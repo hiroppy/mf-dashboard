@@ -12,6 +12,10 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  pages: write
+
 jobs:
   check:
     runs-on: ubuntu-latest
