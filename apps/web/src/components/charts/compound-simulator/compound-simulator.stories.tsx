@@ -101,3 +101,19 @@ export const WithWithdrawalAmount: Story = {
     defaultWithdrawalYears: 25,
   },
 };
+
+export const WithAge: Story = {
+  args: {
+    defaultInitialAmount: 5_000_000,
+    defaultMonthlyContribution: 50_000,
+    defaultCurrentAge: 30,
+  },
+};
+
+export const WithSP500Preset: Story = {
+  args: {
+    defaultInitialAmount: 1_000_000,
+    defaultMonthlyContribution: 50_000,
+    defaultAnnualReturnRate: 10,
+  },
+};

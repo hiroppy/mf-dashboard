@@ -15,7 +15,6 @@ interface NumberFieldProps {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
-  id?: string;
   suffix?: string;
 }
 
@@ -30,7 +29,6 @@ function NumberField({
   disabled,
   className,
   "aria-label": ariaLabel,
-  id,
   suffix,
 }: NumberFieldProps) {
   return (
@@ -64,7 +62,6 @@ function NumberField({
           <Minus className="size-3" />
         </BaseNumberField.Decrement>
         <BaseNumberField.Input
-          id={id}
           aria-label={ariaLabel}
           className={cn(
             "flex h-9 w-full min-w-0 bg-transparent px-2 py-1 text-center text-sm tabular-nums",

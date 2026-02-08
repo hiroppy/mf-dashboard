@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator } from "lucide-react";
+import { Calculator, CircleHelp } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import {
   Area,
@@ -18,8 +18,10 @@ import { formatCurrency } from "../../../lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { MetricLabel } from "../../ui/metric-label";
 import { NumberField } from "../../ui/number-field";
+import { Select } from "../../ui/select";
 import { Slider } from "../../ui/slider";
 import { Switch } from "../../ui/switch";
+import { Tooltip as UiTooltip } from "../../ui/tooltip";
 import { chartTooltipStyle } from "../chart-tooltip";
 import {
   getLabelMap,
@@ -55,6 +57,7 @@ interface CompoundSimulatorProps {
   defaultWithdrawalRate?: number;
   defaultMonthlyWithdrawal?: number;
   defaultWithdrawalYears?: number;
+  defaultCurrentAge?: number;
   title?: string;
   portfolioContext?: PortfolioContext;
 }
@@ -92,10 +95,10 @@ function buildTimelineSegments(
 }
 
 const phaseChipStyles: Record<PhaseType, string> = {
-  contribution: "bg-primary/10 text-primary",
-  idle: "bg-muted-foreground/10",
-  withdrawal: "bg-destructive/10 text-destructive",
-  overlap: "bg-purple-600/10 text-purple-600",
+  contribution: "bg-background text-primary border",
+  idle: "bg-background border",
+  withdrawal: "bg-background text-destructive border",
+  overlap: "bg-background text-purple-600 border",
 };
 
 const phaseLabels: Record<PhaseType, string> = {
@@ -110,11 +113,13 @@ function TimelinePhaseChips({
   withdrawalStartYear,
   withdrawalYears,
   currentYear,
+  currentAge,
 }: {
   contributionYears: number;
   withdrawalStartYear: number;
   withdrawalYears: number;
   currentYear: number;
+  currentAge?: number;
 }) {
   const segments = buildTimelineSegments(contributionYears, withdrawalStartYear, withdrawalYears);
   if (segments.length === 0) return null;
@@ -126,8 +131,18 @@ function TimelinePhaseChips({
           {i > 0 && <span>→</span>}
           <span className={`rounded px-2 py-0.5 font-medium ${phaseChipStyles[seg.type]}`}>
             {phaseLabels[seg.type]} {seg.end - seg.start}年
+            {seg.type === "idle" && (
+              <UiTooltip
+                content="追加投資せず、既存の資産を運用のみ続ける期間"
+                aria-label="据え置きの説明"
+              >
+                <CircleHelp className="ml-0.5 inline h-3 w-3 text-muted-foreground/60" />
+              </UiTooltip>
+            )}
             <span className="ml-1 text-muted-foreground">
-              ({currentYear + seg.start}〜{currentYear + seg.end})
+              {currentAge != null
+                ? `(${currentAge + seg.start}歳〜${currentAge + seg.end}歳)`
+                : `(${currentYear + seg.start}〜${currentYear + seg.end})`}
             </span>
           </span>
         </Fragment>
@@ -145,6 +160,7 @@ function InteractiveTimelineBar({
   onContributionYearsChange,
   onWithdrawalStartYearChange,
   onWithdrawalYearsChange,
+  currentAge,
 }: {
   contributionYears: number;
   withdrawalStartYear: number;
@@ -152,6 +168,7 @@ function InteractiveTimelineBar({
   onContributionYearsChange: (v: number) => void;
   onWithdrawalStartYearChange: (v: number) => void;
   onWithdrawalYearsChange: (v: number) => void;
+  currentAge?: number;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<DragHandle | null>(null);
@@ -160,7 +177,6 @@ function InteractiveTimelineBar({
   const displayMax = 70;
   const currentYear = new Date().getFullYear();
   const withdrawalEnd = withdrawalStartYear + withdrawalYears;
-  const totalYears = Math.max(contributionYears, withdrawalEnd);
 
   const yearToPercent = (year: number) => (year / displayMax) * 100;
 
@@ -269,7 +285,9 @@ function InteractiveTimelineBar({
         ))}
       </div>
       <div className="relative h-5 text-xs text-muted-foreground">
-        <span className="absolute left-0">{currentYear}年</span>
+        <span className="absolute left-0">
+          {currentAge != null ? `${currentAge}歳` : `${currentYear}年`}
+        </span>
         {handles.map((h) => {
           const pct = yearToPercent(h.pos);
           if (pct < 3 || pct > 97) return null;
@@ -279,21 +297,49 @@ function InteractiveTimelineBar({
               className="absolute -translate-x-1/2 font-medium"
               style={{ left: `${pct}%` }}
             >
-              {currentYear + h.pos}年
+              {currentAge != null ? `${currentAge + h.pos}歳` : `${currentYear + h.pos}年`}
             </span>
           );
         })}
-        <span className="absolute right-0">{currentYear + displayMax}年</span>
+        <span className="absolute right-0">
+          {currentAge != null ? `${currentAge + displayMax}歳` : `${currentYear + displayMax}年`}
+        </span>
       </div>
       <TimelinePhaseChips
         contributionYears={contributionYears}
         withdrawalStartYear={withdrawalStartYear}
         withdrawalYears={withdrawalYears}
         currentYear={currentYear}
+        currentAge={currentAge}
       />
     </div>
   );
 }
+
+const PRODUCT_PRESETS = [
+  { value: "custom", label: "カスタム" },
+  {
+    value: "all-country",
+    label: "オルカン",
+    annualReturnRate: 7.5,
+    expenseRatio: 0.05775,
+    volatility: 15,
+  },
+  {
+    value: "sp500",
+    label: "S&P 500",
+    annualReturnRate: 10,
+    expenseRatio: 0.0814,
+    volatility: 17,
+  },
+  {
+    value: "qqq",
+    label: "QQQ",
+    annualReturnRate: 12,
+    expenseRatio: 0.2,
+    volatility: 22,
+  },
+] as const;
 
 export function CompoundSimulator({
   defaultInitialAmount = 0,
@@ -304,6 +350,7 @@ export function CompoundSimulator({
   defaultWithdrawalRate = 4,
   defaultMonthlyWithdrawal = 200000,
   defaultWithdrawalYears = 30,
+  defaultCurrentAge,
   title = "複利シミュレーター",
   portfolioContext,
 }: CompoundSimulatorProps) {
@@ -321,10 +368,22 @@ export function CompoundSimulator({
   const [withdrawalRate, setWithdrawalRate] = useState(defaultWithdrawalRate);
   const [fixedMonthlyWithdrawal, setFixedMonthlyWithdrawal] = useState(defaultMonthlyWithdrawal);
   const [inflationAdjustedWithdrawal, setInflationAdjustedWithdrawal] = useState(false);
+  const [currentAge, setCurrentAge] = useState<number | undefined>(defaultCurrentAge);
+  const [selectedPreset, setSelectedPreset] = useState("custom");
   const [monthlyPensionIncome, setMonthlyPensionIncome] = useState(0);
   const [drawdownPercentile, setDrawdownPercentile] = useState<
     "p10" | "p25" | "p50" | "p75" | "p90"
   >("p50");
+
+  const handlePresetChange = (value: string) => {
+    setSelectedPreset(value);
+    const preset = PRODUCT_PRESETS.find((p) => p.value === value);
+    if (preset && "annualReturnRate" in preset) {
+      setAnnualReturnRate(preset.annualReturnRate);
+      setExpenseRatio(preset.expenseRatio);
+      setVolatility(preset.volatility);
+    }
+  };
 
   const projections = useCompoundCalculator({
     initialAmount,
@@ -407,6 +466,7 @@ export function CompoundSimulator({
         withdrawalRate,
         expenseRatio,
         withdrawalMilestones,
+        currentAge,
       })
     : null;
 
@@ -423,6 +483,21 @@ export function CompoundSimulator({
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="rounded-lg border p-4 space-y-4">
+          <div className="sm:max-w-48 space-y-2">
+            <MetricLabel
+              title="現在の年齢"
+              description="設定すると、グラフやサマリーが年齢で表示されます"
+            />
+            <NumberField
+              value={currentAge}
+              onValueChange={(v) => setCurrentAge(v ?? undefined)}
+              min={0}
+              max={100}
+              step={1}
+              suffix="歳"
+              aria-label="現在の年齢"
+            />
+          </div>
           <InteractiveTimelineBar
             contributionYears={contributionYears}
             withdrawalStartYear={withdrawalStartYear}
@@ -430,16 +505,30 @@ export function CompoundSimulator({
             onContributionYearsChange={setContributionYears}
             onWithdrawalStartYearChange={setWithdrawalStartYear}
             onWithdrawalYearsChange={setWithdrawalYears}
+            currentAge={currentAge}
           />
 
-          <div>
+          <div className="flex items-center justify-between">
             <span className="text-sm font-medium">積立設定</span>
+            <div className="w-36">
+              <Select
+                options={PRODUCT_PRESETS.map((p) => ({
+                  value: p.value,
+                  label: p.label,
+                }))}
+                value={selectedPreset}
+                onChange={handlePresetChange}
+                aria-label="商品プリセット"
+              />
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
             <div className="space-y-2">
-              <MetricLabel title="初期投資額" />
+              <MetricLabel
+                title="初期投資額"
+                description="一括で投資する金額。0円でも積立のみで運用できます"
+              />
               <NumberField
-                id="initial-amount"
                 value={initialAmount}
                 onValueChange={(v) => setInitialAmount(v ?? 0)}
                 min={0}
@@ -451,9 +540,8 @@ export function CompoundSimulator({
             </div>
 
             <div className="space-y-2">
-              <MetricLabel title="月額積立額" />
+              <MetricLabel title="月額積立額" description="毎月定額で積み立てる金額" />
               <NumberField
-                id="monthly-contribution"
                 value={monthlyContribution}
                 onValueChange={(v) => setMonthlyContribution(v ?? 0)}
                 min={0}
@@ -513,7 +601,10 @@ export function CompoundSimulator({
               </div>
               <Slider
                 value={annualReturnRate}
-                onValueChange={setAnnualReturnRate}
+                onValueChange={(v) => {
+                  setAnnualReturnRate(v);
+                  setSelectedPreset("custom");
+                }}
                 min={0}
                 max={15}
                 step={0.5}
@@ -580,7 +671,10 @@ export function CompoundSimulator({
               </div>
               <Slider
                 value={expenseRatio}
-                onValueChange={setExpenseRatio}
+                onValueChange={(v) => {
+                  setExpenseRatio(v);
+                  setSelectedPreset("custom");
+                }}
                 min={0}
                 max={3}
                 step={0.01}
@@ -605,7 +699,44 @@ export function CompoundSimulator({
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <MetricLabel
                       title="年間引出率"
-                      description="切り崩し開始時の資産×X%で年間引出額を決定し、以降毎年同額を取り崩す定額方式（4%ルール/トリニティ・スタディ準拠）。モンテカルロの結果はインフレ調整済み（実質値）で表示されます"
+                      description={
+                        <div className="space-y-1.5">
+                          <p>
+                            切り崩し開始時の資産 ×
+                            引出率で初年度の引出額を決定し、翌年以降はインフレ率に応じて増額します（トリニティ・スタディ準拠）。
+                          </p>
+                          <table className="w-full text-xs">
+                            <tbody>
+                              <tr>
+                                <td className="pr-2 text-muted-foreground">初年度</td>
+                                <td>開始時資産 × 引出率</td>
+                              </tr>
+                              <tr>
+                                <td className="pr-2 text-muted-foreground">N年目</td>
+                                <td>
+                                  初年度額 × (1+インフレ率)
+                                  <sup>N</sup>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          {!taxFree && (
+                            <>
+                              <p className="font-medium">税金の影響</p>
+                              <p>
+                                設定した引出率の分を手取りとして受け取りますが、引き出す際に利益部分へ課税（20.315%）されます。税金分もポートフォリオから差し引かれるため、ポートフォリオからの実際の引出率は設定値を上回ります。
+                              </p>
+                              <p>
+                                例: 引出率4%・利益率30%の場合
+                                <br />→ 手取り4% + 税金(4%×30%×20.315%) ≈ 実質4.2%
+                              </p>
+                            </>
+                          )}
+                          <p className="text-[10px] text-muted-foreground">
+                            モンテカルロの結果はインフレ調整済み（実質値）で表示
+                          </p>
+                        </div>
+                      }
                     />
                     <div className="flex items-center gap-1">
                       <button
@@ -631,7 +762,6 @@ export function CompoundSimulator({
                     </div>
                   </div>
                   <NumberField
-                    id="withdrawal-rate"
                     value={withdrawalRate}
                     onValueChange={(v) => setWithdrawalRate(v ?? 0)}
                     min={0}
@@ -641,7 +771,7 @@ export function CompoundSimulator({
                     aria-label="年間引出率"
                   />
                   <p className="text-xs text-muted-foreground">
-                    年額
+                    初年度年額
                     <span className="font-semibold">
                       約{formatCurrency(monthlyWithdrawalForSummary * 12)}
                     </span>
@@ -650,7 +780,10 @@ export function CompoundSimulator({
               ) : (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-1">
-                    <MetricLabel title="月額引出額" />
+                    <MetricLabel
+                      title="月額引出額"
+                      description="毎月取り崩す金額（税引前）。年金収入がある場合はその分を差し引きます"
+                    />
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
@@ -675,7 +808,6 @@ export function CompoundSimulator({
                     </div>
                   </div>
                   <NumberField
-                    id="monthly-withdrawal"
                     value={fixedMonthlyWithdrawal}
                     onValueChange={(v) => setFixedMonthlyWithdrawal(v ?? 0)}
                     min={0}
@@ -696,7 +828,6 @@ export function CompoundSimulator({
                 description="厚生年金の平均受給額は約14.6万円/月、国民年金のみの場合は約5.6万円/月が目安です（2025年度実績）"
               />
               <NumberField
-                id="pension-income"
                 value={monthlyPensionIncome}
                 onValueChange={(v) => setMonthlyPensionIncome(v ?? 0)}
                 min={0}
@@ -729,11 +860,19 @@ export function CompoundSimulator({
                     requestImmediateMC();
                     setInflationAdjustedWithdrawal(v);
                   }}
-                  aria-label="引出額をインフレ調整"
+                  aria-label="引出額を物価上昇に連動"
                 />
                 <MetricLabel
-                  title="引出額をインフレ調整"
-                  description={`毎年インフレ率（${inflationRate}%）分だけ引出額を増加させます`}
+                  title="引出額を物価上昇に連動"
+                  description={
+                    <div className="space-y-1">
+                      <p>
+                        ONにすると、引出額が毎年インフレ率（{inflationRate}
+                        %）分だけ増額され、購買力を維持します。
+                      </p>
+                      <p>OFFの場合、引出額は名目で固定され、実質的な購買力は年々低下します。</p>
+                    </div>
+                  }
                 />
               </div>
             )}
@@ -747,6 +886,7 @@ export function CompoundSimulator({
             withdrawalStartYear={withdrawalStartYear}
             withdrawalYears={withdrawalYears}
             currentYear={currentYear}
+            currentAge={currentAge}
           />
 
           {/* Accumulation results */}
@@ -821,6 +961,12 @@ export function CompoundSimulator({
                   </button>
                 ))}
                 <span className="ml-1 text-xs text-muted-foreground">楽観</span>
+                <UiTooltip
+                  content="p50（中央値）は半数のシナリオがこの値以上になることを意味します。p10は最悪に近いケース、p90は最良に近いケースです"
+                  aria-label="パーセンタイルの説明"
+                >
+                  <CircleHelp className="ml-1 h-3.5 w-3.5 text-muted-foreground/60" />
+                </UiTooltip>
               </div>
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <div>
@@ -833,7 +979,10 @@ export function CompoundSimulator({
                   </div>
                 </div>
                 <div>
-                  <MetricLabel title="総引出額" description="月額引出額 × 12ヶ月 × 切り崩し年数" />
+                  <MetricLabel
+                    title="総引出額"
+                    description="各年の引出額の合計（税引前の手取り額）"
+                  />
                   <div className="text-lg font-semibold text-expense">
                     {formatCurrency(totalWithdrawalAmount)}
                   </div>
@@ -841,7 +990,7 @@ export function CompoundSimulator({
                 <div>
                   <MetricLabel
                     title="元本割れ確率"
-                    description="5,000回シミュレーションのうち、シミュレーション終了時に総額が元本を下回ったシナリオの割合"
+                    description="投資した元本を回収できない確率。5,000回シミュレーションのうち、残額と累計引出額の合計が投入元本を下回ったシナリオの割合"
                   />
                   <div
                     className={`text-lg font-semibold ${
@@ -858,7 +1007,26 @@ export function CompoundSimulator({
                 <div>
                   <MetricLabel
                     title="枯渇確率"
-                    description="5,000回シミュレーションのうち、切り崩し期間中に資金がゼロになったシナリオの割合"
+                    description={
+                      <div className="space-y-1.5">
+                        <p>
+                          資金が完全にゼロになる確率。5,000回シミュレーションのうち、切り崩し期間中に資金がゼロになったシナリオの割合。
+                        </p>
+                        <p className="font-medium">枯渇リスクが高まる要因</p>
+                        <ul className="list-disc space-y-0.5 pl-3">
+                          {!taxFree && <li>手取り額に加え課税分が追加で引かれ、実引出率が上昇</li>}
+                          <li>
+                            実質リターン = 名目リターン − インフレ率 − σ²/2
+                            のため、見た目の利回りより低い
+                          </li>
+                          <li>引出率が実質リターンを上回ると元本が目減り</li>
+                          <li>30年超の長期では下落の影響が累積</li>
+                        </ul>
+                        <p className="text-muted-foreground">
+                          4%ルールは米国株式中心・30年・税引前が前提です
+                        </p>
+                      </div>
+                    }
                   />
                   <div
                     className={`text-lg font-semibold ${
@@ -914,7 +1082,12 @@ export function CompoundSimulator({
                       return bins.map((bin, i) => {
                         const pct = (bin.count / 5000) * 100;
                         const isActive = i === activeBinIdx;
-                        const label = bin.isDepleted ? "0円(枯渇)" : `〜${formatBin(bin.rangeEnd)}`;
+                        const isLastBin = !bin.isDepleted && i === bins.length - 1;
+                        const label = bin.isDepleted
+                          ? "0円(枯渇)"
+                          : isLastBin
+                            ? `${formatBin(bin.rangeEnd)}〜`
+                            : `〜${formatBin(bin.rangeEnd)}`;
                         return (
                           <div key={i} className="flex items-center gap-2 text-xs">
                             <span
@@ -965,7 +1138,9 @@ export function CompoundSimulator({
               tick={{ fontSize: 12 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `${value}年`}
+              tickFormatter={(value) =>
+                currentAge != null ? `${currentAge + value}歳` : `${value}年`
+              }
             />
             <YAxis
               tick={{ fontSize: 12 }}
@@ -980,10 +1155,12 @@ export function CompoundSimulator({
               ]}
               labelFormatter={(label) => {
                 const entry = projections.find((p) => p.year === label);
-                if (entry?.isContributing && entry?.isWithdrawing)
-                  return `${label}年後（積立+切り崩し）`;
-                if (entry?.isWithdrawing) return `${label}年後（切り崩し）`;
-                return `${label}年後`;
+                let phase = "";
+                if (entry?.isContributing && entry?.isWithdrawing) phase = "・積立+切り崩し";
+                else if (entry?.isWithdrawing) phase = "・切り崩し";
+                if (currentAge != null)
+                  return `${currentAge + (label as number)}歳（${label}年後${phase}）`;
+                return `${label}年後${phase ? `（${phase.slice(1)}）` : ""}`;
               }}
               contentStyle={chartTooltipStyle}
             />
@@ -1018,7 +1195,10 @@ export function CompoundSimulator({
                 stroke="var(--color-muted-foreground)"
                 strokeDasharray="4 4"
                 label={{
-                  value: "積立終了",
+                  value:
+                    currentAge != null
+                      ? `積立終了（${currentAge + contributionYears}歳）`
+                      : "積立終了",
                   position: "top",
                   fontSize: 11,
                   fill: "var(--color-muted-foreground)",
@@ -1031,7 +1211,10 @@ export function CompoundSimulator({
                 stroke="var(--color-muted-foreground)"
                 strokeDasharray="4 4"
                 label={{
-                  value: "切り崩し開始",
+                  value:
+                    currentAge != null
+                      ? `切り崩し開始（${currentAge + withdrawalStartYear}歳）`
+                      : "切り崩し開始",
                   position: "top",
                   fontSize: 11,
                   fill: "var(--color-muted-foreground)",
@@ -1070,16 +1253,22 @@ export function CompoundSimulator({
             )}
           </ComposedChart>
         </ResponsiveContainer>
+        <p className="text-xs text-muted-foreground">
+          ※
+          このグラフは名目値（将来の金額そのもの）で表示しています。インフレによる購買力の変化は反映されていません
+        </p>
 
         {/* Monte Carlo section */}
         <div className="space-y-4 border-t pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-sm font-semibold">モンテカルロ・シミュレーション</h3>
+              <h2 className="text-sm font-semibold">モンテカルロ・シミュレーション</h2>
               <p className="text-xs text-muted-foreground">
-                5,000通りのシナリオに基づく将来予測（インフレ調整済み
-                {taxFree ? " / 非課税" : ""}
-                {withdrawalYears > 0 && !taxFree ? " / 切り崩し: 税引後" : ""}）
+                5,000通りのランダムなシナリオに基づく将来予測。インフレを差し引いた実質値（今の貨幣価値に換算
+                {taxFree ? "・非課税" : withdrawalYears > 0 ? "・切り崩し税引後" : ""}
+                ）で表示しています。
+                <br />
+                薄い帯が全シナリオの80%、その内側の濃い帯が中央50%を示します（残り20%は帯の外側）
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 md:flex md:items-center md:gap-4">
@@ -1087,7 +1276,7 @@ export function CompoundSimulator({
                 <div className="flex items-center justify-between">
                   <MetricLabel
                     title="インフレ率"
-                    description="物価上昇による実質リターンの目減り分。モンテカルロのドリフト項から差し引かれます"
+                    description="今の100万円が将来いくらの価値になるかに影響します。日本の直近インフレ率は約2〜3%です。名目リターンから差し引いて実質リターンを算出し、グラフは購買力ベース（実質値）で表示されます"
                   />
                   <span className="text-xs font-semibold text-primary">{inflationRate}%</span>
                 </div>
@@ -1145,7 +1334,10 @@ export function CompoundSimulator({
                 </div>
                 <Slider
                   value={volatility}
-                  onValueChange={setVolatility}
+                  onValueChange={(v) => {
+                    setVolatility(v);
+                    setSelectedPreset("custom");
+                  }}
                   min={5}
                   max={30}
                   step={1}
@@ -1169,7 +1361,9 @@ export function CompoundSimulator({
                 tick={{ fontSize: 12 }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) => `${value}年`}
+                tickFormatter={(value) =>
+                  currentAge != null ? `${currentAge + value}歳` : `${value}年`
+                }
               />
               <YAxis
                 tick={{ fontSize: 12 }}
@@ -1177,7 +1371,7 @@ export function CompoundSimulator({
                 axisLine={false}
                 tickFormatter={(value) => `${(value / 10000).toFixed(0)}万`}
               />
-              <Tooltip content={<FanChartTooltip />} />
+              <Tooltip content={<FanChartTooltip currentAge={currentAge} />} />
               {/* Stacked bands: base (invisible) → outer lower → inner lower → inner upper → outer upper */}
               <Area type="monotone" dataKey="base" stackId="fan" fill="transparent" stroke="none" />
               <Area
@@ -1235,7 +1429,10 @@ export function CompoundSimulator({
                   stroke="var(--color-muted-foreground)"
                   strokeDasharray="4 4"
                   label={{
-                    value: "積立終了",
+                    value:
+                      currentAge != null
+                        ? `積立終了（${currentAge + contributionYears}歳）`
+                        : "積立終了",
                     position: "top",
                     fontSize: 11,
                     fill: "var(--color-muted-foreground)",
@@ -1248,7 +1445,10 @@ export function CompoundSimulator({
                   stroke="var(--color-muted-foreground)"
                   strokeDasharray="4 4"
                   label={{
-                    value: "切り崩し開始",
+                    value:
+                      currentAge != null
+                        ? `切り崩し開始（${currentAge + withdrawalStartYear}歳）`
+                        : "切り崩し開始",
                     position: "top",
                     fontSize: 11,
                     fill: "var(--color-muted-foreground)",
@@ -1267,10 +1467,12 @@ function FanChartTooltip({
   active,
   payload,
   label,
+  currentAge,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: Record<string, number | string | boolean> }>;
   label?: string | number;
+  currentAge?: number;
 }) {
   if (!active || !payload?.length) return null;
 
@@ -1289,13 +1491,15 @@ function FanChartTooltip({
   const isContributing = data.isContributing as boolean;
   const isWithdrawing = data.isWithdrawing as boolean;
 
+  let phase = "";
+  if (isContributing && isWithdrawing) phase = "・積立+切り崩し";
+  else if (isWithdrawing) phase = "・切り崩し";
+
   let labelText: string;
-  if (isContributing && isWithdrawing) {
-    labelText = `${label}年後（積立+切り崩し）`;
-  } else if (isWithdrawing) {
-    labelText = `${label}年後（切り崩し）`;
+  if (currentAge != null) {
+    labelText = `${currentAge + (label as number)}歳（${label}年後${phase}）`;
   } else {
-    labelText = `${label}年後`;
+    labelText = `${label}年後${phase ? `（${phase.slice(1)}）` : ""}`;
   }
 
   const depletionRate = data.depletionRate as number | undefined;

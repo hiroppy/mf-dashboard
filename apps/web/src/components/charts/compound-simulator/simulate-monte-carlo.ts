@@ -89,8 +89,11 @@ export function simulateMonteCarlo({
   const monthlyDrift = (mu - ri - (sigma * sigma) / 2) / 12;
   const monthlySigma = sigma / Math.sqrt(12);
   const isRateMode = annualWithdrawalRate != null && annualWithdrawalRate > 0;
-  const monthlyInflationFactor =
-    !isRateMode && inflationAdjustedWithdrawal ? Math.pow(1 + ri, 1 / 12) : 1;
+  // MC operates in real (inflation-adjusted) terms.
+  // - Nominal fixed withdrawal decreases in real terms → deflate each month
+  // - Inflation-adjusted withdrawal stays constant in real terms → no adjustment
+  const monthlyRealWithdrawalFactor =
+    !isRateMode && !inflationAdjustedWithdrawal && ri > 0 ? 1 / Math.pow(1 + ri, 1 / 12) : 1;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
 
@@ -119,12 +122,18 @@ export function simulateMonteCarlo({
   const yearlyWithdrawals = isRateMode ? new Float64Array(NUM_SIMULATIONS) : null;
   // Fixed monthly withdrawal amount per path (set at withdrawal start).
   // MC portfolio values are in real terms (drift subtracts inflation).
-  // A constant nominal withdrawal decreases in real terms, so we deflate each month.
+  // Rate mode: constant real withdrawal (Trinity Study inflation-adjusted).
   const initialWithdrawalAmount = isRateMode ? new Float64Array(NUM_SIMULATIONS) : null;
-  const monthlyNominalDeflator = isRateMode && ri > 0 ? 1 / Math.pow(1 + ri, 1 / 12) : 1;
-  let rateDeflationMultiplier = 1;
-  let rateWithdrawalStarted = false;
-  let currentMonthlyWithdrawal = monthlyWithdrawal;
+  // Track cumulative net withdrawals per path for total-return failure metric
+  const cumulativeWithdrawals = new Float64Array(NUM_SIMULATIONS);
+  // Deflate nominal withdrawal by inflation accumulated before withdrawal starts.
+  // MC operates in real terms: a nominal fixed withdrawal loses purchasing power
+  // over time, so we must account for the inflation during the pre-withdrawal period.
+  const preWithdrawalDeflation =
+    !isRateMode && !inflationAdjustedWithdrawal && ri > 0
+      ? Math.pow(1 + ri, -withdrawalStartYear)
+      : 1;
+  let currentMonthlyWithdrawal = monthlyWithdrawal * preWithdrawalDeflation;
 
   for (let year = 1; year <= totalYears; year++) {
     const isContributing = year <= contributionYears;
@@ -134,18 +143,9 @@ export function simulateMonteCarlo({
     if (yearlyWithdrawals) yearlyWithdrawals.fill(0);
 
     for (let month = 0; month < 12; month++) {
-      if (isWithdrawing && !isRateMode && inflationAdjustedWithdrawal) {
-        currentMonthlyWithdrawal *= monthlyInflationFactor;
+      if (isWithdrawing && !isRateMode) {
+        currentMonthlyWithdrawal *= monthlyRealWithdrawalFactor;
       }
-      // Deflate rate-mode withdrawal: constant nominal → decreasing real
-      if (isWithdrawing && isRateMode) {
-        if (rateWithdrawalStarted) {
-          rateDeflationMultiplier *= monthlyNominalDeflator;
-        } else {
-          rateWithdrawalStarted = true;
-        }
-      }
-
       for (let i = 0; i < NUM_SIMULATIONS; i++) {
         const z = normalRandom(rng);
         paths[i] = paths[i] * Math.exp(monthlyDrift + monthlySigma * z);
@@ -161,12 +161,13 @@ export function simulateMonteCarlo({
             if (initialWithdrawalAmount[i] === 0) {
               initialWithdrawalAmount[i] = (paths[i] * annualWithdrawalRate) / 100 / 12;
             }
-            baseWithdrawal = initialWithdrawalAmount[i] * rateDeflationMultiplier;
+            baseWithdrawal = initialWithdrawalAmount[i];
           } else {
             baseWithdrawal = currentMonthlyWithdrawal;
           }
           const netWithdrawal = Math.max(baseWithdrawal - monthlyPensionIncome, 0);
           if (yearlyWithdrawals) yearlyWithdrawals[i] += netWithdrawal;
+          cumulativeWithdrawals[i] += netWithdrawal;
           const gainRatio = paths[i] > costBasis[i] ? (paths[i] - costBasis[i]) / paths[i] : 0;
           const taxOnWithdrawal = netWithdrawal * gainRatio * taxRate;
           const withdrawalRatio = Math.min(netWithdrawal / paths[i], 1);
@@ -214,9 +215,9 @@ export function simulateMonteCarlo({
     });
   }
 
-  // Measure principal loss at simulation end (ensures depletion ⊆ principal loss)
+  // Measure total-return loss: (remaining portfolio + cumulative withdrawals) < total invested
   for (let i = 0; i < NUM_SIMULATIONS; i++) {
-    if (paths[i] < totalPrincipal) failureCount++;
+    if (paths[i] + cumulativeWithdrawals[i] < totalPrincipal) failureCount++;
   }
 
   const depletionProbability = yearlyData.at(-1)?.depletionRate ?? 0;

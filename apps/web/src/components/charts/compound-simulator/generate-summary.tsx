@@ -20,6 +20,7 @@ export interface SummaryInput {
   withdrawalRate?: number;
   expenseRatio?: number;
   withdrawalMilestones?: { year: number; annual: number }[];
+  currentAge?: number;
 }
 
 function formatMan(amount: number): string {
@@ -51,6 +52,7 @@ export function generateSummary(input: SummaryInput): ReactNode {
     withdrawalRate = 0,
     expenseRatio = 0,
     withdrawalMilestones,
+    currentAge,
   } = input;
 
   const parts: ReactNode[] = [];
@@ -80,10 +82,16 @@ export function generateSummary(input: SummaryInput): ReactNode {
 
   // 3. Result with bold total
   const summaryYear = computeSummaryYear(contributionYears, withdrawalStartYear, withdrawalYears);
+  const yearLabel =
+    currentAge != null
+      ? `${currentAge + summaryYear}歳時点（${summaryYear}年後）には`
+      : `${summaryYear}年後には`;
+
   if (summaryYear > 0) {
     parts.push(
       <span key="result">
-        {summaryYear}年後には{taxFree ? "" : "税引後で"}
+        {yearLabel}
+        {taxFree ? "" : "税引後で"}
         <strong className="font-semibold text-foreground">約{formatMan(finalTotal)}円</strong>
         になる見込みです。
       </span>,
@@ -134,7 +142,7 @@ export function generateSummary(input: SummaryInput): ReactNode {
       preamble =
         overlap > 0
           ? `${ratePrefix}年${withdrawalRate}%を${withdrawalYears}年間取り崩した場合、`
-          : `${ratePrefix}${taxFree ? "" : "税引後の"}開始時の資産から年${withdrawalRate}%を${withdrawalYears}年間取り崩した場合、`;
+          : `${ratePrefix}開始時の資産から年${withdrawalRate}%を${withdrawalYears}年間取り崩した場合、`;
     } else {
       const monthlyDesc = `毎月${taxFree ? "" : "手取り"}${formatMan(monthlyWithdrawal!)}円ずつ`;
       if (contributionYears === 0 && withdrawalStartYear === 0) {
@@ -153,23 +161,45 @@ export function generateSummary(input: SummaryInput): ReactNode {
       const rateMonthly = monthlyWithdrawal ?? 0;
       const rateAnnual = rateMonthly * 12;
 
-      // Fixed annual withdrawal amount text
       const withdrawalText =
         rateMonthly > 0 ? `${!taxFree ? "手取り" : ""}年額約${formatMan(rateAnnual)}円` : "";
 
+      let milestonesText = "";
+      if (withdrawalMilestones && withdrawalMilestones.length > 0) {
+        const parts = withdrawalMilestones.map(
+          (m) => `${m.year}年後: 約${formatMan(m.annual)}円/年`,
+        );
+        milestonesText = `（${parts.join("、")}）`;
+      }
+
       if (withdrawalText && !taxFree && finalTotal > 0) {
-        const effectiveRate = (rateAnnual / finalTotal) * 100;
-        rateSuffix = `${withdrawalText}（実質引出率約${effectiveRate.toFixed(1)}%）を毎年取り崩します。`;
+        const grossInterest = finalInterest > 0 ? finalInterest / (1 - TAX_RATE) : 0;
+        const grossPortfolio = finalPrincipal + grossInterest;
+        const gainRatio =
+          grossPortfolio > finalPrincipal && grossPortfolio > 0
+            ? (grossPortfolio - finalPrincipal) / grossPortfolio
+            : 0;
+        const effectiveRate = withdrawalRate * (1 + gainRatio * TAX_RATE);
+        const taxImpact =
+          effectiveRate > withdrawalRate * 1.01
+            ? `手取り年${withdrawalRate}%に利益部分への課税が加わり、`
+            : "";
+        rateSuffix = `初年度は${withdrawalText}で、${taxImpact}実質引出率は約${effectiveRate.toFixed(1)}%です。以降インフレ率に応じて増額します${milestonesText}。`;
       } else if (withdrawalText) {
-        rateSuffix = `${withdrawalText}を毎年取り崩します。`;
+        rateSuffix = `初年度は${withdrawalText}で、以降インフレ率に応じて増額します${milestonesText}。`;
       } else {
         rateSuffix = "";
       }
     } else {
       const annualWithdrawal = monthlyWithdrawal! * 12;
       const computedWithdrawalRate = finalTotal > 0 ? (annualWithdrawal / finalTotal) * 100 : 0;
+      const grossInterest =
+        !taxFree && finalInterest > 0 ? finalInterest / (1 - TAX_RATE) : finalInterest;
+      const grossPortfolio = finalPrincipal + Math.max(0, grossInterest);
       const gainRatio =
-        !taxFree && finalTotal > 0 ? Math.max(0, finalTotal - finalPrincipal) / finalTotal : 0;
+        !taxFree && grossPortfolio > finalPrincipal && grossPortfolio > 0
+          ? (grossPortfolio - finalPrincipal) / grossPortfolio
+          : 0;
       const effectiveReturn = taxFree
         ? annualReturnRate
         : annualReturnRate * (1 - gainRatio * TAX_RATE);

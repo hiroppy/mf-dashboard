@@ -168,10 +168,9 @@ describe("generateSummary", () => {
         depletionProbability: 0.02,
       });
       expect(text).toContain("開始時の資産から年4%を25年間取り崩した場合");
-      expect(text).toContain("手取り年額約60万円");
-      expect(text).toContain("実質引出率約");
-      expect(text).toContain("毎年取り崩します");
-      expect(text).toContain("毎年取り崩します");
+      expect(text).toContain("初年度は手取り年額約60万円");
+      expect(text).toContain("実質引出率は約");
+      expect(text).toContain("以降インフレ率に応じて増額します");
     });
 
     test("generates rate mode summary text without effective rate when taxFree", () => {
@@ -185,10 +184,9 @@ describe("generateSummary", () => {
         depletionProbability: 0.02,
         taxFree: true,
       });
-      expect(text).toContain("年額約60万円");
-      expect(text).toContain("毎年取り崩します");
+      expect(text).toContain("初年度は年額約60万円");
+      expect(text).toContain("以降インフレ率に応じて増額します");
       expect(text).not.toContain("実質引出率");
-      expect(text).toContain("毎年取り崩します");
     });
 
     test("generates rate mode summary with overlap", () => {
@@ -268,6 +266,22 @@ describe("generateSummary", () => {
         withdrawalYears: 0,
       });
       expect(text).toContain("20年後には");
+    });
+  });
+
+  describe("currentAge", () => {
+    test("shows age-based label when currentAge is provided", () => {
+      const text = renderText({
+        ...baseInput,
+        currentAge: 30,
+      });
+      expect(text).toContain("50歳時点（20年後）には");
+    });
+
+    test("does not show age label when currentAge is undefined", () => {
+      const text = renderText(baseInput);
+      expect(text).toContain("20年後には");
+      expect(text).not.toContain("歳時点");
     });
   });
 

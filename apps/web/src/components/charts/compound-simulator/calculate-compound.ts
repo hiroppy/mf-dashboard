@@ -43,12 +43,11 @@ export function calculateCompound({
   monthlyPensionIncome = 0,
 }: CompoundCalculatorInput): YearlyProjection[] {
   const projections: YearlyProjection[] = [];
-  const monthlyRate = (annualReturnRate - expenseRatio) / 100 / 12;
+  const monthlyRate = Math.pow(1 + (annualReturnRate - expenseRatio) / 100, 1 / 12) - 1;
   const taxRate = taxFree ? 0 : TAX_RATE;
   const ri = inflationRate / 100;
   const isRateMode = annualWithdrawalRate != null && annualWithdrawalRate > 0;
-  const monthlyInflationFactor =
-    !isRateMode && inflationAdjustedWithdrawal ? Math.pow(1 + ri, 1 / 12) : 1;
+  const monthlyInflationFactor = ri > 0 ? Math.pow(1 + ri, 1 / 12) : 1;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
 
@@ -56,6 +55,7 @@ export function calculateCompound({
   let totalPrincipal = initialAmount;
   let currentMonthlyWithdrawal = monthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
+  let rateFirstWithdrawalYear = -1;
 
   for (let year = 0; year <= totalYears; year++) {
     const isContributing = year > 0 && year <= contributionYears;
@@ -91,13 +91,16 @@ export function calculateCompound({
         if (isRateMode) {
           if (rateBasedMonthlyWithdrawal === 0) {
             rateBasedMonthlyWithdrawal = (currentTotal * annualWithdrawalRate) / 100 / 12;
+            rateFirstWithdrawalYear = year;
+          } else if (month === 0 && year > rateFirstWithdrawalYear) {
+            rateBasedMonthlyWithdrawal *= 1 + ri;
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
+          baseWithdrawal = currentMonthlyWithdrawal;
           if (inflationAdjustedWithdrawal) {
             currentMonthlyWithdrawal *= monthlyInflationFactor;
           }
-          baseWithdrawal = currentMonthlyWithdrawal;
         }
         const netWithdrawal = Math.max(baseWithdrawal - monthlyPensionIncome, 0);
         yearlyWithdrawalTotal += netWithdrawal;

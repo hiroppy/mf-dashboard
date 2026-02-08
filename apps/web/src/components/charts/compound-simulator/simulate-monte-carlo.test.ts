@@ -498,10 +498,10 @@ describe("simulateMonteCarlo", () => {
       }
     });
 
-    it("should deflate withdrawal in real terms with positive inflation", () => {
-      // With positive inflation, rate-based withdrawal is fixed in nominal terms
-      // but deflates in real terms. The medianYearlyWithdrawal (in real terms)
-      // should decrease over time when inflation > 0.
+    it("should keep withdrawal constant in real terms with positive inflation (trinity study)", () => {
+      // Trinity Study: withdrawal is inflation-adjusted (nominal increases with inflation).
+      // In the MC simulation (which works in real terms), this means the withdrawal
+      // should stay constant across all years.
       const result = simulateMonteCarlo({
         initialAmount: 10_000_000,
         monthlyContribution: 0,
@@ -516,10 +516,10 @@ describe("simulateMonteCarlo", () => {
 
       const withdrawYears = result.yearlyData.filter((d) => d.isWithdrawing);
       const firstWithdrawal = withdrawYears[0].medianYearlyWithdrawal!;
-      const lastWithdrawal = withdrawYears.at(-1)!.medianYearlyWithdrawal!;
-
-      // With inflation > 0, the real withdrawal should decrease over time
-      expect(firstWithdrawal).toBeGreaterThan(lastWithdrawal);
+      expect(firstWithdrawal).toBeGreaterThan(0);
+      for (const yd of withdrawYears) {
+        expect(yd.medianYearlyWithdrawal).toBe(firstWithdrawal);
+      }
     });
   });
 
@@ -625,8 +625,54 @@ describe("simulateMonteCarlo", () => {
       const noAdj = simulateMonteCarlo({ ...base, inflationAdjustedWithdrawal: false });
       const withAdj = simulateMonteCarlo({ ...base, inflationAdjustedWithdrawal: true });
 
-      // Inflation-adjusted withdrawal increases over time, so more depletion
+      // Inflation-adjusted stays constant in real terms (higher real withdrawal)
+      // Nominal fixed deflates in real terms (lower real withdrawal)
       expect(withAdj.depletionProbability).toBeGreaterThanOrEqual(noAdj.depletionProbability);
+    });
+
+    it("should deflate nominal withdrawal in real terms (more remaining than inflation-adjusted)", () => {
+      const base = {
+        initialAmount: 100_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 5,
+        volatility: 0,
+        inflationRate: 3,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 20,
+      };
+
+      const noAdj = simulateMonteCarlo({ ...base, inflationAdjustedWithdrawal: false });
+      const withAdj = simulateMonteCarlo({ ...base, inflationAdjustedWithdrawal: true });
+
+      // With zero volatility: nominal fixed withdrawal decreases in real terms,
+      // so portfolio retains more value than constant real withdrawal
+      const noAdjEnd = noAdj.yearlyData.at(-1)!;
+      const adjEnd = withAdj.yearlyData.at(-1)!;
+      expect(noAdjEnd.p50).toBeGreaterThan(adjEnd.p50);
+    });
+
+    it("should have no deflation effect when inflation is zero", () => {
+      const base = {
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 5,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 10,
+      };
+
+      const noAdj = simulateMonteCarlo({ ...base, inflationAdjustedWithdrawal: false });
+      const withAdj = simulateMonteCarlo({ ...base, inflationAdjustedWithdrawal: true });
+
+      // With zero inflation, both modes should produce identical results
+      const noAdjEnd = noAdj.yearlyData.at(-1)!;
+      const adjEnd = withAdj.yearlyData.at(-1)!;
+      expect(noAdjEnd.p50).toBe(adjEnd.p50);
     });
   });
 
@@ -828,7 +874,7 @@ describe("simulateMonteCarlo", () => {
   });
 
   describe("probability invariant", () => {
-    it("failureProbability should be >= depletionProbability", () => {
+    it("failureProbability accounts for cumulative withdrawals (total return metric)", () => {
       const result = simulateMonteCarlo({
         initialAmount: 5_000_000,
         monthlyContribution: 0,
@@ -841,6 +887,25 @@ describe("simulateMonteCarlo", () => {
         withdrawalYears: 20,
       });
 
+      // failureProbability = (remaining + cumulative_withdrawals) < totalPrincipal
+      // Depleted paths may still have positive total return, so failure can be lower than depletion
+      expect(result.failureProbability).toBeGreaterThanOrEqual(0);
+      expect(result.failureProbability).toBeLessThanOrEqual(1);
+    });
+
+    it("failureProbability should be >= depletionProbability without withdrawal", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 1_000_000,
+        monthlyContribution: 50_000,
+        annualReturnRate: 3,
+        volatility: 25,
+        inflationRate: 2,
+        contributionYears: 20,
+        withdrawalStartYear: 20,
+        withdrawalYears: 0,
+      });
+
+      // Without withdrawal, cumulative withdrawals = 0, so original invariant holds
       expect(result.failureProbability).toBeGreaterThanOrEqual(result.depletionProbability);
     });
   });
