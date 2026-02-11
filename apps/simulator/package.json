@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.18",
+    "@types/node": "catalog:",
     "@types/react": "19.2.13",
     "@types/react-dom": "19.2.3",
     "babel-plugin-react-compiler": "1.0.0",
