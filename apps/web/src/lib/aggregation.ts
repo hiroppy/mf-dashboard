@@ -1,4 +1,4 @@
-export interface NamedValue {
+interface NamedValue {
   name: string;
   value: number;
 }
@@ -22,11 +22,11 @@ export function consolidateCategories(data: NamedValue[], maxItems: number = 6):
   return [...top, { name: "その他", value: othersTotal }];
 }
 
-export interface RankableItem {
+interface RankableItem {
   dailyChange: number;
 }
 
-export interface RankingResult<T> {
+interface RankingResult<T> {
   topGainers: T[];
   topLosers: T[];
   totalChange: number;

@@ -16,6 +16,7 @@
     "./repository/snapshots": "./src/repositories/snapshots.ts",
     "./repository/holdings": "./src/repositories/holdings.ts",
     "./repository/spending-targets": "./src/repositories/spending-targets.ts",
+    "./repository/analytics": "./src/repositories/analytics.ts",
     "./types": "./src/types.ts",
     "./utils": "./src/utils.ts",
     "./test-helpers": "./src/test-helpers.ts"

@@ -1,10 +1,10 @@
-export interface CalendarCell {
+interface CalendarCell {
   day: number;
   date: string;
   amount: number;
 }
 
-export interface CalendarWeek {
+interface CalendarWeek {
   cells: Array<CalendarCell | null>;
 }
 

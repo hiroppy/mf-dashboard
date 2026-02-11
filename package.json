@@ -8,6 +8,7 @@
     "dev:demo": "turbo dev:demo",
     "build": "turbo build",
     "build:demo": "turbo build:demo",
+    "generate:demo-insights": "pnpm --filter @moneyforward-daily-action/analytics generate:demo-insights",
     "db:clean": "rm -f data/moneyforward.db data/moneyforward.db-wal data/moneyforward.db-shm",
     "db:dev": "pnpm --filter @moneyforward-daily-action/crawler dev:scrape",
     "test": "turbo test",

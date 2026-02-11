@@ -1,3 +1,4 @@
+import { analyzeFinancialData } from "@moneyforward-daily-action/analytics";
 import { initDb, closeDb } from "@moneyforward-daily-action/db";
 import {
   updateAccountCategory,
@@ -154,6 +155,29 @@ async function main() {
         const savedCount = saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
         log(`  ${month}: saved ${savedCount} transactions`);
       }
+    }
+
+    // 分析実行（計算は常に行う、LLM insightsは環境変数がある場合のみ）
+    section("Analytics");
+    const analyticsGroups = groupDataList;
+    if (analyticsGroups.length > 0) {
+      const results = await Promise.all(
+        analyticsGroups.map(async (groupData) => {
+          info(`Running financial analysis for ${groupData.group.name}...`);
+          const report = await analyzeFinancialData(db, groupData.group.id);
+          if (report) {
+            info(`Analysis completed and saved for ${groupData.group.name}`);
+          } else {
+            log(`No changes detected, skipped analysis for ${groupData.group.name}`);
+          }
+          return report;
+        }),
+      );
+      info(
+        `Analytics finished: ${results.filter(Boolean).length}/${analyticsGroups.length} groups`,
+      );
+    } else {
+      warn("No group available for analytics");
     }
 
     // Slack通知はデフォルトグループまたは最初のグループのデータを使用

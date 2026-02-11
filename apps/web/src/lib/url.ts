@@ -1,11 +1,16 @@
-const KNOWN_PATHS = ["cf", "bs", "accounts", "simulator"];
+export const KNOWN_PATHS = ["cf", "bs", "accounts", "simulator", "insights"] as const;
+export type KnownPath = (typeof KNOWN_PATHS)[number];
+
+function isKnownPath(path: string): path is KnownPath {
+  return (KNOWN_PATHS as readonly string[]).includes(path);
+}
 
 export function extractPagePath(pathname: string): string {
   const segments = pathname.split("/").filter(Boolean);
 
   if (segments.length === 0) return "";
 
-  if (KNOWN_PATHS.includes(segments[0])) {
+  if (isKnownPath(segments[0])) {
     return segments.join("/");
   }
 
@@ -17,7 +22,7 @@ export function extractGroupIdFromPath(pathname: string): string | null {
   const firstSegment = segments[0];
 
   if (!firstSegment) return null;
-  if (KNOWN_PATHS.includes(firstSegment)) return null;
+  if (isKnownPath(firstSegment)) return null;
 
   return firstSegment;
 }

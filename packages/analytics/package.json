@@ -1,0 +1,28 @@
+{
+  "name": "@moneyforward-daily-action/analytics",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "3.0.37",
+    "@ai-sdk/google": "3.0.21",
+    "@ai-sdk/openai": "3.0.25",
+    "@moneyforward-daily-action/db": "workspace:*",
+    "ai": "6.0.73",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

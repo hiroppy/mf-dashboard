@@ -8,4 +8,5 @@ export const pages = [
   { name: "Cash Flow", path: "/cf" },
   { name: "Cash Flow (monthly)", path: "/cf/2025-12" },
   { name: "Simulator", path: "/simulator" },
+  { name: "Insights", path: "/insights" },
 ] as const;

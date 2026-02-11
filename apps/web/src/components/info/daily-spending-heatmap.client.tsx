@@ -13,7 +13,7 @@ interface DailyData {
   amount: number;
 }
 
-export interface DailySpendingHeatmapClientProps {
+interface DailySpendingHeatmapClientProps {
   title: string;
   icon?: LucideIcon;
   year: number;

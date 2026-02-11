@@ -9,7 +9,7 @@ import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
 
-export interface SankeyDiagramClientProps {
+interface SankeyDiagramClientProps {
   income: Array<{ category: string; amount: number }>;
   expense: Array<{ category: string; amount: number }>;
   height?: number;

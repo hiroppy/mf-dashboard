@@ -1,16 +1,27 @@
 "use client";
 
 import type { Route } from "next";
-import { LayoutDashboard, TrendingUp, PiggyBank, Landmark, Calculator, X } from "lucide-react";
+import { LayoutDashboard, TrendingUp, PiggyBank, Landmark, Calculator, Lightbulb, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { buildGroupPath, extractGroupIdFromPath, isNavItemActive } from "../../lib/url";
+import {
+  buildGroupPath,
+  extractGroupIdFromPath,
+  isNavItemActive,
+  type KnownPath,
+} from "../../lib/url";
 import { cn } from "../../lib/utils";
 import { IconButton } from "../ui/icon-button";
 import { ActionIcons } from "./action-icons";
 import { useSidebar } from "./sidebar-context";
 
-const navItems = [
+interface NavItem {
+  title: string;
+  path: "" | KnownPath;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const navItems: NavItem[] = [
   {
     title: "ダッシュボード",
     path: "",
@@ -25,6 +36,11 @@ const navItems = [
     title: "資産",
     path: "bs",
     icon: PiggyBank,
+  },
+  {
+    title: "インサイト",
+    path: "insights",
+    icon: Lightbulb,
   },
   {
     title: "連携サービス",

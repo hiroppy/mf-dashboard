@@ -362,3 +362,40 @@ export const spendingTargetsRelations = relations(spendingTargets, ({ one }) => 
     references: [groups.id],
   }),
 }));
+
+// ============================================================================
+// 分析系
+// ============================================================================
+
+export const analyticsReports = sqliteTable(
+  "analytics_reports",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    // LLM生成コンテンツ
+    summary: text("summary"),
+    savingsInsight: text("savings_insight"),
+    investmentInsight: text("investment_insight"),
+    spendingInsight: text("spending_insight"),
+    balanceInsight: text("balance_insight"),
+    liabilityInsight: text("liability_insight"),
+    // メタデータ
+    model: text("model"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("analytics_reports_group_date_idx").on(table.groupId, table.date),
+    index("analytics_reports_group_id_idx").on(table.groupId),
+  ],
+);
+
+export const analyticsReportsRelations = relations(analyticsReports, ({ one }) => ({
+  group: one(groups, {
+    fields: [analyticsReports.groupId],
+    references: [groups.id],
+  }),
+}));

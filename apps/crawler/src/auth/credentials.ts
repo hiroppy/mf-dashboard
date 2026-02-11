@@ -1,7 +1,7 @@
 import { createClient, type Client } from "@1password/sdk";
 import { debug, error } from "../logger.js";
 
-export interface Credentials {
+interface Credentials {
   username: string;
   password: string;
 }

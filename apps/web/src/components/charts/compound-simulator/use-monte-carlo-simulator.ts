@@ -5,8 +5,6 @@ import {
   type MonteCarloResult,
 } from "./simulate-monte-carlo";
 
-export type { MonteCarloInput, MonteCarloResult };
-
 const DEBOUNCE_MS = 300;
 
 const EMPTY_RESULT: MonteCarloResult = {

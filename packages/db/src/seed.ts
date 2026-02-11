@@ -12,7 +12,7 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { unlinkSync, existsSync } from "node:fs";
+import { unlinkSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as schema from "./schema/schema";
 
@@ -1998,6 +1998,34 @@ for (const groupId of ALL_GROUP_IDS) {
       })
       .run();
   }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Analytics Reports (from pre-generated LLM insights)
+// ---------------------------------------------------------------------------
+const insightsPath = join(import.meta.dirname, "fixtures", "demo-insights.json");
+if (existsSync(insightsPath)) {
+  const insights: Record<string, Record<string, string | null>> = JSON.parse(
+    readFileSync(insightsPath, "utf-8"),
+  );
+  for (const [groupId, data] of Object.entries(insights)) {
+    db.insert(schema.analyticsReports)
+      .values({
+        groupId,
+        date: "2026-02-24",
+        summary: data.summary,
+        savingsInsight: data.savingsInsight,
+        investmentInsight: data.investmentInsight,
+        spendingInsight: data.spendingInsight,
+        balanceInsight: data.balanceInsight,
+        liabilityInsight: data.liabilityInsight,
+        model: "demo",
+        createdAt: now(),
+        updatedAt: now(),
+      })
+      .run();
+  }
+  console.log(`インサイトデータを挿入しました (${Object.keys(insights).length}グループ)`);
 }
 
 // ---------------------------------------------------------------------------

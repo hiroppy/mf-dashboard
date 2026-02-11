@@ -75,3 +75,8 @@ export const getHoldingsWithLatestValues = fn(() => []);
 export const getHoldingsByAccountId = fn(() => []);
 export const getHoldingsWithDailyChange = fn(() => []);
 export const hasInvestmentHoldings = fn(() => false);
+
+// Query modules - analytics
+export const getLatestAnalytics = fn(() => null);
+export const getFinancialMetrics = fn(() => null);
+export const calculateHealthScore = fn(() => ({ totalScore: 0, categories: [] }));
