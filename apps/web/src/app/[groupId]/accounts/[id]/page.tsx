@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
-import { getAllAccountMfIds, getAccountByMfId } from "@moneyforward-daily-action/db";
-import { getAllGroups } from "@moneyforward-daily-action/db";
+import {
+  getAllAccountMfIds,
+  getAccountByMfId,
+  getAllGroups,
+  isDatabaseAvailable,
+} from "@moneyforward-daily-action/db";
 import { AccountDetailContent } from "../../../accounts/[id]/page";
 
 export async function generateStaticParams() {
+  if (!isDatabaseAvailable()) return [{ groupId: "_", id: "_" }];
   const groups = getAllGroups().filter((g) => !g.isCurrent);
+  if (groups.length === 0) return [{ groupId: "_", id: "_" }];
+
   const params: { groupId: string; id: string }[] = [];
 
   for (const group of groups) {

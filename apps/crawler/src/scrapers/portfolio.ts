@@ -316,7 +316,7 @@ export async function getPortfolio(page: Page): Promise<Portfolio> {
   // Get individual items from bs/portfolio
   await page.goto(mfUrls.portfolio, { waitUntil: "domcontentloaded" });
   // ポートフォリオコンテンツが表示されるまで待機
-  await page.waitForLoadState("networkidle");
+  await page.locator("h1.heading-normal").first().waitFor({ state: "visible", timeout: 10000 });
 
   // 4つのパース関数を並列実行
   const [deposits, stocks, funds, insuranceAndPoints] = await Promise.all([

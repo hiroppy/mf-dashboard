@@ -11,7 +11,7 @@ export async function getLiabilities(page: Page): Promise<Liabilities> {
     waitUntil: "domcontentloaded",
   });
   // ページ読み込み完了を待機
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("load");
 
   const items: LiabilityItem[] = [];
   let totalLiabilities = 0;

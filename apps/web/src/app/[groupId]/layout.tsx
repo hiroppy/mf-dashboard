@@ -1,9 +1,12 @@
-import { getAllGroups } from "@moneyforward-daily-action/db";
+import { getAllGroups, isDatabaseAvailable } from "@moneyforward-daily-action/db";
 import { notFound } from "next/navigation";
 
 export async function generateStaticParams() {
+  if (!isDatabaseAvailable()) return [{ groupId: "_" }];
   const groups = getAllGroups();
-  return groups.filter((g) => !g.isCurrent).map((group) => ({ groupId: group.id }));
+  const nonCurrent = groups.filter((g) => !g.isCurrent);
+  if (nonCurrent.length === 0) return [{ groupId: "_" }];
+  return nonCurrent.map((group) => ({ groupId: group.id }));
 }
 
 export default async function GroupLayout({ children, params }: LayoutProps<"/[groupId]">) {

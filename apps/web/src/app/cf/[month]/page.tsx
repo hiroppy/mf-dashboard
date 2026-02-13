@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { getAvailableMonths, getMonthlySummaryByMonth } from "@moneyforward-daily-action/db";
+import {
+  getAvailableMonths,
+  getMonthlySummaryByMonth,
+  isDatabaseAvailable,
+} from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { notFound } from "next/navigation";
 import { CategoryBreakdown } from "../../../components/info/category-breakdown/category-breakdown";
@@ -13,7 +17,9 @@ import { PageLayout } from "../../../components/layout/page-layout";
 import { formatMonth } from "../../../lib/format";
 
 export async function generateStaticParams() {
+  if (!isDatabaseAvailable()) return [{ month: "_" }];
   const months = getAvailableMonths();
+  if (months.length === 0) return [{ month: "_" }];
   return months.map(({ month }) => ({ month }));
 }
 

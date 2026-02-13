@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { getAccountByMfId, getAllAccountMfIds } from "@moneyforward-daily-action/db";
+import {
+  getAccountByMfId,
+  getAllAccountMfIds,
+  isDatabaseAvailable,
+} from "@moneyforward-daily-action/db";
 import { mfUrls } from "@moneyforward-daily-action/meta/urls";
 import { notFound } from "next/navigation";
 import { AccountSummaryCard } from "../../../components/info/account-summary-card";
@@ -12,7 +16,9 @@ import { Badge } from "../../../components/ui/badge";
 import { formatLastUpdated } from "../../../lib/format";
 
 export async function generateStaticParams() {
+  if (!isDatabaseAvailable()) return [{ id: "_" }];
   const mfIds = getAllAccountMfIds();
+  if (mfIds.length === 0) return [{ id: "_" }];
   return mfIds.map((id) => ({ id }));
 }
 
