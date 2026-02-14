@@ -22,17 +22,17 @@ export function createAnalysisTools(db: Db, groupId: string) {
       description:
         "月次収支の前月比トレンドを分析。各月の変化率・連続増減ストリーク・3/6ヶ月平均を計算",
       inputSchema: z.object({}),
-      execute: () => {
-        const summaries = excludeCurrentMonth(getMonthlySummaries({ groupId }, db));
+      execute: async () => {
+        const summaries = excludeCurrentMonth(await getMonthlySummaries({ groupId }, db));
         return analyzeMoMTrend(summaries);
       },
     }),
     analyzeSpendingComparison: tool({
       description: "カテゴリ別支出を過去平均と比較。乖離度・異常検出・新規カテゴリを特定",
       inputSchema: z.object({}),
-      execute: () => {
+      execute: async () => {
         const currentMonth = getCurrentMonth();
-        const monthObjects = getAvailableMonths(groupId, db).filter(
+        const monthObjects = (await getAvailableMonths(groupId, db)).filter(
           (m) => m.month !== currentMonth,
         );
         if (monthObjects.length === 0) {
@@ -40,7 +40,9 @@ export function createAnalysisTools(db: Db, groupId: string) {
         }
         const latestMonth = monthObjects[0].month;
         const months = monthObjects.slice(0, 7).map((m) => m.month);
-        const allCategoryTotals = months.map((m) => getMonthlyCategoryTotals(m, groupId, db));
+        const allCategoryTotals = await Promise.all(
+          months.map((m) => getMonthlyCategoryTotals(m, groupId, db)),
+        );
         const flatTotals = allCategoryTotals.flat();
         return analyzeSpendingComparison(flatTotals, latestMonth);
       },
@@ -49,10 +51,10 @@ export function createAnalysisTools(db: Db, groupId: string) {
       description:
         "ポートフォリオのリスク分析。集中度・日次変動・含み損益を評価しリスクレベルを判定",
       inputSchema: z.object({}),
-      execute: () => {
-        const holdingsRaw = getHoldingsWithLatestValues(groupId, db);
-        const dailyChangeRaw = getHoldingsWithDailyChange(groupId, db);
-        const metrics = getFinancialMetrics(groupId, db);
+      execute: async () => {
+        const holdingsRaw = await getHoldingsWithLatestValues(groupId, db);
+        const dailyChangeRaw = await getHoldingsWithDailyChange(groupId, db);
+        const metrics = await getFinancialMetrics(groupId, db);
 
         const holdings = holdingsRaw.map((h) => ({
           name: h.name,
@@ -75,9 +77,9 @@ export function createAnalysisTools(db: Db, groupId: string) {
       description:
         "貯蓄の推移分析。緊急予備資金月数の変化・方向・主因、貯蓄率履歴・トレンド、6ヶ月目標までの予測を提供",
       inputSchema: z.object({}),
-      execute: () => {
-        const metrics = getFinancialMetrics(groupId, db);
-        const summaries = getMonthlySummaries({ groupId }, db);
+      execute: async () => {
+        const metrics = await getFinancialMetrics(groupId, db);
+        const summaries = await getMonthlySummaries({ groupId }, db);
 
         if (!metrics) {
           return {
@@ -101,8 +103,8 @@ export function createAnalysisTools(db: Db, groupId: string) {
     analyzeIncomeStability: tool({
       description: "収入の安定性分析。変動係数・安定性分類・外れ値月・傾向を算出",
       inputSchema: z.object({}),
-      execute: () => {
-        const summaries = excludeCurrentMonth(getMonthlySummaries({ groupId }, db));
+      execute: async () => {
+        const summaries = excludeCurrentMonth(await getMonthlySummaries({ groupId }, db));
         return analyzeIncomeStability(summaries);
       },
     }),

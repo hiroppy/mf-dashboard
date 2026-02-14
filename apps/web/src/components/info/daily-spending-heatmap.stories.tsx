@@ -41,7 +41,7 @@ export const Default: Story = {
     month: "2025-04",
   },
   beforeEach() {
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       tx(1, "2025-04-03", 1200),
       tx(2, "2025-04-05", 3500),
       tx(3, "2025-04-05", 800),
@@ -66,7 +66,7 @@ export const SparseData: Story = {
     month: "2025-05",
   },
   beforeEach() {
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       tx(1, "2025-05-01", 50000),
       tx(2, "2025-05-14", 8000),
       tx(3, "2025-05-28", 3000),
@@ -79,6 +79,6 @@ export const NoExpenses: Story = {
     month: "2025-06",
   },
   beforeEach() {
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };

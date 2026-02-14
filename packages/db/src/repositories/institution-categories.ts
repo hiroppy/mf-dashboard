@@ -6,8 +6,11 @@ import { getOrCreate } from "../utils";
  * Get or create institution category by name
  * Returns the category ID
  */
-export function getOrCreateInstitutionCategory(db: Db, categoryName: string): number {
-  return getOrCreate(
+export async function getOrCreateInstitutionCategory(
+  db: Db,
+  categoryName: string,
+): Promise<number> {
+  return await getOrCreate(
     db,
     schema.institutionCategories,
     schema.institutionCategories.name,
@@ -18,8 +21,8 @@ export function getOrCreateInstitutionCategory(db: Db, categoryName: string): nu
 /**
  * Get all institution categories
  */
-export function getAllInstitutionCategories(db: Db) {
-  return db
+export async function getAllInstitutionCategories(db: Db) {
+  return await db
     .select()
     .from(schema.institutionCategories)
     .orderBy(schema.institutionCategories.displayOrder)

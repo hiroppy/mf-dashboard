@@ -20,7 +20,7 @@ export async function analyzeFinancialData(db: Db, groupId: string): Promise<boo
 
   const today = new Date().toISOString().split("T")[0];
 
-  saveAnalyticsReport(db, {
+  await saveAnalyticsReport(db, {
     groupId,
     date: today,
     insights,

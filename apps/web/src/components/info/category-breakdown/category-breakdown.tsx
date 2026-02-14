@@ -22,13 +22,13 @@ function getPreviousMonth(monthStr: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function CategoryBreakdown({ month, type, groupId }: CategoryBreakdownProps) {
-  const categoryTotals = getMonthlyCategoryTotals(month, groupId);
-  const transactions = getTransactionsByMonth(month, groupId);
+export async function CategoryBreakdown({ month, type, groupId }: CategoryBreakdownProps) {
+  const categoryTotals = await getMonthlyCategoryTotals(month, groupId);
+  const transactions = await getTransactionsByMonth(month, groupId);
 
   // Previous month data for delta display
   const prevMonth = getPreviousMonth(month);
-  const prevCategoryTotals = getMonthlyCategoryTotals(prevMonth, groupId);
+  const prevCategoryTotals = await getMonthlyCategoryTotals(prevMonth, groupId);
   const prevAmountByCategory: Record<string, number> = {};
   for (const c of prevCategoryTotals) {
     if (c.type === type) {

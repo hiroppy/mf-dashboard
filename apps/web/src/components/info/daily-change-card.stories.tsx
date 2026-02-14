@@ -30,7 +30,7 @@ const createHolding = (
 export const Mixed: Story = {
   name: "上昇と下落の混合",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式(オール・カントリー)", 15000),
       createHolding("eMAXIS Slim 米国株式(S&P500)", 12000),
       createHolding("楽天・全米株式インデックス・ファンド", 8500),
@@ -49,7 +49,7 @@ export const Mixed: Story = {
 export const AllPositive: Story = {
   name: "全て上昇",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 25000),
       createHolding("eMAXIS Slim 米国株式(S&P500)", 18000),
       createHolding("楽天・全米株式インデックス・ファンド", 12000),
@@ -64,7 +64,7 @@ export const AllPositive: Story = {
 export const AllNegative: Story = {
   name: "全て下落",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("日本株ファンド", -25000),
       createHolding("新興国株式インデックス", -18000),
       createHolding("不動産投資信託", -12000),
@@ -78,7 +78,7 @@ export const AllNegative: Story = {
 export const FewHoldings: Story = {
   name: "少数の銘柄",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 15000),
       createHolding("日本株ファンド", -8000),
     ]);
@@ -88,7 +88,7 @@ export const FewHoldings: Story = {
 export const SingleGainer: Story = {
   name: "上昇のみ1銘柄",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 50000),
     ]);
   },
@@ -97,14 +97,14 @@ export const SingleGainer: Story = {
 export const SingleLoser: Story = {
   name: "下落のみ1銘柄",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([createHolding("日本株ファンド", -30000)]);
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([createHolding("日本株ファンド", -30000)]);
   },
 };
 
 export const LongNames: Story = {
   name: "長い銘柄名",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式(オール・カントリー)除く日本", 20000),
       createHolding("楽天・全米株式インデックス・ファンド(楽天・VTI)", 15000),
       createHolding("SBI・V・S&P500インデックス・ファンド(愛称:SBI・V・S&P500)", 10000),
@@ -117,7 +117,7 @@ export const LongNames: Story = {
 export const ManyHoldings: Story = {
   name: "多数の銘柄",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       // 上昇銘柄 (TOP5より多い)
       createHolding("銘柄A", 50000),
       createHolding("銘柄B", 40000),
@@ -141,7 +141,7 @@ export const ManyHoldings: Story = {
 export const SmallChanges: Story = {
   name: "小さな変動",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 500),
       createHolding("楽天・全米株式", 300),
       createHolding("SBI・V・S&P500", 100),
@@ -154,7 +154,7 @@ export const SmallChanges: Story = {
 export const LargeChanges: Story = {
   name: "大きな変動",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 500000),
       createHolding("楽天・全米株式", 350000),
       createHolding("SBI・V・S&P500", 200000),
@@ -167,6 +167,6 @@ export const LargeChanges: Story = {
 export const Empty: Story = {
   name: "データなし",
   beforeEach() {
-    mocked(getHoldingsWithDailyChange).mockReturnValue([]);
+    mocked(getHoldingsWithDailyChange).mockResolvedValue([]);
   },
 };

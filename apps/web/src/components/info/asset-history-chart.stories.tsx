@@ -49,13 +49,13 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   beforeEach() {
-    mocked(getAssetHistoryWithCategories).mockReturnValue(generateMockData());
+    mocked(getAssetHistoryWithCategories).mockResolvedValue(generateMockData());
   },
 };
 
 export const PeriodToggleTest: Story = {
   beforeEach() {
-    mocked(getAssetHistoryWithCategories).mockReturnValue(generateMockData());
+    mocked(getAssetHistoryWithCategories).mockResolvedValue(generateMockData());
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -69,6 +69,6 @@ export const PeriodToggleTest: Story = {
 
 export const Empty: Story = {
   beforeEach() {
-    mocked(getAssetHistoryWithCategories).mockReturnValue([]);
+    mocked(getAssetHistoryWithCategories).mockResolvedValue([]);
   },
 };

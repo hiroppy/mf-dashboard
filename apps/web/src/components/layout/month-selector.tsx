@@ -7,8 +7,8 @@ interface MonthSelectorProps {
   groupId?: string;
 }
 
-export function MonthSelector({ currentMonth, basePath, groupId }: MonthSelectorProps) {
-  const availableMonths = getAvailableMonths(groupId).map((m) => m.month);
+export async function MonthSelector({ currentMonth, basePath, groupId }: MonthSelectorProps) {
+  const availableMonths = (await getAvailableMonths(groupId)).map((m) => m.month);
 
   return (
     <MonthSelectorClient

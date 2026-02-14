@@ -38,13 +38,13 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   beforeEach() {
-    mocked(getMonthlySummaries).mockReturnValue(generateMockData());
+    mocked(getMonthlySummaries).mockResolvedValue(generateMockData());
   },
 };
 
 export const HighExpense: Story = {
   beforeEach() {
-    mocked(getMonthlySummaries).mockReturnValue([
+    mocked(getMonthlySummaries).mockResolvedValue([
       { month: "2025-07", totalIncome: 300000, totalExpense: 500000, netIncome: -200000 },
       { month: "2025-08", totalIncome: 320000, totalExpense: 480000, netIncome: -160000 },
       { month: "2025-09", totalIncome: 310000, totalExpense: 520000, netIncome: -210000 },
@@ -57,6 +57,6 @@ export const HighExpense: Story = {
 
 export const Empty: Story = {
   beforeEach() {
-    mocked(getMonthlySummaries).mockReturnValue([]);
+    mocked(getMonthlySummaries).mockResolvedValue([]);
   },
 };

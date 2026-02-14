@@ -30,20 +30,20 @@ afterAll(() => {
   closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
-  createTestGroup(db);
+beforeEach(async () => {
+  await resetTestDb(db);
+  await createTestGroup(db);
 });
 
-function createTestAccount(data: {
+async function createTestAccount(data: {
   mfId: string;
   name: string;
   type?: string;
   isActive?: boolean;
   categoryId?: number | null;
-}): number {
+}): Promise<number> {
   const now = new Date().toISOString();
-  const account = db
+  const account = await db
     .insert(schema.accounts)
     .values({
       mfId: data.mfId,
@@ -57,7 +57,8 @@ function createTestAccount(data: {
     .returning()
     .get();
 
-  db.insert(schema.groupAccounts)
+  await db
+    .insert(schema.groupAccounts)
     .values({
       groupId: TEST_GROUP_ID,
       accountId: account.id,
@@ -69,7 +70,7 @@ function createTestAccount(data: {
   return account.id;
 }
 
-function createAccountStatus(
+async function createAccountStatus(
   accountId: number,
   data: {
     status?: string;
@@ -79,7 +80,8 @@ function createAccountStatus(
   },
 ) {
   const now = new Date().toISOString();
-  db.insert(schema.accountStatuses)
+  await db
+    .insert(schema.accountStatuses)
     .values({
       accountId,
       status: data.status ?? "ok",
@@ -92,9 +94,9 @@ function createAccountStatus(
     .run();
 }
 
-function createCategory(name: string, displayOrder: number): number {
+async function createCategory(name: string, displayOrder: number): Promise<number> {
   const now = new Date().toISOString();
-  const category = db
+  const category = await db
     .insert(schema.institutionCategories)
     .values({
       name,
@@ -158,28 +160,26 @@ describe("normalizeAccount", () => {
 });
 
 describe("buildActiveAccountCondition", () => {
-  it("アクティブなアカウントのみをフィルタリングする", () => {
-    createTestAccount({ mfId: "mf1", name: "Active Account", isActive: true });
-    createTestAccount({ mfId: "mf2", name: "Inactive Account", isActive: false });
+  it("アクティブなアカウントのみをフィルタリングする", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Active Account", isActive: true });
+    await createTestAccount({ mfId: "mf2", name: "Inactive Account", isActive: false });
 
-    const accountIds = db
-      .select({ id: schema.accounts.id })
-      .from(schema.accounts)
-      .all()
-      .map((a) => a.id);
+    const accountIds = (
+      await db.select({ id: schema.accounts.id }).from(schema.accounts).all()
+    ).map((a) => a.id);
 
     const condition = buildActiveAccountCondition(accountIds);
-    const results = db.select().from(schema.accounts).where(condition).all();
+    const results = await db.select().from(schema.accounts).where(condition).all();
 
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Active Account");
   });
 
-  it("mfId='unknown'のアカウントを除外する", () => {
-    createTestAccount({ mfId: "mf1", name: "Normal Account" });
+  it("mfId='unknown'のアカウントを除外する", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Normal Account" });
     // unknownアカウント（mfIdがunknown）を直接作成
     const now = new Date().toISOString();
-    const unknownAccount = db
+    const unknownAccount = await db
       .insert(schema.accounts)
       .values({
         mfId: "unknown",
@@ -191,7 +191,8 @@ describe("buildActiveAccountCondition", () => {
       })
       .returning()
       .get();
-    db.insert(schema.groupAccounts)
+    await db
+      .insert(schema.groupAccounts)
       .values({
         groupId: TEST_GROUP_ID,
         accountId: unknownAccount.id,
@@ -200,25 +201,23 @@ describe("buildActiveAccountCondition", () => {
       })
       .run();
 
-    const accountIds = db
-      .select({ id: schema.accounts.id })
-      .from(schema.accounts)
-      .all()
-      .map((a) => a.id);
+    const accountIds = (
+      await db.select({ id: schema.accounts.id }).from(schema.accounts).all()
+    ).map((a) => a.id);
 
     const condition = buildActiveAccountCondition(accountIds);
-    const results = db.select().from(schema.accounts).where(condition).all();
+    const results = await db.select().from(schema.accounts).where(condition).all();
 
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Normal Account");
   });
 
-  it("指定されたaccountIds内のみをフィルタリングする", () => {
-    const accountId1 = createTestAccount({ mfId: "mf1", name: "Account 1" });
-    createTestAccount({ mfId: "mf2", name: "Account 2" });
+  it("指定されたaccountIds内のみをフィルタリングする", async () => {
+    const accountId1 = await createTestAccount({ mfId: "mf1", name: "Account 1" });
+    await createTestAccount({ mfId: "mf2", name: "Account 2" });
 
     const condition = buildActiveAccountCondition([accountId1]);
-    const results = db.select().from(schema.accounts).where(condition).all();
+    const results = await db.select().from(schema.accounts).where(condition).all();
 
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Account 1");
@@ -367,44 +366,45 @@ describe("groupAccountsByCategory", () => {
 // ============================================================
 
 describe("getLatestUpdateDate", () => {
-  it("グループの最終スクレイプ日時を返す", () => {
-    db.update(schema.groups)
+  it("グループの最終スクレイプ日時を返す", async () => {
+    await db
+      .update(schema.groups)
       .set({ lastScrapedAt: "2025-04-15T10:00:00Z" })
       .where(eq(schema.groups.id, TEST_GROUP_ID))
       .run();
 
-    const result = getLatestUpdateDate(undefined, db);
+    const result = await getLatestUpdateDate(undefined, db);
 
     expect(result).toBe("2025-04-15T10:00:00Z");
   });
 
-  it("lastScrapedAtがnullの場合はnullを返す", () => {
-    const result = getLatestUpdateDate(undefined, db);
+  it("lastScrapedAtがnullの場合はnullを返す", async () => {
+    const result = await getLatestUpdateDate(undefined, db);
     expect(result).toBeNull();
   });
 
-  it("グループがない場合はnullを返す", () => {
-    resetTestDb(db);
-    const result = getLatestUpdateDate(undefined, db);
+  it("グループがない場合はnullを返す", async () => {
+    await resetTestDb(db);
+    const result = await getLatestUpdateDate(undefined, db);
     expect(result).toBeNull();
   });
 });
 
 describe("getAccountsWithAssets", () => {
-  it("アカウント一覧を資産情報付きで返す", () => {
-    const categoryId = createCategory("銀行", 1);
-    const accountId = createTestAccount({
+  it("アカウント一覧を資産情報付きで返す", async () => {
+    const categoryId = await createCategory("銀行", 1);
+    const accountId = await createTestAccount({
       mfId: "mf1",
       name: "Bank A",
       categoryId,
     });
-    createAccountStatus(accountId, {
+    await createAccountStatus(accountId, {
       status: "ok",
       lastUpdated: "2025-04-15",
       totalAssets: 100000,
     });
 
-    const result = getAccountsWithAssets(undefined, db);
+    const result = await getAccountsWithAssets(undefined, db);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Bank A");
@@ -412,76 +412,76 @@ describe("getAccountsWithAssets", () => {
     expect(result[0].categoryName).toBe("銀行");
   });
 
-  it("nullフィールドにデフォルト値を適用する", () => {
-    createTestAccount({ mfId: "mf1", name: "Bank A" });
+  it("nullフィールドにデフォルト値を適用する", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Bank A" });
     // statusを作成しない（nullになる）
 
-    const result = getAccountsWithAssets(undefined, db);
+    const result = await getAccountsWithAssets(undefined, db);
 
     expect(result[0].status).toBe("ok");
     expect(result[0].totalAssets).toBe(0);
     expect(result[0].categoryName).toBe("未分類");
   });
 
-  it("非アクティブなアカウントは除外される", () => {
-    createTestAccount({ mfId: "mf1", name: "Active", isActive: true });
-    createTestAccount({ mfId: "mf2", name: "Inactive", isActive: false });
+  it("非アクティブなアカウントは除外される", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Active", isActive: true });
+    await createTestAccount({ mfId: "mf2", name: "Inactive", isActive: false });
 
-    const result = getAccountsWithAssets(undefined, db);
+    const result = await getAccountsWithAssets(undefined, db);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Active");
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getAccountsWithAssets(undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getAccountsWithAssets(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getAllAccountMfIds", () => {
-  it("グループ内のアカウントのmfIdリストを返す", () => {
-    createTestAccount({ mfId: "mf1", name: "Account 1" });
-    createTestAccount({ mfId: "mf2", name: "Account 2" });
+  it("グループ内のアカウントのmfIdリストを返す", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Account 1" });
+    await createTestAccount({ mfId: "mf2", name: "Account 2" });
 
-    const result = getAllAccountMfIds(undefined, db);
+    const result = await getAllAccountMfIds(undefined, db);
 
     expect(result).toContain("mf1");
     expect(result).toContain("mf2");
   });
 
-  it("非アクティブなアカウントは除外される", () => {
-    createTestAccount({ mfId: "mf1", name: "Active", isActive: true });
-    createTestAccount({ mfId: "mf2", name: "Inactive", isActive: false });
+  it("非アクティブなアカウントは除外される", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Active", isActive: true });
+    await createTestAccount({ mfId: "mf2", name: "Inactive", isActive: false });
 
-    const result = getAllAccountMfIds(undefined, db);
+    const result = await getAllAccountMfIds(undefined, db);
 
     expect(result).toEqual(["mf1"]);
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getAllAccountMfIds(undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getAllAccountMfIds(undefined, db);
     expect(result).toEqual([]);
   });
 });
 
 describe("getAccountByMfId", () => {
-  it("mfIdでアカウントを取得する", () => {
-    const categoryId = createCategory("銀行", 1);
-    const accountId = createTestAccount({
+  it("mfIdでアカウントを取得する", async () => {
+    const categoryId = await createCategory("銀行", 1);
+    const accountId = await createTestAccount({
       mfId: "mf1",
       name: "Bank A",
       categoryId,
     });
-    createAccountStatus(accountId, {
+    await createAccountStatus(accountId, {
       status: "ok",
       lastUpdated: "2025-04-15",
       totalAssets: 100000,
     });
 
-    const result = getAccountByMfId("mf1", undefined, db);
+    const result = await getAccountByMfId("mf1", undefined, db);
 
     expect(result).not.toBeNull();
     expect(result!.mfId).toBe("mf1");
@@ -489,18 +489,19 @@ describe("getAccountByMfId", () => {
     expect(result!.totalAssets).toBe(100000);
   });
 
-  it("存在しないmfIdの場合はnullを返す", () => {
-    createTestAccount({ mfId: "mf1", name: "Bank A" });
+  it("存在しないmfIdの場合はnullを返す", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Bank A" });
 
-    const result = getAccountByMfId("mf_nonexistent", undefined, db);
+    const result = await getAccountByMfId("mf_nonexistent", undefined, db);
 
     expect(result).toBeNull();
   });
 
-  it("グループ外のアカウントはnullを返す", () => {
+  it("グループ外のアカウントはnullを返す", async () => {
     // グループに所属しないアカウントを作成
     const now = new Date().toISOString();
-    db.insert(schema.accounts)
+    await db
+      .insert(schema.accounts)
       .values({
         mfId: "mf_outside",
         name: "Outside Account",
@@ -511,49 +512,49 @@ describe("getAccountByMfId", () => {
       })
       .run();
 
-    const result = getAccountByMfId("mf_outside", undefined, db);
+    const result = await getAccountByMfId("mf_outside", undefined, db);
 
     expect(result).toBeNull();
   });
 
-  it("nullフィールドにデフォルト値を適用する", () => {
-    createTestAccount({ mfId: "mf1", name: "Bank A" });
+  it("nullフィールドにデフォルト値を適用する", async () => {
+    await createTestAccount({ mfId: "mf1", name: "Bank A" });
 
-    const result = getAccountByMfId("mf1", undefined, db);
+    const result = await getAccountByMfId("mf1", undefined, db);
 
     expect(result!.status).toBe("ok");
     expect(result!.totalAssets).toBe(0);
     expect(result!.categoryName).toBe("未分類");
   });
 
-  it("グループがない場合はnullを返す", () => {
-    resetTestDb(db);
-    const result = getAccountByMfId("mf1", undefined, db);
+  it("グループがない場合はnullを返す", async () => {
+    await resetTestDb(db);
+    const result = await getAccountByMfId("mf1", undefined, db);
     expect(result).toBeNull();
   });
 });
 
 describe("getAccountsGroupedByCategory", () => {
-  it("カテゴリ別にグループ化されたアカウントを返す", () => {
-    const bankCategoryId = createCategory("銀行", 1);
-    const investmentCategoryId = createCategory("証券", 2);
+  it("カテゴリ別にグループ化されたアカウントを返す", async () => {
+    const bankCategoryId = await createCategory("銀行", 1);
+    const investmentCategoryId = await createCategory("証券", 2);
 
-    const bankAccountId = createTestAccount({
+    const bankAccountId = await createTestAccount({
       mfId: "mf1",
       name: "Bank A",
       categoryId: bankCategoryId,
     });
-    createAccountStatus(bankAccountId, { totalAssets: 100000 });
+    await createAccountStatus(bankAccountId, { totalAssets: 100000 });
 
-    const investmentAccountId = createTestAccount({
+    const investmentAccountId = await createTestAccount({
       mfId: "mf2",
       name: "Investment A",
       type: "investment",
       categoryId: investmentCategoryId,
     });
-    createAccountStatus(investmentAccountId, { totalAssets: 500000 });
+    await createAccountStatus(investmentAccountId, { totalAssets: 500000 });
 
-    const result = getAccountsGroupedByCategory(undefined, db);
+    const result = await getAccountsGroupedByCategory(undefined, db);
 
     expect(result).toHaveLength(2);
     expect(result[0].categoryName).toBe("銀行");
@@ -562,32 +563,32 @@ describe("getAccountsGroupedByCategory", () => {
     expect(result[1].accounts).toHaveLength(1);
   });
 
-  it("同じカテゴリ内でtotalAssets降順にソートされる", () => {
-    const categoryId = createCategory("銀行", 1);
+  it("同じカテゴリ内でtotalAssets降順にソートされる", async () => {
+    const categoryId = await createCategory("銀行", 1);
 
-    const accountId1 = createTestAccount({
+    const accountId1 = await createTestAccount({
       mfId: "mf1",
       name: "Bank A",
       categoryId,
     });
-    createAccountStatus(accountId1, { totalAssets: 100000 });
+    await createAccountStatus(accountId1, { totalAssets: 100000 });
 
-    const accountId2 = createTestAccount({
+    const accountId2 = await createTestAccount({
       mfId: "mf2",
       name: "Bank B",
       categoryId,
     });
-    createAccountStatus(accountId2, { totalAssets: 500000 });
+    await createAccountStatus(accountId2, { totalAssets: 500000 });
 
-    const result = getAccountsGroupedByCategory(undefined, db);
+    const result = await getAccountsGroupedByCategory(undefined, db);
 
     expect(result[0].accounts[0].name).toBe("Bank B");
     expect(result[0].accounts[1].name).toBe("Bank A");
   });
 
-  it("グループがない場合は空配列を返す", () => {
-    resetTestDb(db);
-    const result = getAccountsGroupedByCategory(undefined, db);
+  it("グループがない場合は空配列を返す", async () => {
+    await resetTestDb(db);
+    const result = await getAccountsGroupedByCategory(undefined, db);
     expect(result).toEqual([]);
   });
 });

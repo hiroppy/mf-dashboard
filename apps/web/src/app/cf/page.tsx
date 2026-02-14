@@ -14,8 +14,8 @@ export const metadata: Metadata = {
   title: "収支",
 };
 
-export function CFContent({ groupId }: { groupId?: string }) {
-  const monthlySummaries = getMonthlySummaries({ groupId });
+export async function CFContent({ groupId }: { groupId?: string }) {
+  const monthlySummaries = await getMonthlySummaries({ groupId });
 
   // Group summaries by year
   const summariesByYear = monthlySummaries.reduce(

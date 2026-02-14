@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   title: "シミュレーター",
 };
 
-export function SimulatorContent({ groupId }: { groupId?: string }) {
-  const holdings = getHoldingsWithLatestValues(groupId);
+export async function SimulatorContent({ groupId }: { groupId?: string }) {
+  const holdings = await getHoldingsWithLatestValues(groupId);
   const investmentHoldings = holdings.filter(
     (h) => h.categoryName && h.categoryName.includes("投資信託"),
   );

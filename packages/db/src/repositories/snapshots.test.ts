@@ -15,21 +15,21 @@ afterAll(() => {
   closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
+beforeEach(async () => {
+  await resetTestDb(db);
 });
 
 describe("createSnapshot", () => {
-  test("スナップショットを作成して ID を返す", () => {
-    upsertGroup(db, { id: "g1", name: "test", isCurrent: true });
-    const id = createSnapshot(db, "g1", "2025-04-26");
+  test("スナップショットを作成して ID を返す", async () => {
+    await upsertGroup(db, { id: "g1", name: "test", isCurrent: true });
+    const id = await createSnapshot(db, "g1", "2025-04-26");
     expect(id).toBeGreaterThan(0);
   });
 
-  test("同じ日に複数スナップショットを作成できる", () => {
-    upsertGroup(db, { id: "g1", name: "test", isCurrent: true });
-    const id1 = createSnapshot(db, "g1", "2025-04-26");
-    const id2 = createSnapshot(db, "g1", "2025-04-26");
+  test("同じ日に複数スナップショットを作成できる", async () => {
+    await upsertGroup(db, { id: "g1", name: "test", isCurrent: true });
+    const id1 = await createSnapshot(db, "g1", "2025-04-26");
+    const id2 = await createSnapshot(db, "g1", "2025-04-26");
     expect(id1).not.toBe(id2);
   });
 });

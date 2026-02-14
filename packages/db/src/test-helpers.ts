@@ -2,9 +2,8 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { join } from "node:path";
+import type { Db } from "./index";
 import * as schema from "./schema/schema";
-
-type Db = ReturnType<typeof drizzle<typeof schema>>;
 
 /**
  * テスト用のインメモリ DB を作成し、マイグレーションを適用して返す。
@@ -27,21 +26,21 @@ export function createTestDb(): Db {
  * 全テーブルのデータをクリアする。
  * beforeEach で呼び出してテスト間の分離を保証する。
  */
-export function resetTestDb(db: Db): void {
+export async function resetTestDb(db: Db): Promise<void> {
   // FK の依存順に削除
-  db.delete(schema.holdingValues).run();
-  db.delete(schema.dailySnapshots).run();
-  db.delete(schema.holdings).run();
-  db.delete(schema.accountStatuses).run();
-  db.delete(schema.transactions).run();
-  db.delete(schema.assetHistoryCategories).run();
-  db.delete(schema.assetHistory).run();
-  db.delete(schema.spendingTargets).run();
-  db.delete(schema.groupAccounts).run();
-  db.delete(schema.accounts).run();
-  db.delete(schema.groups).run();
-  db.delete(schema.assetCategories).run();
-  db.delete(schema.institutionCategories).run();
+  await db.delete(schema.holdingValues).run();
+  await db.delete(schema.dailySnapshots).run();
+  await db.delete(schema.holdings).run();
+  await db.delete(schema.accountStatuses).run();
+  await db.delete(schema.transactions).run();
+  await db.delete(schema.assetHistoryCategories).run();
+  await db.delete(schema.assetHistory).run();
+  await db.delete(schema.spendingTargets).run();
+  await db.delete(schema.groupAccounts).run();
+  await db.delete(schema.accounts).run();
+  await db.delete(schema.groups).run();
+  await db.delete(schema.assetCategories).run();
+  await db.delete(schema.institutionCategories).run();
 }
 
 /** テスト用グループ ID */
@@ -50,9 +49,10 @@ export const TEST_GROUP_ID = "test_group_001";
 /**
  * テスト用グループを作成する。
  */
-export function createTestGroup(db: Db): string {
+export async function createTestGroup(db: Db): Promise<string> {
   const now = new Date().toISOString();
-  db.insert(schema.groups)
+  await db
+    .insert(schema.groups)
     .values({
       id: TEST_GROUP_ID,
       name: "Test Group",

@@ -4,7 +4,11 @@ import type { SpendingTargetsData } from "../types";
 import { schema } from "../index";
 import { upsertById } from "../utils";
 
-export function saveSpendingTargets(db: Db, groupId: string, data: SpendingTargetsData): void {
+export async function saveSpendingTargets(
+  db: Db,
+  groupId: string,
+  data: SpendingTargetsData,
+): Promise<void> {
   // カテゴリ別の固定費/変動費区分を upsert
   for (const category of data.categories) {
     const catData = {
@@ -14,7 +18,7 @@ export function saveSpendingTargets(db: Db, groupId: string, data: SpendingTarge
       type: category.type,
     };
 
-    upsertById(
+    await upsertById(
       db,
       schema.spendingTargets,
       and(
@@ -27,8 +31,8 @@ export function saveSpendingTargets(db: Db, groupId: string, data: SpendingTarge
   }
 }
 
-export function getSpendingTargets(db: Db, groupId: string) {
-  return db
+export async function getSpendingTargets(db: Db, groupId: string) {
+  return await db
     .select()
     .from(schema.spendingTargets)
     .where(eq(schema.spendingTargets.groupId, groupId))

@@ -17,31 +17,34 @@ afterAll(() => {
   closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
+beforeEach(async () => {
+  await resetTestDb(db);
 });
 
 describe("getOrCreateInstitutionCategory", () => {
-  test("新規カテゴリーを作成してIDを返す", () => {
-    const id = getOrCreateInstitutionCategory(db, "銀行");
+  test("新規カテゴリーを作成してIDを返す", async () => {
+    const id = await getOrCreateInstitutionCategory(db, "銀行");
     expect(id).toBeGreaterThan(0);
   });
 
-  test("既存カテゴリーのIDを返す", () => {
-    const id1 = getOrCreateInstitutionCategory(db, "銀行");
-    const id2 = getOrCreateInstitutionCategory(db, "銀行");
+  test("既存カテゴリーのIDを返す", async () => {
+    const id1 = await getOrCreateInstitutionCategory(db, "銀行");
+    const id2 = await getOrCreateInstitutionCategory(db, "銀行");
     expect(id1).toBe(id2);
   });
 
-  test("異なるカテゴリーには異なるIDを返す", () => {
-    const id1 = getOrCreateInstitutionCategory(db, "銀行");
-    const id2 = getOrCreateInstitutionCategory(db, "証券");
+  test("異なるカテゴリーには異なるIDを返す", async () => {
+    const id1 = await getOrCreateInstitutionCategory(db, "銀行");
+    const id2 = await getOrCreateInstitutionCategory(db, "証券");
     expect(id1).not.toBe(id2);
   });
 
-  test("複数のカテゴリーを作成できる", () => {
+  test("複数のカテゴリーを作成できる", async () => {
     const categories = ["銀行", "証券", "カード", "電子マネー", "ポイント"];
-    const ids = categories.map((cat) => getOrCreateInstitutionCategory(db, cat));
+    const ids: number[] = [];
+    for (const cat of categories) {
+      ids.push(await getOrCreateInstitutionCategory(db, cat));
+    }
 
     // すべて異なるIDが返される
     const uniqueIds = new Set(ids);
@@ -50,13 +53,13 @@ describe("getOrCreateInstitutionCategory", () => {
 });
 
 describe("getAllInstitutionCategories", () => {
-  test("すべてのカテゴリーを取得する", () => {
+  test("すべてのカテゴリーを取得する", async () => {
     // カテゴリーを作成
-    getOrCreateInstitutionCategory(db, "銀行");
-    getOrCreateInstitutionCategory(db, "証券");
-    getOrCreateInstitutionCategory(db, "カード");
+    await getOrCreateInstitutionCategory(db, "銀行");
+    await getOrCreateInstitutionCategory(db, "証券");
+    await getOrCreateInstitutionCategory(db, "カード");
 
-    const categories = getAllInstitutionCategories(db);
+    const categories = await getAllInstitutionCategories(db);
 
     expect(categories).toHaveLength(3);
     expect(categories.map((c) => c.name)).toEqual(
@@ -64,15 +67,15 @@ describe("getAllInstitutionCategories", () => {
     );
   });
 
-  test("空のデータベースでは空の配列を返す", () => {
-    const categories = getAllInstitutionCategories(db);
+  test("空のデータベースでは空の配列を返す", async () => {
+    const categories = await getAllInstitutionCategories(db);
     expect(categories).toHaveLength(0);
   });
 
-  test("取得したカテゴリーにはcreatedAtとupdatedAtが含まれる", () => {
-    getOrCreateInstitutionCategory(db, "銀行");
+  test("取得したカテゴリーにはcreatedAtとupdatedAtが含まれる", async () => {
+    await getOrCreateInstitutionCategory(db, "銀行");
 
-    const categories = getAllInstitutionCategories(db);
+    const categories = await getAllInstitutionCategories(db);
 
     expect(categories).toHaveLength(1);
     expect(categories[0]).toHaveProperty("createdAt");

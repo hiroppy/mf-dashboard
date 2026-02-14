@@ -34,7 +34,7 @@ beforeAll(async () => {
     const data = await withErrorScreenshot(page, "db-save-test-error.png", () =>
       scrape(page, { skipRefresh: true }),
     );
-    saveScrapedData(getDb(), data);
+    await saveScrapedData(getDb(), data);
   });
 });
 

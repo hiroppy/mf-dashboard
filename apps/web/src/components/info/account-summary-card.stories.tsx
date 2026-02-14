@@ -104,8 +104,8 @@ export const Default: Story = {
     mfId: "abc123",
   },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue(mockAccount);
-    mocked(getHoldingsByAccountId).mockReturnValue([...assetHoldings, ...liabilityHoldings]);
+    mocked(getAccountByMfId).mockResolvedValue(mockAccount);
+    mocked(getHoldingsByAccountId).mockResolvedValue([...assetHoldings, ...liabilityHoldings]);
   },
 };
 
@@ -115,8 +115,8 @@ export const AssetsOnly: Story = {
     mfId: "abc123",
   },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue(mockAccount);
-    mocked(getHoldingsByAccountId).mockReturnValue(assetHoldings);
+    mocked(getAccountByMfId).mockResolvedValue(mockAccount);
+    mocked(getHoldingsByAccountId).mockResolvedValue(assetHoldings);
   },
 };
 
@@ -126,11 +126,11 @@ export const LiabilitiesOnly: Story = {
     mfId: "abc123",
   },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue({
+    mocked(getAccountByMfId).mockResolvedValue({
       ...mockAccount,
       totalAssets: 0,
     });
-    mocked(getHoldingsByAccountId).mockReturnValue(liabilityHoldings);
+    mocked(getHoldingsByAccountId).mockResolvedValue(liabilityHoldings);
   },
 };
 
@@ -140,11 +140,11 @@ export const NoHoldings: Story = {
     mfId: "abc123",
   },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue({
+    mocked(getAccountByMfId).mockResolvedValue({
       ...mockAccount,
       totalAssets: 1000000,
     });
-    mocked(getHoldingsByAccountId).mockReturnValue([]);
+    mocked(getHoldingsByAccountId).mockResolvedValue([]);
   },
 };
 
@@ -154,6 +154,6 @@ export const AccountNotFound: Story = {
     mfId: "unknown",
   },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue(null);
+    mocked(getAccountByMfId).mockResolvedValue(null);
   },
 };

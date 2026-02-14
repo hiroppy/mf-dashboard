@@ -13,8 +13,8 @@ interface InsightsContentProps {
   groupId?: string;
 }
 
-export function InsightsContent({ groupId }: InsightsContentProps) {
-  const analytics = getLatestAnalytics(groupId);
+export async function InsightsContent({ groupId }: InsightsContentProps) {
+  const analytics = await getLatestAnalytics(groupId);
 
   if (!analytics) {
     return (

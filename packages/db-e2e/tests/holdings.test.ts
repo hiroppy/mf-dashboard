@@ -54,7 +54,7 @@ describe.skip("Holdings比較: スクレイピング vs DB", () => {
     const pageGroups = await getPageGroups(page);
 
     // DBからグループを取得
-    const dbGroups = getDbGroups(db);
+    const dbGroups = await getDbGroups(db);
 
     if (dbGroups.length === 0) {
       throw new Error("DBにグループが存在しません");
@@ -93,7 +93,7 @@ describe.skip("Holdings比較: スクレイピング vs DB", () => {
       }
 
       // 比較実行（1000円の誤差を許容 - 株価変動などの影響）
-      const comparison = compareHoldings(group.id, group.name, portfolio, db, 1000);
+      const comparison = await compareHoldings(group.id, group.name, portfolio, db, 1000);
       allComparisons.push(comparison);
 
       const result = formatHoldingComparisonResult(comparison);

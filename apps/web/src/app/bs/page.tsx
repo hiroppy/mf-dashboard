@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   title: "資産",
 };
 
-export function BSContent({ groupId }: { groupId?: string }) {
-  const showUnrealizedGain = hasInvestmentHoldings(groupId);
+export async function BSContent({ groupId }: { groupId?: string }) {
+  const showUnrealizedGain = await hasInvestmentHoldings(groupId);
 
   return (
     <PageLayout title="資産" href={mfUrls.portfolio}>

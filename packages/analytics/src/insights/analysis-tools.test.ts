@@ -126,7 +126,7 @@ describe("createAnalysisTools", () => {
   });
 
   it("analyzeMoMTrend should exclude current month data", async () => {
-    vi.mocked(getMonthlySummaries).mockReturnValueOnce([
+    vi.mocked(getMonthlySummaries).mockResolvedValueOnce([
       { month: "2025-03", totalIncome: 50000, totalExpense: 30000, netIncome: 20000 },
       { month: "2025-02", totalIncome: 310000, totalExpense: 210000, netIncome: 100000 },
       { month: "2025-01", totalIncome: 300000, totalExpense: 200000, netIncome: 100000 },
@@ -140,7 +140,7 @@ describe("createAnalysisTools", () => {
   });
 
   it("analyzeSpendingComparison should exclude current month from available months", async () => {
-    vi.mocked(getAvailableMonths).mockReturnValueOnce([
+    vi.mocked(getAvailableMonths).mockResolvedValueOnce([
       { month: "2025-03" },
       { month: "2025-02" },
       { month: "2025-01" },

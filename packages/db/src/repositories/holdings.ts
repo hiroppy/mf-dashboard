@@ -5,7 +5,7 @@ import { schema } from "../index";
 import { now, upsertById } from "../utils";
 
 // 毎回新規作成（同じ銘柄でも別レコードとして保存）
-export function createHolding(
+export async function createHolding(
   db: Db,
   accountId: number,
   name: string,
@@ -15,8 +15,8 @@ export function createHolding(
     liabilityCategory?: string | null;
     code?: string | null;
   } = {},
-): number {
-  const result = db
+): Promise<number> {
+  const result = await db
     .insert(schema.holdings)
     .values({
       mfId: null,
@@ -36,7 +36,7 @@ export function createHolding(
   return result.id;
 }
 
-export function saveHoldingValue(
+export async function saveHoldingValue(
   db: Db,
   holdingId: number,
   snapshotId: number,
@@ -49,7 +49,7 @@ export function saveHoldingValue(
     unrealizedGain?: number | null;
     unrealizedGainPct?: number | null;
   },
-): void {
+): Promise<void> {
   const data = {
     holdingId,
     snapshotId,
@@ -62,7 +62,7 @@ export function saveHoldingValue(
     unrealizedGainPct: values.unrealizedGainPct ?? null,
   };
 
-  upsertById(
+  await upsertById(
     db,
     schema.holdingValues,
     and(

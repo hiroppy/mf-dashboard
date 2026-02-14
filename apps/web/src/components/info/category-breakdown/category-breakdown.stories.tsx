@@ -19,7 +19,7 @@ export const Expense: Story = {
     type: "expense",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockImplementation((month: string) => {
+    mocked(getMonthlyCategoryTotals).mockImplementation(async (month: string) => {
       // 先月データなし（空配列を返す）
       if (month !== "2025-04") return [];
       return [
@@ -67,7 +67,7 @@ export const Expense: Story = {
         },
       ];
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -228,7 +228,7 @@ export const Income: Story = {
     type: "income",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockImplementation((month: string) => {
+    mocked(getMonthlyCategoryTotals).mockImplementation(async (month: string) => {
       // 先月データなし（空配列を返す）
       if (month !== "2025-04") return [];
       return [
@@ -240,7 +240,7 @@ export const Income: Story = {
         },
       ];
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -296,7 +296,7 @@ export const WithDelta: Story = {
     type: "expense",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockImplementation((month: string) => {
+    mocked(getMonthlyCategoryTotals).mockImplementation(async (month: string) => {
       if (month === "2025-05") {
         return [
           {
@@ -353,7 +353,7 @@ export const WithDelta: Story = {
         },
       ];
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -379,7 +379,7 @@ export const Empty: Story = {
     type: "expense",
   },
   beforeEach() {
-    mocked(getMonthlyCategoryTotals).mockReturnValue([]);
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getMonthlyCategoryTotals).mockResolvedValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };

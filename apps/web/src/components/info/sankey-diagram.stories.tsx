@@ -18,7 +18,7 @@ export const Default: Story = {
     month: "2025-01",
   },
   beforeEach: () => {
-    mocked(getMonthlyCategoryTotals).mockReturnValue([
+    mocked(getMonthlyCategoryTotals).mockResolvedValue([
       {
         month: "2025-01",
         category: "給与",
@@ -80,7 +80,7 @@ export const Default: Story = {
         totalAmount: 15000,
       },
     ]);
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };
 
@@ -89,7 +89,7 @@ export const Deficit: Story = {
     month: "2025-02",
   },
   beforeEach: () => {
-    mocked(getMonthlyCategoryTotals).mockReturnValue([
+    mocked(getMonthlyCategoryTotals).mockResolvedValue([
       {
         month: "2025-02",
         category: "給与",
@@ -127,7 +127,7 @@ export const Deficit: Story = {
         totalAmount: 40000,
       },
     ]);
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };
 
@@ -136,7 +136,7 @@ export const Empty: Story = {
     month: "2025-03",
   },
   beforeEach: () => {
-    mocked(getMonthlyCategoryTotals).mockReturnValue([]);
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getMonthlyCategoryTotals).mockResolvedValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };

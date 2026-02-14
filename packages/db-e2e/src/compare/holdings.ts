@@ -31,15 +31,15 @@ export type HoldingComparison = {
 /**
  * DBから保有資産の集計を取得
  */
-function getDbHoldingSummary(
+async function getDbHoldingSummary(
   groupId: string,
   db: Db,
-): {
+): Promise<{
   totalAssets: number;
   itemCount: number;
   items: Array<{ name: string; amount: number; type: string | null }>;
-} {
-  const holdings = getHoldingsWithLatestValues(groupId, db);
+}> {
+  const holdings = await getHoldingsWithLatestValues(groupId, db);
 
   // 負債（liabilityCategory が設定されているもの）を除外して資産のみ集計
   const assetHoldings = holdings.filter((h) => !h.liabilityCategory);
@@ -136,15 +136,15 @@ function compareItems(
 /**
  * スクレイピング結果とDBの保有資産を比較
  */
-export function compareHoldings(
+export async function compareHoldings(
   groupId: string,
   groupName: string,
   scraped: Portfolio,
   db: Db,
   totalAssetsThreshold = 100, // デフォルト100円の誤差を許容
-): HoldingComparison {
+): Promise<HoldingComparison> {
   const scrapedSummary = getScrapedHoldingSummary(scraped);
-  const dbSummary = getDbHoldingSummary(groupId, db);
+  const dbSummary = await getDbHoldingSummary(groupId, db);
 
   const itemMatches = compareItems(scrapedSummary.items, dbSummary.items);
 

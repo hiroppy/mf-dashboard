@@ -7,8 +7,8 @@ interface AssetHistoryChartProps {
   groupId?: string;
 }
 
-export function AssetHistoryChart({ groupId }: AssetHistoryChartProps) {
-  const data = getAssetHistoryWithCategories({ groupId })
+export async function AssetHistoryChart({ groupId }: AssetHistoryChartProps) {
+  const data = (await getAssetHistoryWithCategories({ groupId }))
     .filter((h) => /^\d{4}-\d{2}-\d{2}$/.test(h.date))
     .reverse();
 

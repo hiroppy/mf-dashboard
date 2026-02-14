@@ -8,8 +8,8 @@ interface FixedVariableBreakdownProps {
   groupId?: string;
 }
 
-export function FixedVariableBreakdown({ month, groupId }: FixedVariableBreakdownProps) {
-  const { fixed, variable } = getExpenseByFixedVariable(month, groupId);
+export async function FixedVariableBreakdown({ month, groupId }: FixedVariableBreakdownProps) {
+  const { fixed, variable } = await getExpenseByFixedVariable(month, groupId);
   const total = fixed.total + variable.total;
   const fixedPct = total > 0 ? (fixed.total / total) * 100 : 0;
   const variablePct = total > 0 ? (variable.total / total) * 100 : 0;

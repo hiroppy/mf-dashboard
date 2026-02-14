@@ -14,14 +14,15 @@ afterAll(() => {
   closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
+beforeEach(async () => {
+  await resetTestDb(db);
 });
 
 describe("getCurrentGroup", () => {
-  it("isCurrent=trueのグループを返す", () => {
+  it("isCurrent=trueのグループを返す", async () => {
     const now = new Date().toISOString();
-    db.insert(schema.groups)
+    await db
+      .insert(schema.groups)
       .values({
         id: "group_001",
         name: "Current Group",
@@ -31,23 +32,24 @@ describe("getCurrentGroup", () => {
       })
       .run();
 
-    const result = getCurrentGroup(db);
+    const result = await getCurrentGroup(db);
 
     expect(result?.id).toBe("group_001");
     expect(result?.name).toBe("Current Group");
   });
 
-  it("該当がない場合はundefinedを返す", () => {
-    expect(getCurrentGroup(db)).toBeUndefined();
+  it("該当がない場合はundefinedを返す", async () => {
+    expect(await getCurrentGroup(db)).toBeUndefined();
   });
 });
 
 describe("getAllGroups", () => {
-  it("isCurrent=trueを最初に、lastScrapedAt降順でソート", () => {
+  it("isCurrent=trueを最初に、lastScrapedAt降順でソート", async () => {
     const now = new Date().toISOString();
     const yesterday = new Date(Date.now() - 86400000).toISOString();
 
-    db.insert(schema.groups)
+    await db
+      .insert(schema.groups)
       .values([
         {
           id: "g1",
@@ -76,7 +78,7 @@ describe("getAllGroups", () => {
       ])
       .run();
 
-    const result = getAllGroups(db);
+    const result = await getAllGroups(db);
 
     expect(result[0].id).toBe("g2"); // isCurrent=true が最初
     expect(result[1].id).toBe("g3"); // 次に lastScrapedAt が新しい順

@@ -3,11 +3,14 @@ import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { transformTransferToIncome } from "../shared/transfer";
 
-export function getTransactions(options?: { limit?: number; groupId?: string }, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, options?.groupId);
+export async function getTransactions(
+  options?: { limit?: number; groupId?: string },
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, options?.groupId);
   if (!groupId) return [];
 
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) return [];
 
   let query = db
@@ -32,25 +35,28 @@ export function getTransactions(options?: { limit?: number; groupId?: string }, 
     .orderBy(desc(schema.transactions.date));
 
   if (options?.limit) {
-    return query
-      .limit(options.limit)
-      .all()
-      .map((t) => transformTransferToIncome(t, accountIds));
+    const results = await query.limit(options.limit).all();
+    return results.map((t) => transformTransferToIncome(t, accountIds));
   }
-  return query.all().map((t) => transformTransferToIncome(t, accountIds));
+  const results = await query.all();
+  return results.map((t) => transformTransferToIncome(t, accountIds));
 }
 
-export function getTransactionsByMonth(month: string, groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getTransactionsByMonth(
+  month: string,
+  groupIdParam?: string,
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return [];
 
   const startDate = `${month}-01`;
   const endDate = `${month}-31`;
 
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0) return [];
 
-  const results = db
+  const results = await db
     .select({
       id: schema.transactions.id,
       mfId: schema.transactions.mfId,
@@ -81,18 +87,18 @@ export function getTransactionsByMonth(month: string, groupIdParam?: string, db:
   return results.map((t) => transformTransferToIncome(t, accountIds));
 }
 
-export function getTransactionsByAccountId(
+export async function getTransactionsByAccountId(
   accountId: number,
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = resolveGroupId(db, groupIdParam);
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return [];
 
-  const accountIds = getAccountIdsForGroup(db, groupId);
+  const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0 || !accountIds.includes(accountId)) return [];
 
-  return db
+  return await db
     .select({
       id: schema.transactions.id,
       mfId: schema.transactions.mfId,

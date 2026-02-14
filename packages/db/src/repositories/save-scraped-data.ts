@@ -29,14 +29,14 @@ function log(...args: unknown[]) {
  * - assetHistory, spendingTargets
  * - group_accountsへのリンク
  */
-export function saveScrapedData(db: Db, data: ScrapedData): void {
+export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
   const today = new Date().toISOString().split("T")[0];
 
   log("Saving scraped data to database...");
 
   // 1. Save group
   if (data.currentGroup) {
-    upsertGroup(db, data.currentGroup);
+    await upsertGroup(db, data.currentGroup);
     log(`  - Group: ${data.currentGroup.name}`);
   }
 
@@ -46,19 +46,19 @@ export function saveScrapedData(db: Db, data: ScrapedData): void {
   }
 
   // 2. Save accounts (バルク処理)
-  upsertAccounts(db, data.registeredAccounts.accounts);
+  await upsertAccounts(db, data.registeredAccounts.accounts);
   log(`  - Accounts: ${data.registeredAccounts.accounts.length}`);
 
   // 3. Build accountIdMap from DB
-  const accountIdMap = buildAccountIdMap(db);
+  const accountIdMap = await buildAccountIdMap(db);
   log(`  - accountIdMap: ${accountIdMap.size} entries`);
 
   // 4. Group-account links (バルク処理)
-  clearGroupAccountLinks(db, groupId);
+  await clearGroupAccountLinks(db, groupId);
   const accountIds = data.registeredAccounts.accounts
     .map((account) => accountIdMap.get(account.mfId))
     .filter((id): id is number => id !== undefined);
-  linkAccountsToGroup(db, groupId, accountIds);
+  await linkAccountsToGroup(db, groupId, accountIds);
   log(`  - Group account links: ${accountIds.length}`);
 
   // 5. Save account statuses (バルク処理)
@@ -74,21 +74,21 @@ export function saveScrapedData(db: Db, data: ScrapedData): void {
       (r): r is { accountId: number; status: (typeof data.registeredAccounts.accounts)[0] } =>
         r !== null,
     );
-  saveAccountStatuses(db, statusRecords);
+  await saveAccountStatuses(db, statusRecords);
 
   // 6. Create snapshot
-  const snapshotId = createSnapshot(db, groupId, today, data.refreshResult);
+  const snapshotId = await createSnapshot(db, groupId, today, data.refreshResult);
   log(`  - Snapshot ID: ${snapshotId}`);
 
   // 7. Unknown account for unmatched items
-  let unknownAccount = db
+  let unknownAccount = await db
     .select()
     .from(schema.accounts)
     .where(eq(schema.accounts.mfId, "unknown"))
     .get();
 
   if (!unknownAccount) {
-    unknownAccount = db
+    unknownAccount = await db
       .insert(schema.accounts)
       .values({
         mfId: "unknown",
@@ -105,13 +105,13 @@ export function saveScrapedData(db: Db, data: ScrapedData): void {
   // 8. Save portfolio
   for (const item of data.portfolio.items) {
     const accountId = accountIdMap.get(item.institution) || unknownAccountId;
-    const categoryId = getOrCreateCategory(db, item.type);
-    const holdingId = createHolding(db, accountId, item.name, "asset", {
+    const categoryId = await getOrCreateCategory(db, item.type);
+    const holdingId = await createHolding(db, accountId, item.name, "asset", {
       categoryId,
       code: item.code,
     });
     const amount = Number.isFinite(item.balance) ? item.balance : 0;
-    saveHoldingValue(db, holdingId, snapshotId, {
+    await saveHoldingValue(db, holdingId, snapshotId, {
       amount,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
@@ -126,17 +126,17 @@ export function saveScrapedData(db: Db, data: ScrapedData): void {
   // 9. Save liabilities
   for (const liability of data.liabilities.items) {
     const accountId = accountIdMap.get(liability.institution) || unknownAccountId;
-    const holdingId = createHolding(db, accountId, liability.name, "liability", {
+    const holdingId = await createHolding(db, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });
-    saveHoldingValue(db, holdingId, snapshotId, { amount: liability.balance });
+    await saveHoldingValue(db, holdingId, snapshotId, { amount: liability.balance });
   }
   log(`  - Liabilities: ${data.liabilities.items.length}`);
 
   // 10. Save transactions
   let savedCount = 0;
   for (const item of data.cashFlow.items) {
-    saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, item, accountIdMap);
     if (item.mfId && !item.mfId.startsWith("unknown")) {
       savedCount++;
     }
@@ -145,18 +145,18 @@ export function saveScrapedData(db: Db, data: ScrapedData): void {
 
   // 11. Save asset history
   if (data.assetHistory?.points?.length > 0) {
-    saveAssetHistory(db, groupId, data.assetHistory.points);
+    await saveAssetHistory(db, groupId, data.assetHistory.points);
     log(`  - Asset history: ${data.assetHistory.points.length}`);
   }
 
   // 12. Save spending targets
   if (data.spendingTargets) {
-    saveSpendingTargets(db, groupId, data.spendingTargets);
+    await saveSpendingTargets(db, groupId, data.spendingTargets);
     log(`  - Spending targets: ${data.spendingTargets.categories.length}`);
   }
 
   // 13. Update timestamp
-  updateGroupLastScrapedAt(db, groupId, now());
+  await updateGroupLastScrapedAt(db, groupId, now());
 
   log("Data saved successfully!");
 }
@@ -167,12 +167,12 @@ export function saveScrapedData(db: Db, data: ScrapedData): void {
  * - assetHistory
  * - spendingTargets
  */
-export function saveGroupOnlyData(db: Db, data: ScrapedData): void {
+export async function saveGroupOnlyData(db: Db, data: ScrapedData): Promise<void> {
   log("Saving group-only data to database...");
 
   // 1. Save group
   if (data.currentGroup) {
-    upsertGroup(db, data.currentGroup);
+    await upsertGroup(db, data.currentGroup);
     log(`  - Group: ${data.currentGroup.name}`);
   }
 
@@ -182,30 +182,30 @@ export function saveGroupOnlyData(db: Db, data: ScrapedData): void {
   }
 
   // 2. Build accountIdMap from DB (全アカウント)
-  const accountIdMap = buildAccountIdMap(db);
+  const accountIdMap = await buildAccountIdMap(db);
 
   // 3. Group-account links (バルク処理)
-  clearGroupAccountLinks(db, groupId);
+  await clearGroupAccountLinks(db, groupId);
   const accountIds = data.registeredAccounts.accounts
     .map((account) => accountIdMap.get(account.mfId))
     .filter((id): id is number => id !== undefined);
-  linkAccountsToGroup(db, groupId, accountIds);
+  await linkAccountsToGroup(db, groupId, accountIds);
   log(`  - Group account links: ${accountIds.length}`);
 
   // 4. Save asset history
   if (data.assetHistory?.points?.length > 0) {
-    saveAssetHistory(db, groupId, data.assetHistory.points);
+    await saveAssetHistory(db, groupId, data.assetHistory.points);
     log(`  - Asset history: ${data.assetHistory.points.length}`);
   }
 
   // 5. Save spending targets
   if (data.spendingTargets) {
-    saveSpendingTargets(db, groupId, data.spendingTargets);
+    await saveSpendingTargets(db, groupId, data.spendingTargets);
     log(`  - Spending targets: ${data.spendingTargets.categories.length}`);
   }
 
   // 6. Update timestamp
-  updateGroupLastScrapedAt(db, groupId, now());
+  await updateGroupLastScrapedAt(db, groupId, now());
 
   log("Group data saved successfully!");
 }

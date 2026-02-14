@@ -13,21 +13,21 @@ interface AssetBreakdownChartProps {
   groupId?: string;
 }
 
-export function AssetBreakdownChart({ className, groupId }: AssetBreakdownChartProps) {
-  const data = getAssetBreakdownByCategory(groupId);
+export async function AssetBreakdownChart({ className, groupId }: AssetBreakdownChartProps) {
+  const data = await getAssetBreakdownByCategory(groupId);
 
   if (data.length === 0) {
     return <EmptyState icon={PieChart} title="資産構成" />;
   }
 
-  const totalAssets = getLatestTotalAssets(groupId);
-  const liabilities = getLiabilityBreakdownByCategory(groupId);
+  const totalAssets = await getLatestTotalAssets(groupId);
+  const liabilities = await getLiabilityBreakdownByCategory(groupId);
   const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
   const netAssets = totalAssets !== null ? totalAssets - totalLiabilities : null;
 
-  const dailyChanges = getCategoryChangesForPeriod("daily", groupId);
-  const weeklyChanges = getCategoryChangesForPeriod("weekly", groupId);
-  const monthlyChanges = getCategoryChangesForPeriod("monthly", groupId);
+  const dailyChanges = await getCategoryChangesForPeriod("daily", groupId);
+  const weeklyChanges = await getCategoryChangesForPeriod("weekly", groupId);
+  const monthlyChanges = await getCategoryChangesForPeriod("monthly", groupId);
 
   return (
     <AssetBreakdownChartClient

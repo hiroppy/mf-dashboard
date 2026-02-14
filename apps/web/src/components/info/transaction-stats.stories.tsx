@@ -44,7 +44,7 @@ export const Default: Story = {
     year: "2025",
   },
   beforeEach() {
-    mocked(getTransactions).mockReturnValue([
+    mocked(getTransactions).mockResolvedValue([
       makeTransaction(1, { category: "食費", amount: 50000 }),
       makeTransaction(2, { category: "住宅", amount: 120000 }),
       makeTransaction(3, { category: "水道・光熱費", amount: 20000 }),
@@ -64,6 +64,6 @@ export const Empty: Story = {
     year: "2025",
   },
   beforeEach() {
-    mocked(getTransactions).mockReturnValue([]);
+    mocked(getTransactions).mockResolvedValue([]);
   },
 };

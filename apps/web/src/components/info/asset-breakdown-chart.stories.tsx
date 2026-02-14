@@ -41,16 +41,16 @@ const sampleChanges = {
 
 export const Default: Story = {
   beforeEach() {
-    mocked(getAssetBreakdownByCategory).mockReturnValue([
+    mocked(getAssetBreakdownByCategory).mockResolvedValue([
       { category: "預金・現金・暗号資産", amount: 5000000 },
       { category: "株式(現物)", amount: 3000000 },
       { category: "投資信託", amount: 2000000 },
       { category: "債券", amount: 500000 },
       { category: "年金", amount: 1500000 },
     ]);
-    mocked(getLatestTotalAssets).mockReturnValue(12000000);
-    mocked(getLiabilityBreakdownByCategory).mockReturnValue([]);
-    mocked(getCategoryChangesForPeriod).mockImplementation((period) => {
+    mocked(getLatestTotalAssets).mockResolvedValue(12000000);
+    mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
+    mocked(getCategoryChangesForPeriod).mockImplementation(async (period) => {
       if (period === "daily") return sampleChanges;
       if (period === "weekly")
         return {
@@ -62,7 +62,7 @@ export const Default: Story = {
         total: { current: 12000000, previous: 11000000, change: 1000000 },
       };
     });
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2026-01",
       totalIncome: 350000,
       totalExpense: 220000,
@@ -73,12 +73,12 @@ export const Default: Story = {
 
 export const SingleCategory: Story = {
   beforeEach() {
-    mocked(getAssetBreakdownByCategory).mockReturnValue([
+    mocked(getAssetBreakdownByCategory).mockResolvedValue([
       { category: "預金・現金・暗号資産", amount: 10000000 },
     ]);
-    mocked(getLatestTotalAssets).mockReturnValue(10000000);
-    mocked(getLiabilityBreakdownByCategory).mockReturnValue([]);
-    mocked(getCategoryChangesForPeriod).mockImplementation((period) => {
+    mocked(getLatestTotalAssets).mockResolvedValue(10000000);
+    mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
+    mocked(getCategoryChangesForPeriod).mockImplementation(async (period) => {
       if (period === "daily")
         return {
           categories: [
@@ -93,7 +93,7 @@ export const SingleCategory: Story = {
         };
       return null;
     });
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2026-01",
       totalIncome: 300000,
       totalExpense: 200000,
@@ -104,37 +104,37 @@ export const SingleCategory: Story = {
 
 export const ZeroAmount: Story = {
   beforeEach() {
-    mocked(getAssetBreakdownByCategory).mockReturnValue([
+    mocked(getAssetBreakdownByCategory).mockResolvedValue([
       { category: "預金・現金・暗号資産", amount: 0 },
       { category: "株式(現物)", amount: 0 },
     ]);
-    mocked(getLatestTotalAssets).mockReturnValue(0);
-    mocked(getLiabilityBreakdownByCategory).mockReturnValue([]);
-    mocked(getCategoryChangesForPeriod).mockReturnValue(null);
-    mocked(getLatestMonthlySummary).mockReturnValue(undefined);
+    mocked(getLatestTotalAssets).mockResolvedValue(0);
+    mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
+    mocked(getCategoryChangesForPeriod).mockResolvedValue(null);
+    mocked(getLatestMonthlySummary).mockResolvedValue(undefined);
   },
 };
 
 export const Empty: Story = {
   beforeEach() {
-    mocked(getAssetBreakdownByCategory).mockReturnValue([]);
-    mocked(getLatestTotalAssets).mockReturnValue(null);
-    mocked(getLiabilityBreakdownByCategory).mockReturnValue([]);
-    mocked(getCategoryChangesForPeriod).mockReturnValue(null);
-    mocked(getLatestMonthlySummary).mockReturnValue(undefined);
+    mocked(getAssetBreakdownByCategory).mockResolvedValue([]);
+    mocked(getLatestTotalAssets).mockResolvedValue(null);
+    mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
+    mocked(getCategoryChangesForPeriod).mockResolvedValue(null);
+    mocked(getLatestMonthlySummary).mockResolvedValue(undefined);
   },
 };
 
 export const NoPeriodComparison: Story = {
   beforeEach() {
-    mocked(getAssetBreakdownByCategory).mockReturnValue([
+    mocked(getAssetBreakdownByCategory).mockResolvedValue([
       { category: "預金・現金・暗号資産", amount: 5000000 },
       { category: "株式(現物)", amount: 3000000 },
     ]);
-    mocked(getLatestTotalAssets).mockReturnValue(8000000);
-    mocked(getLiabilityBreakdownByCategory).mockReturnValue([]);
-    mocked(getCategoryChangesForPeriod).mockReturnValue(null);
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestTotalAssets).mockResolvedValue(8000000);
+    mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
+    mocked(getCategoryChangesForPeriod).mockResolvedValue(null);
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2026-01",
       totalIncome: 250000,
       totalExpense: 180000,

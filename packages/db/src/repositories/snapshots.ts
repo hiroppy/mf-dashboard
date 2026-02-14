@@ -4,13 +4,13 @@ import { schema } from "../index";
 import { now } from "../utils";
 
 // 実行ごとに新しいスナップショットを作成（同じ日でも複数作成可能）
-export function createSnapshot(
+export async function createSnapshot(
   db: Db,
   groupId: string,
   date: string,
   refreshResult?: RefreshResult | null,
-): number {
-  const result = db
+): Promise<number> {
+  const result = await db
     .insert(schema.dailySnapshots)
     .values({
       groupId,

@@ -2,9 +2,9 @@ import { getAllGroups, getCurrentGroup } from "@mf-dashboard/db";
 import { GroupSelectorDisplay, groupSelectorContainerClassName } from "./group-selector-display";
 import { GroupSelectorClient } from "./group-selector.client";
 
-export function GroupSelector() {
-  const groups = getAllGroups();
-  const currentGroup = getCurrentGroup();
+export async function GroupSelector() {
+  const groups = await getAllGroups();
+  const currentGroup = await getCurrentGroup();
 
   if (groups.length <= 1) {
     return currentGroup ? (

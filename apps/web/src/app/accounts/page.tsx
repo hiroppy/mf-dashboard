@@ -77,8 +77,8 @@ function AccountList({
   );
 }
 
-export function AccountsContent({ groupId }: { groupId?: string }) {
-  const groupedAccounts = getAccountsGroupedByCategory(groupId);
+export async function AccountsContent({ groupId }: { groupId?: string }) {
+  const groupedAccounts = await getAccountsGroupedByCategory(groupId);
 
   return (
     <PageLayout

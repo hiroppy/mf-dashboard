@@ -16,28 +16,29 @@ export function now(): string {
  * If a record matching the condition exists, update it. Otherwise, insert a new one.
  * Returns the record's ID.
  */
-export function upsertById<T extends { id: number }>(
+export async function upsertById<T extends { id: number }>(
   db: Db,
   table: SQLiteTable,
   condition: SQL,
   insertValues: Record<string, unknown>,
   updateValues: Record<string, unknown>,
-): number {
-  const existing = db.select().from(table).where(condition).get() as T | undefined;
+): Promise<number> {
+  const existing = (await db.select().from(table).where(condition).get()) as T | undefined;
 
   if (existing) {
-    db.update(table)
+    await db
+      .update(table)
       .set({ ...updateValues, updatedAt: now() })
       .where(condition)
       .run();
     return existing.id;
   }
 
-  const result = db
+  const result = (await db
     .insert(table)
     .values({ ...insertValues, createdAt: now(), updatedAt: now() })
     .returning()
-    .get() as { id: number };
+    .get()) as { id: number };
 
   return result.id;
 }
@@ -45,30 +46,31 @@ export function upsertById<T extends { id: number }>(
 /**
  * Upsert a record and return it along with whether it was newly created.
  */
-export function upsertOne<T extends { id: number }>(
+export async function upsertOne<T extends { id: number }>(
   db: Db,
   table: SQLiteTable,
   condition: SQL,
   insertValues: Record<string, unknown>,
   updateValues: Record<string, unknown>,
-): { record: T; isNew: boolean } {
-  const existing = db.select().from(table).where(condition).get() as T | undefined;
+): Promise<{ record: T; isNew: boolean }> {
+  const existing = (await db.select().from(table).where(condition).get()) as T | undefined;
 
   if (existing) {
-    db.update(table)
+    await db
+      .update(table)
       .set({ ...updateValues, updatedAt: now() })
       .where(condition)
       .run();
 
-    const updated = db.select().from(table).where(condition).get() as T;
+    const updated = (await db.select().from(table).where(condition).get()) as T;
     return { record: updated, isNew: false };
   }
 
-  const result = db
+  const result = (await db
     .insert(table)
     .values({ ...insertValues, createdAt: now(), updatedAt: now() })
     .returning()
-    .get() as T;
+    .get()) as T;
 
   return { record: result, isNew: true };
 }
@@ -81,14 +83,14 @@ export function upsertOne<T extends { id: number }>(
  * Get or create a record by name.
  * Returns the record's ID.
  */
-export function getOrCreate(
+export async function getOrCreate(
   db: Db,
   table: SQLiteTable,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   nameColumn: SQLiteColumn<any>,
   name: string,
-): number {
-  const existing = db.select().from(table).where(eq(nameColumn, name)).get() as
+): Promise<number> {
+  const existing = (await db.select().from(table).where(eq(nameColumn, name)).get()) as
     | { id: number }
     | undefined;
 
@@ -97,11 +99,11 @@ export function getOrCreate(
   }
 
   const timestamp = now();
-  const result = db
+  const result = (await db
     .insert(table)
     .values({ name, createdAt: timestamp, updatedAt: timestamp })
     .returning()
-    .get() as { id: number };
+    .get()) as { id: number };
 
   return result.id;
 }

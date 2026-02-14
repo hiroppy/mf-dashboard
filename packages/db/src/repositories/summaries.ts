@@ -8,7 +8,11 @@ import { now, convertToIsoDate, upsertById } from "../utils";
 // Internal Helpers
 // ============================================================================
 
-function saveAssetHistoryPoint(db: Db, groupId: string, point: AssetHistoryPoint): number {
+async function saveAssetHistoryPoint(
+  db: Db,
+  groupId: string,
+  point: AssetHistoryPoint,
+): Promise<number> {
   const isoDate = convertToIsoDate(point.date);
 
   const data = {
@@ -18,7 +22,7 @@ function saveAssetHistoryPoint(db: Db, groupId: string, point: AssetHistoryPoint
     change: point.change,
   };
 
-  return upsertById(
+  return await upsertById(
     db,
     schema.assetHistory,
     and(eq(schema.assetHistory.groupId, groupId), eq(schema.assetHistory.date, isoDate))!,
@@ -27,16 +31,17 @@ function saveAssetHistoryPoint(db: Db, groupId: string, point: AssetHistoryPoint
   );
 }
 
-function saveAssetHistoryCategories(
+async function saveAssetHistoryCategories(
   db: Db,
   historyId: number,
   categories: Record<string, number>,
-): void {
+): Promise<void> {
   const categoryNames = Object.keys(categories);
 
   // スクレイピング結果にないカテゴリを削除
   if (categoryNames.length > 0) {
-    db.delete(schema.assetHistoryCategories)
+    await db
+      .delete(schema.assetHistoryCategories)
       .where(
         and(
           eq(schema.assetHistoryCategories.assetHistoryId, historyId),
@@ -46,7 +51,8 @@ function saveAssetHistoryCategories(
       .run();
   } else {
     // カテゴリが空の場合は全削除
-    db.delete(schema.assetHistoryCategories)
+    await db
+      .delete(schema.assetHistoryCategories)
       .where(eq(schema.assetHistoryCategories.assetHistoryId, historyId))
       .run();
     return;
@@ -64,7 +70,8 @@ function saveAssetHistoryCategories(
 
   // SQLiteではcomposite keyでのonConflictDoUpdateには
   // unique indexが必要（既にasset_history_categories_history_category_idxがある）
-  db.insert(schema.assetHistoryCategories)
+  await db
+    .insert(schema.assetHistoryCategories)
     .values(records)
     .onConflictDoUpdate({
       target: [
@@ -83,9 +90,13 @@ function saveAssetHistoryCategories(
 // Public Functions
 // ============================================================================
 
-export function saveAssetHistory(db: Db, groupId: string, points: AssetHistoryPoint[]): void {
+export async function saveAssetHistory(
+  db: Db,
+  groupId: string,
+  points: AssetHistoryPoint[],
+): Promise<void> {
   for (const point of points) {
-    const historyId = saveAssetHistoryPoint(db, groupId, point);
-    saveAssetHistoryCategories(db, historyId, point.categories);
+    const historyId = await saveAssetHistoryPoint(db, groupId, point);
+    await saveAssetHistoryCategories(db, historyId, point.categories);
   }
 }

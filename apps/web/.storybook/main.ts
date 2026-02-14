@@ -8,6 +8,9 @@ const config: StorybookConfig = {
   stories: ["../src/components/**/*.stories.@(ts|tsx)"],
   framework: "@storybook/nextjs-vite",
   addons: ["@storybook/addon-a11y", "@storybook/addon-vitest"],
+  features: {
+    experimentalRSC: true,
+  },
   async viteFinal(config) {
     const existingAlias = config.resolve?.alias;
     const baseAlias =

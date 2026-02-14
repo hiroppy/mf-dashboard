@@ -5,13 +5,13 @@ import { CFMonthContent } from "../../../cf/[month]/page";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ groupId: "_", month: "_" }];
-  const groups = getAllGroups().filter((g) => !g.isCurrent);
+  const groups = (await getAllGroups()).filter((g) => !g.isCurrent);
   if (groups.length === 0) return [{ groupId: "_", month: "_" }];
 
   const params: { groupId: string; month: string }[] = [];
 
   for (const group of groups) {
-    const months = getAvailableMonths(group.id);
+    const months = await getAvailableMonths(group.id);
     for (const { month } of months) {
       params.push({ groupId: group.id, month });
     }

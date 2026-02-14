@@ -11,14 +11,14 @@ interface AccountSummaryCardProps {
   groupId?: string;
 }
 
-export function AccountSummaryCard({ mfId, groupId }: AccountSummaryCardProps) {
-  const account = getAccountByMfId(mfId, groupId);
+export async function AccountSummaryCard({ mfId, groupId }: AccountSummaryCardProps) {
+  const account = await getAccountByMfId(mfId, groupId);
 
   if (!account) {
     return <EmptyState icon={WalletIcon} title="サマリー" />;
   }
 
-  const holdings = getHoldingsByAccountId(account.id, groupId);
+  const holdings = await getHoldingsByAccountId(account.id, groupId);
   const assets = holdings.filter((h) => h.type === "asset" && h.amount);
   const liabilities = holdings.filter((h) => h.type === "liability" && h.amount);
 

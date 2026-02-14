@@ -7,8 +7,8 @@ interface DailySpendingHeatmapProps {
   groupId?: string;
 }
 
-export function DailySpendingHeatmap({ month, groupId }: DailySpendingHeatmapProps) {
-  const transactions = getTransactionsByMonth(month, groupId);
+export async function DailySpendingHeatmap({ month, groupId }: DailySpendingHeatmapProps) {
+  const transactions = await getTransactionsByMonth(month, groupId);
 
   // Group expense amounts by date (exclude transfers)
   const dailyMap = new Map<string, number>();

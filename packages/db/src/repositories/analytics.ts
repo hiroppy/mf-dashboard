@@ -32,8 +32,11 @@ export interface AnalyticsReportRow {
   updatedAt: string;
 }
 
-export function getLatestAnalyticsReport(db: Db, groupId: string): AnalyticsReportRow | null {
-  const result = db
+export async function getLatestAnalyticsReport(
+  db: Db,
+  groupId: string,
+): Promise<AnalyticsReportRow | null> {
+  const result = await db
     .select()
     .from(schema.analyticsReports)
     .where(eq(schema.analyticsReports.groupId, groupId))
@@ -44,12 +47,12 @@ export function getLatestAnalyticsReport(db: Db, groupId: string): AnalyticsRepo
   return result ?? null;
 }
 
-export function getAnalyticsReportByDate(
+export async function getAnalyticsReportByDate(
   db: Db,
   groupId: string,
   date: string,
-): AnalyticsReportRow | null {
-  const result = db
+): Promise<AnalyticsReportRow | null> {
+  const result = await db
     .select()
     .from(schema.analyticsReports)
     .where(
@@ -60,9 +63,9 @@ export function getAnalyticsReportByDate(
   return result ?? null;
 }
 
-export function saveAnalyticsReport(db: Db, report: AnalyticsReportInput): void {
+export async function saveAnalyticsReport(db: Db, report: AnalyticsReportInput): Promise<void> {
   const timestamp = now();
-  const existing = getAnalyticsReportByDate(db, report.groupId, report.date);
+  const existing = await getAnalyticsReportByDate(db, report.groupId, report.date);
 
   const values = {
     groupId: report.groupId,
@@ -78,12 +81,14 @@ export function saveAnalyticsReport(db: Db, report: AnalyticsReportInput): void 
   };
 
   if (existing) {
-    db.update(schema.analyticsReports)
+    await db
+      .update(schema.analyticsReports)
       .set(values)
       .where(eq(schema.analyticsReports.id, existing.id))
       .run();
   } else {
-    db.insert(schema.analyticsReports)
+    await db
+      .insert(schema.analyticsReports)
       .values({
         ...values,
         createdAt: timestamp,
@@ -92,8 +97,12 @@ export function saveAnalyticsReport(db: Db, report: AnalyticsReportInput): void 
   }
 }
 
-export function getAnalyticsReports(db: Db, groupId: string, limit = 30): AnalyticsReportRow[] {
-  return db
+export async function getAnalyticsReports(
+  db: Db,
+  groupId: string,
+  limit = 30,
+): Promise<AnalyticsReportRow[]> {
+  return await db
     .select()
     .from(schema.analyticsReports)
     .where(eq(schema.analyticsReports.groupId, groupId))

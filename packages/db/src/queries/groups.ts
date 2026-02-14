@@ -1,12 +1,12 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 
-export function getCurrentGroup(db: Db = getDb()) {
-  return db.select().from(schema.groups).where(eq(schema.groups.isCurrent, true)).get();
+export async function getCurrentGroup(db: Db = getDb()) {
+  return await db.select().from(schema.groups).where(eq(schema.groups.isCurrent, true)).get();
 }
 
-export function getAllGroups(db: Db = getDb()) {
-  return db
+export async function getAllGroups(db: Db = getDb()) {
+  return await db
     .select()
     .from(schema.groups)
     .orderBy(

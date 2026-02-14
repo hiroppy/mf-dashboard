@@ -10,11 +10,11 @@ interface UnrealizedGainCardProps {
   groupId?: string;
 }
 
-export function UnrealizedGainCard({ className, mfId, groupId }: UnrealizedGainCardProps) {
-  const account = mfId ? getAccountByMfId(mfId, groupId) : null;
+export async function UnrealizedGainCard({ className, mfId, groupId }: UnrealizedGainCardProps) {
+  const account = mfId ? await getAccountByMfId(mfId, groupId) : null;
   const holdings = account
-    ? getHoldingsByAccountId(account.id, groupId)
-    : getHoldingsWithLatestValues(groupId);
+    ? await getHoldingsByAccountId(account.id, groupId)
+    : await getHoldingsWithLatestValues(groupId);
   const withGain = holdings.filter((h) => h.unrealizedGain !== null);
 
   if (withGain.length === 0) {

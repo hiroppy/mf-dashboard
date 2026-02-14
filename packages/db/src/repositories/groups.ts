@@ -4,8 +4,8 @@ import type { Group } from "../types";
 import { schema } from "../index";
 import { now, upsertById } from "../utils";
 
-export function getCurrentGroupId(db: Db): string | null {
-  const group = db
+export async function getCurrentGroupId(db: Db): Promise<string | null> {
+  const group = await db
     .select({ id: schema.groups.id })
     .from(schema.groups)
     .where(eq(schema.groups.isCurrent, true))
@@ -13,12 +13,17 @@ export function getCurrentGroupId(db: Db): string | null {
   return group?.id ?? null;
 }
 
-export function clearGroupAccountLinks(db: Db, groupId: string): void {
-  db.delete(schema.groupAccounts).where(eq(schema.groupAccounts.groupId, groupId)).run();
+export async function clearGroupAccountLinks(db: Db, groupId: string): Promise<void> {
+  await db.delete(schema.groupAccounts).where(eq(schema.groupAccounts.groupId, groupId)).run();
 }
 
-export function linkAccountToGroup(db: Db, groupId: string, accountId: number): void {
-  db.insert(schema.groupAccounts)
+export async function linkAccountToGroup(
+  db: Db,
+  groupId: string,
+  accountId: number,
+): Promise<void> {
+  await db
+    .insert(schema.groupAccounts)
     .values({
       groupId,
       accountId,
@@ -29,14 +34,14 @@ export function linkAccountToGroup(db: Db, groupId: string, accountId: number): 
     .run();
 }
 
-export function upsertGroup(db: Db, group: Group): void {
+export async function upsertGroup(db: Db, group: Group): Promise<void> {
   // isCurrent=trueの場合のみ、他のグループをfalseにする
   if (group.isCurrent) {
-    db.update(schema.groups).set({ isCurrent: false, updatedAt: now() }).run();
+    await db.update(schema.groups).set({ isCurrent: false, updatedAt: now() }).run();
   }
 
   // グループをupsert
-  upsertById(
+  await upsertById(
     db,
     schema.groups,
     eq(schema.groups.id, group.id),
@@ -52,8 +57,13 @@ export function upsertGroup(db: Db, group: Group): void {
   );
 }
 
-export function updateGroupLastScrapedAt(db: Db, groupId: string, timestamp: string): void {
-  db.update(schema.groups)
+export async function updateGroupLastScrapedAt(
+  db: Db,
+  groupId: string,
+  timestamp: string,
+): Promise<void> {
+  await db
+    .update(schema.groups)
     .set({ lastScrapedAt: timestamp, updatedAt: now() })
     .where(eq(schema.groups.id, groupId))
     .run();
@@ -62,7 +72,11 @@ export function updateGroupLastScrapedAt(db: Db, groupId: string, timestamp: str
 /**
  * 複数アカウントリンクの一括insert
  */
-export function linkAccountsToGroup(db: Db, groupId: string, accountIds: number[]): void {
+export async function linkAccountsToGroup(
+  db: Db,
+  groupId: string,
+  accountIds: number[],
+): Promise<void> {
   if (accountIds.length === 0) return;
 
   const timestamp = now();
@@ -73,5 +87,5 @@ export function linkAccountsToGroup(db: Db, groupId: string, accountIds: number[
     updatedAt: timestamp,
   }));
 
-  db.insert(schema.groupAccounts).values(records).onConflictDoNothing().run();
+  await db.insert(schema.groupAccounts).values(records).onConflictDoNothing().run();
 }

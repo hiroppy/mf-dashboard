@@ -14,14 +14,14 @@ interface TransactionTableProps {
   groupId?: string;
 }
 
-export function TransactionTable({ month, mfId, groupId }: TransactionTableProps) {
-  const account = mfId ? getAccountByMfId(mfId, groupId) : null;
+export async function TransactionTable({ month, mfId, groupId }: TransactionTableProps) {
+  const account = mfId ? await getAccountByMfId(mfId, groupId) : null;
 
   const transactions = account
-    ? getTransactionsByAccountId(account.id, groupId)
+    ? await getTransactionsByAccountId(account.id, groupId)
     : month
-      ? getTransactionsByMonth(month, groupId)
-      : getTransactions({ groupId });
+      ? await getTransactionsByMonth(month, groupId)
+      : await getTransactions({ groupId });
 
   if (transactions.length === 0) {
     if (mfId) return null;

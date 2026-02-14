@@ -15,25 +15,25 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   beforeEach() {
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2025-04",
       totalIncome: 350000,
       totalExpense: 220000,
       netIncome: 130000,
     });
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };
 
 export const WithRecentTransactions: Story = {
   beforeEach() {
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2025-04",
       totalIncome: 350000,
       totalExpense: 220000,
       netIncome: 130000,
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -85,13 +85,13 @@ export const WithRecentTransactions: Story = {
 
 export const Deficit: Story = {
   beforeEach() {
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2025-04",
       totalIncome: 200000,
       totalExpense: 280000,
       netIncome: -80000,
     });
-    mocked(getTransactionsByMonth).mockReturnValue([
+    mocked(getTransactionsByMonth).mockResolvedValue([
       {
         id: 1,
         mfId: "mf-1",
@@ -143,19 +143,19 @@ export const Deficit: Story = {
 
 export const NoTransactions: Story = {
   beforeEach() {
-    mocked(getLatestMonthlySummary).mockReturnValue({
+    mocked(getLatestMonthlySummary).mockResolvedValue({
       month: "2025-04",
       totalIncome: 0,
       totalExpense: 0,
       netIncome: 0,
     });
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };
 
 export const Empty: Story = {
   beforeEach() {
-    mocked(getLatestMonthlySummary).mockReturnValue(undefined);
-    mocked(getTransactionsByMonth).mockReturnValue([]);
+    mocked(getLatestMonthlySummary).mockResolvedValue(undefined);
+    mocked(getTransactionsByMonth).mockResolvedValue([]);
   },
 };

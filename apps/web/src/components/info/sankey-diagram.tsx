@@ -8,8 +8,8 @@ interface SankeyDiagramProps {
   groupId?: string;
 }
 
-export function SankeyDiagram({ month, groupId }: SankeyDiagramProps) {
-  const categoryTotals = getMonthlyCategoryTotals(month, groupId);
+export async function SankeyDiagram({ month, groupId }: SankeyDiagramProps) {
+  const categoryTotals = await getMonthlyCategoryTotals(month, groupId);
 
   // Separate income and expense categories (sorted by amount desc)
   const incomeCategories = categoryTotals

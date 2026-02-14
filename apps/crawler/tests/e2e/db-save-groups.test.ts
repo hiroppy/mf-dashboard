@@ -47,14 +47,14 @@ beforeAll(async () => {
       const noGroupData = result.groupDataList.find((gd) => isNoGroup(gd.group.id));
       if (noGroupData) {
         const scrapedData = buildScrapedData(result.globalData, noGroupData);
-        saveScrapedData(db, scrapedData);
+        await saveScrapedData(db, scrapedData);
       }
 
       // 各グループはグループ固有データのみ保存
       for (const groupData of result.groupDataList) {
         if (isNoGroup(groupData.group.id)) continue;
         const scrapedData = buildGroupOnlyScrapedData(groupData);
-        saveGroupOnlyData(db, scrapedData);
+        await saveGroupOnlyData(db, scrapedData);
       }
 
       return result;

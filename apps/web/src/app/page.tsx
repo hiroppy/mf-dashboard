@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   title: "ダッシュボード",
 };
 
-export function DashboardContent({ groupId }: { groupId?: string }) {
-  const showDailyChange = hasInvestmentHoldings(groupId);
+export async function DashboardContent({ groupId }: { groupId?: string }) {
+  const showDailyChange = await hasInvestmentHoldings(groupId);
 
   return (
     <PageLayout title="ダッシュボード">

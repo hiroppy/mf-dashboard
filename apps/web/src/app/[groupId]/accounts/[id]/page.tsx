@@ -9,13 +9,13 @@ import { AccountDetailContent } from "../../../accounts/[id]/page";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ groupId: "_", id: "_" }];
-  const groups = getAllGroups().filter((g) => !g.isCurrent);
+  const groups = (await getAllGroups()).filter((g) => !g.isCurrent);
   if (groups.length === 0) return [{ groupId: "_", id: "_" }];
 
   const params: { groupId: string; id: string }[] = [];
 
   for (const group of groups) {
-    const mfIds = getAllAccountMfIds(group.id);
+    const mfIds = await getAllAccountMfIds(group.id);
     for (const id of mfIds) {
       params.push({ groupId: group.id, id });
     }
@@ -28,7 +28,7 @@ export async function generateMetadata({
   params,
 }: PageProps<"/[groupId]/accounts/[id]">): Promise<Metadata> {
   const { id, groupId } = await params;
-  const account = getAccountByMfId(id, groupId);
+  const account = await getAccountByMfId(id, groupId);
   return {
     title: account?.name ?? "アカウント詳細",
   };

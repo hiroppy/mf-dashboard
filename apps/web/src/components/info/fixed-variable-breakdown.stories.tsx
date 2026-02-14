@@ -17,7 +17,7 @@ export const Default: Story = {
     month: "2026-01",
   },
   beforeEach() {
-    mocked(getExpenseByFixedVariable).mockReturnValue({
+    mocked(getExpenseByFixedVariable).mockResolvedValue({
       fixed: {
         total: 180000,
         categories: [
@@ -46,7 +46,7 @@ export const FixedHeavy: Story = {
     month: "2026-01",
   },
   beforeEach() {
-    mocked(getExpenseByFixedVariable).mockReturnValue({
+    mocked(getExpenseByFixedVariable).mockResolvedValue({
       fixed: {
         total: 250000,
         categories: [
@@ -72,7 +72,7 @@ export const Empty: Story = {
     month: "2026-01",
   },
   beforeEach() {
-    mocked(getExpenseByFixedVariable).mockReturnValue({
+    mocked(getExpenseByFixedVariable).mockResolvedValue({
       fixed: { total: 0, categories: [] },
       variable: { total: 0, categories: [] },
     });

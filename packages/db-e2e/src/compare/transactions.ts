@@ -26,18 +26,18 @@ export type TransactionComparison = {
  * DBから月別のtransaction集計を取得
  * getMonthlySummaryByMonthを使用してWebアプリと同じロジックで計算
  */
-function getDbTransactionSummary(
+async function getDbTransactionSummary(
   month: string,
   groupId: string,
   db: Db,
-): { count: number; totalIncome: number; totalExpense: number } {
+): Promise<{ count: number; totalIncome: number; totalExpense: number }> {
   // 収入・支出はWebアプリと同じロジック（getMonthlySummaryByMonth）を使用
-  const summary = getMonthlySummaryByMonth(month, groupId, db);
+  const summary = await getMonthlySummaryByMonth(month, groupId, db);
   const totalIncome = summary?.totalIncome || 0;
   const totalExpense = summary?.totalExpense || 0;
 
   // 件数はトランザクションから計算（振替・計算対象外を除く）
-  const transactions = getTransactionsByMonth(month, groupId, db);
+  const transactions = await getTransactionsByMonth(month, groupId, db);
   let count = 0;
   for (const t of transactions) {
     if (t.isExcludedFromCalculation) continue;
@@ -76,15 +76,15 @@ function getScrapedTransactionSummary(cashFlow: CashFlowSummary): {
 /**
  * スクレイピング結果とDBの値を比較
  */
-export function compareTransactions(
+export async function compareTransactions(
   month: string,
   groupId: string,
   groupName: string,
   scraped: CashFlowSummary,
   db: Db,
-): TransactionComparison {
+): Promise<TransactionComparison> {
   const scrapedSummary = getScrapedTransactionSummary(scraped);
-  const dbSummary = getDbTransactionSummary(month, groupId, db);
+  const dbSummary = await getDbTransactionSummary(month, groupId, db);
 
   return {
     month,

@@ -8,8 +8,8 @@ interface DailyChangeCardProps {
   groupId?: string;
 }
 
-export function DailyChangeCard({ className, groupId }: DailyChangeCardProps) {
-  const holdings = getHoldingsWithDailyChange(groupId);
+export async function DailyChangeCard({ className, groupId }: DailyChangeCardProps) {
+  const holdings = await getHoldingsWithDailyChange(groupId);
 
   if (holdings.length === 0) {
     return <EmptyState icon={ArrowUpDown} title="前日比ランキング" />;

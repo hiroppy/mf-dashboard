@@ -21,12 +21,12 @@ afterAll(() => {
   closeTestDb(db);
 });
 
-beforeEach(() => {
-  resetTestDb(db);
+beforeEach(async () => {
+  await resetTestDb(db);
 });
 
 describe("saveTransaction", () => {
-  test("トランザクションを保存できる", () => {
+  test("トランザクションを保存できる", async () => {
     const item: CashFlowItem = {
       mfId: "tx1",
       date: "2025-04-15",
@@ -38,15 +38,15 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    saveTransaction(db, item);
-    const result = db.select().from(schema.transactions).all();
+    await saveTransaction(db, item);
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].amount).toBe(1000);
   });
 
-  test("accountIdMapでaccount_idが設定される", () => {
+  test("accountIdMapでaccount_idが設定される", async () => {
     // まずアカウントを作成
-    const accountId = db
+    const accountResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc1",
@@ -56,7 +56,8 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const accountId = accountResult.id;
 
     const accountIdMap = new Map<string, number>();
     accountIdMap.set("acc1", accountId);
@@ -74,16 +75,16 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: false,
       accountName: "三井住友銀行 (テスト)",
     };
-    saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, item, accountIdMap);
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].accountId).toBe(accountId);
   });
 
-  test("accountIdMapで部分一致でaccount_idが設定される", () => {
+  test("accountIdMapで部分一致でaccount_idが設定される", async () => {
     // まずアカウントを作成
-    const accountId = db
+    const accountResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc1",
@@ -93,7 +94,8 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const accountId = accountResult.id;
 
     const accountIdMap = new Map<string, number>();
     accountIdMap.set("acc1", accountId);
@@ -111,16 +113,16 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: false,
       accountName: "三井住友銀行", // 部分一致
     };
-    saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, item, accountIdMap);
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].accountId).toBe(accountId);
   });
 
-  test("振替トランザクションでtransferTargetAccountIdが設定される", () => {
+  test("振替トランザクションでtransferTargetAccountIdが設定される", async () => {
     // 送金元アカウントを作成
-    const sourceAccountId = db
+    const sourceResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc1",
@@ -130,10 +132,11 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const sourceAccountId = sourceResult.id;
 
     // 送金先アカウントを作成
-    const targetAccountId = db
+    const targetResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc2",
@@ -143,7 +146,8 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const targetAccountId = targetResult.id;
 
     const accountIdMap = new Map<string, number>();
     accountIdMap.set("ゆうちょ銀行（貯蓄用）", sourceAccountId);
@@ -162,17 +166,17 @@ describe("saveTransaction", () => {
       accountName: "三井住友銀行 (テスト)", // トランザクションの所有者
       transferTarget: "ゆうちょ銀行（貯蓄用）", // 振替相手先
     };
-    saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, item, accountIdMap);
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].accountId).toBe(targetAccountId);
     expect(result[0].transferTargetAccountId).toBe(sourceAccountId);
   });
 
-  test("振替トランザクションでtransferTargetが部分一致でも解決される", () => {
+  test("振替トランザクションでtransferTargetが部分一致でも解決される", async () => {
     // 送金元アカウントを作成（フルネーム）
-    const sourceAccountId = db
+    const sourceResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc1",
@@ -182,10 +186,11 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const sourceAccountId = sourceResult.id;
 
     // 送金先アカウントを作成
-    const targetAccountId = db
+    const targetResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc2",
@@ -195,7 +200,8 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const targetAccountId = targetResult.id;
 
     const accountIdMap = new Map<string, number>();
     accountIdMap.set("ゆうちょ銀行（貯蓄用）", sourceAccountId);
@@ -214,15 +220,15 @@ describe("saveTransaction", () => {
       accountName: "三井住友銀行",
       transferTarget: "ゆうちょ銀行", // 部分一致
     };
-    saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, item, accountIdMap);
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].transferTargetAccountId).toBe(sourceAccountId);
   });
 
-  test("振替トランザクションでtransferTargetがマッチしない場合はnull", () => {
-    const accountId = db
+  test("振替トランザクションでtransferTargetがマッチしない場合はnull", async () => {
+    const accountResult = await db
       .insert(schema.accounts)
       .values({
         mfId: "acc1",
@@ -232,7 +238,8 @@ describe("saveTransaction", () => {
         updatedAt: new Date().toISOString(),
       })
       .returning()
-      .get().id;
+      .get();
+    const accountId = accountResult.id;
 
     const accountIdMap = new Map<string, number>();
     accountIdMap.set("三井住友銀行", accountId);
@@ -250,15 +257,15 @@ describe("saveTransaction", () => {
       accountName: "三井住友銀行",
       transferTarget: "存在しない銀行",
     };
-    saveTransaction(db, item, accountIdMap);
+    await saveTransaction(db, item, accountIdMap);
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].accountId).toBe(accountId);
     expect(result[0].transferTargetAccountId).toBeNull();
   });
 
-  test("accountIdMapがない場合はaccount_idがnull", () => {
+  test("accountIdMapがない場合はaccount_idがnull", async () => {
     const item: CashFlowItem = {
       mfId: "tx1",
       date: "2025-04-15",
@@ -271,14 +278,14 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: false,
       accountName: "三井住友銀行",
     };
-    saveTransaction(db, item);
+    await saveTransaction(db, item);
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].accountId).toBeNull();
   });
 
-  test("unknown mfId はスキップされる", () => {
+  test("unknown mfId はスキップされる", async () => {
     const item: CashFlowItem = {
       mfId: "unknown-1",
       date: "2025-04-15",
@@ -290,12 +297,12 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    saveTransaction(db, item);
-    const result = db.select().from(schema.transactions).all();
+    await saveTransaction(db, item);
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(0);
   });
 
-  test("同じ mfId で upsert される", () => {
+  test("同じ mfId で upsert される", async () => {
     const item: CashFlowItem = {
       mfId: "tx1",
       date: "2025-04-15",
@@ -307,14 +314,14 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    saveTransaction(db, item);
-    saveTransaction(db, { ...item, amount: 2000 });
-    const result = db.select().from(schema.transactions).all();
+    await saveTransaction(db, item);
+    await saveTransaction(db, { ...item, amount: 2000 });
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].amount).toBe(2000);
   });
 
-  test("同じ mfId でカテゴリや詳細が変更されたら反映される", () => {
+  test("同じ mfId でカテゴリや詳細が変更されたら反映される", async () => {
     const item: CashFlowItem = {
       mfId: "tx1",
       date: "2025-04-15",
@@ -326,9 +333,9 @@ describe("saveTransaction", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     };
-    saveTransaction(db, item);
+    await saveTransaction(db, item);
 
-    saveTransaction(db, {
+    await saveTransaction(db, {
       ...item,
       category: "日用品",
       subCategory: "ドラッグストア",
@@ -338,7 +345,7 @@ describe("saveTransaction", () => {
       isExcludedFromCalculation: true,
     });
 
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].category).toBe("日用品");
     expect(result[0].subCategory).toBe("ドラッグストア");
@@ -349,12 +356,12 @@ describe("saveTransaction", () => {
 });
 
 describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
-  test("月にデータがなければ false", () => {
-    expect(hasTransactionsForMonth(db, "2025-04")).toBe(false);
+  test("月にデータがなければ false", async () => {
+    expect(await hasTransactionsForMonth(db, "2025-04")).toBe(false);
   });
 
-  test("月にデータがあれば true", () => {
-    saveTransaction(db, {
+  test("月にデータがあれば true", async () => {
+    await saveTransaction(db, {
       mfId: "tx1",
       date: "2025-04-15",
       category: "食費",
@@ -365,11 +372,11 @@ describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     });
-    expect(hasTransactionsForMonth(db, "2025-04")).toBe(true);
+    expect(await hasTransactionsForMonth(db, "2025-04")).toBe(true);
   });
 
-  test("月のデータを削除できる", () => {
-    saveTransaction(db, {
+  test("月のデータを削除できる", async () => {
+    await saveTransaction(db, {
       mfId: "tx1",
       date: "2025-04-15",
       category: "食費",
@@ -380,9 +387,9 @@ describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
       isTransfer: false,
       isExcludedFromCalculation: false,
     });
-    const count = deleteTransactionsForMonth(db, "2025-04");
+    const count = await deleteTransactionsForMonth(db, "2025-04");
     expect(count).toBe(1);
-    expect(hasTransactionsForMonth(db, "2025-04")).toBe(false);
+    expect(await hasTransactionsForMonth(db, "2025-04")).toBe(false);
   });
 });
 
@@ -412,13 +419,13 @@ describe("saveTransactionsForMonth", () => {
     },
   ];
 
-  test("月のトランザクションを一括保存できる", () => {
-    const savedCount = saveTransactionsForMonth(db, "2025-04", items);
+  test("月のトランザクションを一括保存できる", async () => {
+    const savedCount = await saveTransactionsForMonth(db, "2025-04", items);
     expect(savedCount).toBe(2);
   });
 
-  test("既存データは削除して上書きされる", () => {
-    saveTransactionsForMonth(db, "2025-04", items);
+  test("既存データは削除して上書きされる", async () => {
+    await saveTransactionsForMonth(db, "2025-04", items);
 
     // 異なるデータで上書き
     const newItems: CashFlowItem[] = [
@@ -434,10 +441,10 @@ describe("saveTransactionsForMonth", () => {
         isExcludedFromCalculation: false,
       },
     ];
-    const savedCount = saveTransactionsForMonth(db, "2025-04", newItems);
+    const savedCount = await saveTransactionsForMonth(db, "2025-04", newItems);
 
     expect(savedCount).toBe(1);
-    const result = db.select().from(schema.transactions).all();
+    const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].mfId).toBe("tx3");
   });

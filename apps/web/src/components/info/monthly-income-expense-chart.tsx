@@ -7,8 +7,8 @@ interface MonthlyIncomeExpenseChartProps {
   groupId?: string;
 }
 
-export function MonthlyIncomeExpenseChart({ groupId }: MonthlyIncomeExpenseChartProps) {
-  const data = getMonthlySummaries({ limit: 12, groupId });
+export async function MonthlyIncomeExpenseChart({ groupId }: MonthlyIncomeExpenseChartProps) {
+  const data = await getMonthlySummaries({ limit: 12, groupId });
 
   if (data.length === 0) {
     return <EmptyState icon={TrendingUp} title="月別収支推移" />;

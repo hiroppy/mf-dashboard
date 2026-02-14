@@ -92,7 +92,7 @@ async function main() {
       section(`Save: ${noGroupData.group.name} (Full)`);
       const scrapedData = buildScrapedData(globalData, noGroupData);
       debug("Scraped data:", JSON.stringify(scrapedData, null, 2));
-      saveScrapedData(db, scrapedData);
+      await saveScrapedData(db, scrapedData);
     }
 
     // 各グループはグループ固有データのみ保存（リンク + assetHistory + spendingTargets）
@@ -101,7 +101,7 @@ async function main() {
 
       section(`Save: ${groupData.group.name} (Group Only)`);
       const scrapedData = buildGroupOnlyScrapedData(groupData);
-      saveGroupOnlyData(db, scrapedData);
+      await saveGroupOnlyData(db, scrapedData);
     }
 
     // 金融機関カテゴリはデフォルトグループ（または最初のグループ）で一度だけ取得
@@ -109,14 +109,14 @@ async function main() {
     const categoryMap = await scrapeInstitutionCategories(page);
     log(`Updated ${categoryMap.size} account categories`);
     for (const [mfId, category] of categoryMap.entries()) {
-      updateAccountCategory(db, mfId, category);
+      await updateAccountCategory(db, mfId, category);
     }
 
     if (isHistoryMode) {
       section("Cash Flow History");
 
       // accountIdMapを構築（トランザクション保存時のaccount_id設定用）
-      const accountIdMap = buildAccountIdMap(db);
+      const accountIdMap = await buildAccountIdMap(db);
 
       // 先にDBをチェックしてスキップ可能な月数を計算
       // 今月 + 去年の全月分を取得対象とする
@@ -131,7 +131,7 @@ async function main() {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
         const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-        if (!hasTransactionsForMonth(db, month)) {
+        if (!(await hasTransactionsForMonth(db, month))) {
           monthsToFetch = i + 1;
         }
       }
@@ -146,7 +146,7 @@ async function main() {
       const historyResults = await scrapeCashFlowHistory(page, monthsToFetch);
 
       for (const { month, data: monthData } of historyResults) {
-        const savedCount = saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
+        const savedCount = await saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
         log(`  ${month}: saved ${savedCount} transactions`);
       }
     }

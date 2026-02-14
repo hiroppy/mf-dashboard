@@ -42,7 +42,7 @@ const createHolding = (
 export const Profit: Story = {
   name: "全て含み益",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式(オール・カントリー)", 5000000, 1200000, 31.5),
       createHolding("eMAXIS Slim 米国株式(S&P500)", 3000000, 800000, 36.4),
       createHolding("楽天・全米株式インデックス・ファンド", 2000000, 400000, 25.0),
@@ -54,7 +54,7 @@ export const Profit: Story = {
 export const Loss: Story = {
   name: "全て含み損",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("日本株ファンド", 2000000, -300000, -13.0),
       createHolding("新興国株式インデックス", 1500000, -200000, -11.8),
       createHolding("不動産投資信託", 1000000, -150000, -13.0),
@@ -66,7 +66,7 @@ export const Loss: Story = {
 export const Mixed: Story = {
   name: "含み益と含み損の混合",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 5000000, 1200000, 31.5),
       createHolding("eMAXIS Slim 米国株式(S&P500)", 3000000, 800000, 36.4),
       createHolding("日本株ファンド", 2000000, -300000, -13.0),
@@ -79,7 +79,7 @@ export const Mixed: Story = {
 export const ManyHoldings: Story = {
   name: "多数の銘柄",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("銘柄A (大型)", 8000000, 2000000, 33.3),
       createHolding("銘柄B", 3000000, 500000, 20.0),
       createHolding("銘柄C", 2500000, 400000, 19.0),
@@ -97,7 +97,7 @@ export const ManyHoldings: Story = {
 export const FewHoldings: Story = {
   name: "少数の銘柄",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("メイン投資信託", 8000000, 2000000, 33.3),
       createHolding("サブ投資信託", 2000000, -100000, -4.8),
     ]);
@@ -107,7 +107,7 @@ export const FewHoldings: Story = {
 export const SingleHolding: Story = {
   name: "1銘柄のみ",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 10000000, 2500000, 33.3),
     ]);
   },
@@ -116,7 +116,7 @@ export const SingleHolding: Story = {
 export const LongNames: Story = {
   name: "長い銘柄名",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式(オール・カントリー)除く日本", 5000000, 1200000, 31.5),
       createHolding("楽天・全米株式インデックス・ファンド(楽天VTI)", 3000000, 800000, 36.4),
       createHolding("SBI・V・S&P500インデックス・ファンド", 2000000, -200000, -9.1),
@@ -127,7 +127,7 @@ export const LongNames: Story = {
 export const NoPctData: Story = {
   name: "損益率なし",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       createHolding("投資信託A", 2000000, 200000, null),
       createHolding("投資信託B", 1500000, -100000, null),
     ]);
@@ -137,14 +137,14 @@ export const NoPctData: Story = {
 export const Empty: Story = {
   name: "データなし",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([]);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([]);
   },
 };
 
 export const MultipleInstitutions: Story = {
   name: "複数の金融機関と種別",
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       // SBI証券 - 投資信託
       createHolding("eMAXIS Slim 全世界株式", 5000000, 1200000, 31.5, "SBI証券", "投資信託"),
       createHolding("eMAXIS Slim 米国株式(S&P500)", 3000000, 800000, 36.4, "SBI証券", "投資信託"),
@@ -191,8 +191,8 @@ export const WithMfId: Story = {
     mfId: "abc123",
   },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue(mockAccount);
-    mocked(getHoldingsByAccountId).mockReturnValue([
+    mocked(getAccountByMfId).mockResolvedValue(mockAccount);
+    mocked(getHoldingsByAccountId).mockResolvedValue([
       createHolding("eMAXIS Slim 全世界株式", 5000000, 1200000, 31.5, "SBI証券", "投資信託"),
       createHolding("eMAXIS Slim 米国株式(S&P500)", 3000000, 800000, 36.4, "SBI証券", "投資信託"),
       createHolding("トヨタ自動車", 1000000, 150000, 17.6, "SBI証券", "株式(現物)"),

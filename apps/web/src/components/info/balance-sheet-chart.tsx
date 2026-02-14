@@ -11,10 +11,10 @@ interface BalanceSheetChartProps {
   groupId?: string;
 }
 
-export function BalanceSheetChart({ groupId }: BalanceSheetChartProps) {
-  const assets = getAssetBreakdownByCategory(groupId);
-  const liabilities = getLiabilityBreakdownByCategory(groupId);
-  const totalAssets = getLatestTotalAssets(groupId);
+export async function BalanceSheetChart({ groupId }: BalanceSheetChartProps) {
+  const assets = await getAssetBreakdownByCategory(groupId);
+  const liabilities = await getLiabilityBreakdownByCategory(groupId);
+  const totalAssets = await getLatestTotalAssets(groupId);
 
   if (totalAssets === null) {
     return <EmptyState icon={Scale} title="バランスシート" />;

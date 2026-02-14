@@ -172,24 +172,24 @@ const liabilityHoldings = [
 export const Empty: Story = {
   args: { type: "asset" },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([]);
-    mocked(getLatestMonthlySummary).mockReturnValue(undefined);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([]);
+    mocked(getLatestMonthlySummary).mockResolvedValue(undefined);
   },
 };
 
 export const Asset: Story = {
   args: { type: "asset" },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(assetHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(assetHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
 };
 
 export const Liability: Story = {
   args: { type: "liability" },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(liabilityHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(liabilityHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
 };
 
@@ -214,23 +214,23 @@ export const ManyHoldings: Story = {
       unrealizedGain: 1000000 - i * 100000,
       unrealizedGainPct: 25 - i * 2,
     }));
-    mocked(getHoldingsWithLatestValues).mockReturnValue(manyFunds);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(manyFunds);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
 };
 
 export const SingleHolding: Story = {
   args: { type: "asset" },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([assetHoldings[0]]);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([assetHoldings[0]]);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
 };
 
 export const WithLosses: Story = {
   args: { type: "asset" },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue([
+    mocked(getHoldingsWithLatestValues).mockResolvedValue([
       { ...assetHoldings[0], unrealizedGain: -500000, unrealizedGainPct: -10 },
       {
         ...assetHoldings[1],
@@ -239,7 +239,7 @@ export const WithLosses: Story = {
       },
       { ...assetHoldings[2], unrealizedGain: 50000, unrealizedGainPct: 2.8 },
     ]);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
 };
 
@@ -263,8 +263,8 @@ export const WithMfId: Story = {
   name: "アカウント指定 (金融機関名非表示)",
   args: { type: "asset", mfId: "abc123" },
   beforeEach() {
-    mocked(getAccountByMfId).mockReturnValue(mockAccount);
-    mocked(getHoldingsByAccountId).mockReturnValue(
+    mocked(getAccountByMfId).mockResolvedValue(mockAccount);
+    mocked(getHoldingsByAccountId).mockResolvedValue(
       assetHoldings.map((h) => ({
         ...h,
         accountName: mockAccount.name,
@@ -317,8 +317,8 @@ export const DepositOnly: Story = {
   name: "預金のみ（含み損益なし）",
   args: { type: "asset" },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(depositOnlyHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(depositOnlyHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
 };
 
@@ -331,8 +331,8 @@ export const AssetPC: Story = {
   args: { type: "asset" },
   globals: pcViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(assetHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(assetHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -357,8 +357,8 @@ export const AssetMobile: Story = {
   args: { type: "asset" },
   globals: mobileViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(assetHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(assetHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -378,8 +378,8 @@ export const DepositOnlyPC: Story = {
   args: { type: "asset" },
   globals: pcViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(depositOnlyHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(depositOnlyHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -404,8 +404,8 @@ export const DepositOnlyMobile: Story = {
     ...mobileViewport,
   },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(depositOnlyHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(depositOnlyHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -424,8 +424,8 @@ export const LiabilityPC: Story = {
   args: { type: "liability" },
   globals: pcViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(liabilityHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(liabilityHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -449,8 +449,8 @@ export const LiabilityMobile: Story = {
     ...mobileViewport,
   },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(liabilityHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(liabilityHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -472,8 +472,8 @@ export const AssetExpanded: Story = {
   args: { type: "asset" },
   globals: pcViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(assetHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(assetHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -500,8 +500,8 @@ export const AssetExpandedMobile: Story = {
     ...mobileViewport,
   },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(assetHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(assetHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -524,8 +524,8 @@ export const DepositExpandedPC: Story = {
   args: { type: "asset" },
   globals: pcViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(depositOnlyHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(depositOnlyHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -555,8 +555,8 @@ export const DepositExpandedMobile: Story = {
     ...mobileViewport,
   },
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(depositOnlyHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(depositOnlyHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -578,8 +578,8 @@ export const LiabilityExpanded: Story = {
   args: { type: "liability" },
   globals: pcViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(liabilityHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(liabilityHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -601,8 +601,8 @@ export const LiabilityExpandedMobile: Story = {
   args: { type: "liability" },
   globals: mobileViewport,
   beforeEach() {
-    mocked(getHoldingsWithLatestValues).mockReturnValue(liabilityHoldings);
-    mocked(getLatestMonthlySummary).mockReturnValue(summaryMock);
+    mocked(getHoldingsWithLatestValues).mockResolvedValue(liabilityHoldings);
+    mocked(getLatestMonthlySummary).mockResolvedValue(summaryMock);
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

@@ -25,11 +25,11 @@ const CONFIG = {
   },
 } as const;
 
-export function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTableProps) {
-  const account = mfId ? getAccountByMfId(mfId, groupId) : null;
+export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTableProps) {
+  const account = mfId ? await getAccountByMfId(mfId, groupId) : null;
   const allHoldings = account
-    ? getHoldingsByAccountId(account.id, groupId)
-    : getHoldingsWithLatestValues(groupId);
+    ? await getHoldingsByAccountId(account.id, groupId)
+    : await getHoldingsWithLatestValues(groupId);
   const holdings = allHoldings.filter((h) => h.type === type && h.amount);
 
   const config = CONFIG[type];
@@ -41,17 +41,18 @@ export function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTableProps)
   }
 
   // Calculate total based on type
-  const total = (() => {
-    if (mfId) {
-      return holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-    }
-    if (type === "asset") {
-      // Use asset_history for total assets
-      return getLatestTotalAssets(groupId) ?? holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-    }
+  let total: number;
+  if (mfId) {
+    total = holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
+  } else if (type === "asset") {
+    // Use asset_history for total assets
+    total =
+      (await getLatestTotalAssets(groupId)) ??
+      holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
+  } else {
     // For liabilities, sum from holdings
-    return holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  })();
+    total = holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
+  }
 
   // Group holdings by category
   const grouped = holdings.reduce<

@@ -77,7 +77,7 @@ const allTransactions = [...aprilTransactions, ...otherMonthTransactions];
 
 export const Default: Story = {
   beforeEach() {
-    mocked(getTransactions).mockReturnValue(allTransactions);
+    mocked(getTransactions).mockResolvedValue(allTransactions);
   },
 };
 
@@ -86,12 +86,12 @@ export const ByMonth: Story = {
     month: "2025-04",
   },
   beforeEach() {
-    mocked(getTransactionsByMonth).mockReturnValue(aprilTransactions);
+    mocked(getTransactionsByMonth).mockResolvedValue(aprilTransactions);
   },
 };
 
 export const Empty: Story = {
   beforeEach() {
-    mocked(getTransactions).mockReturnValue([]);
+    mocked(getTransactions).mockResolvedValue([]);
   },
 };

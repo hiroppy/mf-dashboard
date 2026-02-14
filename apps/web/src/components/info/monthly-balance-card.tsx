@@ -12,15 +12,15 @@ interface MonthlyBalanceCardProps {
   groupId?: string;
 }
 
-export function MonthlyBalanceCard({ className, groupId }: MonthlyBalanceCardProps) {
-  const summary = getLatestMonthlySummary(groupId);
+export async function MonthlyBalanceCard({ className, groupId }: MonthlyBalanceCardProps) {
+  const summary = await getLatestMonthlySummary(groupId);
 
   if (!summary) {
     return <EmptyState icon={Calendar} title="今月の収支" />;
   }
 
   const { totalIncome, totalExpense, netIncome } = summary;
-  const recentTransactions = getTransactionsByMonth(summary.month, groupId)
+  const recentTransactions = (await getTransactionsByMonth(summary.month, groupId))
     .filter((t) => !t.isTransfer && !t.isExcludedFromCalculation)
     .slice(0, 3);
 

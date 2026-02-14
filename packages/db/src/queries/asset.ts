@@ -45,11 +45,11 @@ export function calculateTargetDate(
  * カテゴリ別資産内訳を取得
  * assetHistoryCategoriesから最新の値を取得
  */
-export function getAssetBreakdownByCategory(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getAssetBreakdownByCategory(groupIdParam?: string, db: Db = getDb()) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return [];
 
-  const latestHistory = db
+  const latestHistory = await db
     .select()
     .from(schema.assetHistory)
     .where(eq(schema.assetHistory.groupId, groupId))
@@ -61,7 +61,7 @@ export function getAssetBreakdownByCategory(groupIdParam?: string, db: Db = getD
     return [];
   }
 
-  const categories = db
+  const categories = await db
     .select()
     .from(schema.assetHistoryCategories)
     .where(eq(schema.assetHistoryCategories.assetHistoryId, latestHistory.id))
@@ -100,16 +100,19 @@ export function aggregateLiabilitiesByCategory(
 /**
  * カテゴリ別負債内訳を取得
  */
-export function getLiabilityBreakdownByCategory(groupIdParam?: string, db: Db = getDb()) {
-  const holdings = getHoldingsWithLatestValues(groupIdParam, db);
+export async function getLiabilityBreakdownByCategory(groupIdParam?: string, db: Db = getDb()) {
+  const holdings = await getHoldingsWithLatestValues(groupIdParam, db);
   return aggregateLiabilitiesByCategory(holdings);
 }
 
 /**
  * 資産履歴を取得
  */
-export function getAssetHistory(options?: { limit?: number; groupId?: string }, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, options?.groupId);
+export async function getAssetHistory(
+  options?: { limit?: number; groupId?: string },
+  db: Db = getDb(),
+) {
+  const groupId = await resolveGroupId(db, options?.groupId);
   if (!groupId) return [];
 
   const query = db
@@ -119,32 +122,33 @@ export function getAssetHistory(options?: { limit?: number; groupId?: string }, 
     .orderBy(desc(schema.assetHistory.date));
 
   if (options?.limit) {
-    return query.limit(options.limit).all();
+    return await query.limit(options.limit).all();
   }
-  return query.all();
+  return await query.all();
 }
 
 /**
  * カテゴリ情報付き資産履歴を取得
  */
-export function getAssetHistoryWithCategories(
+export async function getAssetHistoryWithCategories(
   options?: { limit?: number; groupId?: string },
   db: Db = getDb(),
 ) {
-  const groupId = resolveGroupId(db, options?.groupId);
+  const groupId = await resolveGroupId(db, options?.groupId);
   if (!groupId) return [];
 
-  const historyEntries = (() => {
+  const historyEntries = await (async () => {
     const query = db
       .select()
       .from(schema.assetHistory)
       .where(eq(schema.assetHistory.groupId, groupId))
       .orderBy(desc(schema.assetHistory.date));
-    return options?.limit ? query.limit(options.limit).all() : query.all();
+    return options?.limit ? await query.limit(options.limit).all() : await query.all();
   })();
 
-  return historyEntries.map((entry) => {
-    const cats = db
+  const results = [];
+  for (const entry of historyEntries) {
+    const cats = await db
       .select()
       .from(schema.assetHistoryCategories)
       .where(eq(schema.assetHistoryCategories.assetHistoryId, entry.id))
@@ -155,22 +159,27 @@ export function getAssetHistoryWithCategories(
       categories[cat.categoryName] = cat.amount;
     }
 
-    return {
+    results.push({
       date: entry.date,
       totalAssets: entry.totalAssets,
       categories,
-    };
-  });
+    });
+  }
+
+  return results;
 }
 
 /**
  * 最新の総資産を取得
  */
-export function getLatestTotalAssets(groupIdParam?: string, db: Db = getDb()): number | null {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getLatestTotalAssets(
+  groupIdParam?: string,
+  db: Db = getDb(),
+): Promise<number | null> {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return null;
 
-  const latest = db
+  const latest = await db
     .select({ totalAssets: schema.assetHistory.totalAssets })
     .from(schema.assetHistory)
     .where(eq(schema.assetHistory.groupId, groupId))
@@ -184,11 +193,11 @@ export function getLatestTotalAssets(groupIdParam?: string, db: Db = getDb()): n
 /**
  * 日次資産変動を取得（今日vs昨日）
  */
-export function getDailyAssetChange(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = resolveGroupId(db, groupIdParam);
+export async function getDailyAssetChange(groupIdParam?: string, db: Db = getDb()) {
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return null;
 
-  const latest = db
+  const latest = await db
     .select()
     .from(schema.assetHistory)
     .where(eq(schema.assetHistory.groupId, groupId))
@@ -232,15 +241,15 @@ export function calculateCategoryChanges(
 /**
  * 期間別カテゴリ変動を取得
  */
-export function getCategoryChangesForPeriod(
+export async function getCategoryChangesForPeriod(
   period: "daily" | "weekly" | "monthly",
   groupIdParam?: string,
   db: Db = getDb(),
 ) {
-  const groupId = resolveGroupId(db, groupIdParam);
+  const groupId = await resolveGroupId(db, groupIdParam);
   if (!groupId) return null;
 
-  const latest = db
+  const latest = await db
     .select()
     .from(schema.assetHistory)
     .where(eq(schema.assetHistory.groupId, groupId))
@@ -254,7 +263,7 @@ export function getCategoryChangesForPeriod(
 
   const targetDateStr = calculateTargetDate(latest.date, period);
 
-  const previous = db
+  const previous = await db
     .select()
     .from(schema.assetHistory)
     .where(
@@ -271,13 +280,13 @@ export function getCategoryChangesForPeriod(
     return null;
   }
 
-  const latestCategories = db
+  const latestCategories = await db
     .select()
     .from(schema.assetHistoryCategories)
     .where(eq(schema.assetHistoryCategories.assetHistoryId, latest.id))
     .all();
 
-  const previousCategories = db
+  const previousCategories = await db
     .select()
     .from(schema.assetHistoryCategories)
     .where(eq(schema.assetHistoryCategories.assetHistoryId, previous.id))
