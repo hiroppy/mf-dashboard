@@ -12,7 +12,9 @@ const config: KnipConfig = {
     "apps/simulator": {
       ignoreDependencies: ["postcss"],
     },
-    "apps/mcp": {},
+    "apps/mcp": {
+      ignoreDependencies: ["@libsql/client"],
+    },
   },
 };
 

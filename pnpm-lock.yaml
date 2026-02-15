@@ -90,6 +90,9 @@ importers:
 
   apps/mcp:
     dependencies:
+      '@libsql/client':
+        specifier: 'catalog:'
+        version: 0.17.0
       '@mf-dashboard/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics

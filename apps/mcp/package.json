@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "tsdown",
-    "start": "node dist/index.js",
+    "start": "node dist/index.cjs",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@libsql/client": "catalog:",
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
     "@modelcontextprotocol/sdk": "1.26.0",
