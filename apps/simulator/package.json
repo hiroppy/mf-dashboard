@@ -12,19 +12,19 @@
   },
   "dependencies": {
     "@next/third-parties": "16.1.6",
-    "lucide-react": "0.564.0",
+    "lucide-react": "0.575.0",
     "next": "16.1.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "4.1.18",
+    "@tailwindcss/postcss": "4.2.1",
     "@types/node": "catalog:",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "babel-plugin-react-compiler": "1.0.0",
-    "tailwindcss": "4.1.18",
+    "tailwindcss": "4.2.1",
     "typescript": "catalog:",
-    "wrangler": "4.65.0"
+    "wrangler": "4.68.1"
   }
 }
