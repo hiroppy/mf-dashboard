@@ -25,6 +25,6 @@
     "babel-plugin-react-compiler": "1.0.0",
     "tailwindcss": "4.2.1",
     "typescript": "catalog:",
-    "wrangler": "4.68.1"
+    "wrangler": "4.69.0"
   }
 }
