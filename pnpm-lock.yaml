@@ -262,8 +262,8 @@ importers:
   packages/analytics:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: 3.0.52
-        version: 3.0.52(zod@4.3.6)
+        specifier: 3.0.53
+        version: 3.0.53(zod@4.3.6)
       '@ai-sdk/google':
         specifier: 3.0.36
         version: 3.0.36(zod@4.3.6)
@@ -274,8 +274,8 @@ importers:
         specifier: workspace:*
         version: link:../db
       ai:
-        specifier: 6.0.107
-        version: 6.0.107(zod@4.3.6)
+        specifier: 6.0.108
+        version: 6.0.108(zod@4.3.6)
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -357,8 +357,8 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@ai-sdk/anthropic@3.0.52':
-    resolution: {integrity: sha512-409BWP7amE0lSEPvHCuD/uyxtmcVaZPY/MsNuJGx0KmegB1TVn2SwZ8IzNECC9mVohTWZ2iTEl2KBGVMSnC8kw==}
+  '@ai-sdk/anthropic@3.0.53':
+    resolution: {integrity: sha512-HVuVLUt4VtioGKV5gxRg7Wu2g0BvX3zzrAa51OHPG9sJlP+caPyZu3n4j4FHjZmg++8A9JHDCMWBQfHra3gtWg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -2768,8 +2768,8 @@ packages:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
 
-  ai@6.0.107:
-    resolution: {integrity: sha512-6KbrBr5ikRT4leZx2PXX37+dvNwsmKmZaZ4wv6Pd6G8vM69fIx4tEa7+9xPfYIQuwpoAxRPHZzleajLTnl9V3g==}
+  ai@6.0.108:
+    resolution: {integrity: sha512-h2xwwU9lE+tdLyII/uFcjcrw+7ciWj2S68GrwQsebjHPSfnvxwrn+sjIl+tBt419yA9rYznWXtQvHJxM1wEAAQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -4970,7 +4970,7 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@ai-sdk/anthropic@3.0.52(zod@4.3.6)':
+  '@ai-sdk/anthropic@3.0.53(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.17(zod@4.3.6)
@@ -6887,7 +6887,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  ai@6.0.107(zod@4.3.6):
+  ai@6.0.108(zod@4.3.6):
     dependencies:
       '@ai-sdk/gateway': 3.0.61(zod@4.3.6)
       '@ai-sdk/provider': 3.0.8
