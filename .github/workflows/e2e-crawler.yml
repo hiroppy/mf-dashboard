@@ -20,7 +20,7 @@ jobs:
         env:
           OP_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           SHOULD_RUN: ${{ vars.SHOULD_RUN_CRAWLER_E2E }}
-        run: echo "should-run=${{ env.OP_TOKEN != '' && env.SHOULD_RUN == 'true' }}" >> $GITHUB_OUTPUT
+        run: echo "should-run=${{ env.OP_TOKEN != '' && env.SHOULD_RUN == 'true' }}" >> "$GITHUB_OUTPUT"
   e2e:
     needs: check
     if: needs.check.outputs.should-run == 'true'
@@ -68,3 +68,21 @@ jobs:
                     *🔴 Crawler E2E テストが失敗しました*
 
                     <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|ワークフローを確認>
+      - name: Notify Discord on failure
+        if: failure() && env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_AVATAR_URL: ${{ secrets.DISCORD_AVATAR_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          payload=$(jq -n --arg run_url "$RUN_URL" --arg avatar_url "${DISCORD_AVATAR_URL:-}" '
+            if ($avatar_url | length) > 0 then
+              {content: "🔴 Crawler E2E テストが失敗しました\n\($run_url)", avatar_url: $avatar_url}
+            else
+              {content: "🔴 Crawler E2E テストが失敗しました\n\($run_url)"}
+            end
+          ')
+
+          curl -sS -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$payload"

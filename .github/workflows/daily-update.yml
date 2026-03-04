@@ -47,6 +47,8 @@ jobs:
           OP_TOTP_FIELD: ${{ secrets.OP_TOTP_FIELD }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_AVATAR_URL: ${{ secrets.DISCORD_AVATAR_URL }}
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
       - uses: ./.github/actions/auth-state-cache
         if: always()
