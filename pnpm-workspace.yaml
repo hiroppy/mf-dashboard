@@ -3,7 +3,7 @@ packages:
   - packages/*
 
 catalog:
-  "@libsql/client": 0.17.0
+  "@libsql/client": 0.17.2
   "@types/node": 25.5.0
   "@vitest/browser-playwright": 4.1.0
   drizzle-orm: 0.45.1
