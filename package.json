@@ -23,9 +23,9 @@
   "devDependencies": {
     "knip": "6.0.0",
     "lefthook": "2.1.4",
-    "oxfmt": "0.40.0",
-    "oxlint": "1.55.0",
-    "oxlint-tsgolint": "0.16.0",
+    "oxfmt": "0.41.0",
+    "oxlint": "1.56.0",
+    "oxlint-tsgolint": "0.17.1",
     "tsx": "4.21.0",
     "turbo": "2.8.20"
   },
