@@ -21,11 +21,11 @@
     "knip": "knip"
   },
   "devDependencies": {
-    "knip": "6.0.2",
+    "knip": "6.0.4",
     "lefthook": "2.1.4",
     "oxfmt": "0.41.0",
     "oxlint": "1.56.0",
-    "oxlint-tsgolint": "0.17.1",
+    "oxlint-tsgolint": "0.17.2",
     "tsx": "4.21.0",
     "turbo": "2.8.20"
   },
