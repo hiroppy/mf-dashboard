@@ -25,7 +25,7 @@
     "lefthook": "2.1.4",
     "oxfmt": "0.41.0",
     "oxlint": "1.56.0",
-    "oxlint-tsgolint": "0.17.3",
+    "oxlint-tsgolint": "0.17.4",
     "tsx": "4.21.0",
     "turbo": "2.8.20"
   },
