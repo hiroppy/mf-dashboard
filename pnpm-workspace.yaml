@@ -8,7 +8,7 @@ catalog:
   "@vitest/browser-playwright": 4.1.0
   drizzle-orm: 0.45.1
   playwright: 1.58.2
-  typescript: 5.9.3
+  typescript: 6.0.2
   vitest: 4.1.0
 
 onlyBuiltDependencies:
