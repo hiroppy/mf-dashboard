@@ -12,7 +12,7 @@ runs:
       shell: bash
     - name: Get Playwright version
       id: playwright-version
-      run: echo "version=$(pnpm list @playwright/test --json | jq -r '.[0].devDependencies["@playwright/test"].version // .[0].dependencies["@playwright/test"].version')" >> $GITHUB_OUTPUT
+      run: echo "version=$(pnpm list @playwright/test playwright --json --recursive | jq -r '[.[] | (.devDependencies["@playwright/test"].version, .dependencies["@playwright/test"].version, .devDependencies["playwright"].version, .dependencies["playwright"].version)] | map(select(. != null)) | first')" >> $GITHUB_OUTPUT
       shell: bash
     - name: Cache Playwright browsers
       id: playwright-cache
@@ -22,9 +22,9 @@ runs:
         key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
     - name: Install Playwright browsers
       if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: pnpm dlx playwright install --with-deps
+      run: pnpm dlx playwright@${{ steps.playwright-version.outputs.version }} install --with-deps
       shell: bash
     - name: Install Playwright system dependencies
       if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: pnpm dlx playwright install-deps
+      run: pnpm dlx playwright@${{ steps.playwright-version.outputs.version }} install-deps
       shell: bash
