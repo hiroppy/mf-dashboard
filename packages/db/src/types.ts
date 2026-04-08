@@ -6,7 +6,22 @@
 export type AccountType = "自動連携" | "手動";
 
 /** Account status */
-export type AccountStatusType = "ok" | "error" | "updating" | "unknown";
+export type AccountStatusType = "ok" | "error" | "updating" | "suspended" | "unknown";
+
+const ACCOUNT_STATUS_VALUES: readonly string[] = [
+  "ok",
+  "error",
+  "updating",
+  "suspended",
+  "unknown",
+];
+
+export function toAccountStatusType(value: string | null | undefined): AccountStatusType {
+  if (value && ACCOUNT_STATUS_VALUES.includes(value)) {
+    return value as AccountStatusType;
+  }
+  return "unknown";
+}
 
 /** Holding type: asset or liability */
 export type HoldingType = "asset" | "liability";
@@ -78,7 +93,7 @@ export interface AccountStatus {
   mfId: string;
   name: string;
   type: string;
-  status: "ok" | "error" | "updating" | "unknown";
+  status: AccountStatusType;
   lastUpdated: string;
   url: string;
   totalAssets: number;

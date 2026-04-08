@@ -79,7 +79,7 @@ export const accountStatuses = sqliteTable("account_statuses", {
     .notNull()
     .unique()
     .references(() => accounts.id, { onDelete: "cascade" }),
-  status: text("status").notNull(), // "ok" / "error" / "updating"
+  status: text("status").notNull(), // "ok" / "error" / "updating" / "suspended" / "unknown"
   lastUpdated: text("last_updated"), // ISO 8601形式
   totalAssets: integer("total_assets").default(0), // /accountsページから取得した資産額
   errorMessage: text("error_message"),

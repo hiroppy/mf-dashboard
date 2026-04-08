@@ -153,7 +153,7 @@ describe("registeredAccounts", () => {
 
   test("各口座に有効なステータスがある", () => {
     for (const account of data.registeredAccounts.accounts) {
-      expect(["ok", "error", "updating", "unknown"]).toContain(account.status);
+      expect(["ok", "error", "updating", "unknown", "suspended"]).toContain(account.status);
     }
   });
 });

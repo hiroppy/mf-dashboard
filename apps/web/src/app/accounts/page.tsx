@@ -1,4 +1,5 @@
 import { getAccountsGroupedByCategory } from "@mf-dashboard/db";
+import type { AccountStatusType } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Metadata } from "next";
 import { AccountCard } from "../../components/info/account-card";
@@ -16,7 +17,7 @@ interface GroupedAccounts {
     mfId: string;
     name: string;
     type: string;
-    status: string;
+    status: AccountStatusType;
     lastUpdated: string | null;
     totalAssets: number;
   }[];

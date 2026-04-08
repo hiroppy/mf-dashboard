@@ -51,7 +51,7 @@ erDiagram
     account_statuses {
         integer id PK
         integer account_id FK,UK "CASCADE"
-        text status
+        text status "ok/error/updating/suspended/unknown"
         text last_updated
         integer total_assets
         text error_message

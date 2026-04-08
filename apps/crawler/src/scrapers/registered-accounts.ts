@@ -91,8 +91,10 @@ export async function getRegisteredAccounts(page: Page): Promise<RegisteredAccou
           } else if (statusText?.includes("更新中")) {
             status = "updating";
             errorMessage = statusText.trim();
+          } else if (statusText?.includes("取得を停止しています")) {
+            status = "suspended";
           } else if (statusText && statusText.trim()) {
-            // 正常でも更新中でもない場合はエラー扱い
+            // 正常でも更新中でも停止中でもない場合はエラー扱い
             status = "error";
             errorMessage = statusText.trim();
           }

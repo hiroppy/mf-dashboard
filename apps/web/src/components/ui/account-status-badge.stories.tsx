@@ -25,6 +25,10 @@ export const Error: Story = {
   args: { status: "error" },
 };
 
+export const Suspended: Story = {
+  args: { status: "suspended" },
+};
+
 export const Unknown: Story = {
   args: { status: "unknown" },
 };

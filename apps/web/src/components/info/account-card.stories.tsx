@@ -48,7 +48,7 @@ export const Manual: Story = {
     mfId: "manual001",
     name: "現金",
     type: "手動",
-    status: "",
+    status: "unknown",
     lastUpdated: null,
     totalAssets: 100000,
   },

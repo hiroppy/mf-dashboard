@@ -1,3 +1,4 @@
+import type { AccountStatusType } from "@mf-dashboard/db/types";
 import { formatLastUpdated } from "../../lib/format";
 import { AccountStatusBadge } from "../ui/account-status-badge";
 import { AmountDisplay } from "../ui/amount-display";
@@ -8,7 +9,7 @@ type AccountCardProps = {
   mfId: string;
   name: string;
   type: string;
-  status: string;
+  status: AccountStatusType;
   lastUpdated: string | null;
   totalAssets: number;
   groupId?: string;

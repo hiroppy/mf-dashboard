@@ -1,7 +1,8 @@
+import type { AccountStatusType } from "@mf-dashboard/db/types";
 import { Badge } from "./badge";
 
 interface AccountStatusBadgeProps {
-  status: string;
+  status: AccountStatusType;
 }
 
 export function AccountStatusBadge({ status }: AccountStatusBadgeProps) {
@@ -12,6 +13,8 @@ export function AccountStatusBadge({ status }: AccountStatusBadgeProps) {
       return <Badge variant="warning">更新中</Badge>;
     case "error":
       return <Badge variant="destructive">エラー</Badge>;
+    case "suspended":
+      return <Badge variant="secondary">停止中</Badge>;
     default:
       return <Badge variant="secondary">不明</Badge>;
   }

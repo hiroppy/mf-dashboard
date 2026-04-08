@@ -130,7 +130,7 @@ describe("normalizeAccount", () => {
 
     const result = normalizeAccount(account);
 
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("unknown");
     expect(result.totalAssets).toBe(0);
     expect(result.categoryName).toBe("未分類");
     expect(result.categoryDisplayOrder).toBe(999);
@@ -142,7 +142,7 @@ describe("normalizeAccount", () => {
       mfId: "mf1",
       name: "Bank A",
       type: "bank",
-      status: "alert",
+      status: "error",
       lastUpdated: "2025-04-15",
       totalAssets: 100000,
       categoryId: 1,
@@ -152,7 +152,7 @@ describe("normalizeAccount", () => {
 
     const result = normalizeAccount(account);
 
-    expect(result.status).toBe("alert");
+    expect(result.status).toBe("error");
     expect(result.totalAssets).toBe(100000);
     expect(result.categoryName).toBe("銀行");
     expect(result.categoryDisplayOrder).toBe(1);
@@ -232,7 +232,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf1",
         name: "Bank A",
         type: "bank",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 100000,
         categoryId: 1,
@@ -244,7 +244,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf2",
         name: "Investment A",
         type: "investment",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 500000,
         categoryId: 2,
@@ -256,7 +256,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf3",
         name: "Bank B",
         type: "bank",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 200000,
         categoryId: 1,
@@ -281,7 +281,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf1",
         name: "Bank A",
         type: "bank",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 100000,
         categoryId: 1,
@@ -293,7 +293,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf2",
         name: "Bank B",
         type: "bank",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 500000,
         categoryId: 1,
@@ -305,7 +305,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf3",
         name: "Bank C",
         type: "bank",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 200000,
         categoryId: 1,
@@ -328,7 +328,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf1",
         name: "Investment",
         type: "investment",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 100000,
         categoryId: 2,
@@ -340,7 +340,7 @@ describe("groupAccountsByCategory", () => {
         mfId: "mf2",
         name: "Bank",
         type: "bank",
-        status: "ok",
+        status: "ok" as const,
         lastUpdated: null,
         totalAssets: 100000,
         categoryId: 1,
@@ -418,7 +418,7 @@ describe("getAccountsWithAssets", () => {
 
     const result = await getAccountsWithAssets(undefined, db);
 
-    expect(result[0].status).toBe("ok");
+    expect(result[0].status).toBe("unknown");
     expect(result[0].totalAssets).toBe(0);
     expect(result[0].categoryName).toBe("未分類");
   });
@@ -522,7 +522,7 @@ describe("getAccountByMfId", () => {
 
     const result = await getAccountByMfId("mf1", undefined, db);
 
-    expect(result!.status).toBe("ok");
+    expect(result!.status).toBe("unknown");
     expect(result!.totalAssets).toBe(0);
     expect(result!.categoryName).toBe("未分類");
   });

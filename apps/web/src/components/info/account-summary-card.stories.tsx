@@ -21,7 +21,7 @@ const mockAccount = {
   type: "証券",
   categoryName: "証券",
   institution: "サンプル証券",
-  status: "ok",
+  status: "ok" as const,
   lastUpdated: "2025-04-26T10:30:00",
   errorMessage: null,
   totalAssets: 15000000,

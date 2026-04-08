@@ -1,6 +1,7 @@
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import { toAccountStatusType, type AccountStatusType } from "../types";
 
 /**
  * グループの最終スクレイプ日時を取得
@@ -31,7 +32,7 @@ export function normalizeAccount<
 >(
   account: T,
 ): Omit<T, "status" | "totalAssets" | "categoryName" | "categoryDisplayOrder"> & {
-  status: string;
+  status: AccountStatusType;
   lastUpdated: T["lastUpdated"];
   totalAssets: number;
   categoryName: string;
@@ -39,7 +40,7 @@ export function normalizeAccount<
 } {
   return {
     ...account,
-    status: account.status ?? "ok",
+    status: toAccountStatusType(account.status),
     totalAssets: account.totalAssets ?? 0,
     categoryName: account.categoryName ?? "未分類",
     categoryDisplayOrder: account.categoryDisplayOrder ?? 999,
@@ -151,7 +152,7 @@ export async function getAccountByMfId(mfId: string, groupIdParam?: string, db: 
     mfId: account.mfId,
     name: account.name,
     type: account.type,
-    status: account.status ?? "ok",
+    status: toAccountStatusType(account.status),
     lastUpdated: account.lastUpdated ?? null,
     totalAssets: account.totalAssets ?? 0,
     errorMessage: account.errorMessage ?? null,
