@@ -11,11 +11,11 @@
     "deploy": "wrangler pages deploy out --project-name asset-melt"
   },
   "dependencies": {
-    "@next/third-parties": "16.2.2",
+    "@next/third-parties": "16.2.3",
     "lucide-react": "0.577.0",
-    "next": "16.2.2",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "next": "16.2.3",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.2",
