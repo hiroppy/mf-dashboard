@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "3.0.68",
-    "@ai-sdk/google": "3.0.60",
+    "@ai-sdk/google": "3.0.61",
     "@ai-sdk/openai": "3.0.52",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "6.0.154",
+    "ai": "6.0.156",
     "zod": "4.3.6"
   },
   "devDependencies": {
