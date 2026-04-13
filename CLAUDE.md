@@ -213,6 +213,12 @@ pnpm --filter @mf-dashboard/crawler start
 
 **For testing**: Use `SCRAPE_MODE=history` or `SCRAPE_MODE=month` to force a specific mode
 
+**To clean up groups deleted from MoneyForward**: Use `CLEANUP_GROUPS=true` to delete groups from DB that no longer exist in MoneyForward. By default, groups are only upserted and never deleted.
+
+```bash
+CLEANUP_GROUPS=true pnpm --filter @mf-dashboard/crawler start
+```
+
 ### Database
 
 - SQLite database is located at `data/moneyforward.db`
