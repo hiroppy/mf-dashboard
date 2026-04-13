@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, notInArray } from "drizzle-orm";
 import type { Db } from "../index";
 import { schema } from "../index";
 import type { Group } from "../types";
@@ -67,6 +67,11 @@ export async function updateGroupLastScrapedAt(
     .set({ lastScrapedAt: timestamp, updatedAt: now() })
     .where(eq(schema.groups.id, groupId))
     .run();
+}
+
+export async function deleteGroupsNotIn(db: Db, groupIds: string[]): Promise<void> {
+  if (groupIds.length === 0) return;
+  await db.delete(schema.groups).where(notInArray(schema.groups.id, groupIds)).run();
 }
 
 /**

@@ -3,6 +3,7 @@ import path from "node:path";
 import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { initDb, closeDb } from "@mf-dashboard/db";
 import { updateAccountCategory, buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
+import { deleteGroupsNotIn } from "@mf-dashboard/db/repository/groups";
 import { saveScrapedData, saveGroupOnlyData } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
@@ -34,6 +35,7 @@ const isHeaded = process.env.HEADED === "true";
 
 async function main() {
   const skipRefresh = process.env.SKIP_REFRESH === "true";
+  const cleanupGroups = process.env.CLEANUP_GROUPS === "true";
   const authState = hasAuthState() ? "configured" : "none";
   const dbPath =
     process.env.DB_PATH || path.join(import.meta.dirname, "../../../data/moneyforward.db");
@@ -43,6 +45,7 @@ async function main() {
 
   section("Options");
   log(`SKIP_REFRESH:   ${skipRefresh}`);
+  log(`CLEANUP_GROUPS: ${cleanupGroups}`);
   log(`SCRAPE_MODE:    ${scrapeMode} (DB exists: ${dbExists})`);
   log(`DEBUG:          ${isDebug}`);
   log(`HEADED:         ${isHeaded}`);
@@ -104,6 +107,21 @@ async function main() {
       section(`Save: ${groupData.group.name} (Group Only)`);
       const scrapedData = buildGroupOnlyScrapedData(groupData);
       await saveGroupOnlyData(db, scrapedData);
+    }
+
+    // CLEANUP_GROUPS=true の場合のみ、MoneyForward に存在しないグループを DB から削除
+    if (cleanupGroups) {
+      const scrapedGroups = groupDataList.filter((gd) => !isNoGroup(gd.group.id));
+
+      if (scrapedGroups.length > 0) {
+        const scrapedGroupIds = scrapedGroups.map((gd) => gd.group.id);
+        await deleteGroupsNotIn(db, [...scrapedGroupIds, NO_GROUP_ID]);
+        info("Cleaned up groups not found in MoneyForward");
+      } else {
+        warn(
+          "Skipped group cleanup because no actual groups were scraped; group selector retrieval may have failed.",
+        );
+      }
     }
 
     // 金融機関カテゴリはデフォルトグループ（または最初のグループ）で一度だけ取得
