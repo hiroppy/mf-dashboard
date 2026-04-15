@@ -274,8 +274,8 @@ importers:
         specifier: workspace:*
         version: link:../db
       ai:
-        specifier: 6.0.160
-        version: 6.0.160(zod@4.3.6)
+        specifier: 6.0.161
+        version: 6.0.161(zod@4.3.6)
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -360,8 +360,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@3.0.97':
-    resolution: {integrity: sha512-ERHmVGX30YKTwxObuHQzNqoOf8Nb5WwYMDBn34e3TGGVn0vLEXwMimo7uRVTbhhi4gfu9WtwYTE4x1+csZok1w==}
+  '@ai-sdk/gateway@3.0.98':
+    resolution: {integrity: sha512-Ol+nP8PIlj8FjN8qKlxhE89N0woqAaGi9CUBGp1boe3RafpphJ7WMuq/RErSvxtwTqje03TP+zIdzP113krxRg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -3066,8 +3066,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai@6.0.160:
-    resolution: {integrity: sha512-7ezNpbdCGhhBMWX8zrF7/iDdG2CazVlFqPNWFKefpTaRbT3faBzcbH9o7VfO9GIW1aRq8rvMli1d0q8MOdPYVg==}
+  ai@6.0.161:
+    resolution: {integrity: sha512-ufhmijmx2YyWTPAicGgtpLOB/xD7mG8zKs1pT1Trj+JL/3r1rS8fkMi/cHZoChSAQSGB4pgmcWVxDrVTUvK2IQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -5251,7 +5251,7 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.23(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/gateway@3.0.97(zod@4.3.6)':
+  '@ai-sdk/gateway@3.0.98(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.23(zod@4.3.6)
@@ -7333,9 +7333,9 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai@6.0.160(zod@4.3.6):
+  ai@6.0.161(zod@4.3.6):
     dependencies:
-      '@ai-sdk/gateway': 3.0.97(zod@4.3.6)
+      '@ai-sdk/gateway': 3.0.98(zod@4.3.6)
       '@ai-sdk/provider': 3.0.8
       '@ai-sdk/provider-utils': 4.0.23(zod@4.3.6)
       '@opentelemetry/api': 1.9.0
