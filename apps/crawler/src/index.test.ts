@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { buildCleanupGroupIds } from "./index.js";
-import { NO_GROUP_ID } from "./scrapers/group.js";
 import type { GroupData } from "./scraper.js";
+import { NO_GROUP_ID } from "./scrapers/group.js";
 
 function makeGroupData(id: string, name: string): GroupData {
   return {
