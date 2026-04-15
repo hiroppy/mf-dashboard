@@ -18,6 +18,7 @@ import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord
 import { runHooks } from "./hooks/runner.js";
 import { log, debug, info, error, section, warn } from "./logger.js";
 import { scrapeAllGroups } from "./scraper.js";
+import type { GroupData } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { isNoGroup, switchGroup, NO_GROUP_ID, createGroupScope } from "./scrapers/group.js";
 import { scrapeInstitutionCategories } from "./scrapers/institution-categories.js";
@@ -111,15 +112,13 @@ async function main() {
 
     // CLEANUP_GROUPS=true の場合のみ、MoneyForward に存在しないグループを DB から削除
     if (cleanupGroups) {
-      const scrapedGroups = groupDataList.filter((gd) => !isNoGroup(gd.group.id));
-
-      if (scrapedGroups.length > 0) {
-        const scrapedGroupIds = scrapedGroups.map((gd) => gd.group.id);
-        await deleteGroupsNotIn(db, [...scrapedGroupIds, NO_GROUP_ID]);
+      const result = buildCleanupGroupIds(groupDataList);
+      if (result) {
+        await deleteGroupsNotIn(db, result.ids);
         info("Cleaned up groups not found in MoneyForward");
       } else {
         warn(
-          "Skipped group cleanup because no actual groups were scraped; group selector retrieval may have failed.",
+          "Skipped group cleanup because no groups were scraped; group selector retrieval may have failed.",
         );
       }
     }
@@ -275,6 +274,20 @@ async function main() {
     await browser.close();
     closeDb();
   }
+}
+
+/**
+ * クリーンアップ対象のグループIDリストを構築する。
+ * groupDataList が空（スクレイピング完全失敗）の場合は null を返し、クリーンアップをスキップする。
+ */
+export function buildCleanupGroupIds(groupDataList: GroupData[]): { ids: string[] } | null {
+  if (groupDataList.length === 0) return null;
+
+  const customGroupIds = groupDataList
+    .filter((gd) => !isNoGroup(gd.group.id))
+    .map((gd) => gd.group.id);
+
+  return { ids: [...customGroupIds, NO_GROUP_ID] };
 }
 
 void main();
