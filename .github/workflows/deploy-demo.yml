@@ -50,7 +50,7 @@ jobs:
       - name: Build Storybook
         run: pnpm --filter @mf-dashboard/web build-storybook --output-dir out/storybook
       - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/web/out
       - id: deployment
