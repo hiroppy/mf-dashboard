@@ -34,7 +34,7 @@
     "tailwind-merge": "3.5.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.11.1",
+    "@axe-core/playwright": "4.11.2",
     "@playwright/test": "1.58.2",
     "@storybook/addon-a11y": "10.3.5",
     "@storybook/addon-vitest": "10.3.5",
