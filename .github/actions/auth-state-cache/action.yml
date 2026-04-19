@@ -21,7 +21,7 @@ runs:
     - name: Restore auth state
       if: inputs.mode == 'restore' && inputs.enabled == 'true'
       id: restore
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v5.0.5
       with:
         path: data/auth-state.json
         key: auth-state-${{ github.run_id }}
@@ -30,7 +30,7 @@ runs:
 
     - name: Save auth state
       if: inputs.mode == 'save' && inputs.enabled == 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v5.0.5
       with:
         path: data/auth-state.json
         key: auth-state-${{ github.run_id }}
