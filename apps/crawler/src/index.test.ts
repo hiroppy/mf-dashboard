@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildCleanupGroupIds } from "./index.js";
+import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import type { GroupData } from "./scraper.js";
 import { NO_GROUP_ID } from "./scrapers/group.js";
 
