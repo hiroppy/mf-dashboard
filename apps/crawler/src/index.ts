@@ -13,12 +13,12 @@ import { chromium } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
 import { createBrowserContext } from "./browser/context.js";
+import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord.js";
 import { runHooks } from "./hooks/runner.js";
 import { log, debug, info, error, section, warn } from "./logger.js";
 import { scrapeAllGroups } from "./scraper.js";
-import type { GroupData } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { isNoGroup, switchGroup, NO_GROUP_ID, createGroupScope } from "./scrapers/group.js";
 import { scrapeInstitutionCategories } from "./scrapers/institution-categories.js";
@@ -46,7 +46,7 @@ async function main() {
 
   section("Options");
   log(`SKIP_REFRESH:   ${skipRefresh}`);
-  log(`CLEANUP_GROUPS: ${cleanupGroups}`);
+  info(`CLEANUP_GROUPS: ${cleanupGroups}`);
   log(`SCRAPE_MODE:    ${scrapeMode} (DB exists: ${dbExists})`);
   log(`DEBUG:          ${isDebug}`);
   log(`HEADED:         ${isHeaded}`);
@@ -274,20 +274,6 @@ async function main() {
     await browser.close();
     closeDb();
   }
-}
-
-/**
- * クリーンアップ対象のグループIDリストを構築する。
- * groupDataList が空（スクレイピング完全失敗）の場合は null を返し、クリーンアップをスキップする。
- */
-export function buildCleanupGroupIds(groupDataList: GroupData[]): { ids: string[] } | null {
-  if (groupDataList.length === 0) return null;
-
-  const customGroupIds = groupDataList
-    .filter((gd) => !isNoGroup(gd.group.id))
-    .map((gd) => gd.group.id);
-
-  return { ids: [...customGroupIds, NO_GROUP_ID] };
 }
 
 void main();
