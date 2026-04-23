@@ -10,6 +10,7 @@ import {
   getCurrentGroupId,
   linkAccountToGroup,
   clearGroupAccountLinks,
+  deleteGroupsNotIn,
 } from "./groups";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
@@ -201,6 +202,52 @@ describe("clearGroupAccountLinks", () => {
   test("リンクがない状態でもエラーにならない", async () => {
     await upsertGroup(db, { id: "g1", name: "テストグループ", isCurrent: true });
     await expect(clearGroupAccountLinks(db, "g1")).resolves.not.toThrow();
+  });
+});
+
+describe("deleteGroupsNotIn", () => {
+  test("リストに含まれないグループを削除する", async () => {
+    await upsertGroup(db, { id: "g1", name: "グループ1", isCurrent: true });
+    await upsertGroup(db, { id: "g2", name: "グループ2", isCurrent: false });
+    await upsertGroup(db, { id: "g3", name: "グループ3", isCurrent: false });
+
+    await deleteGroupsNotIn(db, ["g1", "g2"]);
+
+    const result = await db.select().from(schema.groups).all();
+    expect(result).toHaveLength(2);
+    expect(result.map((g) => g.id).sort()).toEqual(["g1", "g2"]);
+  });
+
+  test("リストにすべて含まれる場合は何も削除しない", async () => {
+    await upsertGroup(db, { id: "g1", name: "グループ1", isCurrent: true });
+    await upsertGroup(db, { id: "g2", name: "グループ2", isCurrent: false });
+
+    await deleteGroupsNotIn(db, ["g1", "g2"]);
+
+    const result = await db.select().from(schema.groups).all();
+    expect(result).toHaveLength(2);
+  });
+
+  test("空リストを渡しても何も削除しない", async () => {
+    await upsertGroup(db, { id: "g1", name: "グループ1", isCurrent: true });
+
+    await deleteGroupsNotIn(db, []);
+
+    const result = await db.select().from(schema.groups).all();
+    expect(result).toHaveLength(1);
+  });
+
+  test("NO_GROUP_ID をリストに含めれば削除されない", async () => {
+    const NO_GROUP_ID = "0";
+    await upsertGroup(db, { id: NO_GROUP_ID, name: "グループなし", isCurrent: false });
+    await upsertGroup(db, { id: "g1", name: "グループ1", isCurrent: true });
+    await upsertGroup(db, { id: "g2", name: "グループ2", isCurrent: false });
+
+    await deleteGroupsNotIn(db, ["g1", NO_GROUP_ID]);
+
+    const result = await db.select().from(schema.groups).all();
+    expect(result).toHaveLength(2);
+    expect(result.map((g) => g.id).sort()).toEqual(["0", "g1"]);
   });
 });
 
