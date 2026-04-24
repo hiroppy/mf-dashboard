@@ -13,9 +13,7 @@ interface AccountListClientProps {
 }
 
 export function countSuspended(groupedAccounts: GroupedAccounts): number {
-  return groupedAccounts
-    .flatMap((g) => g.accounts)
-    .filter((a) => a.status === "suspended").length;
+  return groupedAccounts.flatMap((g) => g.accounts).filter((a) => a.status === "suspended").length;
 }
 
 export function filterSuspended(groupedAccounts: GroupedAccounts): GroupedAccounts {
@@ -43,10 +41,7 @@ export function AccountListClient({ groupedAccounts, groupId }: AccountListClien
             onCheckedChange={setShowSuspended}
             aria-label="停止中のアカウントを表示する"
           />
-          <label
-            htmlFor="show-suspended"
-            className="text-sm text-muted-foreground cursor-pointer"
-          >
+          <label htmlFor="show-suspended" className="text-sm text-muted-foreground cursor-pointer">
             停止中を表示する（{suspendedCount}件）
           </label>
         </div>

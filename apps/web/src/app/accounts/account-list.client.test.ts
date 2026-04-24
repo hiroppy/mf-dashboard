@@ -34,10 +34,7 @@ const baseGrouped = [
   {
     categoryName: "銀行",
     displayOrder: 1,
-    accounts: [
-      makeAccount({ id: 1, status: "ok" }),
-      makeAccount({ id: 2, status: "suspended" }),
-    ],
+    accounts: [makeAccount({ id: 1, status: "ok" }), makeAccount({ id: 2, status: "suspended" })],
   },
   {
     categoryName: "クレジットカード",
