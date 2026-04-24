@@ -39,7 +39,6 @@ export function AccountListClient({ groupedAccounts, groupId }: AccountListClien
             id="show-suspended"
             checked={showSuspended}
             onCheckedChange={setShowSuspended}
-            aria-label="停止中のアカウントを表示する"
           />
           <label htmlFor="show-suspended" className="text-sm text-muted-foreground cursor-pointer">
             停止中を表示する（{suspendedCount}件）
@@ -48,7 +47,11 @@ export function AccountListClient({ groupedAccounts, groupId }: AccountListClien
       )}
 
       {filteredGroups.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">連携サービスがありません。</div>
+        <div className="text-center py-12 text-muted-foreground">
+          {suspendedCount > 0
+            ? "表示できるアカウントはありません。停止中を表示してください。"
+            : "連携サービスがありません。"}
+        </div>
       ) : (
         <div className="space-y-8">
           {filteredGroups.map((group) => (
