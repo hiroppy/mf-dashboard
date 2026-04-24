@@ -35,11 +35,7 @@ export function AccountListClient({ groupedAccounts, groupId }: AccountListClien
     <div className="space-y-6">
       {suspendedCount > 0 && (
         <div className="flex items-center gap-2">
-          <Switch
-            id="show-suspended"
-            checked={showSuspended}
-            onCheckedChange={setShowSuspended}
-          />
+          <Switch id="show-suspended" checked={showSuspended} onCheckedChange={setShowSuspended} />
           <label htmlFor="show-suspended" className="text-sm text-muted-foreground cursor-pointer">
             停止中を表示する（{suspendedCount}件）
           </label>
