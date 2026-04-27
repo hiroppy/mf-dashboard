@@ -13,7 +13,7 @@
     "@libsql/client": "catalog:",
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.27.1",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "zod": "4.3.6"
   },
   "devDependencies": {
