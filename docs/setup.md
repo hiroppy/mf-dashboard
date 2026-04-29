@@ -101,7 +101,6 @@ cp .env.example .env
 | Key                                                  | 必須     | 値                                                                                             |
 | ---------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
 | `TUNNEL_TOKEN`                                       | ✅       | `cd terraform && op run --env-file=.env.template -- terraform output -raw tunnel_token` の結果 |
-| `REFRESH_TOKEN`                                      | ✅       | crawler → web の `/api/refresh` 通知用ランダム文字列 (例: `openssl rand -hex 32`)              |
 | `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                          |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                     |
@@ -128,7 +127,7 @@ docker compose up -d
 
 - **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
 - **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
-- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 6:50 / 15:20 に MoneyForward をスクレイピング → 終了後 `http://web:8765/api/refresh` を Bearer 認証付きで POST して `revalidatePath` をトリガー
+- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 6:50 / 15:20 に MoneyForward をスクレイピング → 終了後 `http://web:8765/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
   - 起動時に `data/moneyforward.db` が存在しなければ初回 crawl を実行する
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
@@ -160,7 +159,7 @@ op run --env-file=terraform/.env.template -- \
 - ホストの再起動: Docker Desktop が自動起動 → `restart: unless-stopped` の各コンテナも自動復帰
 - 手動再ビルド (依存追加など): `docker compose build && docker compose up -d`
 - crawler を即時実行: `docker compose exec crawler /app/docker/crawler/run-crawl.sh`
-- web のキャッシュを手動で無効化: `curl -X POST http://localhost:8765/api/refresh -H "Authorization: Bearer $REFRESH_TOKEN"` (web をホストに公開していない場合は `docker compose exec web wget --post-data='' --header="Authorization: Bearer $REFRESH_TOKEN" -qO- http://localhost:8765/api/refresh`)
+- web のキャッシュを手動で無効化: `docker compose exec crawler curl -fsS -X POST http://web:8765/api/refresh`
 
 ## 更新
 
