@@ -29,3 +29,4 @@ apps/crawler/tests/e2e/screenshots/
 .worktrees/
 docs/plans
 error-*.png
+.claude/scheduled_tasks.lock
