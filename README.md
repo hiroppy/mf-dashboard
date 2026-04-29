@@ -8,7 +8,7 @@
 
 ### 指定した時間に金融機関の一括更新
 
-GitHubのworkflowでcrontabを使い定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日6:50(JST)と15:20(JST)。GitHubのcrontabは指定時間ちょうどに実行されないので、-10分に設定。
+crawler コンテナ内の supercronic で定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日 7:00 (JST) と 15:30 (JST)。
 
 ### Slackへ結果を投稿
 
@@ -42,11 +42,11 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ## アーキテクチャ
 
-ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) を持ち、JST 6:50 / 15:20 に MoneyForward をスクレイピング → 完了後 web の `/api/refresh` を Docker bridge 経由で叩いて `revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
+ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) を持ち、JST 7:00 / 15:30 に MoneyForward をスクレイピング → 完了後 web の `/api/refresh` を Docker bridge 経由で叩いて `revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
 
 ```mermaid
 graph LR
-    A[crawler コンテナ<br/>supercronic] -->|1. JST 6:50/15:20| B[crawler<br/>Playwright]
+    A[crawler コンテナ<br/>supercronic] -->|1. JST 7:00/15:30| B[crawler<br/>Playwright]
     B -->|2. OTP取得| E[1Password<br/>Service Account]
     E -->|3. 認証情報| B
     B -->|4. アクセス| F[MoneyForward Me]

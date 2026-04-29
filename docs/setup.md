@@ -1,6 +1,6 @@
 # セットアップ
 
-ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 6:50 / 15:20 に走り、完了後 web の `/api/refresh` を叩いて `revalidatePath` で全ルートを再生成する。
+ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 7:00 / 15:30 に走り、完了後 web の `/api/refresh` を叩いて `revalidatePath` で全ルートを再生成する。
 
 ## 必須要件
 
@@ -127,7 +127,7 @@ docker compose up -d
 
 - **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
 - **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
-- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 6:50 / 15:20 に MoneyForward をスクレイピング → 終了後 `http://web:8765/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
+- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に MoneyForward をスクレイピング → 終了後 `http://web:8765/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
   - 起動時に `data/moneyforward.db` が存在しなければ初回 crawl を実行する
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
