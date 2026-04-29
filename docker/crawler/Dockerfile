@@ -21,6 +21,4 @@ RUN pnpm install --frozen-lockfile --filter "@mf-dashboard/crawler..."
 
 COPY . .
 
-RUN chmod +x /app/docker/crawler/entrypoint.sh
-
-ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/crawler/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "supercronic", "/app/docker/crawler/crontab"]
