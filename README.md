@@ -42,7 +42,7 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ## アーキテクチャ
 
-ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) を持ち、JST 6:50 / 15:20 に MoneyForward をスクレイピング → 完了後 web の `/api/refresh` を叩いて `revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
+ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) を持ち、JST 6:50 / 15:20 に MoneyForward をスクレイピング → 完了後 web の `/api/refresh` を Docker bridge 経由で叩いて `revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
 
 ```mermaid
 graph LR
@@ -53,7 +53,7 @@ graph LR
     F -->|5. データ| B
     B -->|6. 保存| C[(SQLite<br/>./data volume)]
     C -.読む.-> W[web コンテナ<br/>next start]
-    B -->|7. POST /api/refresh| W
+    B -->|7. POST /api/refresh<br/>internal only| W
     W -->|8. localhost:8765| H[cloudflared コンテナ]
     H -->|9. 公開| I[Cloudflare<br/>Edge + Access]
     I -->|10. 認証通過のみ| J[エンドユーザー]
@@ -66,7 +66,7 @@ graph LR
 - **データ取得**: Playwright で MoneyForward Me からスクレイピング
 - **認証**: 1Password Service Account から OTP を取得
 - **データ保存**: 共有 volume の SQLite (`./data/moneyforward.db`) に保存
-- **静的再生成**: crawler 完了後、web コンテナの `/api/refresh` を Bearer 認証付き POST → `revalidatePath('/', 'layout')` で全ルートを invalidate。次のリクエストで新しい DB の内容を反映
+- **静的再生成**: crawler 完了後、web コンテナの `/api/refresh` を Docker bridge 経由で POST → `revalidatePath('/', 'layout')` で全ルートを invalidate。次のリクエストで新しい DB の内容を反映 (`expose:` のみで host には公開しないので外部到達不可)
 - **公開**: cloudflared コンテナが Cloudflare Edge と接続し、Access (Google IdP + email allowlist) を経由して許可ユーザーのみアクセス可能
 
 Cloudflare 側の Tunnel / DNS / Access は `terraform/` で宣言的に管理する。詳細は [docs/setup.md](/docs/setup.md) を参照。

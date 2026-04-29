@@ -11,17 +11,10 @@ REFRESH_RETRY_DELAY="${REFRESH_RETRY_DELAY:-5}"
 echo "[crawl] starting at $(date -Iseconds)"
 pnpm --filter @mf-dashboard/crawler start
 
-if [ -z "${REFRESH_TOKEN:-}" ]; then
-  echo "[crawl] REFRESH_TOKEN not set; cannot invalidate cached pages" >&2
-  exit 1
-fi
-
 attempt=1
 while [ "$attempt" -le "$REFRESH_MAX_ATTEMPTS" ]; do
   echo "[crawl] notifying ${REFRESH_URL} (attempt ${attempt}/${REFRESH_MAX_ATTEMPTS})"
-  if curl -fsS --max-time 10 -X POST "${REFRESH_URL}" \
-    -H "Authorization: Bearer ${REFRESH_TOKEN}" \
-    -o /dev/null; then
+  if curl -fsS --max-time 10 -X POST "${REFRESH_URL}" -o /dev/null; then
     echo "[crawl] refresh acknowledged at $(date -Iseconds)"
     exit 0
   fi
