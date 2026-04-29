@@ -62,16 +62,42 @@ Terraform 用の API Token を発行する。最小権限:
 - アイテム名: `Cloudflare API Token mf-dashboard`
 - フィールド: `credential`
 
-参照は `op://Private/Cloudflare API Token mf-dashboard/credential` の形式で `terraform/.env.template` から行われる。
+参照は `op://Private/Cloudflare API Token mf-dashboard/credential` の形式でリポジトリルートの `.env` (`CLOUDFLARE_API_TOKEN` キー) から行われる。値はその `op://` 参照のまま `.env` に書く — `op run --env-file=.env` が呼ばれるたびに解決される。
 
-## 3. Terraform で Tunnel + Access を構築
+## 3. `.env` の作成
+
+リポジトリルートの `.env.example` をコピーして `.env` を作る (`.gitignore` 済み)。Docker Compose と Terraform の双方がこの 1 ファイルを参照する。
 
 ```sh
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
+cp .env.example .env
 ```
 
-`terraform.tfvars` を実際の値に書き換える:
+| Key                                                  | 必須     | 値                                                                                                            |
+| ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                               | ✅       | `op://Private/Cloudflare API Token mf-dashboard/credential` のような 1Password 参照のまま (op run が解決する) |
+| `TUNNEL_TOKEN`                                       | ✅       | `terraform output -raw tunnel_token` の結果 (次のセクションで取得)                                            |
+| `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                               |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                         |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                                    |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL`         | optional | Discord 通知                                                                                                  |
+| `DASHBOARD_URL`                                      | optional | 公開している `https://<hostname>/`                                                                            |
+| `NEXT_PUBLIC_GITHUB_ORG` / `NEXT_PUBLIC_GITHUB_REPO` | optional | UI から workflow へのリンク                                                                                   |
+
+### 1Password の ID の見つけ方 (アプリ)
+
+1password/sdk は日本語に対応しておらずエラーになるため日本語のものは UUID を使う:
+
+- `OP_VAULT`: サイドバーで保管庫を右クリック > UUID をコピー
+- `OP_ITEM`: アイテム画面右上のケバブメニューから UUID をコピー
+- `OP_TOTP_FIELD`: 同メニューの「アイテムの JSON をコピー」から、`u` に `TOTP_` 開始の文字列があるフィールド ID を抽出
+
+## 4. Terraform で Tunnel + Access を構築
+
+```sh
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+`terraform/terraform.tfvars` を実際の値に書き換える:
 
 ```hcl
 account_id = "<Cloudflare Account ID>"
@@ -82,39 +108,19 @@ allowed_emails = [
 ]
 ```
 
-適用:
+`op run` がルートの `.env` から `CLOUDFLARE_API_TOKEN` を解決して terraform に渡す:
 
 ```sh
-op run --env-file=.env.template -- terraform init
-op run --env-file=.env.template -- terraform plan
-op run --env-file=.env.template -- terraform apply
+op run --env-file=.env -- terraform -chdir=terraform init
+op run --env-file=.env -- terraform -chdir=terraform plan
+op run --env-file=.env -- terraform -chdir=terraform apply
 ```
 
-## 4. `.env` の作成
-
-リポジトリルートの `.env.example` をコピーして `.env` を作る (`.gitignore` 済み):
+apply 後に `tunnel_token` を取得し、`.env` の `TUNNEL_TOKEN=` に貼り付ける:
 
 ```sh
-cp .env.example .env
+op run --env-file=.env -- terraform -chdir=terraform output -raw tunnel_token
 ```
-
-| Key                                                  | 必須     | 値                                                                                             |
-| ---------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-| `TUNNEL_TOKEN`                                       | ✅       | `cd terraform && op run --env-file=.env.template -- terraform output -raw tunnel_token` の結果 |
-| `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                          |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                     |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL`         | optional | Discord 通知                                                                                   |
-| `DASHBOARD_URL`                                      | optional | 公開している `https://<hostname>/`                                                             |
-| `NEXT_PUBLIC_GITHUB_ORG` / `NEXT_PUBLIC_GITHUB_REPO` | optional | UI から workflow へのリンク                                                                    |
-
-### 1Password の ID の見つけ方 (アプリ)
-
-1password/sdk は日本語に対応しておらずエラーになるため日本語のものは UUID を使う:
-
-- `OP_VAULT`: サイドバーで保管庫を右クリック > UUID をコピー
-- `OP_ITEM`: アイテム画面右上のケバブメニューから UUID をコピー
-- `OP_TOTP_FIELD`: 同メニューの「アイテムの JSON をコピー」から、`u` に `TOTP_` 開始の文字列があるフィールド ID を抽出
 
 ## 5. Docker Compose で起動
 
@@ -152,7 +158,7 @@ curl -I https://<hostname>/
 # → 302 + Location が <team-name>.cloudflareaccess.com 配下なら Access 動作中
 
 # 接続中の Tunnel を確認
-op run --env-file=terraform/.env.template -- \
+op run --env-file=.env -- \
   terraform -chdir=terraform output -raw tunnel_id \
   | xargs -I {} cloudflared tunnel info {}
 ```
