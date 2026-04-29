@@ -17,7 +17,7 @@
     "@ai-sdk/google": "3.0.65",
     "@ai-sdk/openai": "3.0.54",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "6.0.169",
+    "ai": "6.0.170",
     "zod": "4.3.6"
   },
   "devDependencies": {
