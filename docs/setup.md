@@ -121,7 +121,11 @@ cp .env.example .env
 ```sh
 docker compose build
 docker compose up -d
+# 初回起動時、DB がまだ空なら 1 回だけ手動で走らせて bootstrap する
+docker compose exec crawler pnpm --filter @mf-dashboard/crawler start
 ```
+
+以降は crawler コンテナ内の supercronic が `crontab` のスケジュールで自動更新する。
 
 各コンテナの役割:
 
