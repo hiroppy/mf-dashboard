@@ -5,7 +5,7 @@ DB_PATH="${DB_PATH:-/app/data/moneyforward.db}"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "[init] DB not found at $DB_PATH; running initial crawl"
-  if ! /app/docker/crawler/run-crawl.sh; then
+  if ! pnpm --filter @mf-dashboard/crawler start; then
     echo "[init] initial crawl failed; supercronic will retry on schedule" >&2
   fi
 fi
