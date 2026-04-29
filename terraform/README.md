@@ -1,6 +1,6 @@
 # Terraform: Cloudflare Tunnel + Access
 
-ローカル PC で配信する `apps/web/out` を Cloudflare Tunnel で外部公開し、Cloudflare Access (Google IdP + email allowlist) で保護するための Terraform。
+ローカル PC の Docker Compose (`web` / `cloudflared` / `crawler`) を Cloudflare Tunnel で外部公開し、Cloudflare Access (Google IdP + email allowlist) で保護するための Terraform。
 
 ## 前提
 
@@ -29,16 +29,14 @@ op run --env-file=.env.template -- terraform plan
 op run --env-file=.env.template -- terraform apply
 ```
 
-## Tunnel Token の取り出し (1Password へ保存)
+## Tunnel Token の取り出し
 
-`Cloudflare Tunnel mf-dashboard` という名前で **API Credential** アイテムを作成し、`credential` フィールドに以下のコマンドで書き込む:
+`terraform output` で得た token を、リポジトリルートの `.env` の `TUNNEL_TOKEN=...` に書き込む。`compose.yml` の `cloudflared` サービスが `env_file: .env` 経由でこれを読み、Cloudflare 公式イメージが起動時に `cloudflared tunnel run --token` 相当の挙動をする。
 
 ```sh
-op run --env-file=.env.template -- terraform output -raw tunnel_token \
-  | op item edit "Cloudflare Tunnel mf-dashboard" "credential=$(cat)"
+op run --env-file=.env.template -- terraform output -raw tunnel_token
+# 出力をコピーして .env の TUNNEL_TOKEN に貼り付ける
 ```
-
-ローカル側ではこの token を `cloudflared tunnel run --token` に渡す (`scripts/start-tunnel.sh` 参照)。
 
 ## 破棄
 
