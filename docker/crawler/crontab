@@ -1,2 +1,2 @@
-0 7  * * * /app/docker/crawler/run-crawl.sh
-30 15 * * * /app/docker/crawler/run-crawl.sh
+0 7  * * * cd /app && pnpm --filter @mf-dashboard/crawler start
+30 15 * * * cd /app && pnpm --filter @mf-dashboard/crawler start

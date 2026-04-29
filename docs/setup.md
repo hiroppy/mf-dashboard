@@ -127,7 +127,7 @@ docker compose up -d
 
 - **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
 - **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
-- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に MoneyForward をスクレイピング → 終了後 `http://web:8765/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
+- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
   - 起動時に `data/moneyforward.db` が存在しなければ初回 crawl を実行する
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
@@ -158,8 +158,8 @@ op run --env-file=terraform/.env.template -- \
 
 - ホストの再起動: Docker Desktop が自動起動 → `restart: unless-stopped` の各コンテナも自動復帰
 - 手動再ビルド (依存追加など): `docker compose build && docker compose up -d`
-- crawler を即時実行: `docker compose exec crawler /app/docker/crawler/run-crawl.sh`
-- web のキャッシュを手動で無効化: `docker compose exec crawler curl -fsS -X POST http://web:8765/api/refresh`
+- crawler を即時実行: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start` (完了時に自動的に web へ refresh ping を送る)
+- web のキャッシュだけ手動で無効化: `docker compose exec crawler curl -fsS -X POST http://web:8765/api/refresh`
 
 ## 更新
 
