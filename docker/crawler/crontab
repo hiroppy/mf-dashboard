@@ -1,0 +1,2 @@
+50 6  * * * /app/docker/crawler/run-crawl.sh
+20 15 * * * /app/docker/crawler/run-crawl.sh

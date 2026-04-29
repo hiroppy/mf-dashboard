@@ -18,6 +18,7 @@ test-groups-moneyforward.db
 test-moneyforward.db*
 *.db-shm
 *.db-wal
+data/moneyforward.db
 
 playwright-report
 test-results
