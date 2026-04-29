@@ -132,7 +132,6 @@ docker compose exec crawler pnpm --filter @mf-dashboard/crawler start
 - **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
 - **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
 - **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
-  - 起動時に `data/moneyforward.db` が存在しなければ初回 crawl を実行する
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
 
