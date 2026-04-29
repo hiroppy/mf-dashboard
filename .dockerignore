@@ -1,0 +1,40 @@
+node_modules
+**/node_modules
+.next
+**/.next
+out
+**/out
+storybook-static
+**/storybook-static
+.turbo
+**/.turbo
+dist
+**/dist
+.git
+.github
+.worktrees
+.playwright-mcp
+playwright-report
+test-results
+debug
+**/debug
+
+# 機密
+.env
+.env.*
+!.env.example
+data/moneyforward.db
+data/moneyforward.db-shm
+data/moneyforward.db-wal
+
+# Terraform local state
+terraform/.terraform
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/.env
+
+# その他
+docs
+*.md
+!README.md

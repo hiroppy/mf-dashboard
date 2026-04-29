@@ -1,0 +1,11 @@
+account_id = "your-cloudflare-account-id"
+zone_id    = "your-cloudflare-zone-id"
+hostname   = "dashboard.example.com"
+
+allowed_emails = [
+  "you@example.com",
+]
+
+# tunnel_name       = "mf-dashboard"
+# local_service_url = "http://web:8765"
+# session_duration  = "24h"
