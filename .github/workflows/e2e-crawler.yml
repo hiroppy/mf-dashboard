@@ -53,7 +53,7 @@ jobs:
           if-no-files-found: ignore
       - name: Notify Slack on failure
         if: failure()
-        uses: slackapi/slack-github-action@v3.0.1
+        uses: slackapi/slack-github-action@v3.0.3
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
