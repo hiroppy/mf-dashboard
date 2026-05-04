@@ -8,7 +8,7 @@
 
 ### 指定した時間に金融機関の一括更新
 
-GitHubのworkflowでcrontabを使い定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日6:50(JST)と15:20(JST)。GitHubのcrontabは指定時間ちょうどに実行されないので、-10分に設定。
+crawler コンテナ内の supercronic で定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日 7:00 (JST) と 15:30 (JST)。
 
 ### Slackへ結果を投稿
 
@@ -42,28 +42,34 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ## アーキテクチャ
 
-このプロダクトは、GitHub Actionsで定期的にMoneyForward Meのデータを取得してSQLiteに保存し、Cloudflare Pagesで静的サイトをビルド・公開する。Publicで公開する前提のものではないので、以下の構成とする。
+ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) を持ち、JST 7:00 / 15:30 に MoneyForward をスクレイピング → 完了後 web の `/api/refresh` を Docker bridge 経由で叩いて `revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
 
 ```mermaid
 graph LR
-    A[GitHub Actions<br/>Cron] -->|1. 実行| B[Crawler<br/>Playwright]
+    A[crawler コンテナ<br/>supercronic] -->|1. JST 7:00/15:30| B[crawler<br/>Playwright]
     B -->|2. OTP取得| E[1Password<br/>Service Account]
     E -->|3. 認証情報| B
     B -->|4. アクセス| F[MoneyForward Me]
     F -->|5. データ| B
-    B -->|6. 保存| C[SQLite<br/>Database]
-    C -->|7. 更新完了| A
-    A -->|8. Git Commit| D[Cloudflare Worker<br/>Next.js Static Export]
+    B -->|6. 保存| C[(SQLite<br/>./data volume)]
+    C -.読む.-> W[web コンテナ<br/>next start]
+    B -->|7. POST /api/refresh<br/>internal only| W
+    W -->|8. localhost:8765| H[cloudflared コンテナ]
+    H -->|9. 公開| I[Cloudflare<br/>Edge + Access]
+    I -->|10. 認証通過のみ| J[エンドユーザー]
 ```
 
 **処理の流れ:**
 
-- **定期実行**: GitHub Actionsのcronスケジュールで自動実行
-- **認証**: 1Password Service AccountからOTPを取得
-- **データ取得**: Playwrightを使用してMoneyForward Meからデータをスクレイピング
-- **データ保存**: SQLiteデータベースに構造化して保存
-- **コミット**: SQLiteファイルをリポジトリにコミットすることにより、cloudflareをキック
-- **ビルド・デプロイ**: Cloudflare PagesでNext.jsの静的サイトをビルドして公開(Cloudflare Oneの利用を強く推奨)
+- **常駐**: Docker Desktop の自動起動 + `restart: unless-stopped` で 3 コンテナがホスト起動時に立ち上がる
+- **スケジューリング**: crawler コンテナの supercronic が `docker/crawler/crontab` を回す (TZ=Asia/Tokyo)
+- **データ取得**: Playwright で MoneyForward Me からスクレイピング
+- **認証**: 1Password Service Account から OTP を取得
+- **データ保存**: 共有 volume の SQLite (`./data/moneyforward.db`) に保存
+- **静的再生成**: crawler 完了後、web コンテナの `/api/refresh` を Docker bridge 経由で POST → `revalidatePath('/', 'layout')` で全ルートを invalidate。次のリクエストで新しい DB の内容を反映 (`expose:` のみで host には公開しないので外部到達不可)
+- **公開**: cloudflared コンテナが Cloudflare Edge と接続し、Access (Google IdP + email allowlist) を経由して許可ユーザーのみアクセス可能
+
+Cloudflare 側の Tunnel / DNS / Access は `terraform/` で宣言的に管理する。詳細は [docs/setup.md](/docs/setup.md) を参照。
 
 ## 推奨セキュリティ
 
@@ -73,11 +79,7 @@ graph LR
   - ワンタイムパスワード
   - Passkeyだけだとクローリングするときにログインできない点に注意
 - Cloudflare
-  - Cloudflare oneでサイトへのアクセス制限 (e.g. googleログイン)
-
-このプロダクトはスケールさせる必要がないことから、当初GitHubだけで完結するように設計されていた。しかし、Private repoの場合はGitHub Pagesが有料限定ということでページの公開と認証はCloudflareを利用するようにした経緯がある。
-
-SQLiteを今後、pushしなくても良いオプションを作る可能性はあるが、毎回1年分のデータ取得と取得毎のdiffが取れなくなるデメリットがあるため現段階では実装していない。またインフラは今後変える可能性あり。
+  - Cloudflare Tunnel + Access (Zero Trust) で Google ログイン + email allowlist によるアクセス制限
 
 ## 開発
 

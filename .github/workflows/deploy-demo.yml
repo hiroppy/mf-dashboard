@@ -18,20 +18,7 @@ permissions:
   id-token: write
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      should-run: ${{ steps.check.outputs.should-run }}
-    steps:
-      - id: check
-        env:
-          OP_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          HAS_DEMO: ${{ vars.HAS_DEMO }}
-        run: echo "should-run=${{ env.OP_TOKEN == '' && env.HAS_DEMO == 'true' }}" >> $GITHUB_OUTPUT
-
   deploy:
-    needs: check
-    if: needs.check.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

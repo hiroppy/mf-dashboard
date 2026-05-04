@@ -1,0 +1,32 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    expose:
+      - "8765"
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    env_file: .env
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  crawler:
+    build:
+      context: .
+      dockerfile: docker/crawler/Dockerfile
+    env_file: .env
+    environment:
+      WEB_URL: http://web:8765
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - web
+    restart: unless-stopped
