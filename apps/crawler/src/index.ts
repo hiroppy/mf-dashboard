@@ -3,6 +3,7 @@ import path from "node:path";
 import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { initDb, closeDb } from "@mf-dashboard/db";
 import { updateAccountCategory, buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
+import { deleteGroupsNotIn } from "@mf-dashboard/db/repository/groups";
 import { saveScrapedData, saveGroupOnlyData } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
@@ -12,6 +13,7 @@ import { chromium } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
 import { createBrowserContext } from "./browser/context.js";
+import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord.js";
 import { runHooks } from "./hooks/runner.js";
@@ -34,6 +36,7 @@ const isHeaded = process.env.HEADED === "true";
 
 async function main() {
   const skipRefresh = process.env.SKIP_REFRESH === "true";
+  const cleanupGroups = process.env.CLEANUP_GROUPS === "true";
   const authState = hasAuthState() ? "configured" : "none";
   const dbPath =
     process.env.DB_PATH || path.join(import.meta.dirname, "../../../data/moneyforward.db");
@@ -43,6 +46,7 @@ async function main() {
 
   section("Options");
   log(`SKIP_REFRESH:   ${skipRefresh}`);
+  info(`CLEANUP_GROUPS: ${cleanupGroups}`);
   log(`SCRAPE_MODE:    ${scrapeMode} (DB exists: ${dbExists})`);
   log(`DEBUG:          ${isDebug}`);
   log(`HEADED:         ${isHeaded}`);
@@ -104,6 +108,19 @@ async function main() {
       section(`Save: ${groupData.group.name} (Group Only)`);
       const scrapedData = buildGroupOnlyScrapedData(groupData);
       await saveGroupOnlyData(db, scrapedData);
+    }
+
+    // CLEANUP_GROUPS=true の場合のみ、MoneyForward に存在しないグループを DB から削除
+    if (cleanupGroups) {
+      const result = buildCleanupGroupIds(groupDataList);
+      if (result) {
+        await deleteGroupsNotIn(db, result.ids);
+        info("Cleaned up groups not found in MoneyForward");
+      } else {
+        warn(
+          "Skipped group cleanup because no groups were scraped; group selector retrieval may have failed.",
+        );
+      }
     }
 
     // 金融機関カテゴリはデフォルトグループ（または最初のグループ）で一度だけ取得

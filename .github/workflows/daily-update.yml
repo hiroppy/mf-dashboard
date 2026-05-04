@@ -50,6 +50,7 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_AVATAR_URL: ${{ secrets.DISCORD_AVATAR_URL }}
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          CLEANUP_GROUPS: ${{ vars.CLEANUP_GROUPS }}
       - uses: ./.github/actions/auth-state-cache
         if: always()
         with:
