@@ -18,7 +18,7 @@
     "@ai-sdk/openai": "3.0.61",
     "@mf-dashboard/db": "workspace:*",
     "ai": "6.0.175",
-    "zod": "4.3.6"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",
