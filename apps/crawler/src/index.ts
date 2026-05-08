@@ -22,6 +22,7 @@ import { isNoGroup, switchGroup, NO_GROUP_ID, createGroupScope } from "./scraper
 import { scrapeInstitutionCategories } from "./scrapers/institution-categories.js";
 import { sendSlackNotification, sendErrorNotification } from "./slack.js";
 import type { ScrapedData } from "./types.js";
+import { notifyWebRefresh } from "./web-refresh.js";
 
 try {
   process.loadEnvFile(path.resolve(import.meta.dirname, "../../../.env"));
@@ -221,6 +222,12 @@ async function main() {
       }
     } catch (err) {
       error("Failed to send notification:", err);
+    }
+
+    try {
+      await notifyWebRefresh();
+    } catch (err) {
+      error("Failed to refresh web cache:", err);
     }
 
     info("Completed!");

@@ -18,6 +18,7 @@ test-groups-moneyforward.db
 test-moneyforward.db*
 *.db-shm
 *.db-wal
+data/moneyforward.db
 
 playwright-report
 test-results
@@ -28,3 +29,4 @@ apps/crawler/tests/e2e/screenshots/
 .worktrees/
 docs/plans
 error-*.png
+.claude/scheduled_tasks.lock

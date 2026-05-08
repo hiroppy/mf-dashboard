@@ -1,124 +1,177 @@
 # セットアップ
 
+ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 7:00 / 15:30 に走り、完了後 web の `/api/refresh` を叩いて `revalidatePath` で全ルートを再生成する。
+
 ## 必須要件
 
 - [MoneyForward Me](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)
-- [Cloudflare](https://www.cloudflare.com/ja-jp/)
-  - GitHub Pagesが使えるならなくてもいいが、workflowを変更する必要あり
+- [1Password](https://1password.com/jp) (Service Account)
+- [Cloudflare](https://www.cloudflare.com/ja-jp/) アカウント (Zero Trust 有効化済み)
+- 公開先 FQDN の zone が Cloudflare で管理されている
+- ローカル PC が常時起動できる環境
+- ローカルにインストール済みのツール:
+  - **Docker Desktop** (System Settings の Login Items でログイン時起動を有効化)
+  - `terraform` (>= 1.6)
+  - `op` CLI (1Password)
 
-## 1. プライベートリポジトリの作成
+## 1. MoneyForward / 1Password の準備
 
-**SQLiteをプッシュするため、プライベートリポジトリで行ってください。** GitHubの仕様上、このリポジトリをforkした場合は強制的にパブリックになるため、UIから行わずに以下を手元で実行し作成してください。
+- MoneyForward でワンタイムパスワードの設定を行う ([参考](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95))
+- 1Password で service account を発行する ([参考](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account))
+  - Private、Family など最初から作成されている vault に MoneyForward のアカウントを保存している場合、service account はそのvaultへアクセスできない。手で作った vault へ移動させる必要がある
+- (Optional) Slack Bot を作成する (更新結果を Slack に通知したい場合)
+  - [ここ](https://api.slack.com/apps) から作成し、`xoxb-` から始まる token を作成
+  - `chat:write` の権限を与え、投稿先チャンネルに招待する
+- (Optional) Discord Incoming Webhook を作成する (更新結果を Discord に通知したい場合)
+  - 通知先チャンネルの「連携サービス」から Incoming Webhook を作成し、`https://discord.com/api/webhooks/...` 形式の URL を控える
+
+## 2. Cloudflare Zero Trust の準備
+
+### 2.1 Zero Trust の有効化と Team domain の確認
+
+Cloudflare ダッシュボードから Zero Trust を有効化し、Team domain (`<team-name>.cloudflareaccess.com`) を控えておく。
+
+### 2.2 Google を Identity Provider として登録
+
+Google ログインを使う場合、以下を行う:
+
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作り、OAuth client ID を発行
+   - APIs & Services > Credentials > Create Credentials
+   - アプリケーションタイプ: `Web application`
+   - 承認済みの JavaScript 生成元: `https://<your-team-name>.cloudflareaccess.com`
+   - 承認済みのリダイレクト URI: `https://<your-team-name>.cloudflareaccess.com/cdn-cgi/access/callback`
+2. `Client ID` と `Client Secret` を控える
+3. Cloudflare Zero Trust の `Settings > Authentication > Login methods` で Google を Identity Provider として登録
+
+Terraform はアカウントに登録済みの Google IdP を自動で参照する。未登録の場合は IdP 制限なしの Access Application が作られる。
+
+### 2.3 Cloudflare API Token の発行
+
+Terraform 用の API Token を発行する。最小権限:
+
+| スコープ | 権限                             |
+| -------- | -------------------------------- |
+| Account  | `Cloudflare Tunnel:Edit`         |
+| Account  | `Access: Apps and Policies:Edit` |
+| Zone     | `DNS:Edit` (対象 zone を含む)    |
+
+発行した token を 1Password に **API Credential** タイプで保存する。デフォルトの参照先:
+
+- 1Password vault: `Private`
+- アイテムタイプ: `API Credential`
+- アイテム名: `Cloudflare API Token mf-dashboard`
+- フィールド: `credential`
+
+参照は `op://Private/Cloudflare API Token mf-dashboard/credential` の形式でリポジトリルートの `.env` (`CLOUDFLARE_API_TOKEN` キー) から行われる。値はその `op://` 参照のまま `.env` に書く — `op run --env-file=.env` が呼ばれるたびに解決される。
+
+## 3. `.env` の作成
+
+リポジトリルートの `.env.example` をコピーして `.env` を作る (`.gitignore` 済み)。Docker Compose と Terraform の双方がこの 1 ファイルを参照する。
 
 ```sh
-$ git clone --bare https://github.com/hiroppy/mf-dashboard
-$ cd mf-dashboard
-# 作成したプライベートリポジトリへ変更
-$ git push --mirror https://github.com/xxxx/private-repo.git
-$ git remote add upstream https://github.com/hiroppy/mf-dashboard
+cp .env.example .env
 ```
 
-## 2. 各種アカウント設定
+| Key                                                  | 必須     | 値                                                                                                            |
+| ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                               | ✅       | `op://Private/Cloudflare API Token mf-dashboard/credential` のような 1Password 参照のまま (op run が解決する) |
+| `TUNNEL_TOKEN`                                       | ✅       | `terraform output -raw tunnel_token` の結果 (次のセクションで取得)                                            |
+| `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                               |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                         |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                                    |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL`         | optional | Discord 通知                                                                                                  |
+| `DASHBOARD_URL`                                      | optional | 公開している `https://<hostname>/`                                                                            |
+| `NEXT_PUBLIC_GITHUB_ORG` / `NEXT_PUBLIC_GITHUB_REPO` | optional | UI から workflow へのリンク                                                                                   |
 
-- MoneyForwardでワンタイムパスワードの設定を行う ([参考](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95))
-- 1Passwordでservice accountを発行する ([参考](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account))
-  - Private, Familyなど最初から作成されているvaultにMoneyForwardのアカウントを保存している場合、service accountはそのvaultへアクセスできないので注意。その場合は、手で作ったvaultへ移動させる必要がある
-- Cloudflareにプロジェクトを作り、そのリポジトリとGitHub連携を行う ([参考](https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/))
-  - ビルド構成
-    - ビルド コマンド: `pnpm build --filter="@mf-dashboard/web"`
-    - デプロイ コマンド: `npx wrangler deploy`
-    - バージョン コマンド: `npx wrangler versions upload`
-    - ルート ディレクトリ: `/`
-- (Optional) Slack Botを作成する (更新結果をSlackに通知したい場合)
-  - [ここ](https://api.slack.com/apps)から作成し、`xoxb-`から始まるtokenを作成
-    - Install App > OAuth Tokens
-  - `chat:write` の権限を与えておく
-    - OAuth & Permissions > Scopes
-  - 投稿したいチャンネルに招待する
-- (Optional) Discord Incoming Webhook を作成する (更新結果をDiscordに通知したい場合)
-  - 通知先チャンネルの「連携サービス」から Incoming Webhook を作成
-  - `https://discord.com/api/webhooks/...` 形式の URL を控える
+### 1Password の ID の見つけ方 (アプリ)
 
-## 3. Cloudflare Oneを設定
+1password/sdk は日本語に対応しておらずエラーになるため日本語のものは UUID を使う:
 
-Cloudflareへデプロイするにあたり、[Cloudflare One](https://developers.cloudflare.com/cloudflare-one/)でアクセスコントロールを設定する必要がある。
+- `OP_VAULT`: サイドバーで保管庫を右クリック > UUID をコピー
+- `OP_ITEM`: アイテム画面右上のケバブメニューから UUID をコピー
+- `OP_TOTP_FIELD`: 同メニューの「アイテムの JSON をコピー」から、`u` に `TOTP_` 開始の文字列があるフィールド ID を抽出
 
-Workers&Pagesで先程作ったプロジェクトの「設定」タブの「ドメインとルート」項目にあるworkers.devタイプのURL行の3点メニューを開き、Cloudflare Accessを有効にする。そうするとアプリケーションが作られているので、ポリシーとログイン方法を設定する必要がある。ここのポリシーで許可したいEmailを追加する。
-
-注意: プロジェクトのプレビュー URL がactive(default)の場合、外から見えてしまうため無効にするのを忘れないこと。
-
-標準でワンタイムパスワード込みのログインは行えるが、Google認証を使いたい場合は次のセクションへ移動。
-
-### Google認証を利用したい場合
-
-- [Google Cloud](https://console.cloud.google.com/)でプロジェクトを作り、OAuth client IDを発行
-  - APIs & Services > Credentials > Create Credentials
-  - `https://console.cloud.google.com/apis/credentials`
-- 以下を設定
-  - アプリケーションタイプ
-    - `Web application`
-  - 承認済みの JavaScript 生成元
-    - https://<your-team-name>.cloudflareaccess.com
-    - `<your-team-name>`はCloudflare Oneのチーム名
-  - 承認済みのリダイレクト URI
-    - `https://<your-team-name>.cloudflareaccess.com/cdn-cgi/access/callback`
-- `Client ID` と `Client Secret`を覚えておく
-
-Cloudflare OneにIdentity Providerの登録(`/integrations/identity-providers`)があるので、そこへ行き、Google認証を登録する。最後にさっき作ったアプリケーションの設定に行き、ログイン方法の選択でGoogleが選べるようになるので選べば完了。
-
-## 3. 環境変数設定
-
-作成したリポジトリの `/settings/secrets/actions` ページへ行き、以下の環境変数をそれぞれ設定。変数とシークレットそれぞれあるので間違えないように。
-
-### Variables
-
-| Key              | Required | Value | Why                                            |
-| ---------------- | -------- | ----- | ---------------------------------------------- |
-| RUN_TASK         | ✅       | true  | crontabの実行に必要                            |
-| CACHE_AUTH_STATE |          | true  | 認証状態をキャッシュし毎回のログインをスキップ |
-
-### Secrets
-
-| Key                      | Required | Value                                            | Why                                                 |
-| ------------------------ | -------- | ------------------------------------------------ | --------------------------------------------------- |
-| OP_SERVICE_ACCOUNT_TOKEN | ✅       | 1passwordのサービスアカウントトークン            | ログインに必要                                      |
-| OP_VAULT                 | ✅       | 保管庫ID                                         | ログインに必要                                      |
-| OP_ITEM                  | ✅       | MoneyForwardのアイテムID                         | ログインに必要                                      |
-| OP_TOTP_FIELD            | ✅       | MoneyForwardのワンタイムパスワードのフィールドID | ログインに必要                                      |
-| DASHBOARD_URL            |          | デプロイ先URL                                    | Slack投稿でダッシュボードリンクを生成               |
-| SLACK_BOT_TOKEN          |          | bot token                                        | Slackへ結果投稿のため                               |
-| SLACK_CHANNEL_ID         |          | 投稿先のチャンネルID                             | Slackへ結果投稿のため                               |
-| DISCORD_WEBHOOK_URL      |          | Discord Incoming Webhook URL                     | crawler/e2e結果をDiscordへ通知するため              |
-| DISCORD_AVATAR_URL       |          | Discord通知のアイコン画像URL                     | Discord通知の `avatar_url` を上書きするため         |
-| NEXT_PUBLIC_GITHUB_ORG   |          | このリポジトリの組織名                           | UIからGitHub workflowへアクセスするためのリンク作成 |
-| NEXT_PUBLIC_GITHUB_REPO  |          | このリポジトリのリポジトリ名                     | UIからGitHub workflowへアクセスするためのリンク作成 |
-
-`NEXT_PUBLIC_GITHUB_ORG`, `NEXT_PUBLIC_GITHUB_REPO`に関しては、Next.jsのビルド時に必要な環境変数なので、Cloudflare側で設定する必要がある。
-
-### 1PasswordのIDの見つけ方 (アプリ)
-
-1password/sdkは日本語に対応しておらずエラーとなってしまうため日本語のものは全部UUIDを利用する必要がある。
-
-- `OP_VAULT`
-  - サイドバーでその保管庫を右クリックすると、UUIDをコピーが出てくる
-- `OP_ITEM`
-  - MoneyForwardのアイテム画面右上にあるケバブメニュー(`︙`)をクリックすると、UUIDをコピーが出てくる
-- `OP_TOTP_FIELD`
-  - `OP_ITEM`同様、メニューを開きアイテムのJSONをコピーを押し、そのJSONの中からUUIDを探す。`u`に`TOTP_`開始の文字列があったらそれが正解
-
-## 4. 実行
-
-作ったリポジトリの`/actions/workflows/daily-update.yml`へ行くとRun Workflowがあるので、手動実行し、SQLiteがコミットされたら成功。
-
-## バージョン更新
+## 4. Terraform で Tunnel + Access を構築
 
 ```sh
-$ sh update.sh
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 ```
 
+`terraform/terraform.tfvars` を実際の値に書き換える:
+
+```hcl
+account_id = "<Cloudflare Account ID>"
+zone_id    = "<Cloudflare Zone ID>"
+hostname   = "dashboard.example.com"
+allowed_emails = [
+  "you@example.com",
+]
+```
+
+`op run` がルートの `.env` から `CLOUDFLARE_API_TOKEN` を解決して terraform に渡す:
+
 ```sh
-$ git pull origin main
-$ git pull upstream --no-ff
-$ git push -f origin main
+op run --env-file=.env -- terraform -chdir=terraform init
+op run --env-file=.env -- terraform -chdir=terraform plan
+op run --env-file=.env -- terraform -chdir=terraform apply
+```
+
+apply 後に `tunnel_token` を取得し、`.env` の `TUNNEL_TOKEN=` に貼り付ける:
+
+```sh
+op run --env-file=.env -- terraform -chdir=terraform output -raw tunnel_token
+```
+
+## 5. Docker Compose で起動
+
+```sh
+docker compose build
+docker compose up -d
+# 初回起動時、DB がまだ空なら 1 回だけ手動で走らせて bootstrap する
+docker compose exec crawler pnpm --filter @mf-dashboard/crawler start
+```
+
+以降は crawler コンテナ内の supercronic が `crontab` のスケジュールで自動更新する。
+
+各コンテナの役割:
+
+- **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
+- **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
+- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
+
+スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
+
+### 動作確認
+
+```sh
+docker compose ps                  # 3 サービスすべて Up
+docker compose logs -f web         # next start のログ
+docker compose logs -f crawler     # supercronic と crawl 実行のログ
+docker compose logs -f cloudflared # tunnel 接続状態
+```
+
+ブラウザで `https://<hostname>/` にアクセスし、Google ログインを通過するとダッシュボードが表示されれば成功。許可リスト外アカウントで 403 になることも確認。
+
+```sh
+# Cloudflare Access 経由の応答を確認
+curl -I https://<hostname>/
+# → 302 + Location が <team-name>.cloudflareaccess.com 配下なら Access 動作中
+
+# 接続中の Tunnel を確認
+op run --env-file=.env -- \
+  terraform -chdir=terraform output -raw tunnel_id \
+  | xargs -I {} cloudflared tunnel info {}
+```
+
+## 6. 運用
+
+- ホストの再起動: Docker Desktop が自動起動 → `restart: unless-stopped` の各コンテナも自動復帰
+- 手動再ビルド (依存追加など): `docker compose build && docker compose up -d`
+- crawler を即時実行: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start` (完了時に自動的に web へ refresh ping を送る)
+- web のキャッシュだけ手動で無効化: `docker compose exec crawler curl -fsS -X POST http://web:8765/api/refresh`
+
+## 更新
+
+```sh
+sh update.sh
 ```
