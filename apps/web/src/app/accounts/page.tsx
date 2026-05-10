@@ -2,9 +2,9 @@ import { getAccountsGroupedByCategory } from "@mf-dashboard/db";
 import type { AccountStatusType } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Metadata } from "next";
-import { AccountCard } from "../../components/info/account-card";
 import { PageLayout } from "../../components/layout/page-layout";
 import { Badge } from "../../components/ui/badge";
+import { AccountListClient } from "./account-list.client";
 
 export const metadata: Metadata = {
   title: "連携サービス一覧",
@@ -38,46 +38,6 @@ function AccountStatusBadges({ groupedAccounts }: { groupedAccounts: GroupedAcco
   );
 }
 
-function AccountList({
-  groupedAccounts,
-  groupId,
-}: {
-  groupedAccounts: GroupedAccounts[];
-  groupId?: string;
-}) {
-  if (groupedAccounts.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">連携サービスがありません。</div>
-    );
-  }
-
-  return (
-    <div className="space-y-8">
-      {groupedAccounts.map((group) => (
-        <div key={group.categoryName} className="space-y-3">
-          <h2 className="text-lg font-semibold text-foreground border-b pb-2">
-            {group.categoryName}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {group.accounts.map((account) => (
-              <AccountCard
-                key={account.id}
-                mfId={account.mfId}
-                name={account.name}
-                type={account.type}
-                status={account.status}
-                lastUpdated={account.lastUpdated}
-                totalAssets={account.totalAssets}
-                groupId={groupId}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export async function AccountsContent({ groupId }: { groupId?: string }) {
   const groupedAccounts = await getAccountsGroupedByCategory(groupId);
 
@@ -87,7 +47,7 @@ export async function AccountsContent({ groupId }: { groupId?: string }) {
       href={mfUrls.accounts}
       options={<AccountStatusBadges groupedAccounts={groupedAccounts} />}
     >
-      <AccountList groupedAccounts={groupedAccounts} groupId={groupId} />
+      <AccountListClient groupedAccounts={groupedAccounts} groupId={groupId} />
     </PageLayout>
   );
 }
