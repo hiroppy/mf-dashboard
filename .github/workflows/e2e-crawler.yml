@@ -28,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-node
+        with:
+          playwright-browsers: chromium
       - uses: ./.github/actions/auth-state-cache
         with:
           mode: restore

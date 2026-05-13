@@ -1,5 +1,10 @@
 name: Setup Node
 description: Setup pnpm and Node.js with dependencies
+inputs:
+  playwright-browsers:
+    description: "Space-separated list of Playwright browsers to install (e.g. chromium webkit)"
+    default: "chromium webkit"
+    required: false
 runs:
   using: composite
   steps:
@@ -14,17 +19,21 @@ runs:
       id: playwright-version
       run: echo "version=$(pnpm list @playwright/test playwright --json --recursive | jq -r '[.[] | (.devDependencies["@playwright/test"].version, .dependencies["@playwright/test"].version, .devDependencies["playwright"].version, .dependencies["playwright"].version)] | map(select(. != null)) | first')" >> $GITHUB_OUTPUT
       shell: bash
+    - name: Set Playwright cache key
+      id: playwright-cache-key
+      run: echo "value=playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-$(echo '${{ inputs.playwright-browsers }}' | tr ' ' '-')" >> $GITHUB_OUTPUT
+      shell: bash
     - name: Cache Playwright browsers
       id: playwright-cache
       uses: actions/cache@v5
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+        key: ${{ steps.playwright-cache-key.outputs.value }}
     - name: Install Playwright browsers
       if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: pnpm dlx playwright@${{ steps.playwright-version.outputs.version }} install --with-deps
+      run: pnpm dlx playwright@${{ steps.playwright-version.outputs.version }} install --with-deps ${{ inputs.playwright-browsers }}
       shell: bash
     - name: Install Playwright system dependencies
       if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: pnpm dlx playwright@${{ steps.playwright-version.outputs.version }} install-deps
+      run: pnpm dlx playwright@${{ steps.playwright-version.outputs.version }} install-deps ${{ inputs.playwright-browsers }}
       shell: bash
