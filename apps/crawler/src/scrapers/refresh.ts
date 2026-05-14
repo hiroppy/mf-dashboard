@@ -66,7 +66,7 @@ export async function clickRefreshButton(page: Page): Promise<RefreshResult> {
   await page.goto(mfUrls.home);
   await page.waitForLoadState("networkidle");
 
-  const refreshButton = page.locator('a:has-text("更新")').first();
+  const refreshButton = page.locator('a:has-text("一括更新")').first();
   await refreshButton.click();
 
   info("Refreshing accounts...");
