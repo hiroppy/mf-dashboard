@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.6.0
     command: tunnel --no-autoupdate run
     env_file: .env
     depends_on:
@@ -24,7 +24,7 @@ services:
       dockerfile: docker/crawler/Dockerfile
     env_file: .env
     environment:
-      WEB_URL: http://web:8765
+      WEB_URL: ${WEB_URL:-http://web:8765}
     volumes:
       - ./data:/app/data
     depends_on:

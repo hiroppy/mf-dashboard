@@ -1,6 +1,6 @@
 # セットアップ
 
-ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 7:00 / 15:30 に走り、完了後 web の `/api/refresh` を叩いて `revalidatePath` で全ルートを再生成する。
+ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 7:00 / 15:30 に走り、完了後 web の `/api/refresh/` を Bearer 認証付きで叩いて `revalidatePath` で全ルートを再生成する。
 
 ## 必須要件
 
@@ -76,6 +76,8 @@ cp .env.example .env
 | ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`                               | ✅       | `op://Private/Cloudflare API Token mf-dashboard/credential` のような 1Password 参照のまま (op run が解決する) |
 | `TUNNEL_TOKEN`                                       | ✅       | `terraform output -raw tunnel_token` の結果 (次のセクションで取得)                                            |
+| `REFRESH_TOKEN`                                      | ✅       | crawler と web が共有する `/api/refresh/` 用 Bearer token                                                     |
+| `WEB_URL`                                            | ✅       | `http://web:8765` (crawler から見た web サービス URL)                                                         |
 | `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                               |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                         |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                                    |
@@ -104,7 +106,7 @@ account_id = "<Cloudflare Account ID>"
 zone_id    = "<Cloudflare Zone ID>"
 hostname   = "dashboard.example.com"
 allowed_emails = [
-  "you@example.com",
+  "user-a@example.com",
 ]
 ```
 
@@ -137,7 +139,7 @@ docker compose exec crawler pnpm --filter @mf-dashboard/crawler start
 
 - **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
 - **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
-- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh` を POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外側は Cloudflare Access で gate 済みのため認証なし)
+- **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh/` へ `REFRESH_TOKEN` を Bearer 認証で POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外部は Cloudflare Access で保護)
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
 
@@ -168,7 +170,7 @@ op run --env-file=.env -- \
 - ホストの再起動: Docker Desktop が自動起動 → `restart: unless-stopped` の各コンテナも自動復帰
 - 手動再ビルド (依存追加など): `docker compose build && docker compose up -d`
 - crawler を即時実行: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start` (完了時に自動的に web へ refresh ping を送る)
-- web のキャッシュだけ手動で無効化: `docker compose exec crawler curl -fsS -X POST http://web:8765/api/refresh`
+- web のキャッシュだけ手動で無効化: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer $REFRESH_TOKEN" http://web:8765/api/refresh/'`
 
 ## 更新
 
