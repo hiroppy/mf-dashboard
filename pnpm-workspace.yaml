@@ -9,6 +9,9 @@ allowBuilds:
   sharp: true
   workerd: true
 
+minimumReleaseAgeExclude:
+  - ai
+
 catalog:
   "@libsql/client": 0.17.3
   "@types/node": 25.9.3
