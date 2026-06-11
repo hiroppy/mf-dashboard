@@ -912,6 +912,45 @@ describe("calculateCompound", () => {
         expect(w.yearlyWithdrawal).toBe(firstYrWithdrawal);
       }
     });
+
+    it("should base first rate withdrawal on withdrawal-start assets before monthly growth", () => {
+      const annualWithdrawalRate = 4;
+      const withdrawalStartYear = 5;
+      const result = calculateCompound({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 12,
+        contributionYears: 0,
+        withdrawalStartYear,
+        annualWithdrawalRate,
+        withdrawalYears: 1,
+        taxFree: true,
+      });
+
+      const withdrawalStart = result.find((p) => p.year === withdrawalStartYear)!;
+      const firstWithdrawalYear = result.find((p) => p.year === withdrawalStartYear + 1)!;
+
+      expect(firstWithdrawalYear.yearlyWithdrawal).toBe(
+        Math.round((withdrawalStart.total * annualWithdrawalRate) / 100),
+      );
+    });
+
+    it("should not reseed rate withdrawal when withdrawal-start assets are zero", () => {
+      const result = calculateCompound({
+        initialAmount: 0,
+        monthlyContribution: 100_000,
+        annualReturnRate: 0,
+        contributionYears: 2,
+        withdrawalStartYear: 0,
+        annualWithdrawalRate: 4,
+        withdrawalYears: 2,
+        taxFree: true,
+      });
+
+      const withdrawals = result.filter((p) => p.isWithdrawing);
+      expect(withdrawals.map((p) => p.yearlyWithdrawal)).toEqual([0, 0]);
+      expect(result[2].total).toBe(2_400_000);
+    });
   });
 
   describe("overlap with rate mode", () => {

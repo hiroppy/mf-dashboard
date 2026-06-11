@@ -498,6 +498,51 @@ describe("simulateMonteCarlo", () => {
       }
     });
 
+    it("should base first rate withdrawal on withdrawal-start median before monthly growth", () => {
+      const annualWithdrawalRate = 4;
+      const withdrawalStartYear = 5;
+      const result = simulateMonteCarlo({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 12,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear,
+        annualWithdrawalRate,
+        withdrawalYears: 1,
+        taxFree: true,
+      });
+
+      const withdrawalStart = result.yearlyData.find((d) => d.year === withdrawalStartYear)!;
+      const firstWithdrawalYear = result.yearlyData.find(
+        (d) => d.year === withdrawalStartYear + 1,
+      )!;
+
+      expect(firstWithdrawalYear.medianYearlyWithdrawal).toBe(
+        Math.round((withdrawalStart.p50 * annualWithdrawalRate) / 100),
+      );
+    });
+
+    it("should not reseed rate withdrawal when withdrawal-start median is zero", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 0,
+        monthlyContribution: 100_000,
+        annualReturnRate: 0,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 2,
+        withdrawalStartYear: 0,
+        annualWithdrawalRate: 4,
+        withdrawalYears: 2,
+        taxFree: true,
+      });
+
+      const withdrawals = result.yearlyData.filter((d) => d.isWithdrawing);
+      expect(withdrawals.map((d) => d.medianYearlyWithdrawal)).toEqual([0, 0]);
+      expect(result.yearlyData[2].p50).toBe(2_400_000);
+    });
+
     it("should keep withdrawal constant in real terms with positive inflation (trinity study)", () => {
       // Trinity Study: withdrawal is inflation-adjusted (nominal increases with inflation).
       // In the MC simulation (which works in real terms), this means the withdrawal

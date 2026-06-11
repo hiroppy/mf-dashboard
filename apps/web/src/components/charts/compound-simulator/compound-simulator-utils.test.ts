@@ -6,6 +6,7 @@ import {
   getTimelinePattern,
   computeSummaryYear,
   computeMonthlyWithdrawalForSummary,
+  computeRateWithdrawalBasis,
   computeMcDrawdownEndValue,
   computeTotalWithdrawalAmount,
   buildFanChartData,
@@ -153,6 +154,38 @@ describe("computeMonthlyWithdrawalForSummary", () => {
   test("rate mode: returns 0 when projection not found", () => {
     const result = computeMonthlyWithdrawalForSummary("rate", projections, 99, 0);
     expect(result).toBe(0);
+  });
+});
+
+describe("computeRateWithdrawalBasis", () => {
+  test("uses gross portfolio value so taxable rate-mode display matches calculation basis", () => {
+    const projection: YearlyProjection = {
+      year: 5,
+      principal: 10_000_000,
+      interest: 6_074_720,
+      tax: 1_548_697,
+      total: 16_074_720,
+      yearlyWithdrawal: 0,
+      isContributing: false,
+      isWithdrawing: false,
+    };
+
+    expect(computeRateWithdrawalBasis(projection)).toBe(17_623_417);
+  });
+
+  test("matches total for tax-free projections", () => {
+    const projection: YearlyProjection = {
+      year: 5,
+      principal: 10_000_000,
+      interest: 7_623_417,
+      tax: 0,
+      total: 17_623_417,
+      yearlyWithdrawal: 0,
+      isContributing: false,
+      isWithdrawing: false,
+    };
+
+    expect(computeRateWithdrawalBasis(projection)).toBe(projection.total);
   });
 });
 
