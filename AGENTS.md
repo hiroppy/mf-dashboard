@@ -1,4 +1,4 @@
-# Codex Development Guidelines
+# Agent Development Guidelines
 
 ## Mandatory Rules (MUST)
 
@@ -194,7 +194,7 @@ Monorepo using pnpm workspaces + Turborepo.
 
 - Run: `pnpm --filter @mf-dashboard/crawler start`
 - Development/Debug: `pnpm --filter @mf-dashboard/crawler dev:scrape`
-- **When LLM (Codex) runs scraping, use `dev:scrape`**
+- **When an LLM agent runs scraping, use `dev:scrape`**
 - If `data/auth-state.json` exists, it will be used automatically
 
 #### Scraping Mode (Auto-detected)
