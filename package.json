@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "setup": "corepack enable pnpm",
+    "postinstall": "pnpm --filter @mf-dashboard/crawler exec playwright install",
     "dev": "turbo dev",
     "dev:demo": "turbo dev:demo",
     "build": "turbo build",
