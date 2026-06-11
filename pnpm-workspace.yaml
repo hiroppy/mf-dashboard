@@ -11,6 +11,10 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - ai
+  - "@csstools/css-color-parser"
+  - "@turbo/*"
+  - "@types/node"
+  - turbo
 
 catalog:
   "@libsql/client": 0.17.3
