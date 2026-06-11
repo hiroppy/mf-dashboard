@@ -186,7 +186,8 @@ Monorepo using pnpm workspaces + Turborepo.
 
 ### Linting & Formatting
 
-- Lint: `pnpm lint` (runs oxlint + knip)
+- Lint: `pnpm lint` (runs oxlint with type-aware checking)
+- Unused code check: `pnpm knip`
 - Format: `pnpm format`
 - Format check: `pnpm format:check`
 
@@ -224,7 +225,7 @@ CLEANUP_GROUPS=true pnpm --filter @mf-dashboard/crawler start
 - SQLite database is located at `data/moneyforward.db`
 - Generate migration: `pnpm --filter @mf-dashboard/db exec drizzle-kit generate`
 - Apply migration: `pnpm --filter @mf-dashboard/db exec drizzle-kit migrate`
-- Database Studio: `pnpm db:studio`
+- Database Studio: `pnpm --filter @mf-dashboard/db studio`
 
 ### Test & Storybook Data
 
