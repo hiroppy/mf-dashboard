@@ -1,6 +1,6 @@
 import type { AssetSummary, AssetItem, CashFlowSummary } from "@mf-dashboard/db/types";
 
-export interface AccountIssue {
+interface AccountIssue {
   name: string;
   status: "updating" | "error";
   errorMessage?: string;
