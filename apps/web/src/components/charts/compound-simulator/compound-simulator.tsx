@@ -34,6 +34,7 @@ import {
   computeTotalYears,
   computeWithdrawalMilestones,
   computeSecurityScore,
+  computeRateWithdrawalBasis,
 } from "./compound-simulator-utils";
 import { generateSummary } from "./generate-summary";
 import { adjustedPension } from "./pension-utils";
@@ -531,6 +532,9 @@ export function CompoundSimulator({
     withdrawalStartYear,
     fixedMonthlyWithdrawal,
   );
+  const rateWithdrawalBasis = computeRateWithdrawalBasis(contributionEnd);
+  const initialAnnualWithdrawal = Math.round((rateWithdrawalBasis * withdrawalRate) / 100);
+  const initialMonthlyWithdrawal = Math.round((rateWithdrawalBasis * withdrawalRate) / 100 / 12);
 
   const withdrawalMilestones =
     withdrawalMode === "rate"
@@ -919,24 +923,15 @@ export function CompoundSimulator({
                   <p className="text-xs text-muted-foreground">
                     初年度年額{" "}
                     <span className="font-semibold">
-                      約
-                      {formatCurrency(
-                        Math.round(((contributionEnd?.total ?? 0) * withdrawalRate) / 100),
-                      )}
+                      約{formatCurrency(initialAnnualWithdrawal)}
                     </span>
-                    （
-                    {formatCurrency(
-                      Math.round(((contributionEnd?.total ?? 0) * withdrawalRate) / 100 / 12),
-                    )}
-                    /月）
+                    （{formatCurrency(initialMonthlyWithdrawal)}/月）
                   </p>
                   {currentAge != null && (adjustedMonthlyPension > 0 || monthlyOtherIncome > 0) && (
                     <p className="text-xs text-muted-foreground">
                       取崩し {formatCurrency(monthlyWithdrawalForSummary)}/月 ={" "}
-                      {formatCurrency(
-                        Math.round(((contributionEnd?.total ?? 0) * withdrawalRate) / 100 / 12),
-                      )}{" "}
-                      - 年金{formatCurrency(adjustedMonthlyPension)}
+                      {formatCurrency(initialMonthlyWithdrawal)} - 年金
+                      {formatCurrency(adjustedMonthlyPension)}
                       {monthlyOtherIncome > 0 && <> - その他{formatCurrency(monthlyOtherIncome)}</>}
                     </p>
                   )}

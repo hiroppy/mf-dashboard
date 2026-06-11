@@ -60,6 +60,7 @@ export function calculateCompound({
   let currentMonthlyWithdrawal = monthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
   let rateFirstWithdrawalYear = -1;
+  let rateBasedWithdrawalSeeded = false;
 
   for (let year = 0; year <= totalYears; year++) {
     const isContributing = year > 0 && year <= contributionYears;
@@ -82,6 +83,16 @@ export function calculateCompound({
 
     let yearlyWithdrawalTotal = 0;
 
+    if (isWithdrawing && isRateMode) {
+      if (!rateBasedWithdrawalSeeded) {
+        rateBasedMonthlyWithdrawal = (currentTotal * (annualWithdrawalRate ?? 0)) / 100 / 12;
+        rateFirstWithdrawalYear = year;
+        rateBasedWithdrawalSeeded = true;
+      } else if (year > rateFirstWithdrawalYear) {
+        rateBasedMonthlyWithdrawal *= 1 + ri;
+      }
+    }
+
     for (let month = 0; month < 12; month++) {
       currentTotal *= 1 + monthlyRate;
 
@@ -93,12 +104,6 @@ export function calculateCompound({
       if (isWithdrawing && currentTotal > 0) {
         let baseWithdrawal: number;
         if (isRateMode) {
-          if (rateBasedMonthlyWithdrawal === 0) {
-            rateBasedMonthlyWithdrawal = (currentTotal * annualWithdrawalRate) / 100 / 12;
-            rateFirstWithdrawalYear = year;
-          } else if (month === 0 && year > rateFirstWithdrawalYear) {
-            rateBasedMonthlyWithdrawal *= 1 + ri;
-          }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
           baseWithdrawal = currentMonthlyWithdrawal;
