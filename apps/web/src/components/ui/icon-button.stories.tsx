@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { Bell, Github, Home, HelpCircle } from "lucide-react";
+import { Bell, Code2, Home, HelpCircle } from "lucide-react";
 import { IconButton } from "./icon-button";
 
 const meta = {
@@ -23,7 +23,7 @@ export const Button: Story = {
 
 export const Link: Story = {
   args: {
-    icon: <Github className="h-4.5 w-4.5" />,
+    icon: <Code2 className="h-4.5 w-4.5" />,
     href: "https://github.com",
     ariaLabel: "GitHub",
     isExternal: true,
