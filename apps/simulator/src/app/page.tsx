@@ -1,5 +1,5 @@
 import { CompoundSimulator } from "@web/components/charts/compound-simulator/compound-simulator";
-import { Github, Twitter } from "lucide-react";
+import { AtSign, Code2 } from "lucide-react";
 
 export default function Page() {
   return (
@@ -15,7 +15,7 @@ export default function Page() {
               aria-label="X (Twitter)"
               className="hover:text-foreground"
             >
-              <Twitter size={20} />
+              <AtSign size={20} />
             </a>
             <a
               href="https://github.com/hiroppy/mf-dashboard"
@@ -24,7 +24,7 @@ export default function Page() {
               aria-label="GitHub"
               className="hover:text-foreground"
             >
-              <Github size={20} />
+              <Code2 size={20} />
             </a>
           </div>
         </div>

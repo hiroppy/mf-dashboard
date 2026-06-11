@@ -1,7 +1,7 @@
 "use client";
 
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import { Home, RefreshCw, Github, HelpCircle } from "lucide-react";
+import { Home, RefreshCw, Code2, HelpCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
@@ -105,7 +105,7 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
 function GitHubButton({ iconSize, className }: { iconSize: string; className?: string }) {
   return (
     <IconButton
-      icon={<Github className={iconSize} />}
+      icon={<Code2 className={iconSize} />}
       href="https://github.com/hiroppy/mf-dashboard"
       ariaLabel="GitHub"
       className={className}
