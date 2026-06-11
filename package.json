@@ -19,6 +19,7 @@
     "typecheck": "turbo typecheck",
     "lint": "oxlint --type-aware --fix",
     "format": "oxfmt",
+    "format:check": "oxfmt --check .",
     "knip": "knip"
   },
   "devDependencies": {
