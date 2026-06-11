@@ -13,11 +13,11 @@
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "3.0.75",
-    "@ai-sdk/google": "3.0.68",
-    "@ai-sdk/openai": "3.0.62",
+    "@ai-sdk/anthropic": "3.0.82",
+    "@ai-sdk/google": "3.0.80",
+    "@ai-sdk/openai": "3.0.69",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "6.0.175",
+    "ai": "6.0.200",
     "zod": "4.3.6"
   },
   "devDependencies": {
