@@ -57,7 +57,7 @@ export interface MonteCarloYearData {
   medianYearlyWithdrawal?: number;
 }
 
-export interface DistributionBin {
+interface DistributionBin {
   rangeEnd: number;
   count: number;
   isDepleted: boolean;
