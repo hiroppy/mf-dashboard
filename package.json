@@ -31,5 +31,5 @@
     "tsx": "4.22.4",
     "turbo": "2.9.18"
   },
-  "packageManager": "pnpm@11.5.3"
+  "packageManager": "pnpm@11.6.0"
 }
