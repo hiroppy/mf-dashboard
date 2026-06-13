@@ -16,6 +16,7 @@ import { createBrowserContext } from "./browser/context.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord.js";
+import { getHistoryMonth } from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
 import { log, debug, info, error, section, warn } from "./logger.js";
 import { scrapeAllGroups } from "./scraper.js";
@@ -147,9 +148,7 @@ async function main() {
       // DBにない最古の月まで取得
       let monthsToFetch = 1; // 今月は常に取得
       for (let i = 1; i < maxMonths; i++) {
-        const date = new Date();
-        date.setMonth(date.getMonth() - i);
-        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        const month = getHistoryMonth(now, i);
         if (!(await hasTransactionsForMonth(db, month))) {
           monthsToFetch = i + 1;
         }

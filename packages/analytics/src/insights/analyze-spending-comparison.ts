@@ -58,8 +58,9 @@ export function analyzeSpendingComparison(
   for (const [category, monthData] of byCategory) {
     const currentAmount = monthData.get(latestMonth) ?? 0;
     const prevMonthsForCat = allMonths.filter((m) => m < latestMonth);
+    const hasPreviousAmount = prevMonthsForCat.some((m) => (monthData.get(m) ?? 0) > 0);
 
-    if (prevMonthsForCat.length === 0 && currentAmount > 0) {
+    if (!hasPreviousAmount && currentAmount > 0) {
       newCategories.push(category);
     }
 
