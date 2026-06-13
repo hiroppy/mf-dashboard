@@ -6,17 +6,13 @@ const INVESTMENT_CATEGORIES = ["株式(現物)", "投資信託"];
 
 /**
  * 最新のスナップショットを取得
- * groupId が指定された場合は、そのグループ内の最新スナップショットを取得する
+ * スナップショットは全アカウント共通で1つ作成される
  */
-export async function getLatestSnapshot(db: Db = getDb(), groupId?: string | null) {
-  let query = db.select().from(schema.dailySnapshots).$dynamic();
-
-  if (groupId) {
-    query = query.where(eq(schema.dailySnapshots.groupId, groupId));
-  }
-
-  return await query
-    .orderBy(desc(schema.dailySnapshots.date), desc(schema.dailySnapshots.id))
+export async function getLatestSnapshot(db: Db = getDb()) {
+  return await db
+    .select()
+    .from(schema.dailySnapshots)
+    .orderBy(desc(schema.dailySnapshots.id))
     .limit(1)
     .get();
 }
@@ -51,13 +47,13 @@ export function buildHoldingWhereCondition(
  * snapshotIdで駆動し、グループでフィルタリング
  */
 export async function getHoldingsWithLatestValues(groupIdParam?: string, db: Db = getDb()) {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  const latestSnapshot = await getLatestSnapshot(db, groupId);
+  const latestSnapshot = await getLatestSnapshot(db);
 
   if (!latestSnapshot) {
     return [];
   }
 
+  const groupId = await resolveGroupId(db, groupIdParam);
   const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(latestSnapshot.id, accountIds);
@@ -104,7 +100,7 @@ export async function getHoldingsByAccountId(
   const accountIds = await getAccountIdsForGroup(db, groupId);
   if (accountIds.length === 0 || !accountIds.includes(accountId)) return [];
 
-  const latestSnapshot = await getLatestSnapshot(db, groupId);
+  const latestSnapshot = await getLatestSnapshot(db);
 
   if (!latestSnapshot) {
     return [];
@@ -157,13 +153,13 @@ export async function getHoldingsWithDailyChange(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<HoldingWithDailyChange[]> {
-  const groupId = await resolveGroupId(db, groupIdParam);
-  const latestSnapshot = await getLatestSnapshot(db, groupId);
+  const latestSnapshot = await getLatestSnapshot(db);
 
   if (!latestSnapshot) {
     return [];
   }
 
+  const groupId = await resolveGroupId(db, groupIdParam);
   const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(
