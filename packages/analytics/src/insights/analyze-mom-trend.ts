@@ -105,22 +105,27 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   const threeMonthAvg = last3.length >= 3 ? buildAvg(last3) : null;
   const sixMonthAvg = last6.length >= 6 ? buildAvg(last6) : null;
 
-  // Latest month vs 3-month average
+  // Latest month vs previous 3-month average
   let latestVsThreeMonthAvg: MoMTrendResult["latestVsThreeMonthAvg"] = null;
-  if (threeMonthAvg && sorted.length > 0) {
+  const previous3 = sorted.slice(-4, -1);
+  const previousThreeMonthAvg = previous3.length >= 3 ? buildAvg(previous3) : null;
+  if (previousThreeMonthAvg && sorted.length > 0) {
     const latest = sorted[sorted.length - 1];
     latestVsThreeMonthAvg = {
-      incomeDiff: latest.totalIncome - threeMonthAvg.income,
+      incomeDiff: latest.totalIncome - previousThreeMonthAvg.income,
       incomeDiffPct:
-        threeMonthAvg.income > 0
-          ? ((latest.totalIncome - threeMonthAvg.income) / threeMonthAvg.income) * 100
+        previousThreeMonthAvg.income > 0
+          ? ((latest.totalIncome - previousThreeMonthAvg.income) / previousThreeMonthAvg.income) *
+            100
           : 0,
-      expenseDiff: latest.totalExpense - threeMonthAvg.expense,
+      expenseDiff: latest.totalExpense - previousThreeMonthAvg.expense,
       expenseDiffPct:
-        threeMonthAvg.expense > 0
-          ? ((latest.totalExpense - threeMonthAvg.expense) / threeMonthAvg.expense) * 100
+        previousThreeMonthAvg.expense > 0
+          ? ((latest.totalExpense - previousThreeMonthAvg.expense) /
+              previousThreeMonthAvg.expense) *
+            100
           : 0,
-      netIncomeDiff: latest.netIncome - threeMonthAvg.netIncome,
+      netIncomeDiff: latest.netIncome - previousThreeMonthAvg.netIncome,
     };
   }
 
