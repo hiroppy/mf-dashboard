@@ -56,6 +56,26 @@ describe("applyCategoryDecisions", () => {
     });
   });
 
+  test("計算対象外の取引はisTarget=falseで更新する", async () => {
+    const updater = vi.fn<TestUpdater>().mockResolvedValue({ ok: true, status: 200 });
+    const excludedDecision = decision("tx-excluded");
+    excludedDecision.transaction.isExcludedFromCalculation = true;
+
+    await applyCategoryDecisions({
+      page: {} as Page,
+      csrfToken: "csrf",
+      decisions: [excludedDecision],
+      updater,
+    });
+
+    expect(updater).toHaveBeenCalledWith({} as Page, "csrf", "tx-excluded", {
+      largeCategoryId: "11",
+      middleCategoryId: "41",
+      isIncome: false,
+      isTarget: false,
+    });
+  });
+
   test("更新失敗時もthrowせずwarnして未反映として扱う", async () => {
     const warn = vi.fn<(...args: unknown[]) => void>();
     const updater = vi

@@ -52,6 +52,8 @@ export async function categorizeCashFlowMonth(options: {
   usage: CategoryDecisionUsage;
 }): Promise<CashFlowSummary> {
   const { page, db, cashFlow, config, usage } = options;
+  let latestCashFlowForFallback: CashFlowSummary | null = null;
+  let appliedCountForFallback = 0;
 
   try {
     const mfIds = cashFlow.items.map((item) => item.mfId);
@@ -63,7 +65,10 @@ export async function categorizeCashFlowMonth(options: {
     }
 
     const latestCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
-    const latestTargets = toCategorizationTargets(latestCashFlow.items, existingMfIds);
+    latestCashFlowForFallback = latestCashFlow;
+    const latestMfIds = latestCashFlow.items.map((item) => item.mfId);
+    const latestExistingMfIds = await findExistingTransactionMfIds(db, latestMfIds);
+    const latestTargets = toCategorizationTargets(latestCashFlow.items, latestExistingMfIds);
     if (latestTargets.length === 0) {
       return latestCashFlow;
     }
@@ -102,15 +107,21 @@ export async function categorizeCashFlowMonth(options: {
       csrfToken,
       decisions,
     });
+    appliedCountForFallback = appliedCount;
 
     if (appliedCount === 0) {
       return latestCashFlow;
     }
 
     info(`Applied category decisions: ${appliedCount}/${decisions.length} for ${cashFlow.month}`);
-    return scrapeCashFlowMonth(page, cashFlow.month);
+    const updatedCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
+    latestCashFlowForFallback = updatedCashFlow;
+    return updatedCashFlow;
   } catch (err) {
     warn(`Category decision failed for ${cashFlow.month}; saving original categories.`, err);
+    if (appliedCountForFallback > 0 && latestCashFlowForFallback) {
+      return latestCashFlowForFallback;
+    }
     return cashFlow;
   }
 }

@@ -96,10 +96,14 @@ export async function loadCategoryDecisionConfig(
 
   try {
     const json = await readFile(filePath, "utf8");
-    const parsed = JSON.parse(json) as CategoryDecisionConfig;
+    const parsed = JSON.parse(json) as unknown;
+    if (!isRecord(parsed)) {
+      warn(`Failed to load category rules from ${filePath}: root must be an object`);
+      return { enabled: false, config: null };
+    }
     return {
       enabled: true,
-      config: normalizeCategoryDecisionConfig(parsed, warn),
+      config: normalizeCategoryDecisionConfig(parsed as CategoryDecisionConfig, warn),
     };
   } catch (err) {
     warn(`Failed to load category rules from ${filePath}:`, err);

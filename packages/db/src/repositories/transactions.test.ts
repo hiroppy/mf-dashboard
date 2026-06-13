@@ -391,6 +391,31 @@ describe("findExistingTransactionMfIds", () => {
 
     expect(result).toEqual(new Set());
   });
+
+  test("BATCH_SIZEを超える入力でも全バッチの既存mfIdを返す", async () => {
+    for (const mfId of ["existing-1", "existing-2", "existing-599"]) {
+      await saveTransaction(db, {
+        mfId,
+        date: "2026-06-03",
+        category: "食費",
+        subCategory: null,
+        description: `Batch Edge ${mfId}`,
+        amount: 100,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      });
+    }
+
+    const mfIds = Array.from({ length: 600 }, (_, index) => `missing-${index}`);
+    mfIds[0] = "existing-1";
+    mfIds[499] = "existing-2";
+    mfIds[599] = "existing-599";
+
+    const result = await findExistingTransactionMfIds(db, mfIds);
+
+    expect([...result].sort()).toEqual(["existing-1", "existing-2", "existing-599"]);
+  });
 });
 
 describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {

@@ -62,7 +62,7 @@ async function main() {
   if (categoryDecisionConfig.enabled) {
     info("Category decision: enabled (data/category-rules.json found)");
   } else {
-    log("Category decision: disabled (data/category-rules.json not found)");
+    info("Category decision: disabled (data/category-rules.json not found)");
   }
 
   const browser = await chromium.launch({

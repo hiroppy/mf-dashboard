@@ -61,6 +61,18 @@ describe("loadCategoryDecisionConfig", () => {
     );
   });
 
+  test("JSON rootがobjectではない場合は無効化してwarnする", async () => {
+    const warn = vi.fn<(...args: unknown[]) => void>();
+    const configPath = join(tempDir, "category-rules.json");
+    await writeFile(configPath, JSON.stringify([]));
+
+    const result = await loadCategoryDecisionConfig(configPath, warn);
+
+    expect(result.enabled).toBe(false);
+    expect(result.config).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Failed to load category rules"));
+  });
+
   test("空のcontainsを持つルールは無効化してwarnする", async () => {
     const warn = vi.fn<(...args: unknown[]) => void>();
     const configPath = join(tempDir, "category-rules.json");

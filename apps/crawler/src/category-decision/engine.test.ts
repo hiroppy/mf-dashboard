@@ -248,4 +248,25 @@ describe("CategoryDecisionEngine", () => {
     expect(llmDecider).toHaveBeenCalledTimes(1);
     expect(usage.llmCallsUsed).toBe(1);
   });
+
+  test("取引種別に合う候補カテゴリがない場合はLLMを呼ばず推論件数を消費しない", async () => {
+    const llmDecider = vi.fn<LLMCategoryDecider>();
+    const config: NormalizedCategoryDecisionConfig = {
+      llm: { enabled: true, maxPerRun: 5, minConfidence: 0.65 },
+      rules: [],
+    };
+    const usage = { llmCallsUsed: 0 };
+    const engine = new CategoryDecisionEngine({
+      config,
+      candidates: candidates.filter((candidate) => candidate.isIncome),
+      llmDecider,
+      usage,
+    });
+
+    const result = await engine.decideMany([tx({ type: "expense" })]);
+
+    expect(result).toEqual([]);
+    expect(llmDecider).not.toHaveBeenCalled();
+    expect(usage.llmCallsUsed).toBe(0);
+  });
 });

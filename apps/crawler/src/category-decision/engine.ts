@@ -132,12 +132,13 @@ export class CategoryDecisionEngine {
     if (!this.#config.llm.enabled || !this.#llmDecider) return null;
     if (this.#usage.llmCallsUsed >= this.#config.llm.maxPerRun) return null;
 
-    this.#usage.llmCallsUsed += 1;
-
     try {
       const llmCandidates = this.#candidates.filter((candidate) =>
         candidateTypeMatches(candidate, transaction),
       );
+      if (llmCandidates.length === 0) return null;
+
+      this.#usage.llmCallsUsed += 1;
       const llmDecision = await this.#llmDecider(transaction, llmCandidates);
       if (!llmDecision) return null;
 

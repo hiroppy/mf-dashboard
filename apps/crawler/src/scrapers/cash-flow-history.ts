@@ -234,7 +234,7 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   return { month, totalIncome, totalExpense, balance, items };
 }
 
-function buildMonthRange(month: string): { from: string; to: string } {
+export function buildMonthRange(month: string): { from: string; to: string } {
   const [yearText, monthText] = month.split("-");
   const year = Number(yearText);
   const monthIndex = Number(monthText);
