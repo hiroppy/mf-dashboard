@@ -17,12 +17,16 @@ vi.mock("./config.js", () => ({
 
 const candidates = [
   {
+    largeCategoryId: "11",
     largeCategoryName: "食費",
+    middleCategoryId: "41",
     middleCategoryName: "食料品",
     isIncome: false,
   },
   {
+    largeCategoryId: "13",
     largeCategoryName: "趣味・娯楽",
+    middleCategoryId: "77",
     middleCategoryName: "動画・音楽",
     isIncome: false,
   },
@@ -51,11 +55,11 @@ describe("generateCategoryDecisionWithLLM", () => {
     expect(generateText).not.toHaveBeenCalled();
   });
 
-  test("候補カテゴリ一覧から選ばせるpromptでLLM決定を返す", async () => {
+  test("候補カテゴリID一覧から選ばせるpromptでLLM決定を返す", async () => {
     vi.mocked(generateText).mockResolvedValue({
       output: {
-        category: "趣味・娯楽",
-        subCategory: "動画・音楽",
+        largeCategoryId: "13",
+        middleCategoryId: "77",
         confidence: 0.78,
         reason: "subscription service",
       },
@@ -68,12 +72,13 @@ describe("generateCategoryDecisionWithLLM", () => {
       model: "mock-model",
     });
     const prompt = vi.mocked(generateText).mock.calls[0]?.[0].prompt;
-    expect(prompt).toEqual(expect.stringContaining("食費 > 食料品"));
-    expect(prompt).toEqual(expect.stringContaining("趣味・娯楽 > 動画・音楽"));
+    expect(prompt).toEqual(expect.stringContaining("11: 食費 > 41: 食料品"));
+    expect(prompt).toEqual(expect.stringContaining("13: 趣味・娯楽 > 77: 動画・音楽"));
+    expect(prompt).not.toEqual(expect.stringContaining("金融機関"));
     expect(result).toEqual({
       source: "llm",
-      category: "趣味・娯楽",
-      subCategory: "動画・音楽",
+      largeCategoryId: "13",
+      middleCategoryId: "77",
       confidence: 0.78,
       reason: "subscription service",
     });

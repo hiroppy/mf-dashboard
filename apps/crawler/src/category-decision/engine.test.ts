@@ -141,8 +141,8 @@ describe("CategoryDecisionEngine", () => {
   test("固定ルールにmatchしない場合だけLLMへfallbackし、候補カテゴリの決定を採用する", async () => {
     const llmDecider = vi.fn<LLMCategoryDecider>().mockResolvedValue({
       source: "llm",
-      category: "趣味・娯楽",
-      subCategory: "動画・音楽",
+      largeCategoryId: "13",
+      middleCategoryId: "77",
       confidence: 0.8,
       reason: "subscription",
     });
@@ -173,6 +173,27 @@ describe("CategoryDecisionEngine", () => {
     });
   });
 
+  test("LLMが候補にないカテゴリIDを返した場合は採用しない", async () => {
+    const warn = vi.fn<(...args: unknown[]) => void>();
+    const llmDecider = vi.fn<LLMCategoryDecider>().mockResolvedValue({
+      source: "llm",
+      largeCategoryId: "999",
+      middleCategoryId: "888",
+      confidence: 0.8,
+      reason: "unknown category",
+    });
+    const config: NormalizedCategoryDecisionConfig = {
+      llm: { enabled: true, maxPerRun: 5, minConfidence: 0.65 },
+      rules: [],
+    };
+    const engine = new CategoryDecisionEngine({ config, candidates, llmDecider, warn });
+
+    const result = await engine.decideMany([tx({ description: "Unknown Service A" })]);
+
+    expect(result).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("LLM category decision ignored"));
+  });
+
   test("LLMが無効の場合は未match取引を推論しない", async () => {
     const llmDecider = vi.fn<LLMCategoryDecider>();
     const config: NormalizedCategoryDecisionConfig = {
@@ -190,8 +211,8 @@ describe("CategoryDecisionEngine", () => {
   test("LLMのconfidenceが閾値未満の場合は採用しない", async () => {
     const llmDecider = vi.fn<LLMCategoryDecider>().mockResolvedValue({
       source: "llm",
-      category: "趣味・娯楽",
-      subCategory: "動画・音楽",
+      largeCategoryId: "13",
+      middleCategoryId: "77",
       confidence: 0.64,
       reason: "low confidence",
     });
@@ -209,8 +230,8 @@ describe("CategoryDecisionEngine", () => {
   test("LLM推論件数はmaxPerRunで制限する", async () => {
     const llmDecider = vi.fn<LLMCategoryDecider>().mockResolvedValue({
       source: "llm",
-      category: "趣味・娯楽",
-      subCategory: "動画・音楽",
+      largeCategoryId: "13",
+      middleCategoryId: "77",
       confidence: 0.8,
       reason: "subscription",
     });

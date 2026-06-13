@@ -2,6 +2,7 @@ import type {
   CategoryCandidate,
   CategoryDecision,
   CategoryDecisionUsage,
+  LLMCategoryDecision,
   LLMCategoryDecider,
   NormalizedCategoryDecisionConfig,
   ResolvedCategoryDecision,
@@ -57,7 +58,7 @@ function candidateTypeMatches(
   return candidate.isIncome === (transaction.type === "income");
 }
 
-function findCandidate(
+function findCandidateByName(
   candidates: CategoryCandidate[],
   transaction: TransactionForCategorization,
   category: string,
@@ -68,6 +69,21 @@ function findCandidate(
       (candidate) =>
         candidate.largeCategoryName === category &&
         candidate.middleCategoryName === subCategory &&
+        candidateTypeMatches(candidate, transaction),
+    ) ?? null
+  );
+}
+
+function findCandidateById(
+  candidates: CategoryCandidate[],
+  transaction: TransactionForCategorization,
+  decision: LLMCategoryDecision,
+): CategoryCandidate | null {
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.largeCategoryId === decision.largeCategoryId &&
+        candidate.middleCategoryId === decision.middleCategoryId &&
         candidateTypeMatches(candidate, transaction),
     ) ?? null
   );
@@ -129,7 +145,7 @@ export class CategoryDecisionEngine {
         return null;
       }
 
-      return this.#resolveDecision(transaction, llmDecision);
+      return this.#resolveLLMDecision(transaction, llmDecision);
     } catch (err) {
       this.#warn(`LLM category decision failed for transaction ${transaction.mfId}:`, err);
       return null;
@@ -158,7 +174,7 @@ export class CategoryDecisionEngine {
         reason: `Matched rule: ${needles.join(" + ")}`,
       };
 
-      const resolved = this.#resolveDecision(transaction, decision);
+      const resolved = this.#resolveRuleDecision(transaction, decision);
       if (resolved) return resolved;
 
       this.#warn(
@@ -169,11 +185,11 @@ export class CategoryDecisionEngine {
     return null;
   }
 
-  #resolveDecision(
+  #resolveRuleDecision(
     transaction: TransactionForCategorization,
     decision: CategoryDecision,
   ): ResolvedCategoryDecision | null {
-    const candidate = findCandidate(
+    const candidate = findCandidateByName(
       this.#candidates,
       transaction,
       decision.category,
@@ -190,5 +206,31 @@ export class CategoryDecisionEngine {
     }
 
     return { transaction, decision, candidate };
+  }
+
+  #resolveLLMDecision(
+    transaction: TransactionForCategorization,
+    decision: LLMCategoryDecision,
+  ): ResolvedCategoryDecision | null {
+    const candidate = findCandidateById(this.#candidates, transaction, decision);
+
+    if (!candidate) {
+      this.#warn(
+        `LLM category decision ignored: ${decision.largeCategoryId} > ${decision.middleCategoryId} is not in Money Forward candidates`,
+      );
+      return null;
+    }
+
+    return {
+      transaction,
+      decision: {
+        source: "llm",
+        category: candidate.largeCategoryName,
+        subCategory: candidate.middleCategoryName,
+        confidence: decision.confidence,
+        reason: decision.reason,
+      },
+      candidate,
+    };
   }
 }

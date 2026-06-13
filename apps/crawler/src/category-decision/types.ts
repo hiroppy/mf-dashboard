@@ -30,6 +30,14 @@ export interface CategoryDecision {
   reason: string;
 }
 
+export interface LLMCategoryDecision {
+  source: "llm";
+  largeCategoryId: string;
+  middleCategoryId: string;
+  confidence: number;
+  reason: string;
+}
+
 export interface CategoryCandidate {
   largeCategoryId: string;
   largeCategoryName: string;
@@ -60,7 +68,7 @@ export interface ResolvedCategoryDecision {
 export type LLMCategoryDecider = (
   transaction: TransactionForCategorization,
   candidates: CategoryCandidate[],
-) => Promise<CategoryDecision | null>;
+) => Promise<LLMCategoryDecision | null>;
 
 export interface CategoryDecisionUsage {
   llmCallsUsed: number;
