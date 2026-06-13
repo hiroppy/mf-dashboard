@@ -13,6 +13,8 @@ import { chromium } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
 import { createBrowserContext } from "./browser/context.js";
+import { categorizeCashFlowMonth } from "./category-decision/categorize-cash-flow.js";
+import { loadCategoryDecisionConfig } from "./category-decision/config.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord.js";
@@ -55,6 +57,13 @@ async function main() {
   section("Setup");
   log("Initializing database");
   const db = await initDb();
+  const categoryDecisionConfig = await loadCategoryDecisionConfig(undefined, warn);
+  const categoryDecisionUsage = { llmCallsUsed: 0 };
+  if (categoryDecisionConfig.enabled) {
+    info("Category decision: enabled (data/category-rules.json found)");
+  } else {
+    log("Category decision: disabled (data/category-rules.json not found)");
+  }
 
   const browser = await chromium.launch({
     headless: !isHeaded,
@@ -96,6 +105,16 @@ async function main() {
     const noGroupData = groupDataList.find((gd) => isNoGroup(gd.group.id));
     if (noGroupData) {
       section(`Save: ${noGroupData.group.name} (Full)`);
+      if (categoryDecisionConfig.config) {
+        await switchGroup(page, NO_GROUP_ID);
+        globalData.cashFlow = await categorizeCashFlowMonth({
+          page,
+          db,
+          cashFlow: globalData.cashFlow,
+          config: categoryDecisionConfig.config,
+          usage: categoryDecisionUsage,
+        });
+      }
       const scrapedData = buildScrapedData(globalData, noGroupData);
       debug("Scraped data:", JSON.stringify(scrapedData, null, 2));
       await saveScrapedData(db, scrapedData);
@@ -165,7 +184,21 @@ async function main() {
       const historyResults = await scrapeCashFlowHistory(page, monthsToFetch);
 
       for (const { month, data: monthData } of historyResults) {
-        const savedCount = await saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
+        const categorizedMonthData = categoryDecisionConfig.config
+          ? await categorizeCashFlowMonth({
+              page,
+              db,
+              cashFlow: monthData,
+              config: categoryDecisionConfig.config,
+              usage: categoryDecisionUsage,
+            })
+          : monthData;
+        const savedCount = await saveTransactionsForMonth(
+          db,
+          month,
+          categorizedMonthData.items,
+          accountIdMap,
+        );
         log(`  ${month}: saved ${savedCount} transactions`);
       }
     }

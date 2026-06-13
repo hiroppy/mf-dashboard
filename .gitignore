@@ -17,6 +17,7 @@ test-auth-state.json
 test-groups-moneyforward.db
 test-moneyforward.db*
 data/demo.db
+data/category-rules.json
 *.db-shm
 *.db-wal
 
