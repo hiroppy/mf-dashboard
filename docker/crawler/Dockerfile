@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.58.2-jammy
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 WORKDIR /app
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
@@ -26,6 +26,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/crawler/package.json ./apps/crawler/
 COPY packages/db/package.json ./packages/db/
 COPY packages/meta/package.json ./packages/meta/
+COPY packages/analytics/package.json ./packages/analytics/
 
 RUN pnpm install --frozen-lockfile --filter "@mf-dashboard/crawler..."
 

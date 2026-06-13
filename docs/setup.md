@@ -86,20 +86,19 @@ pnpm setup:cloudflare
 - `terraform output -raw tunnel_token` を `.env` の `TUNNEL_TOKEN` に書き込む
 - `docker compose build && docker compose up -d` を実行する
 
-既存の GitHub Actions secrets に入れていた MoneyForward / 通知系の値は、そのまま `.env` に移して使える。Slack / Discord / dashboard link は必要な場合だけ設定する。
+既存の GitHub Actions secrets に入れていた MoneyForward / 通知系の値は、そのまま `.env` に移して使える。Slack / Discord / dashboard link は必要な場合だけ設定する。local の `pnpm db:dev` / `pnpm dev` では `DB_PATH` と `WEB_URL` を未設定のままにし、repo root の `data/moneyforward.db` と refresh skip の既定挙動を使う。
 
-| Key                                                  | 必須     | 値                                                                                                            |
-| ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`                               | ✅       | `op://Private/Cloudflare API Token mf-dashboard/credential` のような 1Password 参照のまま (op run が解決する) |
-| `TUNNEL_TOKEN`                                       | 自動     | `pnpm setup:cloudflare` が Terraform output から書き込む                                                      |
-| `REFRESH_TOKEN`                                      | 自動     | crawler と web が共有する `/api/refresh/` 用 Bearer token                                                     |
-| `WEB_URL`                                            | 自動     | `http://web:8765` (crawler から見た web サービス URL)                                                         |
-| `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                               |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                         |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                                    |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL`         | optional | Discord 通知                                                                                                  |
-| `DASHBOARD_URL`                                      | optional | 公開している `https://<hostname>/`                                                                            |
-| `NEXT_PUBLIC_GITHUB_ORG` / `NEXT_PUBLIC_GITHUB_REPO` | optional | UI から workflow へのリンク                                                                                   |
+| Key                                          | 必須     | 値                                                                                                            |
+| -------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                       | ✅       | `op://Private/Cloudflare API Token mf-dashboard/credential` のような 1Password 参照のまま (op run が解決する) |
+| `TUNNEL_TOKEN`                               | 自動     | `pnpm setup:cloudflare` が Terraform output から書き込む                                                      |
+| `REFRESH_TOKEN`                              | 自動     | crawler と web が共有する `/api/refresh/` 用 Bearer token                                                     |
+| `WEB_URL`                                    | 自動     | `http://web:8765` (crawler から見た web サービス URL)                                                         |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | ✅       | 1Password Service Account token                                                                               |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                         |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | optional | Slack 通知                                                                                                    |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | optional | Discord 通知                                                                                                  |
+| `DASHBOARD_URL`                              | optional | 公開している `https://<hostname>/`                                                                            |
 
 ### 1Password の ID の見つけ方 (アプリ)
 
@@ -131,7 +130,7 @@ docker compose up -d
 
 各コンテナの役割:
 
-- **web** — Next.js を `next start --port 8765` で常駐 (image build 時に `data/demo.db` で bootstrap 済み、本番 DB は volume 経由で読む)
+- **web** — Next.js を `next start --port 8765` で常駐。Docker image build 時は dashboard route を request-time rendering にし、起動後は volume 経由の本番 DB を読む
 - **cloudflared** — `TUNNEL_TOKEN` で Cloudflare Edge に接続
 - **crawler** — supercronic で `crontab` (`docker/crawler/crontab`) を回し、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh/` へ `REFRESH_TOKEN` を Bearer 認証で POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外部は Cloudflare Access で保護)
 
