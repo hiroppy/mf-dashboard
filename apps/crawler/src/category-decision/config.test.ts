@@ -60,4 +60,32 @@ describe("loadCategoryDecisionConfig", () => {
       expect.stringContaining("Failed to load category rules"),
     );
   });
+
+  test("空のcontainsを持つルールは無効化してwarnする", async () => {
+    const warn = vi.fn<(...args: unknown[]) => void>();
+    const configPath = join(tempDir, "category-rules.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        rules: [
+          { contains: "", category: "食費", subCategory: "食料品" },
+          { contains: "   ", category: "食費", subCategory: "食料品" },
+          { contains: [], category: "食費", subCategory: "食料品" },
+          { contains: ["Service A", ""], category: "食費", subCategory: "食料品" },
+          { contains: "Service B", category: "食費", subCategory: "食料品" },
+        ],
+      }),
+    );
+
+    const result = await loadCategoryDecisionConfig(configPath, warn);
+
+    expect(result.enabled).toBe(true);
+    expect(result.config?.rules).toEqual([
+      { contains: "Service B", category: "食費", subCategory: "食料品" },
+    ]);
+    expect(warn).toHaveBeenCalledTimes(4);
+    expect(warn.mock.calls[0]?.[0]).toEqual(
+      expect.stringContaining("Invalid category rule ignored"),
+    );
+  });
 });

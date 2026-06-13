@@ -39,8 +39,14 @@ export function selectTransactionsForCategorization(
   });
 }
 
-function containsNeedles(text: string, contains: string | string[]): boolean {
+function getValidContainsNeedles(contains: string | string[]): string[] | null {
   const needles = Array.isArray(contains) ? contains : [contains];
+  if (needles.length === 0) return null;
+  if (needles.some((needle) => needle.trim().length === 0)) return null;
+  return needles;
+}
+
+function containsNeedles(text: string, needles: string[]): boolean {
   return needles.every((needle) => text.includes(needle));
 }
 
@@ -134,14 +140,22 @@ export class CategoryDecisionEngine {
     const searchText = buildSearchText(transaction);
 
     for (const rule of this.#config.rules) {
-      if (!containsNeedles(searchText, rule.contains)) continue;
+      const needles = getValidContainsNeedles(rule.contains);
+      if (!needles) {
+        this.#warn(
+          "Invalid category rule ignored: contains must be a non-empty string or non-empty string array",
+        );
+        continue;
+      }
+
+      if (!containsNeedles(searchText, needles)) continue;
 
       const decision: CategoryDecision = {
         source: "rule",
         category: rule.category,
         subCategory: rule.subCategory,
         confidence: 1,
-        reason: `Matched rule: ${Array.isArray(rule.contains) ? rule.contains.join(" + ") : rule.contains}`,
+        reason: `Matched rule: ${needles.join(" + ")}`,
       };
 
       const resolved = this.#resolveDecision(transaction, decision);

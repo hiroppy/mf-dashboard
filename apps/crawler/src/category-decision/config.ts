@@ -24,19 +24,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseContains(value: unknown): string | string[] | null {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => typeof item === "string" && item.trim().length > 0)
+  ) {
     return value;
   }
   return null;
 }
 
-function parseRules(value: unknown): CategoryRuleConfig[] {
+function parseRules(value: unknown, warn: (...args: unknown[]) => void): CategoryRuleConfig[] {
   if (!Array.isArray(value)) return [];
 
   const rules: CategoryRuleConfig[] = [];
   for (const item of value) {
-    if (!isRecord(item)) continue;
+    if (!isRecord(item)) {
+      warn("Invalid category rule ignored: rule must be an object");
+      continue;
+    }
 
     const contains = parseContains(item.contains);
     if (contains && typeof item.category === "string" && typeof item.subCategory === "string") {
@@ -45,7 +52,12 @@ function parseRules(value: unknown): CategoryRuleConfig[] {
         category: item.category,
         subCategory: item.subCategory,
       });
+      continue;
     }
+
+    warn(
+      "Invalid category rule ignored: contains must be a non-empty string or non-empty string array",
+    );
   }
   return rules;
 }
@@ -62,6 +74,7 @@ function confidenceOrDefault(value: unknown, defaultValue: number): number {
 
 function normalizeCategoryDecisionConfig(
   rawConfig: CategoryDecisionConfig,
+  warn: (...args: unknown[]) => void,
 ): NormalizedCategoryDecisionConfig {
   return {
     llm: {
@@ -69,7 +82,7 @@ function normalizeCategoryDecisionConfig(
       maxPerRun: positiveNumberOrDefault(rawConfig.llm?.maxPerRun, DEFAULT_MAX_PER_RUN),
       minConfidence: confidenceOrDefault(rawConfig.llm?.minConfidence, DEFAULT_MIN_CONFIDENCE),
     },
-    rules: parseRules(rawConfig.rules),
+    rules: parseRules(rawConfig.rules, warn),
   };
 }
 
@@ -86,7 +99,7 @@ export async function loadCategoryDecisionConfig(
     const parsed = JSON.parse(json) as CategoryDecisionConfig;
     return {
       enabled: true,
-      config: normalizeCategoryDecisionConfig(parsed),
+      config: normalizeCategoryDecisionConfig(parsed, warn),
     };
   } catch (err) {
     warn(`Failed to load category rules from ${filePath}:`, err);

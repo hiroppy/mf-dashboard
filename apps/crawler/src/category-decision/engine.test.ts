@@ -118,6 +118,26 @@ describe("CategoryDecisionEngine", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Invalid category rule"));
   });
 
+  test("空のcontainsを持つ固定ルールは全取引にmatchしない", async () => {
+    const warn = vi.fn<(...args: unknown[]) => void>();
+    const config: NormalizedCategoryDecisionConfig = {
+      llm: { enabled: false, maxPerRun: 5, minConfidence: 0.65 },
+      rules: [
+        { contains: "", category: "食費", subCategory: "食料品" },
+        { contains: [], category: "食費", subCategory: "食料品" },
+      ],
+    };
+    const engine = new CategoryDecisionEngine({ config, candidates, warn });
+
+    const result = await engine.decideMany([tx({ description: "unrelated merchant" })]);
+
+    expect(result).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0]?.[0]).toEqual(
+      expect.stringContaining("Invalid category rule ignored"),
+    );
+  });
+
   test("固定ルールにmatchしない場合だけLLMへfallbackし、候補カテゴリの決定を採用する", async () => {
     const llmDecider = vi.fn<LLMCategoryDecider>().mockResolvedValue({
       source: "llm",
