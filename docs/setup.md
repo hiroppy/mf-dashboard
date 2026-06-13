@@ -11,6 +11,7 @@
 - ローカル PC が常時起動できる環境
 - ローカルにインストール済みのツール:
   - **Docker Desktop** (System Settings の Login Items でログイン時起動を有効化)
+  - Node.js / `pnpm` (`corepack enable pnpm`)
   - `terraform` (>= 1.6)
   - `op` CLI (1Password)
 
@@ -64,20 +65,35 @@ Terraform 用の API Token を発行する。最小権限:
 
 参照は `op://Private/Cloudflare API Token mf-dashboard/credential` の形式でリポジトリルートの `.env` (`CLOUDFLARE_API_TOKEN` キー) から行われる。値はその `op://` 参照のまま `.env` に書く — `op run --env-file=.env` が呼ばれるたびに解決される。
 
-## 3. `.env` の作成
+## 3. 自動セットアップ
 
-リポジトリルートの `.env.example` をコピーして `.env` を作る (`.gitignore` 済み)。Docker Compose と Terraform の双方がこの 1 ファイルを参照する。
+Cloudflare API Token を 1Password に保存した後は、リポジトリルートで以下を実行するだけでセットアップできる:
 
 ```sh
-cp .env.example .env
+pnpm setup:cloudflare
 ```
+
+このコマンドが行うこと:
+
+- `.env` がなければ `.env.example` から作る
+- `REFRESH_TOKEN` を自動生成する
+- `WEB_URL=http://web:8765` を設定する
+- `OP_SERVICE_ACCOUNT_TOKEN` / `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD` が未設定なら聞く
+- 公開する `hostname` と許可する email を聞く
+- Cloudflare API から `account_id` / `zone_id` を自動検出する (検出できない場合だけ手入力)
+- `terraform/terraform.tfvars` を生成する
+- `terraform init` / `terraform plan` / `terraform apply` を実行する
+- `terraform output -raw tunnel_token` を `.env` の `TUNNEL_TOKEN` に書き込む
+- `docker compose build && docker compose up -d` を実行する
+
+既存の GitHub Actions secrets に入れていた MoneyForward / 通知系の値は、そのまま `.env` に移して使える。Slack / Discord / dashboard link は必要な場合だけ設定する。
 
 | Key                                                  | 必須     | 値                                                                                                            |
 | ---------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`                               | ✅       | `op://Private/Cloudflare API Token mf-dashboard/credential` のような 1Password 参照のまま (op run が解決する) |
-| `TUNNEL_TOKEN`                                       | ✅       | `terraform output -raw tunnel_token` の結果 (次のセクションで取得)                                            |
-| `REFRESH_TOKEN`                                      | ✅       | crawler と web が共有する `/api/refresh/` 用 Bearer token                                                     |
-| `WEB_URL`                                            | ✅       | `http://web:8765` (crawler から見た web サービス URL)                                                         |
+| `TUNNEL_TOKEN`                                       | 自動     | `pnpm setup:cloudflare` が Terraform output から書き込む                                                      |
+| `REFRESH_TOKEN`                                      | 自動     | crawler と web が共有する `/api/refresh/` 用 Bearer token                                                     |
+| `WEB_URL`                                            | 自動     | `http://web:8765` (crawler から見た web サービス URL)                                                         |
 | `OP_SERVICE_ACCOUNT_TOKEN`                           | ✅       | 1Password Service Account token                                                                               |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`             | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                         |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`               | optional | Slack 通知                                                                                                    |
@@ -93,44 +109,22 @@ cp .env.example .env
 - `OP_ITEM`: アイテム画面右上のケバブメニューから UUID をコピー
 - `OP_TOTP_FIELD`: 同メニューの「アイテムの JSON をコピー」から、`u` に `TOTP_` 開始の文字列があるフィールド ID を抽出
 
-## 4. Terraform で Tunnel + Access を構築
+### 手動で確認・分割実行したい場合
+
+Terraform apply や Docker 起動を自動で行いたくない場合は、以下を使う:
 
 ```sh
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+pnpm setup:cloudflare --no-apply --no-docker
 ```
 
-`terraform/terraform.tfvars` を実際の値に書き換える:
-
-```hcl
-account_id = "<Cloudflare Account ID>"
-zone_id    = "<Cloudflare Zone ID>"
-hostname   = "dashboard.example.com"
-allowed_emails = [
-  "user-a@example.com",
-]
-```
-
-`op run` がルートの `.env` から `CLOUDFLARE_API_TOKEN` を解決して terraform に渡す:
+その後、必要に応じて手動で実行する:
 
 ```sh
-op run --env-file=.env -- terraform -chdir=terraform init
-op run --env-file=.env -- terraform -chdir=terraform plan
 op run --env-file=.env -- terraform -chdir=terraform apply
-```
-
-apply 後に `tunnel_token` を取得し、`.env` の `TUNNEL_TOKEN=` に貼り付ける:
-
-```sh
 op run --env-file=.env -- terraform -chdir=terraform output -raw tunnel_token
-```
 
-## 5. Docker Compose で起動
-
-```sh
 docker compose build
 docker compose up -d
-# 初回起動時、DB がまだ空なら 1 回だけ手動で走らせて bootstrap する
-docker compose exec crawler pnpm --filter @mf-dashboard/crawler start
 ```
 
 以降は crawler コンテナ内の supercronic が `crontab` のスケジュールで自動更新する。

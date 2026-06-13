@@ -16,6 +16,14 @@
 
 ## セットアップ
 
+通常はリポジトリルートで自動セットアップを使う:
+
+```sh
+pnpm setup:cloudflare
+```
+
+Terraform だけを手動で扱う場合:
+
 ```sh
 cp terraform.tfvars.example terraform.tfvars
 # terraform.tfvars を実際の値に書き換える (.gitignore で除外済み)
