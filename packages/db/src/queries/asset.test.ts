@@ -436,6 +436,8 @@ describe("getAssetHistory", () => {
 
 describe("getAssetHistoryWithCategories", () => {
   it("履歴にカテゴリ情報を付与して返す", async () => {
+    await createAssetHistory({ date: "2025-04-16", totalAssets: 250000 });
+
     const historyId1 = await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
     await createAssetHistoryCategory({
       assetHistoryId: historyId1,
@@ -457,17 +459,65 @@ describe("getAssetHistoryWithCategories", () => {
 
     const result = await getAssetHistoryWithCategories(undefined, db);
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(3);
     expect(result[0]).toEqual({
+      date: "2025-04-16",
+      totalAssets: 250000,
+      categories: {},
+    });
+    expect(result[1]).toEqual({
       date: "2025-04-15",
       totalAssets: 200000,
       categories: { 預金: 150000, 株式: 50000 },
     });
-    expect(result[1]).toEqual({
+    expect(result[2]).toEqual({
       date: "2025-04-14",
       totalAssets: 100000,
       categories: { 預金: 100000 },
     });
+  });
+
+  it("limitを指定した場合は対象履歴のカテゴリだけを返す", async () => {
+    const historyId1 = await createAssetHistory({ date: "2025-04-16", totalAssets: 300000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId1,
+      categoryName: "預金",
+      amount: 180000,
+    });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId1,
+      categoryName: "投資",
+      amount: 120000,
+    });
+
+    const historyId2 = await createAssetHistory({ date: "2025-04-15", totalAssets: 200000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId2,
+      categoryName: "預金",
+      amount: 150000,
+    });
+
+    const historyId3 = await createAssetHistory({ date: "2025-04-14", totalAssets: 100000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId3,
+      categoryName: "対象外",
+      amount: 100000,
+    });
+
+    const result = await getAssetHistoryWithCategories({ limit: 2 }, db);
+
+    expect(result).toEqual([
+      {
+        date: "2025-04-16",
+        totalAssets: 300000,
+        categories: { 預金: 180000, 投資: 120000 },
+      },
+      {
+        date: "2025-04-15",
+        totalAssets: 200000,
+        categories: { 預金: 150000 },
+      },
+    ]);
   });
 
   it("履歴が空の場合は空配列を返す", async () => {

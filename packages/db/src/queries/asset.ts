@@ -1,4 +1,4 @@
-import { desc, eq, sql, and } from "drizzle-orm";
+import { desc, eq, sql, and, inArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId } from "../shared/group-filter";
 import { getHoldingsWithLatestValues } from "./holding";
@@ -146,27 +146,37 @@ export async function getAssetHistoryWithCategories(
     return options?.limit ? await query.limit(options.limit).all() : await query.all();
   })();
 
-  const results = [];
-  for (const entry of historyEntries) {
-    const cats = await db
-      .select()
-      .from(schema.assetHistoryCategories)
-      .where(eq(schema.assetHistoryCategories.assetHistoryId, entry.id))
-      .all();
-
-    const categories: Record<string, number> = {};
-    for (const cat of cats) {
-      categories[cat.categoryName] = cat.amount;
-    }
-
-    results.push({
-      date: entry.date,
-      totalAssets: entry.totalAssets,
-      categories,
-    });
+  if (historyEntries.length === 0) {
+    return [];
   }
 
-  return results;
+  const categoriesByHistoryId = new Map<number, Record<string, number>>();
+  const categories = await db
+    .select({
+      assetHistoryId: schema.assetHistoryCategories.assetHistoryId,
+      categoryName: schema.assetHistoryCategories.categoryName,
+      amount: schema.assetHistoryCategories.amount,
+    })
+    .from(schema.assetHistoryCategories)
+    .where(
+      inArray(
+        schema.assetHistoryCategories.assetHistoryId,
+        historyEntries.map((entry) => entry.id),
+      ),
+    )
+    .all();
+
+  for (const category of categories) {
+    const groupedCategories = categoriesByHistoryId.get(category.assetHistoryId) ?? {};
+    groupedCategories[category.categoryName] = category.amount;
+    categoriesByHistoryId.set(category.assetHistoryId, groupedCategories);
+  }
+
+  return historyEntries.map((entry) => ({
+    date: entry.date,
+    totalAssets: entry.totalAssets,
+    categories: categoriesByHistoryId.get(entry.id) ?? {},
+  }));
 }
 
 /**
