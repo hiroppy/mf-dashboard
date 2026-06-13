@@ -31,9 +31,9 @@ export async function scrapeMonthlySummary(page: Page): Promise<MonthlySummaryIt
   // 月を解析（最初のセルは空なのでスキップ）
   const months: string[] = [];
   for (let i = 1; i < headers.length; i++) {
-    const match = headers[i].trim().match(/^(\d{4})\/(\d{2})\/\d{2}〜$/);
+    const match = headers[i].trim().match(/^(\d{4})\/(\d{1,2})\/\d{1,2}〜$/);
     if (match) {
-      months.push(`${match[1]}-${match[2]}`);
+      months.push(`${match[1]}-${match[2].padStart(2, "0")}`);
     }
   }
 

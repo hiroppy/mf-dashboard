@@ -150,7 +150,7 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
       avgCostPrice: orUndefined(parseDecimalNumber(avgCostText)),
       unitPrice: orUndefined(parseDecimalNumber(unitPriceText)),
       dailyChange,
-      unrealizedGain: parseJapaneseNumber(unrealizedGainText) || undefined,
+      unrealizedGain: unrealizedGainText ? parseJapaneseNumber(unrealizedGainText) : undefined,
       unrealizedGainPct: parsePercentage(unrealizedGainPctText),
     });
   }
@@ -201,7 +201,7 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
       avgCostPrice: orUndefined(parseDecimalNumber(avgCostText)),
       unitPrice: orUndefined(parseDecimalNumber(unitPriceText)),
       dailyChange,
-      unrealizedGain: parseJapaneseNumber(unrealizedGainText) || undefined,
+      unrealizedGain: unrealizedGainText ? parseJapaneseNumber(unrealizedGainText) : undefined,
       unrealizedGainPct: parsePercentage(unrealizedGainPctText),
     });
   }
@@ -286,7 +286,7 @@ async function parseInsuranceAndPoints(page: Page): Promise<PortfolioItem[]> {
           institution: "",
           balance: parseJapaneseNumber(balanceText),
           avgCostPrice: orUndefined(parseJapaneseNumber(avgCostText)),
-          unrealizedGain: parseJapaneseNumber(unrealizedGainText) || undefined,
+          unrealizedGain: unrealizedGainText ? parseJapaneseNumber(unrealizedGainText) : undefined,
           unrealizedGainPct: parsePercentage(unrealizedGainPctText),
         });
       }

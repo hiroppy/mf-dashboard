@@ -64,12 +64,13 @@ describe("analyzeMoMTrend", () => {
     const data: MonthlySummary[] = [
       { month: "2025-01", totalIncome: 300000, totalExpense: 200000, netIncome: 100000 },
       { month: "2025-02", totalIncome: 300000, totalExpense: 200000, netIncome: 100000 },
-      { month: "2025-03", totalIncome: 360000, totalExpense: 200000, netIncome: 160000 },
+      { month: "2025-03", totalIncome: 300000, totalExpense: 200000, netIncome: 100000 },
+      { month: "2025-04", totalIncome: 360000, totalExpense: 200000, netIncome: 160000 },
     ];
     const result = analyzeMoMTrend(data);
     expect(result.latestVsThreeMonthAvg).not.toBeNull();
-    // Latest income 360000 vs avg 320000 = +40000
-    expect(result.latestVsThreeMonthAvg!.incomeDiff).toBe(40000);
+    // Latest income 360000 vs previous 3-month avg 300000 = +60000
+    expect(result.latestVsThreeMonthAvg!.incomeDiff).toBe(60000);
   });
 
   it("should detect increasing streak", () => {
@@ -208,6 +209,18 @@ describe("analyzeSpendingComparison", () => {
     ];
     const result = analyzeSpendingComparison(data, "2025-04");
     expect(result.newCategories).toContain("新カテゴリ");
+  });
+
+  it("should detect categories first appearing in the latest month", () => {
+    const data: CategoryTotal[] = [
+      { month: "2025-01", category: "食費", type: "expense", totalAmount: 30000 },
+      { month: "2025-02", category: "食費", type: "expense", totalAmount: 30000 },
+      { month: "2025-03", category: "医療費", type: "expense", totalAmount: 10000 },
+    ];
+
+    const result = analyzeSpendingComparison(data, "2025-03");
+
+    expect(result.newCategories).toContain("医療費");
   });
 
   it("should filter out income entries", () => {

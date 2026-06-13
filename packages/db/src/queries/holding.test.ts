@@ -244,6 +244,67 @@ describe("getHoldingsWithLatestValues", () => {
     expect(result[0].categoryName).toBe("株式(現物)");
   });
 
+  it("デフォルトグループの最新スナップショットを使う", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const holdingId = await createHolding({ accountId, name: "Holding A" });
+    await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+
+    const now = new Date().toISOString();
+    await db
+      .insert(schema.groups)
+      .values({
+        id: "other-group",
+        name: "Other Group",
+        isCurrent: false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    const outsideAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "mf_other",
+        name: "Other Account",
+        type: "bank",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db
+      .insert(schema.groupAccounts)
+      .values({
+        groupId: "other-group",
+        accountId: outsideAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    const otherSnapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "other-group",
+        date: "2025-04-16",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const otherHolding = await createHolding({ accountId: outsideAccount.id, name: "Holding B" });
+    await createHoldingValue({
+      holdingId: otherHolding,
+      snapshotId: otherSnapshot.id,
+      amount: 200000,
+    });
+
+    const result = await getHoldingsWithLatestValues(undefined, db);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Holding A");
+    expect(result[0].amount).toBe(100000);
+  });
+
   it("スナップショットがない場合は空配列を返す", async () => {
     const result = await getHoldingsWithLatestValues(undefined, db);
     expect(result).toEqual([]);
