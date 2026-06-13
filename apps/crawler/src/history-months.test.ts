@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getHistoryMonth } from "./history-months.js";
+import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
 
 describe("getHistoryMonth", () => {
   test("月末でも前月にロールオーバーしない", () => {
@@ -22,5 +22,11 @@ describe("getHistoryMonth", () => {
 
     expect(getHistoryMonth(now, 0)).toBe("2026-07");
     expect(getHistoryMonth(now, 1)).toBe("2026-06");
+  });
+
+  test("履歴取得月数もJST基準の当月から計算する", () => {
+    const now = new Date("2026-01-31T16:00:00Z"); // 2026-02-01 01:00 JST
+
+    expect(getHistoryMaxMonths(now)).toBe(14);
   });
 });

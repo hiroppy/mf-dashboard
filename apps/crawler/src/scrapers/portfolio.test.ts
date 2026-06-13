@@ -46,6 +46,7 @@ describe("parseOptionalJapaneseNumber", () => {
 
   test("プレースホルダーは undefined を返す", () => {
     expect(parseOptionalJapaneseNumber("-")).toBeUndefined();
+    expect(parseOptionalJapaneseNumber("−")).toBeUndefined();
     expect(parseOptionalJapaneseNumber("—")).toBeUndefined();
   });
 });
