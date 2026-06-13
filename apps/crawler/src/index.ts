@@ -16,7 +16,7 @@ import { createBrowserContext } from "./browser/context.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord.js";
-import { getHistoryMonth } from "./history-months.js";
+import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
 import { log, debug, info, error, section, warn } from "./logger.js";
 import { scrapeAllGroups } from "./scraper.js";
@@ -142,8 +142,7 @@ async function main() {
       // 今月 + 去年の全月分を取得対象とする
       // 例: 2026年1月 → 2026年1月 + 2025年1月〜12月 = 13ヶ月
       const now = new Date();
-      const currentMonthIndex = now.getMonth(); // 0-11
-      const maxMonths = currentMonthIndex + 1 + 12; // 今年の経過月数 + 去年12ヶ月
+      const maxMonths = getHistoryMaxMonths(now); // 今年の経過月数 + 去年12ヶ月（JST基準）
 
       // DBにない最古の月まで取得
       let monthsToFetch = 1; // 今月は常に取得

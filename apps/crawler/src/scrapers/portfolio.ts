@@ -105,7 +105,7 @@ function orUndefined(value: number): number | undefined {
 
 export function parseOptionalJapaneseNumber(text: string): number | undefined {
   const trimmed = text.trim();
-  if (!trimmed || ["-", "—", "–", "―"].includes(trimmed)) {
+  if (!trimmed || ["-", "−", "—", "–", "―"].includes(trimmed)) {
     return undefined;
   }
   return parseJapaneseNumber(trimmed);
