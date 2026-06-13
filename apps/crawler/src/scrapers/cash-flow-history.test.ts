@@ -28,12 +28,13 @@ describe("scrapeCashFlowMonth", () => {
 
   test("指定月範囲のURLへ遷移して収支テーブル表示後に抽出する", async () => {
     page = await browser.newPage();
-    let requestedUrl: string | null = null;
-    await page.route("https://moneyforward.com/cf?**", async (route) => {
-      requestedUrl = route.request().url();
-      await route.fulfill({
-        contentType: "text/html",
-        body: `
+    try {
+      let requestedUrl: string | null = null;
+      await page.route("https://moneyforward.com/cf?**", async (route) => {
+        requestedUrl = route.request().url();
+        await route.fulfill({
+          contentType: "text/html",
+          body: `
 <!DOCTYPE html>
 <html>
   <body>
@@ -55,22 +56,23 @@ describe("scrapeCashFlowMonth", () => {
   </body>
 </html>
         `,
+        });
       });
-    });
 
-    const result = await scrapeCashFlowMonth(page, "2024-02");
+      const result = await scrapeCashFlowMonth(page, "2024-02");
 
-    expect(requestedUrl).not.toBeNull();
-    expect(requestedUrl).toContain("from=2024%2F02%2F01");
-    expect(requestedUrl).toContain("to=2024%2F02%2F29");
-    expect(result).toEqual({
-      month: "2024-02",
-      totalIncome: 0,
-      totalExpense: 0,
-      balance: 0,
-      items: [],
-    });
-
-    await page.close();
+      expect(requestedUrl).not.toBeNull();
+      expect(requestedUrl).toContain("from=2024%2F02%2F01");
+      expect(requestedUrl).toContain("to=2024%2F02%2F29");
+      expect(result).toEqual({
+        month: "2024-02",
+        totalIncome: 0,
+        totalExpense: 0,
+        balance: 0,
+        items: [],
+      });
+    } finally {
+      await page.close();
+    }
   });
 });
