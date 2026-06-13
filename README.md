@@ -96,6 +96,13 @@ $ pnpm db:dev
 $ pnpm dev
 ```
 
+`data/demo.db` は生成物として扱い、Git には含めない。`pnpm dev:demo` / `pnpm build:demo`
+実行時に自動生成される。手動で作り直したい場合は次を実行する。
+
+```sh
+$ pnpm --filter @mf-dashboard/db build:demo
+```
+
 ## 更新
 
 ```sh

@@ -30,6 +30,7 @@ pnpm --filter @mf-dashboard/mcp build
 ```
 
 > `DB_PATH` を省略すると `data/moneyforward.db` がデフォルトで使われる。デモ用には `data/demo.db` を指定する。
+> `data/demo.db` がない場合は、先に `pnpm --filter @mf-dashboard/db build:demo` で生成する。
 
 ## Claude Code での設定
 
