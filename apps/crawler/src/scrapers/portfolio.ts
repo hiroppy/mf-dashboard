@@ -103,6 +103,14 @@ function orUndefined(value: number): number | undefined {
   return value || undefined;
 }
 
+export function parseOptionalJapaneseNumber(text: string): number | undefined {
+  const trimmed = text.trim();
+  if (!trimmed || ["-", "—", "–", "―"].includes(trimmed)) {
+    return undefined;
+  }
+  return parseJapaneseNumber(trimmed);
+}
+
 // Parse stocks from .table-eq
 async function parseStocks(page: Page): Promise<PortfolioItem[]> {
   const rows = page.locator("table.table-eq tbody tr");
@@ -138,7 +146,7 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
     if (!name) continue;
 
     // Parse daily change - keep 0 as valid value (only undefined if empty)
-    const dailyChange = dailyChangeText ? parseJapaneseNumber(dailyChangeText) : undefined;
+    const dailyChange = parseOptionalJapaneseNumber(dailyChangeText);
 
     items.push({
       name,
@@ -150,7 +158,7 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
       avgCostPrice: orUndefined(parseDecimalNumber(avgCostText)),
       unitPrice: orUndefined(parseDecimalNumber(unitPriceText)),
       dailyChange,
-      unrealizedGain: unrealizedGainText ? parseJapaneseNumber(unrealizedGainText) : undefined,
+      unrealizedGain: parseOptionalJapaneseNumber(unrealizedGainText),
       unrealizedGainPct: parsePercentage(unrealizedGainPctText),
     });
   }
@@ -190,7 +198,7 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
     if (!name) continue;
 
     // Parse daily change - keep 0 as valid value (only undefined if empty)
-    const dailyChange = dailyChangeText ? parseJapaneseNumber(dailyChangeText) : undefined;
+    const dailyChange = parseOptionalJapaneseNumber(dailyChangeText);
 
     items.push({
       name,
@@ -201,7 +209,7 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
       avgCostPrice: orUndefined(parseDecimalNumber(avgCostText)),
       unitPrice: orUndefined(parseDecimalNumber(unitPriceText)),
       dailyChange,
-      unrealizedGain: unrealizedGainText ? parseJapaneseNumber(unrealizedGainText) : undefined,
+      unrealizedGain: parseOptionalJapaneseNumber(unrealizedGainText),
       unrealizedGainPct: parsePercentage(unrealizedGainPctText),
     });
   }
@@ -286,7 +294,7 @@ async function parseInsuranceAndPoints(page: Page): Promise<PortfolioItem[]> {
           institution: "",
           balance: parseJapaneseNumber(balanceText),
           avgCostPrice: orUndefined(parseJapaneseNumber(avgCostText)),
-          unrealizedGain: unrealizedGainText ? parseJapaneseNumber(unrealizedGainText) : undefined,
+          unrealizedGain: parseOptionalJapaneseNumber(unrealizedGainText),
           unrealizedGainPct: parsePercentage(unrealizedGainPctText),
         });
       }

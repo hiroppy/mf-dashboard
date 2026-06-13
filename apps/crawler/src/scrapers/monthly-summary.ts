@@ -12,6 +12,17 @@ export interface MonthlySummaryItem {
   totalExpense: number;
 }
 
+export function parseMonthlySummaryMonths(headers: string[]): string[] {
+  const months: string[] = [];
+  for (let i = 1; i < headers.length; i++) {
+    const match = headers[i].trim().match(/^(\d{4})\/(\d{1,2})\/\d{1,2}〜$/);
+    if (match) {
+      months.push(`${match[1]}-${match[2].padStart(2, "0")}`);
+    }
+  }
+  return months;
+}
+
 /**
  * /cf/monthly ページから月次サマリーを取得
  */
@@ -29,13 +40,7 @@ export async function scrapeMonthlySummary(page: Page): Promise<MonthlySummaryIt
   const headers = await headerRow.locator("th, td").allTextContents();
 
   // 月を解析（最初のセルは空なのでスキップ）
-  const months: string[] = [];
-  for (let i = 1; i < headers.length; i++) {
-    const match = headers[i].trim().match(/^(\d{4})\/(\d{1,2})\/\d{1,2}〜$/);
-    if (match) {
-      months.push(`${match[1]}-${match[2].padStart(2, "0")}`);
-    }
-  }
+  const months = parseMonthlySummaryMonths(headers);
 
   debug(`Found months: ${months.join(", ")}`);
 

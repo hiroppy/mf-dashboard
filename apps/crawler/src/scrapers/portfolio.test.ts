@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { identifyTableTypeFromTitle } from "./portfolio.js";
+import { identifyTableTypeFromTitle, parseOptionalJapaneseNumber } from "./portfolio.js";
 
 describe("identifyTableTypeFromTitle", () => {
   test("「ポイント・マイル」はそのまま返す", () => {
@@ -30,5 +30,22 @@ describe("identifyTableTypeFromTitle", () => {
     expect(identifyTableTypeFromTitle("")).toBe("不明");
     expect(identifyTableTypeFromTitle("不明なカテゴリ")).toBe("不明");
     expect(identifyTableTypeFromTitle("ポイント")).toBe("不明"); // "ポイント・マイル"ではない
+  });
+});
+
+describe("parseOptionalJapaneseNumber", () => {
+  test("0 は有効な数値として保持する", () => {
+    expect(parseOptionalJapaneseNumber("0")).toBe(0);
+    expect(parseOptionalJapaneseNumber("¥0")).toBe(0);
+  });
+
+  test("空文字は undefined を返す", () => {
+    expect(parseOptionalJapaneseNumber("")).toBeUndefined();
+    expect(parseOptionalJapaneseNumber("   ")).toBeUndefined();
+  });
+
+  test("プレースホルダーは undefined を返す", () => {
+    expect(parseOptionalJapaneseNumber("-")).toBeUndefined();
+    expect(parseOptionalJapaneseNumber("—")).toBeUndefined();
   });
 });
