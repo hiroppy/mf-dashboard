@@ -170,7 +170,7 @@ op run --env-file=.env -- \
 - ホストの再起動: Docker Desktop が自動起動 → `restart: unless-stopped` の各コンテナも自動復帰
 - 手動再ビルド (依存追加など): `docker compose build && docker compose up -d`
 - crawler を即時実行: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start` (完了時に自動的に web へ refresh ping を送る)
-- web のキャッシュだけ手動で無効化: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer $REFRESH_TOKEN" http://web:8765/api/refresh/'`
+- web のキャッシュだけ手動で無効化: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer ${REFRESH_TOKEN}" http://web:8765/api/refresh/'`
 
 ## 更新
 
