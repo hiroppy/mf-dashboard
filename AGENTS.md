@@ -230,7 +230,7 @@ CLEANUP_GROUPS=true pnpm --filter @mf-dashboard/crawler start
 ### Test & Storybook Data
 
 - When creating dummy data for tests or Storybook, **do not reference** `data/moneyforward.db` (contains personal information)
-- `data/demo.db` can be used as reference
+- `data/demo.db` can be generated with `pnpm --filter @mf-dashboard/db build:demo` and used as reference
 - Run web app with demo data: `pnpm --filter @mf-dashboard/web dev:demo`
 
 ### Testing
