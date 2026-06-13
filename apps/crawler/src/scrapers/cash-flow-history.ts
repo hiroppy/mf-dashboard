@@ -202,7 +202,7 @@ export async function parseDetailRow(
 /**
  * 現在表示中のページから家計簿データを取得
  */
-async function extractCashFlowFromPage(page: Page): Promise<CashFlowSummary> {
+export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSummary> {
   const { year, month: monthNum } = await detectMonth(page);
   const month = `${year}-${String(monthNum).padStart(2, "0")}`;
   debug(`  Extracting data for ${month}...`);
@@ -232,6 +232,29 @@ async function extractCashFlowFromPage(page: Page): Promise<CashFlowSummary> {
   }
 
   return { month, totalIncome, totalExpense, balance, items };
+}
+
+export function buildMonthRange(month: string): { from: string; to: string } {
+  const [yearText, monthText] = month.split("-");
+  const year = Number(yearText);
+  const monthIndex = Number(monthText);
+  const lastDay = new Date(year, monthIndex, 0).getDate();
+
+  return {
+    from: `${yearText}/${monthText}/01`,
+    to: `${yearText}/${monthText}/${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+export async function scrapeCashFlowMonth(page: Page, month: string): Promise<CashFlowSummary> {
+  const range = buildMonthRange(month);
+
+  await page.goto(mfUrls.cashFlowWithRange(range.from, range.to), {
+    waitUntil: "domcontentloaded",
+  });
+  await page.locator("#cf-detail-table").waitFor({ state: "visible", timeout: 10000 });
+
+  return extractCashFlowFromPage(page);
 }
 
 /**
