@@ -223,6 +223,21 @@ describe("analyzeSpendingComparison", () => {
     expect(result.newCategories).toContain("医療費");
   });
 
+  it("should not include new categories with zero previous average in top increasing", () => {
+    const data: CategoryTotal[] = [
+      { month: "2025-01", category: "食費", type: "expense", totalAmount: 30000 },
+      { month: "2025-02", category: "食費", type: "expense", totalAmount: 30000 },
+      { month: "2025-03", category: "食費", type: "expense", totalAmount: 30000 },
+      { month: "2025-04", category: "食費", type: "expense", totalAmount: 30000 },
+      { month: "2025-04", category: "医療費", type: "expense", totalAmount: 10000 },
+    ];
+
+    const result = analyzeSpendingComparison(data, "2025-04");
+
+    expect(result.newCategories).toContain("医療費");
+    expect(result.topIncreasing.map((c) => c.category)).not.toContain("医療費");
+  });
+
   it("should filter out income entries", () => {
     const data: CategoryTotal[] = [
       { month: "2025-01", category: "給与", type: "income", totalAmount: 300000 },

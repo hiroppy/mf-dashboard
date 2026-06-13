@@ -16,4 +16,11 @@ describe("getHistoryMonth", () => {
     expect(getHistoryMonth(now, 1)).toBe("2025-12");
     expect(getHistoryMonth(now, 2)).toBe("2025-11");
   });
+
+  test("UTC環境でもJST基準の年月を使う", () => {
+    const now = new Date("2026-06-30T21:50:00Z");
+
+    expect(getHistoryMonth(now, 0)).toBe("2026-07");
+    expect(getHistoryMonth(now, 1)).toBe("2026-06");
+  });
 });

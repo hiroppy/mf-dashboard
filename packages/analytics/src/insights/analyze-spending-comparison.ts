@@ -146,7 +146,9 @@ export function analyzeSpendingComparison(
   });
 
   // Top increasing/decreasing vs 3-month average
-  const withDev = categories.filter((c) => c.deviationFromThreeMonth != null);
+  const withDev = categories.filter(
+    (c) => c.deviationFromThreeMonth != null && c.deviationFromThreeMonthPct != null,
+  );
   const topIncreasing = withDev
     .filter((c) => c.deviationFromThreeMonth! > 0)
     .sort((a, b) => b.deviationFromThreeMonth! - a.deviationFromThreeMonth!)
