@@ -11,6 +11,7 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - ai
+  - "@cloudflare/workerd-*"
   - "@csstools/css-color-parser"
   - "@storybook/addon-a11y"
   - "@storybook/addon-vitest"
@@ -22,8 +23,13 @@ minimumReleaseAgeExclude:
   - "@storybook/react-vite"
   - "@turbo/*"
   - "@types/node"
+  - knip
+  - lucide-react
+  - miniflare
   - storybook
   - turbo
+  - workerd
+  - wrangler
 
 catalog:
   "@libsql/client": 0.17.4
