@@ -12,8 +12,17 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - ai
   - "@csstools/css-color-parser"
+  - "@storybook/addon-a11y"
+  - "@storybook/addon-vitest"
+  - "@storybook/builder-vite"
+  - "@storybook/csf-plugin"
+  - "@storybook/nextjs-vite"
+  - "@storybook/react"
+  - "@storybook/react-dom-shim"
+  - "@storybook/react-vite"
   - "@turbo/*"
   - "@types/node"
+  - storybook
   - turbo
 
 catalog:
