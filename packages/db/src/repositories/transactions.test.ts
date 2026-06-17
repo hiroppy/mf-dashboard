@@ -511,4 +511,25 @@ describe("saveTransactionsForMonth", () => {
     expect(result).toHaveLength(1);
     expect(result[0].mfId).toBe("tx3");
   });
+
+  test("MM/DD形式の日付は保存対象月の年で保存される", async () => {
+    const savedCount = await saveTransactionsForMonth(db, "2025-12", [
+      {
+        mfId: "tx-history-1",
+        date: "12/31",
+        category: "食費",
+        subCategory: null,
+        description: "スーパー",
+        amount: 3000,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      },
+    ]);
+
+    expect(savedCount).toBe(1);
+    const result = await db.select().from(schema.transactions).all();
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe("2025-12-31");
+  });
 });

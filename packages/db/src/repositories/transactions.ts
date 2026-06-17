@@ -140,6 +140,7 @@ function lookupAccountId(
 function prepareTransactionData(
   item: CashFlowItem,
   accountIdMap?: Map<string, number>,
+  currentYear?: number,
 ): {
   mfId: string;
   date: string;
@@ -154,7 +155,7 @@ function prepareTransactionData(
   transferTarget: string | null;
   transferTargetAccountId: number | null;
 } {
-  const isoDate = convertToIsoDate(item.date);
+  const isoDate = convertToIsoDate(item.date, currentYear);
   const accountId = lookupAccountId(accountIdMap, item.accountName);
   const transferTargetAccountId = lookupAccountId(accountIdMap, item.transferTarget);
 
@@ -198,11 +199,12 @@ export async function saveTransactionsForMonth(
 
   // バルクinsert（BATCH_SIZE単位）
   const timestamp = now();
+  const currentYear = parseInt(month.slice(0, 4), 10);
 
   for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
     const batch = validItems.slice(i, i + BATCH_SIZE);
     const records = batch.map((item) => {
-      const data = prepareTransactionData(item, accountIdMap);
+      const data = prepareTransactionData(item, accountIdMap, currentYear);
       return {
         ...data,
         createdAt: timestamp,
