@@ -100,8 +100,8 @@ describe("parseCategoryCandidates", () => {
               </select>
             </td>
             <td>
+              Ignored cell text
               <select name="user_asset_act[middle_category_id]">
-                <option value="41">食料品</option>
                 <option value="77" selected>動画・音楽</option>
               </select>
             </td>
@@ -118,6 +118,53 @@ describe("parseCategoryCandidates", () => {
         largeCategoryName: "趣味・娯楽",
         middleCategoryId: "77",
         middleCategoryName: "動画・音楽",
+        isIncome: false,
+      },
+    ]);
+  });
+
+  test("data-large-category-idがない取引行内中項目selectは選択中大項目配下の候補として全optionを補完する", async () => {
+    await page.setContent(`
+      <table id="cf-detail-table">
+        <tbody>
+          <tr id="js-transaction-tx-1">
+            <td></td>
+            <td>06/01</td>
+            <td>Store A</td>
+            <td>-1,200</td>
+            <td>Card A</td>
+            <td>
+              <select name="user_asset_act[large_category_id]">
+                <option value="11" selected>食費</option>
+                <option value="13">趣味・娯楽</option>
+              </select>
+            </td>
+            <td>
+              <select name="user_asset_act[middle_category_id]">
+                <option value="41" selected>食料品</option>
+                <option value="42">外食</option>
+              </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `);
+
+    const result = await page.evaluate(parseCategoryCandidates);
+
+    expect(result).toEqual([
+      {
+        largeCategoryId: "11",
+        largeCategoryName: "食費",
+        middleCategoryId: "41",
+        middleCategoryName: "食料品",
+        isIncome: false,
+      },
+      {
+        largeCategoryId: "11",
+        largeCategoryName: "食費",
+        middleCategoryId: "42",
+        middleCategoryName: "外食",
         isIncome: false,
       },
     ]);

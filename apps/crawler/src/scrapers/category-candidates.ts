@@ -121,8 +121,29 @@ export function parseCategoryCandidates(): CategoryCandidate[] {
     );
 
     const largeCategoryId = largeCategoryInput?.value ?? "";
-    const middleCategoryId = middleCategoryInput?.value ?? "";
     const largeCategoryName = inputDisplayText(largeCategoryInput, categoryCell);
+
+    if (middleCategoryInput instanceof HTMLSelectElement) {
+      for (const option of middleCategoryInput.options) {
+        const optionLargeCategoryId = getLargeCategoryId(option);
+        const resolvedLargeCategoryId = optionLargeCategoryId || largeCategoryId;
+        const resolvedLargeCategoryName =
+          largeCategoryNames.get(resolvedLargeCategoryId) ||
+          (resolvedLargeCategoryId === largeCategoryId ? largeCategoryName : "");
+
+        addCandidate(candidates, seen, {
+          largeCategoryId: resolvedLargeCategoryId,
+          largeCategoryName: resolvedLargeCategoryName,
+          middleCategoryId: option.value,
+          middleCategoryName: optionText(option),
+          isIncome: inferIsIncome(resolvedLargeCategoryId, resolvedLargeCategoryName),
+        });
+      }
+
+      continue;
+    }
+
+    const middleCategoryId = middleCategoryInput?.value ?? "";
     const middleCategoryName = inputDisplayText(middleCategoryInput, subCategoryCell);
 
     addCandidate(candidates, seen, {
