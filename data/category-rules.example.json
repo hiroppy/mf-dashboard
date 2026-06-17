@@ -1,6 +1,6 @@
 {
   "llm": {
-    "enabled": true,
+    "enabled": false,
     "maxPerRun": 5,
     "minConfidence": 0.65
   },

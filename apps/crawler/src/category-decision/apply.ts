@@ -13,12 +13,18 @@ interface ApplyCategoryDecisionsOptions {
   warn?: (...args: unknown[]) => void;
 }
 
+export interface ApplyCategoryDecisionsResult {
+  appliedCount: number;
+  appliedDecisions: ResolvedCategoryDecision[];
+}
+
 export async function applyCategoryDecisions(
   options: ApplyCategoryDecisionsOptions,
-): Promise<{ appliedCount: number }> {
+): Promise<ApplyCategoryDecisionsResult> {
   const updater = options.updater ?? updateTransactionCategory;
   const warn = options.warn ?? defaultWarn;
   let appliedCount = 0;
+  const appliedDecisions: ResolvedCategoryDecision[] = [];
 
   for (const item of options.decisions) {
     try {
@@ -31,6 +37,7 @@ export async function applyCategoryDecisions(
 
       if (result.ok) {
         appliedCount++;
+        appliedDecisions.push(item);
       } else {
         warn(`Failed to update transaction category: ${item.transaction.mfId} (${result.status})`);
       }
@@ -39,5 +46,5 @@ export async function applyCategoryDecisions(
     }
   }
 
-  return { appliedCount };
+  return { appliedCount, appliedDecisions };
 }

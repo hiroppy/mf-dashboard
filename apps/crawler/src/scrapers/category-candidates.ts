@@ -54,6 +54,19 @@ export function parseCategoryCandidates(): CategoryCandidate[] {
     );
   }
 
+  function inputDisplayText(
+    input: HTMLInputElement | HTMLSelectElement | null,
+    fallbackCell: HTMLTableCellElement,
+  ): string {
+    if (input instanceof HTMLSelectElement) {
+      const selectedOption = input.selectedOptions.item(0);
+      const selectedText = selectedOption ? optionText(selectedOption) : "";
+      if (selectedText) return selectedText;
+    }
+
+    return cleanText(fallbackCell.textContent);
+  }
+
   const candidates: CategoryCandidate[] = [];
   const seen = new Set<string>();
   const largeCategoryNames = new Map<string, string>();
@@ -109,8 +122,8 @@ export function parseCategoryCandidates(): CategoryCandidate[] {
 
     const largeCategoryId = largeCategoryInput?.value ?? "";
     const middleCategoryId = middleCategoryInput?.value ?? "";
-    const largeCategoryName = cleanText(categoryCell.textContent);
-    const middleCategoryName = cleanText(subCategoryCell.textContent);
+    const largeCategoryName = inputDisplayText(largeCategoryInput, categoryCell);
+    const middleCategoryName = inputDisplayText(middleCategoryInput, subCategoryCell);
 
     addCandidate(candidates, seen, {
       largeCategoryId,

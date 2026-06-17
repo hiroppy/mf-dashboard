@@ -91,7 +91,10 @@ describe("categorizeCashFlowMonth", () => {
       .mockResolvedValueOnce(new Set())
       .mockResolvedValueOnce(new Set(["latest-existing"]));
     vi.mocked(scrapeCashFlowMonth).mockResolvedValue(latestCashFlow);
-    vi.mocked(applyCategoryDecisions).mockResolvedValue({ appliedCount: 0 });
+    vi.mocked(applyCategoryDecisions).mockResolvedValue({
+      appliedCount: 0,
+      appliedDecisions: [],
+    });
 
     await categorizeCashFlowMonth({
       page: {} as Page,
@@ -111,14 +114,17 @@ describe("categorizeCashFlowMonth", () => {
     ).toBe("latest-new");
   });
 
-  test("カテゴリ反映後の再スクレイプ失敗時は元データではなく反映直前の最新データを返す", async () => {
+  test("カテゴリ反映後の再スクレイプ失敗時は反映カテゴリをローカル適用して返す", async () => {
     const initialCashFlow = cashFlow("2026-06", [item("initial-new")]);
     const latestCashFlow = cashFlow("2026-06", [item("latest-new")]);
     vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set());
     vi.mocked(scrapeCashFlowMonth)
       .mockResolvedValueOnce(latestCashFlow)
       .mockRejectedValueOnce(new Error("final scrape failed"));
-    vi.mocked(applyCategoryDecisions).mockResolvedValue({ appliedCount: 1 });
+    vi.mocked(applyCategoryDecisions).mockImplementation(async ({ decisions }) => ({
+      appliedCount: 1,
+      appliedDecisions: decisions,
+    }));
 
     const result = await categorizeCashFlowMonth({
       page: {} as Page,
@@ -128,6 +134,12 @@ describe("categorizeCashFlowMonth", () => {
       usage: { llmCallsUsed: 0 },
     });
 
-    expect(result).toBe(latestCashFlow);
+    expect(result.items).toEqual([
+      {
+        ...latestCashFlow.items[0],
+        category: "食費",
+        subCategory: "食料品",
+      },
+    ]);
   });
 });

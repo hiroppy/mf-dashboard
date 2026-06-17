@@ -82,4 +82,44 @@ describe("parseCategoryCandidates", () => {
       },
     ]);
   });
+
+  test("取引行内selectではセル全体ではなく選択中optionの表示名を使う", async () => {
+    await page.setContent(`
+      <table id="cf-detail-table">
+        <tbody>
+          <tr id="js-transaction-tx-1">
+            <td></td>
+            <td>06/01</td>
+            <td>Service A</td>
+            <td>-1,200</td>
+            <td>Card A</td>
+            <td>
+              <select name="user_asset_act[large_category_id]">
+                <option value="11">食費</option>
+                <option value="13" selected>趣味・娯楽</option>
+              </select>
+            </td>
+            <td>
+              <select name="user_asset_act[middle_category_id]">
+                <option value="41">食料品</option>
+                <option value="77" selected>動画・音楽</option>
+              </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `);
+
+    const result = await page.evaluate(parseCategoryCandidates);
+
+    expect(result).toEqual([
+      {
+        largeCategoryId: "13",
+        largeCategoryName: "趣味・娯楽",
+        middleCategoryId: "77",
+        middleCategoryName: "動画・音楽",
+        isIncome: false,
+      },
+    ]);
+  });
 });

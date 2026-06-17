@@ -39,15 +39,17 @@ function decision(mfId: string): ResolvedCategoryDecision {
 describe("applyCategoryDecisions", () => {
   test("/cf/updateにカテゴリIDを渡して成功件数を返す", async () => {
     const updater = vi.fn<TestUpdater>().mockResolvedValue({ ok: true, status: 200 });
+    const resolvedDecision = decision("tx-1");
 
     const result = await applyCategoryDecisions({
       page: {} as Page,
       csrfToken: "csrf",
-      decisions: [decision("tx-1")],
+      decisions: [resolvedDecision],
       updater,
     });
 
     expect(result.appliedCount).toBe(1);
+    expect(result.appliedDecisions).toEqual([resolvedDecision]);
     expect(updater).toHaveBeenCalledWith({} as Page, "csrf", "tx-1", {
       largeCategoryId: "11",
       middleCategoryId: "41",
@@ -92,6 +94,7 @@ describe("applyCategoryDecisions", () => {
     });
 
     expect(result.appliedCount).toBe(0);
+    expect(result.appliedDecisions).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(2);
   });
 });

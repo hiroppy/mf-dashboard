@@ -12,6 +12,7 @@ import { CategoryDecisionEngine, selectTransactionsForCategorization } from "./e
 import type {
   CategoryDecisionUsage,
   NormalizedCategoryDecisionConfig,
+  ResolvedCategoryDecision,
   TransactionForCategorization,
 } from "./types.js";
 
@@ -44,6 +45,37 @@ function toCategorizationTargets(
   );
 }
 
+function applyDecisionsToCashFlow(
+  cashFlow: CashFlowSummary,
+  decisions: ResolvedCategoryDecision[],
+): CashFlowSummary {
+  if (decisions.length === 0) return cashFlow;
+
+  const decisionsByMfId = new Map(
+    decisions.map((item) => [
+      item.transaction.mfId,
+      {
+        category: item.candidate.largeCategoryName,
+        subCategory: item.candidate.middleCategoryName,
+      },
+    ]),
+  );
+
+  return {
+    ...cashFlow,
+    items: cashFlow.items.map((item) => {
+      const decision = decisionsByMfId.get(item.mfId);
+      if (!decision) return item;
+
+      return {
+        ...item,
+        category: decision.category,
+        subCategory: decision.subCategory,
+      };
+    }),
+  };
+}
+
 export async function categorizeCashFlowMonth(options: {
   page: Page;
   db: Db;
@@ -54,6 +86,7 @@ export async function categorizeCashFlowMonth(options: {
   const { page, db, cashFlow, config, usage } = options;
   let latestCashFlowForFallback: CashFlowSummary | null = null;
   let appliedCountForFallback = 0;
+  let appliedDecisionsForFallback: ResolvedCategoryDecision[] = [];
 
   try {
     const mfIds = cashFlow.items.map((item) => item.mfId);
@@ -102,12 +135,16 @@ export async function categorizeCashFlowMonth(options: {
       return latestCashFlow;
     }
 
-    const { appliedCount } = await applyCategoryDecisions({
+    const applyResult = await applyCategoryDecisions({
       page,
       csrfToken,
       decisions,
     });
+    const appliedCount = applyResult.appliedCount;
+    const appliedDecisions = applyResult.appliedDecisions ?? [];
     appliedCountForFallback = appliedCount;
+    appliedDecisionsForFallback =
+      appliedDecisions.length > 0 ? appliedDecisions : decisions.slice(0, appliedCount);
 
     if (appliedCount === 0) {
       return latestCashFlow;
@@ -118,9 +155,13 @@ export async function categorizeCashFlowMonth(options: {
     latestCashFlowForFallback = updatedCashFlow;
     return updatedCashFlow;
   } catch (err) {
-    warn(`Category decision failed for ${cashFlow.month}; saving original categories.`, err);
+    const fallbackMessage =
+      appliedCountForFallback > 0
+        ? "saving locally reflected categories"
+        : "saving original categories";
+    warn(`Category decision failed for ${cashFlow.month}; ${fallbackMessage}.`, err);
     if (appliedCountForFallback > 0 && latestCashFlowForFallback) {
-      return latestCashFlowForFallback;
+      return applyDecisionsToCashFlow(latestCashFlowForFallback, appliedDecisionsForFallback);
     }
     return cashFlow;
   }

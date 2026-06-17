@@ -110,7 +110,7 @@ $ cp data/category-rules.example.json data/category-rules.json
 ```json
 {
   "llm": {
-    "enabled": true,
+    "enabled": false,
     "maxPerRun": 5,
     "minConfidence": 0.65
   },
@@ -134,7 +134,7 @@ $ cp data/category-rules.example.json data/category-rules.json
 - 対象は「新規」「未分類」「非振替」「計算対象」の取引のみ。
 - `contains` は `accountName + description` への部分一致。配列の場合は全要素が含まれるとmatchする。
 - 固定ルールがmatchした場合は、そのカテゴリを優先しLLMは呼ばない。
-- 固定ルールにmatchせず、`llm.enabled` が `true` の場合のみLLM推論する。
+- 固定ルールにmatchせず、`llm.enabled` が `true` の場合のみLLM推論する。サンプル設定では誤送信を避けるため `false` にしている。
 - LLM推論はMoneyForwardから取得した候補カテゴリ一覧から選ばせ、カテゴリIDは生成させない。
 - `llm.maxPerRun` のdefaultは `5`、`llm.minConfidence` のdefaultは `0.65`。
 - `category` / `subCategory` がMoneyForwardの候補に存在しない場合、そのルールやLLM結果は採用しない。
@@ -142,7 +142,7 @@ $ cp data/category-rules.example.json data/category-rules.json
 - 採用したカテゴリはMoneyForwardの `/cf/update` へ反映し、対象月を再スクレイプしてDBへ保存する。
 - 更新に失敗してもcrawlerは停止せず、対象取引は未分類のまま保存する。
 
-LLM fallbackを使う場合は、既存のAI設定として `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` も設定する。専用のカテゴリ決定envはなく、機能ON/OFFは `data/category-rules.json` の有無で決まる。
+LLM fallbackを使う場合は、`llm.enabled` を `true` に変更し、既存のAI設定として `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` も設定する。LLMには取引の日付、種別、金額、内容、候補カテゴリID/名称を送るため、外部providerへ送信してよい場合だけ有効にする。専用のカテゴリ決定envはなく、機能ON/OFFは `data/category-rules.json` の有無で決まる。
 
 ### 1PasswordのIDの見つけ方 (アプリ)
 
