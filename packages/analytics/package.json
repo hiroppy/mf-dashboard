@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./categorization": "./src/categorization.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

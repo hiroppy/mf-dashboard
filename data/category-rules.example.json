@@ -1,0 +1,19 @@
+{
+  "llm": {
+    "enabled": false,
+    "maxPerRun": 5,
+    "minConfidence": 0.65
+  },
+  "rules": [
+    {
+      "contains": ["コープデリ", "eフレンズ"],
+      "category": "食費",
+      "subCategory": "食料品"
+    },
+    {
+      "contains": "Netflix",
+      "category": "趣味・娯楽",
+      "subCategory": "動画・音楽"
+    }
+  ]
+}

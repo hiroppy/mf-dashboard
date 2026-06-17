@@ -7,6 +7,7 @@ import {
   hasTransactionsForMonth,
   deleteTransactionsForMonth,
   saveTransactionsForMonth,
+  findExistingTransactionMfIds,
 } from "./transactions";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
@@ -352,6 +353,68 @@ describe("saveTransaction", () => {
     expect(result[0].description).toBe("薬局");
     expect(result[0].amount).toBe(5000);
     expect(result[0].isExcludedFromCalculation).toBe(true);
+  });
+});
+
+describe("findExistingTransactionMfIds", () => {
+  test("指定したmfIdのうちDBに存在するものだけをSetで返す", async () => {
+    await saveTransaction(db, {
+      mfId: "existing-1",
+      date: "2026-06-01",
+      category: "食費",
+      subCategory: "食料品",
+      description: "Test Transaction A",
+      amount: 1000,
+      type: "expense",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+    });
+    await saveTransaction(db, {
+      mfId: "existing-2",
+      date: "2026-06-02",
+      category: "趣味・娯楽",
+      subCategory: "動画・音楽",
+      description: "Test Transaction B",
+      amount: 2000,
+      type: "expense",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+    });
+
+    const result = await findExistingTransactionMfIds(db, ["existing-1", "missing", "existing-2"]);
+
+    expect([...result].sort()).toEqual(["existing-1", "existing-2"]);
+  });
+
+  test("空配列の場合はDBを読まず空Setを返す", async () => {
+    const result = await findExistingTransactionMfIds(db, []);
+
+    expect(result).toEqual(new Set());
+  });
+
+  test("BATCH_SIZEを超える入力でも全バッチの既存mfIdを返す", async () => {
+    for (const mfId of ["existing-1", "existing-2", "existing-599"]) {
+      await saveTransaction(db, {
+        mfId,
+        date: "2026-06-03",
+        category: "食費",
+        subCategory: null,
+        description: `Batch Edge ${mfId}`,
+        amount: 100,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      });
+    }
+
+    const mfIds = Array.from({ length: 600 }, (_, index) => `missing-${index}`);
+    mfIds[0] = "existing-1";
+    mfIds[499] = "existing-2";
+    mfIds[599] = "existing-599";
+
+    const result = await findExistingTransactionMfIds(db, mfIds);
+
+    expect([...result].sort()).toEqual(["existing-1", "existing-2", "existing-599"]);
   });
 });
 
