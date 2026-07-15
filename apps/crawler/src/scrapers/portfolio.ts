@@ -5,8 +5,7 @@ import type { Locator, Page } from "playwright";
 import { debug } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 
-// Asset category constant for points (used for category check in parsing)
-const POINT = "ポイント・マイル";
+const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
 
 // Column indices for each table type
@@ -109,6 +108,43 @@ export function parseOptionalJapaneseNumber(text: string): number | undefined {
     return undefined;
   }
   return parseJapaneseNumber(trimmed);
+}
+
+export function isPointCategory(category: string): boolean {
+  return POINT_CATEGORIES.has(category);
+}
+
+export function parsePnsPortfolioItem(
+  category: string,
+  cellTexts: readonly string[],
+): PortfolioItem | null {
+  const name = cellTexts[0]?.trim() ?? "";
+  if (!name) return null;
+
+  if (isPointCategory(category)) {
+    return {
+      name,
+      type: category,
+      institution: cellTexts[POINT_COLUMNS.INSTITUTION]?.trim() ?? "",
+      balance: parseJapaneseNumber(cellTexts[POINT_COLUMNS.BALANCE] ?? "0"),
+    };
+  }
+
+  return {
+    name,
+    type: category,
+    institution: "",
+    balance: parseJapaneseNumber(cellTexts[INSURANCE_PENSION_COLUMNS.BALANCE] ?? "0"),
+    avgCostPrice: orUndefined(
+      parseJapaneseNumber(cellTexts[INSURANCE_PENSION_COLUMNS.AVG_COST] ?? ""),
+    ),
+    unrealizedGain: parseOptionalJapaneseNumber(
+      cellTexts[INSURANCE_PENSION_COLUMNS.UNREALIZED_GAIN] ?? "",
+    ),
+    unrealizedGainPct: parsePercentage(
+      cellTexts[INSURANCE_PENSION_COLUMNS.UNREALIZED_GAIN_PCT] ?? "",
+    ),
+  };
 }
 
 // Parse stocks from .table-eq
@@ -259,45 +295,12 @@ async function parseInsuranceAndPoints(page: Page): Promise<PortfolioItem[]> {
 
     for (let i = 0; i < rowCount; i++) {
       const cells = rows.nth(i).locator("td");
-
-      if (category === POINT) {
-        // 並列取得（ポイント）
-        const [name, institution, balanceText] = await Promise.all([
-          getCellText(cells, 0),
-          getCellText(cells, POINT_COLUMNS.INSTITUTION),
-          getCellText(cells, POINT_COLUMNS.BALANCE, "0"),
-        ]);
-        if (!name) continue;
-
-        items.push({
-          name,
-          type: category,
-          institution,
-          balance: parseJapaneseNumber(balanceText),
-        });
-      } else {
-        // 並列取得（保険・年金）
-        const [name, balanceText, avgCostText, unrealizedGainText, unrealizedGainPctText] =
-          await Promise.all([
-            getCellText(cells, 0),
-            getCellText(cells, INSURANCE_PENSION_COLUMNS.BALANCE, "0"),
-            getCellText(cells, INSURANCE_PENSION_COLUMNS.AVG_COST),
-            getCellText(cells, INSURANCE_PENSION_COLUMNS.UNREALIZED_GAIN),
-            getCellText(cells, INSURANCE_PENSION_COLUMNS.UNREALIZED_GAIN_PCT),
-          ]);
-        if (!name) continue;
-
-        // Insurance and Pension share the same 8-column structure
-        items.push({
-          name,
-          type: category,
-          institution: "",
-          balance: parseJapaneseNumber(balanceText),
-          avgCostPrice: orUndefined(parseJapaneseNumber(avgCostText)),
-          unrealizedGain: parseOptionalJapaneseNumber(unrealizedGainText),
-          unrealizedGainPct: parsePercentage(unrealizedGainPctText),
-        });
-      }
+      const cellCount = await cells.count();
+      const cellTexts = await Promise.all(
+        Array.from({ length: cellCount }, (_, index) => getCellText(cells, index)),
+      );
+      const item = parsePnsPortfolioItem(category, cellTexts);
+      if (item) items.push(item);
     }
   }
   return items;

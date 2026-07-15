@@ -213,8 +213,13 @@ function calculateSavings(data: CollectedData): AnalyticsMetrics["savings"] {
   return { totalAssets, liquidAssets, monthlyExpenseAvg, emergencyFundMonths };
 }
 
-function isInvestmentCategory(categoryName: string): boolean {
-  return INVESTMENT_CATEGORIES.some((c) => categoryName.includes(c) || c.includes(categoryName));
+export function isInvestmentCategory(categoryName: string): boolean {
+  const normalizedCategoryName = categoryName.trim();
+  if (isLiquidAssetCategory(normalizedCategoryName)) return false;
+  return INVESTMENT_CATEGORIES.some(
+    (category) =>
+      normalizedCategoryName.includes(category) || category.includes(normalizedCategoryName),
+  );
 }
 
 function calculateInvestment(data: CollectedData): AnalyticsMetrics["investment"] {

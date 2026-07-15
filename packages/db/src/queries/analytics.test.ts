@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AnalyticsMetrics } from "./analytics";
-import { calculateHealthScore, isLiquidAssetCategory } from "./analytics";
+import { calculateHealthScore, isInvestmentCategory, isLiquidAssetCategory } from "./analytics";
 
 type FullMetrics = Omit<AnalyticsMetrics, "healthScore">;
 
@@ -211,9 +211,27 @@ describe("isLiquidAssetCategory", () => {
     expect(isLiquidAssetCategory("預金・現金・暗号資産")).toBe(true);
   });
 
+  it("normalizes surrounding whitespace before matching", () => {
+    expect(isLiquidAssetCategory(" 預金・現金 ")).toBe(true);
+  });
+
   it("does not classify non-liquid asset categories as liquid", () => {
     expect(isLiquidAssetCategory("投資信託")).toBe(false);
     expect(isLiquidAssetCategory("株式(現物)")).toBe(false);
     expect(isLiquidAssetCategory("暗号資産・FX・貴金属")).toBe(false);
+  });
+});
+
+describe("isInvestmentCategory", () => {
+  it("matches investment categories", () => {
+    expect(isInvestmentCategory("投資信託")).toBe(true);
+    expect(isInvestmentCategory("株式(現物)")).toBe(true);
+    expect(isInvestmentCategory("暗号資産・FX・貴金属")).toBe(true);
+  });
+
+  it("does not classify split liquid asset categories as investment", () => {
+    expect(isInvestmentCategory("暗号資産")).toBe(false);
+    expect(isInvestmentCategory("預金・現金")).toBe(false);
+    expect(isInvestmentCategory("電子マネー・プリペイド")).toBe(false);
   });
 });

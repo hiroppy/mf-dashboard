@@ -1,5 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { identifyTableTypeFromTitle, parseOptionalJapaneseNumber } from "./portfolio.js";
+import {
+  identifyTableTypeFromTitle,
+  isPointCategory,
+  parseOptionalJapaneseNumber,
+  parsePnsPortfolioItem,
+} from "./portfolio.js";
 
 describe("identifyTableTypeFromTitle", () => {
   test("「ポイント・マイル」はそのまま返す", () => {
@@ -22,6 +27,7 @@ describe("identifyTableTypeFromTitle", () => {
     expect(identifyTableTypeFromTitle("預金・現金")).toBe("預金・現金");
     expect(identifyTableTypeFromTitle("暗号資産")).toBe("暗号資産");
     expect(identifyTableTypeFromTitle("電子マネー・プリペイド")).toBe("電子マネー・プリペイド");
+    expect(identifyTableTypeFromTitle("ポイント")).toBe("ポイント");
   });
 
   test("「株式(現物)」はそのまま返す", () => {
@@ -35,6 +41,76 @@ describe("identifyTableTypeFromTitle", () => {
   test("不明なタイトルは「不明」を返す", () => {
     expect(identifyTableTypeFromTitle("")).toBe("不明");
     expect(identifyTableTypeFromTitle("不明なカテゴリ")).toBe("不明");
+  });
+});
+
+describe("isPointCategory", () => {
+  test("現在とlegacyのポイントカテゴリを判定する", () => {
+    expect(isPointCategory("ポイント")).toBe(true);
+    expect(isPointCategory("ポイント・マイル")).toBe(true);
+    expect(isPointCategory("年金")).toBe(false);
+  });
+});
+
+describe("parsePnsPortfolioItem", () => {
+  test("現在の「ポイント」カテゴリはポイント用カラムでパースする", () => {
+    const item = parsePnsPortfolioItem("ポイント", [
+      "Point Service A",
+      "not used",
+      "999",
+      "not used",
+      "1,234",
+      "not used",
+      "Institution A",
+    ]);
+
+    expect(item).toEqual({
+      name: "Point Service A",
+      type: "ポイント",
+      institution: "Institution A",
+      balance: 1234,
+    });
+  });
+
+  test("legacyの「ポイント・マイル」カテゴリもポイント用カラムでパースする", () => {
+    const item = parsePnsPortfolioItem("ポイント・マイル", [
+      "Point Service B",
+      "not used",
+      "999",
+      "not used",
+      "2,345",
+      "not used",
+      "Institution B",
+    ]);
+
+    expect(item).toEqual({
+      name: "Point Service B",
+      type: "ポイント・マイル",
+      institution: "Institution B",
+      balance: 2345,
+    });
+  });
+
+  test("保険カテゴリは保険・年金用カラムでパースする", () => {
+    const item = parsePnsPortfolioItem("保険", [
+      "Insurance A",
+      "1,000",
+      "3,000",
+      "200",
+      "10%",
+      "not used",
+      "not used",
+    ]);
+
+    expect(item).toEqual({
+      name: "Insurance A",
+      type: "保険",
+      institution: "",
+      balance: 3000,
+      avgCostPrice: 1000,
+      unrealizedGain: 200,
+      unrealizedGainPct: 10,
+    });
   });
 });
 
