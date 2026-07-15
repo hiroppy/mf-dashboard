@@ -1,3 +1,4 @@
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { ScrapedData } from "@mf-dashboard/db/types";
 import type { GlobalData, GroupData } from "./scraper.js";
 
@@ -6,8 +7,7 @@ import type { GlobalData, GroupData } from "./scraper.js";
  * 「グループ選択なし」の全データ保存用
  */
 export function buildScrapedData(globalData: GlobalData, groupData: GroupData): ScrapedData {
-  const now = new Date();
-  const updatedAt = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const updatedAt = formatJstDateTimeForDisplay();
 
   return {
     summary: groupData.summary,
@@ -29,8 +29,7 @@ export function buildScrapedData(globalData: GlobalData, groupData: GroupData): 
  * 各グループのグループ固有データ保存用
  */
 export function buildGroupOnlyScrapedData(groupData: GroupData): ScrapedData {
-  const now = new Date();
-  const updatedAt = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const updatedAt = formatJstDateTimeForDisplay();
 
   return {
     summary: groupData.summary,

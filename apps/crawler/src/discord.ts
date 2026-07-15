@@ -1,3 +1,4 @@
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import { log, info, error } from "./logger.js";
 import type { ScrapedData } from "./types.js";
 
@@ -59,8 +60,7 @@ export async function sendDiscordErrorNotification(err: Error): Promise<void> {
     return;
   }
 
-  const now = new Date();
-  const timestamp = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const timestamp = formatJstDateTimeForDisplay();
   const content = buildErrorContent(err.message, timestamp);
   const payloads = buildPayloads(content, avatarUrl);
 

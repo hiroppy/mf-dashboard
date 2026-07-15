@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { analyzeFinancialData } from "@mf-dashboard/analytics";
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import { initDb, closeDb } from "@mf-dashboard/db";
 import { updateAccountCategory, buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { deleteGroupsNotIn } from "@mf-dashboard/db/repository/groups";
@@ -210,10 +211,7 @@ async function main() {
             errorMessage: a.errorMessage,
           }));
 
-        const now = new Date();
-        const updatedAt = now.toLocaleString("ja-JP", {
-          timeZone: "Asia/Tokyo",
-        });
+        const updatedAt = formatJstDateTimeForDisplay();
 
         const notifyPayload: ScrapedData = {
           summary: notifyGroupData.summary,

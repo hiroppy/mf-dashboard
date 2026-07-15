@@ -1,3 +1,4 @@
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { KnownBlock } from "@slack/web-api";
 import { WebClient } from "@slack/web-api";
 import { log, info, error } from "./logger.js";
@@ -57,8 +58,7 @@ export async function sendErrorNotification(err: Error): Promise<void> {
     return;
   }
 
-  const now = new Date();
-  const timestamp = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const timestamp = formatJstDateTimeForDisplay();
 
   await slack.chat.postMessage({
     channel: channelId,

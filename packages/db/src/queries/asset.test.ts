@@ -189,6 +189,11 @@ describe("calculateTargetDate", () => {
     expect(result).toBe("2025-04-07");
   });
 
+  it("daily: 年境界をまたいで1日前の日付を返す", async () => {
+    const result = calculateTargetDate("2026-01-01", "daily");
+    expect(result).toBe("2025-12-31");
+  });
+
   it("monthly: 前月末日を返す", async () => {
     const result = calculateTargetDate("2025-04-15", "monthly");
     expect(result).toBe("2025-03-31");
@@ -197,6 +202,11 @@ describe("calculateTargetDate", () => {
   it("monthly: 2月の場合は1月末日を返す", async () => {
     const result = calculateTargetDate("2025-05-15", "monthly");
     expect(result).toBe("2025-04-30");
+  });
+
+  it("monthly: 年境界をまたいだ前月末日を返す", async () => {
+    const result = calculateTargetDate("2026-01-15", "monthly");
+    expect(result).toBe("2025-12-31");
   });
 });
 

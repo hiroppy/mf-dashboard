@@ -76,18 +76,18 @@ describe("getShortMonth", () => {
 describe("formatDate", () => {
   it("日付を年月日形式でフォーマットする", () => {
     const result = formatDate("2025-04-15");
-    expect(result).toMatch(/2025/);
-    expect(result).toMatch(/4/);
-    expect(result).toMatch(/15/);
+    expect(result).toBe("2025年4月15日");
+  });
+
+  it("日付キーをDate timezone parsingに通さず表示する", () => {
+    expect(formatDate("2025-04-01")).toBe("2025年4月1日");
   });
 });
 
 describe("formatDateShort", () => {
   it("日付を月日形式でフォーマットする（年なし）", () => {
     const result = formatDateShort("2025-04-15");
-    expect(result).toMatch(/4/);
-    expect(result).toMatch(/15/);
-    expect(result).not.toMatch(/2025/);
+    expect(result).toBe("4月15日");
   });
 });
 

@@ -62,6 +62,9 @@ importers:
       '@mf-dashboard/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
+      '@mf-dashboard/date-utils':
+        specifier: workspace:*
+        version: link:../../packages/date-utils
       '@mf-dashboard/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -164,6 +167,9 @@ importers:
       '@base-ui/react':
         specifier: 1.5.0
         version: 1.5.0(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@mf-dashboard/date-utils':
+        specifier: workspace:*
+        version: link:../../packages/date-utils
       '@mf-dashboard/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -273,6 +279,9 @@ importers:
       '@ai-sdk/openai':
         specifier: 3.0.71
         version: 3.0.71(zod@4.4.3)
+      '@mf-dashboard/date-utils':
+        specifier: workspace:*
+        version: link:../date-utils
       '@mf-dashboard/db':
         specifier: workspace:*
         version: link:../db
@@ -293,11 +302,23 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@25.9.3)(@vitest/browser-playwright@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/date-utils:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@25.9.3)(@vitest/browser-playwright@4.1.9)(jsdom@29.1.1)(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/db:
     dependencies:
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4
+      '@mf-dashboard/date-utils':
+        specifier: workspace:*
+        version: link:../date-utils
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.6.2)

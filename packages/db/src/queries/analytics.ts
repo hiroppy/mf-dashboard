@@ -1,3 +1,9 @@
+import {
+  addMonthsToIsoDateKey,
+  getJstTodayIsoDate,
+  getJstYearMonthKey,
+  parseIsoDateKey,
+} from "@mf-dashboard/date-utils";
 import { desc, eq } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import {
@@ -107,9 +113,7 @@ const ANALYSIS_MONTHS = 12;
 // ============================================================================
 
 function getDateThreshold(): string {
-  const date = new Date();
-  date.setMonth(date.getMonth() - ANALYSIS_MONTHS);
-  return date.toISOString().split("T")[0];
+  return addMonthsToIsoDateKey(getJstTodayIsoDate(), -ANALYSIS_MONTHS);
 }
 
 interface CollectedData {
@@ -171,7 +175,7 @@ async function collectData(groupId: string, db: Db): Promise<CollectedData> {
       amount: h.amount ?? 0,
     }));
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = getJstYearMonthKey();
   const transactions = transactionsRaw
     .filter((t) => !t.isExcludedFromCalculation && t.date >= dateThreshold)
     .filter((t) => t.date.slice(0, 7) !== currentMonth)
@@ -396,11 +400,9 @@ function calculateGrowth(data: CollectedData): AnalyticsMetrics["growth"] {
     };
   }
 
-  const startDate = new Date(first.date);
-  const endDate = new Date(last.date);
-  const monthsDiff =
-    (endDate.getFullYear() - startDate.getFullYear()) * 12 +
-    (endDate.getMonth() - startDate.getMonth());
+  const startDate = parseIsoDateKey(first.date);
+  const endDate = parseIsoDateKey(last.date);
+  const monthsDiff = (endDate.year - startDate.year) * 12 + (endDate.month - startDate.month);
 
   if (monthsDiff <= 0) {
     return {

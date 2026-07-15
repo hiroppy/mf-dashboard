@@ -1,3 +1,4 @@
+import { formatIsoDateKey, getDaysInMonth, getJstDateParts } from "@mf-dashboard/date-utils";
 import { eq, type SQL } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Db } from "./index";
@@ -131,32 +132,32 @@ export function convertToIsoDate(dateStr: string, currentYear?: number): string 
     return dateStr;
   }
 
-  const year = currentYear || new Date().getFullYear();
+  const year = currentYear ?? getJstDateParts().year;
 
   // "2021-12月末" or "2022-01月末" パターン
   const monthEndMatch = dateStr.match(/^(\d{4})-(\d{1,2})月末$/);
   if (monthEndMatch) {
     const y = parseInt(monthEndMatch[1], 10);
     const m = parseInt(monthEndMatch[2], 10);
-    const lastDay = new Date(y, m, 0).getDate();
-    return `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    return formatIsoDateKey({ year: y, month: m, day: getDaysInMonth(y, m) });
   }
 
   // "01/22(木)" パターン
   const dateOnlyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})/);
   if (dateOnlyMatch) {
-    const month = dateOnlyMatch[1].padStart(2, "0");
-    const day = dateOnlyMatch[2].padStart(2, "0");
+    const month = Number(dateOnlyMatch[1]);
+    const day = Number(dateOnlyMatch[2]);
+    const isoDate = formatIsoDateKey({ year, month, day });
 
     // 時刻が含まれている場合 "01/25 08:51"
     const timeMatch = dateStr.match(/(\d{1,2}):(\d{2})/);
     if (timeMatch) {
       const hour = timeMatch[1].padStart(2, "0");
       const minute = timeMatch[2].padStart(2, "0");
-      return `${year}-${month}-${day}T${hour}:${minute}:00`;
+      return `${isoDate}T${hour}:${minute}:00`;
     }
 
-    return `${year}-${month}-${day}`;
+    return isoDate;
   }
 
   return dateStr;

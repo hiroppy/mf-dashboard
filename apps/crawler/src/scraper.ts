@@ -1,3 +1,4 @@
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { Group, ScrapedData } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
 import { log, warn, section } from "./logger.js";
@@ -245,8 +246,7 @@ export async function scrape(page: Page, options: ScrapeOptions = {}): Promise<S
   const registeredAccounts = await getRegisteredAccounts(page);
   const spendingTargets = await getSpendingTargets(page).catch(() => null);
 
-  const now = new Date();
-  const updatedAt = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const updatedAt = formatJstDateTimeForDisplay();
 
   return {
     summary,

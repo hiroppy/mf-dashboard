@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@libsql/client": "catalog:",
+    "@mf-dashboard/date-utils": "workspace:*",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
