@@ -38,9 +38,11 @@ test.describe("App flows", () => {
     ] as const;
 
     for (const { link, path, heading } of destinations) {
-      await navigateFromMenu(page, link);
-      await expectLocation(page, path);
-      await expectHeading(page, heading);
+      await test.step(`Navigate to ${heading}`, async () => {
+        await navigateFromMenu(page, link);
+        await expectLocation(page, path);
+        await expectHeading(page, heading);
+      });
     }
   });
 
