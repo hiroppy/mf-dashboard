@@ -224,7 +224,15 @@ for (const ic of instCategories) {
 // ---------------------------------------------------------------------------
 // 3. 資産カテゴリ
 // ---------------------------------------------------------------------------
-const assetCats = ["預金・現金・暗号資産", "株式(現物)", "投資信託", "年金", "ポイント・マイル"];
+const assetCats = [
+  "預金・現金",
+  "暗号資産",
+  "電子マネー・プリペイド",
+  "株式(現物)",
+  "投資信託",
+  "年金",
+  "ポイント",
+];
 
 const assetCatIds: Record<string, number> = {};
 for (const name of assetCats) {
@@ -435,21 +443,21 @@ const holdingDefs: HoldingDef[] = [
     accountName: "三井住友銀行",
     name: "普通預金",
     type: "asset",
-    assetCategory: "預金・現金・暗号資産",
+    assetCategory: "預金・現金",
     amount: 852481,
   },
   {
     accountName: "楽天銀行",
     name: "普通預金",
     type: "asset",
-    assetCategory: "預金・現金・暗号資産",
+    assetCategory: "預金・現金",
     amount: 623718,
   },
   {
     accountName: "住信SBIネット銀行",
     name: "SBIハイブリッド預金",
     type: "asset",
-    assetCategory: "預金・現金・暗号資産",
+    assetCategory: "預金・現金",
     amount: 347592,
   },
   // ---- 貯蓄用口座（グループ選択なしのみに所属） ----
@@ -457,7 +465,7 @@ const holdingDefs: HoldingDef[] = [
     accountName: "ゆうちょ銀行（貯蓄用）",
     name: "通常貯金",
     type: "asset",
-    assetCategory: "預金・現金・暗号資産",
+    assetCategory: "預金・現金",
     amount: 487293, // 貯蓄用の残高
   },
 
@@ -566,7 +574,7 @@ const holdingDefs: HoldingDef[] = [
     accountName: "Suica",
     name: "Suica残高",
     type: "asset",
-    assetCategory: "預金・現金・暗号資産",
+    assetCategory: "電子マネー・プリペイド",
     amount: 3842,
   },
 
@@ -575,7 +583,7 @@ const holdingDefs: HoldingDef[] = [
     accountName: "楽天ポイント",
     name: "楽天ポイント残高",
     type: "asset",
-    assetCategory: "ポイント・マイル",
+    assetCategory: "ポイント",
     amount: 15237,
   },
 
@@ -1707,6 +1715,7 @@ const dailyAssetData = generateDailyAssetData(GROUP_ID, totalAssets);
 //   - 年金:     月2からiDeCo積立 (0→最終 ¥350,000)
 //   - ポイント:  月1から少額蓄積 (0→最終 ¥15,480)
 //   - 預金・現金: total - 他カテゴリ合計 (残り全部)
+//   - 電子マネー: 少額残高を別カテゴリとして保持
 const TOTAL_DAYS = dailyAssetData.length;
 
 // 最終日のカテゴリ別目標額
@@ -1714,6 +1723,8 @@ const FINAL_FUND = 1999859; // 1,049,966 + 580,372 + 369,521
 const FINAL_STOCK = 703040; // 281,400 + 258,700 + 162,940
 const FINAL_PENSION = 350038;
 const FINAL_POINT = 15237;
+const FINAL_PREPAID = 3842;
+const FINAL_CRYPTO = 0;
 
 // 各カテゴリの「開始日インデックス」を月から算出
 // 月idx: 0=2025-02, 1=2025-03, ..., 11=2026-01
@@ -1774,7 +1785,14 @@ function stockAmount(dayIdx: number): number {
 }
 
 // 預金・現金の最終目標額 (holdings から)
-const FINAL_DEPOSIT = totalAssets - FINAL_FUND - FINAL_STOCK - FINAL_PENSION - FINAL_POINT;
+const FINAL_DEPOSIT =
+  totalAssets -
+  FINAL_FUND -
+  FINAL_STOCK -
+  FINAL_PENSION -
+  FINAL_POINT -
+  FINAL_PREPAID -
+  FINAL_CRYPTO;
 
 // 各グループの最終資産額を計算
 const groupFinalAssets: Record<string, number> = {};
@@ -1792,12 +1810,16 @@ const INVESTMENT_FINAL_PENSION = FINAL_PENSION;
 const LIVING_DEPOSITS = holdingDefs
   .filter((h) => {
     if (h.type !== "asset") return false;
-    if (h.assetCategory !== "預金・現金・暗号資産") return false;
+    if (h.assetCategory !== "預金・現金" && h.assetCategory !== "電子マネー・プリペイド")
+      return false;
     const cat = accountCategoryMap[h.accountName];
     return livingCategories.has(cat);
   })
   .reduce((s, h) => s + h.amount, 0);
-const LIVING_FINAL_DEPOSIT = LIVING_DEPOSITS; // ゆうちょ銀行を除く
+const LIVING_FINAL_PREPAID = holdingDefs
+  .filter((h) => h.type === "asset" && h.assetCategory === "電子マネー・プリペイド")
+  .reduce((s, h) => s + h.amount, 0);
+const LIVING_FINAL_DEPOSIT = LIVING_DEPOSITS - LIVING_FINAL_PREPAID; // ゆうちょ銀行を除く
 const LIVING_FINAL_POINT = FINAL_POINT;
 
 await db.transaction(async (tx) => {
@@ -1830,31 +1852,49 @@ await db.transaction(async (tx) => {
       // グループに応じてカテゴリを計算・挿入
       if (groupId === GROUP_ID) {
         // グループ選択なし: 全カテゴリ
-        let fund: number, stock: number, pension: number, point: number, deposit: number;
+        let fund: number,
+          stock: number,
+          pension: number,
+          point: number,
+          prepaid: number,
+          deposit: number;
         if (i === lastIdx) {
           fund = FINAL_FUND;
           stock = FINAL_STOCK;
           pension = FINAL_PENSION;
           point = FINAL_POINT;
+          prepaid = FINAL_PREPAID;
           deposit = FINAL_DEPOSIT;
         } else {
           fund = categoryAmount(i, FINAL_FUND, fundStartDay);
           stock = stockAmount(i);
           pension = categoryAmount(i, FINAL_PENSION, pensionStartDay);
           point = categoryAmount(i, FINAL_POINT, pointStartDay);
-          deposit = Math.max(0, total - fund - stock - pension - point);
+          prepaid = categoryAmount(i, FINAL_PREPAID, pointStartDay);
+          deposit = Math.max(0, total - fund - stock - pension - point - prepaid);
         }
 
         await tx
           .insert(schema.assetHistoryCategories)
           .values({
             assetHistoryId: ahId,
-            categoryName: "預金・現金・暗号資産",
+            categoryName: "預金・現金",
             amount: deposit,
             createdAt: ts,
             updatedAt: ts,
           })
           .run();
+        if (prepaid > 0)
+          await tx
+            .insert(schema.assetHistoryCategories)
+            .values({
+              assetHistoryId: ahId,
+              categoryName: "電子マネー・プリペイド",
+              amount: prepaid,
+              createdAt: ts,
+              updatedAt: ts,
+            })
+            .run();
         if (fund > 0)
           await tx
             .insert(schema.assetHistoryCategories)
@@ -1893,7 +1933,7 @@ await db.transaction(async (tx) => {
             .insert(schema.assetHistoryCategories)
             .values({
               assetHistoryId: ahId,
-              categoryName: "ポイント・マイル",
+              categoryName: "ポイント",
               amount: point,
               createdAt: ts,
               updatedAt: ts,
@@ -1947,31 +1987,44 @@ await db.transaction(async (tx) => {
             .run();
       } else if (groupId === GROUP_ID_LIVING) {
         // 生活グループ: 預金・現金、ポイント
-        let deposit: number, point: number;
+        let deposit: number, prepaid: number, point: number;
         if (i === lastIdx) {
           deposit = LIVING_FINAL_DEPOSIT;
+          prepaid = LIVING_FINAL_PREPAID;
           point = LIVING_FINAL_POINT;
         } else {
+          prepaid = categoryAmount(i, LIVING_FINAL_PREPAID, pointStartDay);
           point = categoryAmount(i, LIVING_FINAL_POINT, pointStartDay);
-          deposit = Math.max(0, total - point);
+          deposit = Math.max(0, total - prepaid - point);
         }
 
         await tx
           .insert(schema.assetHistoryCategories)
           .values({
             assetHistoryId: ahId,
-            categoryName: "預金・現金・暗号資産",
+            categoryName: "預金・現金",
             amount: deposit,
             createdAt: ts,
             updatedAt: ts,
           })
           .run();
+        if (prepaid > 0)
+          await tx
+            .insert(schema.assetHistoryCategories)
+            .values({
+              assetHistoryId: ahId,
+              categoryName: "電子マネー・プリペイド",
+              amount: prepaid,
+              createdAt: ts,
+              updatedAt: ts,
+            })
+            .run();
         if (point > 0)
           await tx
             .insert(schema.assetHistoryCategories)
             .values({
               assetHistoryId: ahId,
-              categoryName: "ポイント・マイル",
+              categoryName: "ポイント",
               amount: point,
               createdAt: ts,
               updatedAt: ts,

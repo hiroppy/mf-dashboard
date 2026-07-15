@@ -80,7 +80,18 @@ export interface AnalyticsReport {
 // 定数
 // ============================================================================
 
-const LIQUID_ASSET_CATEGORIES = ["預金・現金・暗号資産", "電子マネー・プリペイド"];
+const LIQUID_ASSET_CATEGORIES = new Set([
+  // Legacy Money Forward label used before deposits and crypto were split.
+  "預金・現金・暗号資産",
+  // Current Money Forward labels.
+  "預金・現金",
+  "暗号資産",
+  "電子マネー・プリペイド",
+]);
+
+export function isLiquidAssetCategory(category: string): boolean {
+  return LIQUID_ASSET_CATEGORIES.has(category.trim());
+}
 const INVESTMENT_CATEGORIES = [
   "株式(現物)",
   "投資信託",
@@ -139,7 +150,7 @@ async function collectData(groupId: string, db: Db): Promise<CollectedData> {
   const categoryBreakdown = await getAssetBreakdownByCategory(groupId, db);
 
   const liquidAssets = categoryBreakdown
-    .filter((c) => LIQUID_ASSET_CATEGORIES.some((lc) => c.category.includes(lc)))
+    .filter((c) => isLiquidAssetCategory(c.category))
     .reduce((sum, c) => sum + c.amount, 0);
 
   const holdings = holdingsRaw

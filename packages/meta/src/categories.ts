@@ -35,11 +35,15 @@ export const EXPENSE_LARGE_CATEGORIES = [
 /** 資産カテゴリ名 */
 export const ASSET_CATEGORIES = [
   "預金・現金・暗号資産",
+  "預金・現金",
+  "暗号資産",
+  "電子マネー・プリペイド",
   "株式(現物)",
   "投資信託",
   "保険",
   "年金",
   "ポイント・マイル",
+  "ポイント",
 ] as const;
 
 /** 全大項目（収入+支出） */

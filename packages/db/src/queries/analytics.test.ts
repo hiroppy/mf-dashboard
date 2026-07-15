@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AnalyticsMetrics } from "./analytics";
-import { calculateHealthScore } from "./analytics";
+import { calculateHealthScore, isLiquidAssetCategory } from "./analytics";
 
 type FullMetrics = Omit<AnalyticsMetrics, "healthScore">;
 
@@ -197,5 +197,23 @@ describe("calculateHealthScore", () => {
 
     expect(getGrowth(negGrowth)).toBeLessThan(getGrowth(zeroGrowth));
     expect(getGrowth(zeroGrowth)).toBe(Math.round(15 / 2));
+  });
+});
+
+describe("isLiquidAssetCategory", () => {
+  it("matches current Money Forward split liquid asset categories", () => {
+    expect(isLiquidAssetCategory("預金・現金")).toBe(true);
+    expect(isLiquidAssetCategory("暗号資産")).toBe(true);
+    expect(isLiquidAssetCategory("電子マネー・プリペイド")).toBe(true);
+  });
+
+  it("keeps compatibility with the legacy combined liquid asset category", () => {
+    expect(isLiquidAssetCategory("預金・現金・暗号資産")).toBe(true);
+  });
+
+  it("does not classify non-liquid asset categories as liquid", () => {
+    expect(isLiquidAssetCategory("投資信託")).toBe(false);
+    expect(isLiquidAssetCategory("株式(現物)")).toBe(false);
+    expect(isLiquidAssetCategory("暗号資産・FX・貴金属")).toBe(false);
   });
 });

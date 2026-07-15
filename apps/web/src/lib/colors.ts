@@ -2,11 +2,15 @@ import type { CategoryName } from "@mf-dashboard/meta/categories";
 
 const CATEGORY_VAR_MAP: Record<CategoryName, string> = {
   "預金・現金・暗号資産": "--color-asset-deposit",
+  "預金・現金": "--color-asset-deposit",
+  暗号資産: "--color-asset-crypto",
+  "電子マネー・プリペイド": "--color-asset-prepaid",
   "株式(現物)": "--color-asset-stock",
   投資信託: "--color-asset-fund",
   保険: "--color-asset-insurance",
   年金: "--color-asset-pension",
   "ポイント・マイル": "--color-asset-point",
+  ポイント: "--color-asset-point",
   "現金・カード": "--color-cat-cash-card",
   住宅: "--color-cat-housing",
   "水道・光熱費": "--color-cat-utility",

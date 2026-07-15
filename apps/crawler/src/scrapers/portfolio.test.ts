@@ -18,6 +18,12 @@ describe("identifyTableTypeFromTitle", () => {
     expect(identifyTableTypeFromTitle("預金・現金・暗号資産")).toBe("預金・現金・暗号資産");
   });
 
+  test("現在の分離済み流動資産カテゴリはそのまま返す", () => {
+    expect(identifyTableTypeFromTitle("預金・現金")).toBe("預金・現金");
+    expect(identifyTableTypeFromTitle("暗号資産")).toBe("暗号資産");
+    expect(identifyTableTypeFromTitle("電子マネー・プリペイド")).toBe("電子マネー・プリペイド");
+  });
+
   test("「株式(現物)」はそのまま返す", () => {
     expect(identifyTableTypeFromTitle("株式(現物)")).toBe("株式(現物)");
   });
@@ -29,7 +35,6 @@ describe("identifyTableTypeFromTitle", () => {
   test("不明なタイトルは「不明」を返す", () => {
     expect(identifyTableTypeFromTitle("")).toBe("不明");
     expect(identifyTableTypeFromTitle("不明なカテゴリ")).toBe("不明");
-    expect(identifyTableTypeFromTitle("ポイント")).toBe("不明"); // "ポイント・マイル"ではない
   });
 });
 

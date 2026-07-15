@@ -29,7 +29,7 @@ export function InsightsSavingsCard({ metrics, insights }: InsightsSavingsCardPr
           <div>
             <MetricLabel
               title="流動資産"
-              description="預金・現金・暗号資産、電子マネー・プリペイドなど、すぐに現金化できる資産の合計です。"
+              description="預金・現金、暗号資産、電子マネー・プリペイドなど、すぐに現金化できる資産の合計です。"
             />
             <div className="text-xl font-semibold">
               {formatCurrency(metrics.savings.liquidAssets)}

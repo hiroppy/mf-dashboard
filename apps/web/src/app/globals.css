@@ -55,6 +55,8 @@
 
   /* === Asset category colors === */
   --color-asset-deposit: #0e7490; /* 本家: #2881d7 */
+  --color-asset-crypto: #7c3aed;
+  --color-asset-prepaid: #0f766e;
   --color-asset-stock: #dd3121; /* 本家: #df3727 */
   --color-asset-fund: #c45505; /* 本家: #fcad4c */
   --color-asset-insurance: #be185d; /* 本家: #ff689a */

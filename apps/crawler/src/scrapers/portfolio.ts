@@ -6,7 +6,7 @@ import { debug } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 
 // Asset category constant for points (used for category check in parsing)
-const POINT = ASSET_CATEGORIES[5]; // "ポイント・マイル"
+const POINT = "ポイント・マイル";
 const UNKNOWN_CATEGORY = "不明";
 
 // Column indices for each table type
@@ -219,7 +219,7 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
 // Get category from section title (h1.heading-normal before the table)
 // Returns the title if it's a valid asset category, otherwise returns "不明"
 export function identifyTableTypeFromTitle(titleText: string): string {
-  // ASSET_CATEGORIES: ["預金・現金・暗号資産", "株式(現物)", "投資信託", "保険", "年金", "ポイント・マイル"]
+  // ASSET_CATEGORIES includes both legacy combined labels and current split labels.
   const validCategories = new Set(ASSET_CATEGORIES);
   if (validCategories.has(titleText as (typeof ASSET_CATEGORIES)[number])) {
     return titleText;
