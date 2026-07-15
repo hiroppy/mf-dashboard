@@ -2,8 +2,10 @@ import { describe, test, expect } from "vitest";
 import {
   identifyTableTypeFromTitle,
   isPointCategory,
+  parseDepositPortfolioItem,
   parseOptionalJapaneseNumber,
   parsePnsPortfolioItem,
+  resolveDepositTableCategory,
 } from "./portfolio.js";
 
 describe("identifyTableTypeFromTitle", () => {
@@ -41,6 +43,37 @@ describe("identifyTableTypeFromTitle", () => {
   test("不明なタイトルは「不明」を返す", () => {
     expect(identifyTableTypeFromTitle("")).toBe("不明");
     expect(identifyTableTypeFromTitle("不明なカテゴリ")).toBe("不明");
+  });
+});
+
+describe("resolveDepositTableCategory", () => {
+  test("現在の分離済み流動資産カテゴリを返す", () => {
+    expect(resolveDepositTableCategory("預金・現金")).toBe("預金・現金");
+    expect(resolveDepositTableCategory("暗号資産")).toBe("暗号資産");
+    expect(resolveDepositTableCategory("電子マネー・プリペイド")).toBe("電子マネー・プリペイド");
+  });
+
+  test("legacyカテゴリと未知のタイトルはlegacy預金カテゴリとして扱う", () => {
+    expect(resolveDepositTableCategory("預金・現金・暗号資産")).toBe("預金・現金・暗号資産");
+    expect(resolveDepositTableCategory("")).toBe("預金・現金・暗号資産");
+    expect(resolveDepositTableCategory("その他")).toBe("預金・現金・暗号資産");
+  });
+});
+
+describe("parseDepositPortfolioItem", () => {
+  test("section title由来のsplitカテゴリを保持する", () => {
+    const item = parseDepositPortfolioItem("暗号資産", "Crypto Asset A", "Institution A", "1,234");
+
+    expect(item).toEqual({
+      name: "Crypto Asset A",
+      type: "暗号資産",
+      institution: "Institution A",
+      balance: 1234,
+    });
+  });
+
+  test("名前が空の行は無視する", () => {
+    expect(parseDepositPortfolioItem("預金・現金", " ", "Institution A", "1,234")).toBeNull();
   });
 });
 

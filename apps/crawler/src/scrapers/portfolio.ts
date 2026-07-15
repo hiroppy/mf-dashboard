@@ -5,6 +5,13 @@ import type { Locator, Page } from "playwright";
 import { debug } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 
+const LEGACY_DEPOSIT_CATEGORY = "預金・現金・暗号資産";
+const DEPOSIT_TABLE_CATEGORIES = new Set([
+  LEGACY_DEPOSIT_CATEGORY,
+  "預金・現金",
+  "暗号資産",
+  "電子マネー・プリペイド",
+]);
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
 
@@ -71,28 +78,68 @@ async function getInstitutionFromCell(cells: Locator, index: number): Promise<st
   }
 }
 
+async function getPrecedingSectionTitle(table: Locator): Promise<string> {
+  return table.evaluate((el) => {
+    let prev = el.previousElementSibling;
+    while (prev) {
+      const h1 = prev.tagName === "H1" ? prev : prev.querySelector("h1.heading-normal");
+      if (h1) {
+        return h1.textContent?.trim() || "";
+      }
+      prev = prev.previousElementSibling;
+    }
+    return "";
+  });
+}
+
+export function resolveDepositTableCategory(titleText: string): string {
+  const category = titleText.trim();
+  return DEPOSIT_TABLE_CATEGORIES.has(category) ? category : LEGACY_DEPOSIT_CATEGORY;
+}
+
+export function parseDepositPortfolioItem(
+  category: string,
+  nameText: string,
+  institution: string,
+  balanceText: string,
+): PortfolioItem | null {
+  const name = nameText.trim();
+  if (!name) return null;
+
+  return {
+    name,
+    type: category,
+    institution,
+    balance: parseJapaneseNumber(balanceText),
+  };
+}
+
 // Parse deposits from .table-depo
 async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
-  const rows = page.locator("table.table-depo tbody tr");
-  const count = await rows.count();
+  const tables = page.locator("table.table-depo");
+  const tableCount = await tables.count();
   const items: PortfolioItem[] = [];
 
-  for (let i = 0; i < count; i++) {
-    const cells = rows.nth(i).locator("td");
-    // 並列取得
-    const [name, institution, balanceText] = await Promise.all([
-      getCellText(cells, DEPOSIT_COLUMNS.NAME),
-      getInstitutionFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
-      getCellText(cells, DEPOSIT_COLUMNS.BALANCE, "0"),
-    ]);
-    if (!name) continue;
+  for (let t = 0; t < tableCount; t++) {
+    const table = tables.nth(t);
+    const sectionTitle = await getPrecedingSectionTitle(table);
+    const category = resolveDepositTableCategory(sectionTitle);
+    debug(`  .table-depo[${t}] title: "${sectionTitle}" -> ${category}`);
 
-    items.push({
-      name,
-      type: "預金・現金・暗号資産",
-      institution,
-      balance: parseJapaneseNumber(balanceText),
-    });
+    const rows = table.locator("tbody tr");
+    const count = await rows.count();
+
+    for (let i = 0; i < count; i++) {
+      const cells = rows.nth(i).locator("td");
+      // 並列取得
+      const [name, institution, balanceText] = await Promise.all([
+        getCellText(cells, DEPOSIT_COLUMNS.NAME),
+        getInstitutionFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
+        getCellText(cells, DEPOSIT_COLUMNS.BALANCE, "0"),
+      ]);
+      const item = parseDepositPortfolioItem(category, name, institution, balanceText);
+      if (item) items.push(item);
+    }
   }
   return items;
 }
@@ -272,21 +319,7 @@ async function parseInsuranceAndPoints(page: Page): Promise<PortfolioItem[]> {
   for (let t = 0; t < tableCount; t++) {
     const table = tables.nth(t);
 
-    // Get section title from preceding h1.heading-normal element
-    const sectionTitle = await table.evaluate((el) => {
-      // Look for h1.heading-normal in preceding siblings
-      let prev = el.previousElementSibling;
-      while (prev) {
-        // Check if this element or its children contain h1.heading-normal
-        const h1 = prev.tagName === "H1" ? prev : prev.querySelector("h1.heading-normal");
-        if (h1) {
-          return h1.textContent?.trim() || "";
-        }
-        prev = prev.previousElementSibling;
-      }
-      return "";
-    });
-
+    const sectionTitle = await getPrecedingSectionTitle(table);
     const category = identifyTableTypeFromTitle(sectionTitle);
     debug(`  .table-pns[${t}] title: "${sectionTitle}" -> ${category}`);
 
