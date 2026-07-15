@@ -19,7 +19,6 @@ export function useMonteCarloSimulator(input: MonteCarloInput): [MonteCarloResul
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const isFirstRef = useRef(true);
   const immediateNextRef = useRef(false);
-  const inputJson = JSON.stringify(input);
 
   const requestImmediate = useCallback(() => {
     immediateNextRef.current = true;
@@ -41,8 +40,7 @@ export function useMonteCarloSimulator(input: MonteCarloInput): [MonteCarloResul
       }, DEBOUNCE_MS);
     }
     return () => clearTimeout(timerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputJson]);
+  }, [input]);
 
   return [result, requestImmediate];
 }
