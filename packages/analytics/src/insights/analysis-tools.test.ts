@@ -1,22 +1,24 @@
 import { describe, it, expect, vi } from "vitest";
 import { createAnalysisTools } from "./analysis-tools";
 
+type AnyMock = (...args: any[]) => any;
+
 // Fix time to 2025-03-15 so that "2025-03" is the current month and test data (2025-01, 2025-02) passes through
 vi.useFakeTimers({ now: new Date("2025-03-15T12:00:00Z") });
 
 vi.mock("@mf-dashboard/db", () => ({
-  getMonthlySummaries: vi.fn(() => [
+  getMonthlySummaries: vi.fn<AnyMock>(() => [
     { month: "2025-02", totalIncome: 310000, totalExpense: 210000, netIncome: 100000 },
     { month: "2025-01", totalIncome: 300000, totalExpense: 200000, netIncome: 100000 },
   ]),
-  getMonthlyCategoryTotals: vi.fn(() => [
+  getMonthlyCategoryTotals: vi.fn<AnyMock>(() => [
     { month: "2025-02", category: "食費", type: "expense", totalAmount: 50000 },
   ]),
-  getHoldingsWithLatestValues: vi.fn(() => [
+  getHoldingsWithLatestValues: vi.fn<AnyMock>(() => [
     { name: "Stock A", amount: 500000, unrealizedGain: 50000, unrealizedGainPct: 10 },
   ]),
-  getHoldingsWithDailyChange: vi.fn(() => [{ name: "Stock A", dailyChange: -5000 }]),
-  getFinancialMetrics: vi.fn(() => ({
+  getHoldingsWithDailyChange: vi.fn<AnyMock>(() => [{ name: "Stock A", dailyChange: -5000 }]),
+  getFinancialMetrics: vi.fn<AnyMock>(() => ({
     savings: {
       totalAssets: 5000000,
       liquidAssets: 2000000,
@@ -25,27 +27,27 @@ vi.mock("@mf-dashboard/db", () => ({
     },
     investment: { diversificationScore: 50 },
   })),
-  getAvailableMonths: vi.fn(() => [{ month: "2025-02" }, { month: "2025-01" }]),
+  getAvailableMonths: vi.fn<AnyMock>(() => [{ month: "2025-02" }, { month: "2025-01" }]),
 }));
 
 vi.mock("./analyze-mom-trend.js", () => ({
-  analyzeMoMTrend: vi.fn(() => ({ overallTrend: "stable" })),
+  analyzeMoMTrend: vi.fn<AnyMock>(() => ({ overallTrend: "stable" })),
 }));
 
 vi.mock("./analyze-spending-comparison.js", () => ({
-  analyzeSpendingComparison: vi.fn(() => ({ categories: [], newCategories: [] })),
+  analyzeSpendingComparison: vi.fn<AnyMock>(() => ({ categories: [], newCategories: [] })),
 }));
 
 vi.mock("./analyze-portfolio-risk.js", () => ({
-  analyzePortfolioRisk: vi.fn(() => ({ riskLevel: "low" })),
+  analyzePortfolioRisk: vi.fn<AnyMock>(() => ({ riskLevel: "low" })),
 }));
 
 vi.mock("./analyze-savings-trajectory.js", () => ({
-  analyzeSavingsTrajectory: vi.fn(() => ({ direction: "stable" })),
+  analyzeSavingsTrajectory: vi.fn<AnyMock>(() => ({ direction: "stable" })),
 }));
 
 vi.mock("./analyze-income-stability.js", () => ({
-  analyzeIncomeStability: vi.fn(() => ({ stability: "stable" })),
+  analyzeIncomeStability: vi.fn<AnyMock>(() => ({ stability: "stable" })),
 }));
 
 const {

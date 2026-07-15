@@ -16,6 +16,7 @@
     "test:e2e:web": "turbo test:e2e --filter=@mf-dashboard/web",
     "test:e2e:crawler": "turbo test:e2e --filter=@mf-dashboard/crawler",
     "test:e2e:real": "pnpm --filter @mf-dashboard/db-e2e test",
+    "test:storybook": "pnpm --filter @mf-dashboard/web test:storybook",
     "typecheck": "turbo typecheck",
     "lint": "oxlint --type-aware --fix",
     "format": "oxfmt",

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mockSaveAnalyticsReport = vi.fn();
-const mockGenerateInsights = vi.fn();
-const mockIsLLMEnabled = vi.fn();
+type AnyMock = (...args: any[]) => any;
+
+const mockSaveAnalyticsReport = vi.fn<AnyMock>();
+const mockGenerateInsights = vi.fn<AnyMock>();
+const mockIsLLMEnabled = vi.fn<AnyMock>();
 
 vi.mock("@mf-dashboard/db/repository/analytics", () => ({
   saveAnalyticsReport: (...args: any[]) => mockSaveAnalyticsReport(...args),

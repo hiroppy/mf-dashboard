@@ -22,7 +22,7 @@ const DEBUG_DIR = path.join(__dirname, "..", "debug");
 
 const MONTHS_TO_SCRAPE = 5;
 
-describe.skip("Transaction比較: スクレイピング vs DB", () => {
+describe.skipIf(!hasAuthState())("Transaction比較: スクレイピング vs DB", () => {
   let browser: Browser;
   let context: BrowserContext;
   let page: Page;

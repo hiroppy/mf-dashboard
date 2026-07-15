@@ -1,26 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mockGenerateText = vi.fn();
+type AnyMock = (...args: any[]) => any;
+
+const mockGenerateText = vi.fn<AnyMock>();
 
 vi.mock("ai", () => ({
   generateText: (...args: any[]) => mockGenerateText(...args),
   Output: {
-    object: vi.fn(({ schema }: any) => ({ type: "object", schema })),
+    object: vi.fn<AnyMock>(({ schema }: any) => ({ type: "object", schema })),
   },
-  stepCountIs: vi.fn((n: number) => ({ type: "stepCount", count: n })),
-  tool: vi.fn((def: any) => def),
+  stepCountIs: vi.fn<AnyMock>((n: number) => ({ type: "stepCount", count: n })),
+  tool: vi.fn<AnyMock>((def: any) => def),
 }));
 
 vi.mock("../config.js", () => ({
-  getModel: vi.fn(() => "mock-model"),
+  getModel: vi.fn<AnyMock>(() => "mock-model"),
 }));
 
 vi.mock("./tools.js", () => ({
-  createFinancialTools: vi.fn(() => ({ dbTool1: {}, dbTool2: {} })),
+  createFinancialTools: vi.fn<AnyMock>(() => ({ dbTool1: {}, dbTool2: {} })),
 }));
 
 vi.mock("./analysis-tools.js", () => ({
-  createAnalysisTools: vi.fn(() => ({ analysisTool1: {}, analysisTool2: {} })),
+  createAnalysisTools: vi.fn<AnyMock>(() => ({ analysisTool1: {}, analysisTool2: {} })),
 }));
 
 const { generateInsights } = await import("./generator");

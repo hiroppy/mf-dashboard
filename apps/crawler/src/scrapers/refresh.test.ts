@@ -324,12 +324,12 @@ describe("refresh - 更新中セレクタ", () => {
   });
 
   test("accountsページへの遷移がERR_ABORTEDでも1回だけ再試行する", async () => {
-    const goto = vi.fn().mockImplementationOnce(() => {
+    const goto = vi.fn<(...args: any[]) => any>().mockImplementationOnce(() => {
       throw new Error("page.goto: net::ERR_ABORTED at https://moneyforward.com/accounts");
     });
-    const waitForLoadState = vi.fn().mockResolvedValue(undefined);
-    const waitForTimeout = vi.fn().mockResolvedValue(undefined);
-    const isClosed = vi.fn().mockReturnValue(false);
+    const waitForLoadState = vi.fn<(...args: any[]) => any>().mockResolvedValue(undefined);
+    const waitForTimeout = vi.fn<(...args: any[]) => any>().mockResolvedValue(undefined);
+    const isClosed = vi.fn<(...args: any[]) => any>().mockReturnValue(false);
 
     const retryPage = {
       goto,
