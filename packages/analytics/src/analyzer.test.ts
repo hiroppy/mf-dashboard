@@ -82,7 +82,7 @@ describe("analyzeFinancialData", () => {
   });
 
   it("should save report with JST date across UTC day boundary", async () => {
-    vi.setSystemTime(new Date("2025-03-31T15:00:00.000Z"));
+    vi.useFakeTimers({ now: new Date("2025-03-31T15:00:00.000Z") });
     mockIsLLMEnabled.mockReturnValue(true);
     const insights = {
       summary: "summary",

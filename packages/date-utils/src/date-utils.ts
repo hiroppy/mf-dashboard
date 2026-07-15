@@ -35,18 +35,31 @@ function assertInteger(value: number, name: string): void {
 function assertYearMonth(parts: YearMonthParts): void {
   assertInteger(parts.year, "year");
   assertInteger(parts.month, "month");
+  if (parts.year < 0 || parts.year > 9999) {
+    throw new Error(`Invalid year: ${parts.year}`);
+  }
   if (parts.month < 1 || parts.month > 12) {
     throw new Error(`Invalid month: ${parts.month}`);
   }
+}
+
+function padYear(value: number): string {
+  return String(value).padStart(4, "0");
 }
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+function createUtcDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
+}
+
 export function getDaysInMonth(year: number, month: number): number {
   assertYearMonth({ year, month });
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return createUtcDate(year, month, 0).getUTCDate();
 }
 
 export function formatIsoDateKey(parts: IsoDateParts): string {
@@ -58,12 +71,12 @@ export function formatIsoDateKey(parts: IsoDateParts): string {
     throw new Error(`Invalid day: ${parts.day}`);
   }
 
-  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+  return `${padYear(parts.year)}-${pad2(parts.month)}-${pad2(parts.day)}`;
 }
 
 export function formatYearMonthKey(parts: YearMonthParts): string {
   assertYearMonth(parts);
-  return `${parts.year}-${pad2(parts.month)}`;
+  return `${padYear(parts.year)}-${pad2(parts.month)}`;
 }
 
 export function parseIsoDateKey(dateKey: string): IsoDateParts {
@@ -115,13 +128,13 @@ export function getJstYearMonthKey(date: Date = new Date()): string {
 
 export function getDayOfWeekIsoDateKey(dateKey: string): number {
   const { year, month, day } = parseIsoDateKey(dateKey);
-  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return createUtcDate(year, month - 1, day).getUTCDay();
 }
 
 export function addDaysToIsoDateKey(dateKey: string, days: number): string {
   assertInteger(days, "days");
   const { year, month, day } = parseIsoDateKey(dateKey);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
+  const date = createUtcDate(year, month - 1, day + days);
   return formatIsoDateKey({
     year: date.getUTCFullYear(),
     month: date.getUTCMonth() + 1,
@@ -132,7 +145,7 @@ export function addDaysToIsoDateKey(dateKey: string, days: number): string {
 export function addMonthsToIsoDateKey(dateKey: string, months: number): string {
   assertInteger(months, "months");
   const { year, month, day } = parseIsoDateKey(dateKey);
-  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const target = createUtcDate(year, month - 1 + months, 1);
   const targetYear = target.getUTCFullYear();
   const targetMonth = target.getUTCMonth() + 1;
 
@@ -146,7 +159,7 @@ export function addMonthsToIsoDateKey(dateKey: string, months: number): string {
 export function shiftYearMonthKey(monthKey: string, months: number): string {
   assertInteger(months, "months");
   const { year, month } = parseYearMonthKey(monthKey);
-  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const target = createUtcDate(year, month - 1 + months, 1);
 
   return formatYearMonthKey({
     year: target.getUTCFullYear(),
@@ -162,7 +175,8 @@ export function getEndOfMonthIsoDateKey(parts: YearMonthParts): string {
 }
 
 export function getEndOfPreviousMonthIsoDateKey(dateKey: string): string {
-  const previousMonth = shiftYearMonthKey(dateKey.slice(0, 7), -1);
+  const { year, month } = parseIsoDateKey(dateKey);
+  const previousMonth = shiftYearMonthKey(formatYearMonthKey({ year, month }), -1);
   return getEndOfMonthIsoDateKey(parseYearMonthKey(previousMonth));
 }
 

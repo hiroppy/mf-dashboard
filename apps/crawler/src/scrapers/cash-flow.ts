@@ -1,4 +1,4 @@
-import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
+import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
@@ -63,7 +63,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
 
   debug(`Detected month: ${month}`);
 
-  const currentYear = getJstDateParts().year;
+  const currentYear = parseInt(month.substring(0, 4), 10);
 
   // Parse detail items
   const detailRows = page.locator("#cf-detail-table tbody tr[id^='js-transaction-']");
