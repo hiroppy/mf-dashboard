@@ -209,6 +209,72 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   });
 
   describe("資産整合性", () => {
+    test("暗号資産アカウントと保有資産が存在する", async () => {
+      const cryptoAccounts = await db
+        .select({ id: schema.accounts.id, name: schema.accounts.name })
+        .from(schema.accounts)
+        .innerJoin(
+          schema.institutionCategories,
+          eq(schema.accounts.categoryId, schema.institutionCategories.id),
+        )
+        .where(eq(schema.institutionCategories.name, "暗号資産・FX・貴金属"))
+        .all();
+
+      expect(cryptoAccounts.length).toBeGreaterThan(0);
+
+      const cryptoHoldings = await db
+        .select({
+          name: schema.holdings.name,
+          amount: schema.holdingValues.amount,
+        })
+        .from(schema.holdings)
+        .innerJoin(
+          schema.assetCategories,
+          eq(schema.holdings.categoryId, schema.assetCategories.id),
+        )
+        .innerJoin(schema.holdingValues, eq(schema.holdings.id, schema.holdingValues.holdingId))
+        .where(eq(schema.assetCategories.name, "暗号資産"))
+        .all();
+
+      expect(cryptoHoldings.length).toBeGreaterThan(0);
+      expect(cryptoHoldings.reduce((sum, h) => sum + h.amount, 0)).toBeGreaterThan(0);
+    });
+
+    test("最新の資産履歴に暗号資産カテゴリが含まれる", async () => {
+      const targetGroups = await db
+        .select()
+        .from(schema.groups)
+        .where(sql`${schema.groups.name} IN ('グループ選択なし', '投資')`)
+        .all();
+
+      expect(targetGroups).toHaveLength(2);
+
+      for (const group of targetGroups) {
+        const latestAssetHistory = await db
+          .select()
+          .from(schema.assetHistory)
+          .where(eq(schema.assetHistory.groupId, group.id))
+          .orderBy(sql`${schema.assetHistory.date} DESC`)
+          .limit(1)
+          .get();
+
+        expect(latestAssetHistory).toBeDefined();
+
+        const cryptoCategory = await db
+          .select()
+          .from(schema.assetHistoryCategories)
+          .where(
+            and(
+              eq(schema.assetHistoryCategories.assetHistoryId, latestAssetHistory!.id),
+              eq(schema.assetHistoryCategories.categoryName, "暗号資産"),
+            ),
+          )
+          .get();
+
+        expect(cryptoCategory?.amount).toBeGreaterThan(0);
+      }
+    });
+
     test("holdingValuesの合計がassetHistoryの最終日と一致する", async () => {
       const groups = await db.select().from(schema.groups).all();
 
