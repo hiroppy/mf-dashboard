@@ -1,3 +1,4 @@
+import { getJstDateParts } from "@mf-dashboard/date-utils";
 import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
@@ -71,8 +72,9 @@ async function parseAccountCell(
  * ページから表示中の月を検出する
  */
 async function detectMonth(page: Page): Promise<{ year: number; month: number }> {
-  let year = new Date().getFullYear();
-  let month = new Date().getMonth() + 1;
+  const today = getJstDateParts();
+  let year = today.year;
+  let month = today.month;
 
   // Try 1: fc-header-title (FullCalendar style)
   const headerTitle = await getOptionalText(page.locator(".fc-header-title h2"), SUMMARY_TIMEOUT);

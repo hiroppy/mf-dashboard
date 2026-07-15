@@ -1,3 +1,8 @@
+import {
+  getJstTodayIsoDate,
+  getJstYearMonthKey,
+  shiftYearMonthKey,
+} from "@mf-dashboard/date-utils";
 import type { Db } from "@mf-dashboard/db";
 import { generateText, Output, stepCountIs } from "ai";
 import { z } from "zod";
@@ -166,13 +171,10 @@ export async function generateInsights(db: Db, groupId: string): Promise<Analyti
   const allTools = { ...dbTools, ...analysisTools };
 
   // 日付情報を算出
-  const today = new Date().toISOString().slice(0, 10);
-  const currentMonth = today.slice(0, 7); // e.g. "2026-02"
-  const latestConfirmedDate = new Date();
-  latestConfirmedDate.setMonth(latestConfirmedDate.getMonth() - 1);
-  const latestConfirmedMonth = latestConfirmedDate.toISOString().slice(0, 7); // e.g. "2026-01"
-  latestConfirmedDate.setMonth(latestConfirmedDate.getMonth() - 1);
-  const previousMonth = latestConfirmedDate.toISOString().slice(0, 7); // e.g. "2025-12"
+  const today = getJstTodayIsoDate();
+  const currentMonth = getJstYearMonthKey(); // e.g. "2026-02"
+  const latestConfirmedMonth = shiftYearMonthKey(currentMonth, -1); // e.g. "2026-01"
+  const previousMonth = shiftYearMonthKey(currentMonth, -2); // e.g. "2025-12"
 
   const stage1System = STAGE1_SYSTEM_PROMPT.replaceAll("${today}", today)
     .replaceAll("${currentMonth}", currentMonth)

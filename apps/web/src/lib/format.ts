@@ -1,3 +1,9 @@
+import {
+  formatJstDateTimeForDisplay,
+  parseIsoDateKey,
+  parseYearMonthKey,
+} from "@mf-dashboard/date-utils";
+
 export function formatCurrency(amount: number, showPlusSign = false): string {
   const sign = showPlusSign && amount > 0 ? "+" : "";
   return `${sign}${amount.toLocaleString("ja-JP")}円`;
@@ -13,54 +19,46 @@ export function formatPercent(value: number, decimals: number = 1): string {
 }
 
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(date);
+  const { year, month, day } = parseIsoDateKey(dateStr);
+  return `${year}年${month}月${day}日`;
 }
 
 export function formatMonth(monthStr: string): string {
-  const [year, month] = monthStr.split("-");
-  return `${year}年${parseInt(month)}月`;
+  const { year, month } = parseYearMonthKey(monthStr);
+  return `${year}年${month}月`;
 }
 
 export function getShortMonth(monthStr: string): string {
-  const month = monthStr.split("-")[1];
-  return `${parseInt(month)}月`;
+  const { month } = parseYearMonthKey(monthStr);
+  return `${month}月`;
 }
 
 export function formatDateShort(dateStr: string): string {
-  const date = new Date(dateStr);
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "short",
-    day: "numeric",
-  }).format(date);
+  const { month, day } = parseIsoDateKey(dateStr);
+  return `${month}月${day}日`;
 }
 
 export function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+  return formatJstDateTimeForDisplay(new Date(dateStr), {
+    includeYear: false,
+    includeSeconds: false,
   });
 }
 
 export function formatLastUpdated(lastUpdated: string | null, includeYear = false): string | null {
   if (!lastUpdated) return null;
+
+  const localDateTime = lastUpdated.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (localDateTime) {
+    const [, year, month, day, hours, minutes] = localDateTime;
+    if (includeYear) {
+      return `${Number(year)}/${Number(month)}/${Number(day)} ${hours}:${minutes}`;
+    }
+    return `${Number(month)}/${Number(day)} ${hours}:${minutes}`;
+  }
+
   const date = new Date(lastUpdated);
   if (Number.isNaN(date.getTime())) return null;
 
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-
-  if (includeYear) {
-    return `${date.getFullYear()}/${month}/${day} ${hours}:${minutes}`;
-  }
-  return `${month}/${day} ${hours}:${minutes}`;
+  return formatJstDateTimeForDisplay(date, { includeYear, includeSeconds: false });
 }

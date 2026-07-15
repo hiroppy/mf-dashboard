@@ -1,3 +1,4 @@
+import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
@@ -57,13 +58,12 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
 
   // Fallback to local date
   if (!month) {
-    const now = new Date();
-    month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    month = getJstYearMonthKey();
   }
 
   debug(`Detected month: ${month}`);
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = parseInt(month.substring(0, 4), 10);
 
   // Parse detail items
   const detailRows = page.locator("#cf-detail-table tbody tr[id^='js-transaction-']");

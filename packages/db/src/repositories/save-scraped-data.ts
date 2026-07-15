@@ -1,3 +1,4 @@
+import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import type { Db } from "../index";
 import { schema } from "../index";
@@ -30,7 +31,7 @@ function log(...args: unknown[]) {
  * - group_accountsへのリンク
  */
 export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getJstTodayIsoDate();
 
   log("Saving scraped data to database...");
 

@@ -1,3 +1,4 @@
+import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq, and, like, sql, inArray, or, notInArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
@@ -465,8 +466,7 @@ export async function getMonthlySummaries(
   if (!oldestResult?.month) return [];
 
   // 最古の月から現在月までの全ての月を生成
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = getJstYearMonthKey();
   const allMonths = generateMonthRange(oldestResult.month, currentMonth);
 
   // 通常の収入/支出を集計
@@ -538,8 +538,7 @@ export async function getAvailableMonths(groupIdParam?: string, db: Db = getDb()
   if (!oldestResult?.month) return [];
 
   // Generate all months from oldest to current
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = getJstYearMonthKey();
 
   const months = generateMonthRange(oldestResult.month, currentMonth);
 
@@ -695,7 +694,7 @@ export async function getYearToDateSummary(
   db: Db = getDb(),
 ) {
   const groupId = await resolveGroupId(db, options?.groupId);
-  const targetYear = options?.year || new Date().getFullYear();
+  const targetYear = options?.year || getJstDateParts().year;
 
   if (!groupId) {
     return {

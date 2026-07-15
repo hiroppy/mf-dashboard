@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockGenerateText = vi.fn();
 
@@ -57,6 +57,10 @@ function mockStage2Result(output: any) {
 describe("generateInsights", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("should call createFinancialTools and createAnalysisTools with db and groupId", async () => {
@@ -129,6 +133,22 @@ describe("generateInsights", () => {
     const stage2Args = mockGenerateText.mock.calls[1][0];
     expect(stage2Args).toHaveProperty("output");
     expect(stage2Args).toHaveProperty("system");
+  });
+
+  it("should use JST date context across UTC year boundary", async () => {
+    vi.useFakeTimers({ now: new Date("2025-12-31T15:00:00.000Z") });
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(validOutput));
+
+    await generateInsights(mockDb, groupId);
+
+    const stage1Args = mockGenerateText.mock.calls[0][0];
+    expect(stage1Args.prompt).toContain("今日は2026-01-01です");
+    expect(stage1Args.system).toContain("今日は2026-01-01です");
+    expect(stage1Args.system).toContain("当月2026-01");
+    expect(stage1Args.system).toContain("最新の確定月は**2025-12**");
+    expect(stage1Args.system).toContain("2025-12は2025-11比");
   });
 
   it("should return structured insights from Stage 2 output", async () => {

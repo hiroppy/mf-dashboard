@@ -1,3 +1,9 @@
+import {
+  addDaysToIsoDateKey,
+  formatIsoDateKey,
+  getEndOfPreviousMonthIsoDateKey,
+  parseIsoDateKey,
+} from "@mf-dashboard/date-utils";
 import { desc, eq, sql, and } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId } from "../shared/group-filter";
@@ -7,15 +13,14 @@ import { getHoldingsWithLatestValues } from "./holding";
  * 日付文字列をパース
  */
 export function parseDateString(dateStr: string): { year: number; month: number; day: number } {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return { year, month, day };
+  return parseIsoDateKey(dateStr);
 }
 
 /**
  * 日付文字列を生成
  */
 export function toDateString(year: number, month: number, day: number): string {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return formatIsoDateKey({ year, month, day });
 }
 
 /**
@@ -25,20 +30,12 @@ export function calculateTargetDate(
   latestDate: string,
   period: "daily" | "weekly" | "monthly",
 ): string {
-  const { year, month, day } = parseDateString(latestDate);
-
   if (period === "monthly") {
-    const lastDayPrevMonth = new Date(year, month - 1, 0);
-    return toDateString(
-      lastDayPrevMonth.getFullYear(),
-      lastDayPrevMonth.getMonth() + 1,
-      lastDayPrevMonth.getDate(),
-    );
+    return getEndOfPreviousMonthIsoDateKey(latestDate);
   }
 
   const daysAgo = period === "daily" ? 1 : 8;
-  const targetDate = new Date(year, month - 1, day - daysAgo);
-  return toDateString(targetDate.getFullYear(), targetDate.getMonth() + 1, targetDate.getDate());
+  return addDaysToIsoDateKey(latestDate, -daysAgo);
 }
 
 /**

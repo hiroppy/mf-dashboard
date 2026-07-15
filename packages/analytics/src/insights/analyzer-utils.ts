@@ -1,3 +1,5 @@
+import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
+
 export function calcChangeRate(current: number, previous: number): number | null {
   if (previous === 0) return null;
   return ((current - previous) / Math.abs(previous)) * 100;
@@ -55,7 +57,7 @@ export function calcSavingsRate(income: number, expense: number): number {
 }
 
 export function getCurrentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  return getJstYearMonthKey();
 }
 
 export function excludeCurrentMonth<T extends { month: string }>(items: T[]): T[] {

@@ -1,8 +1,9 @@
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { ScrapedData } from "@mf-dashboard/db/types";
 import type { GlobalData, GroupData } from "./scraper.js";
 
 export function formatUpdatedAt(now = new Date()): string {
-  return now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  return formatJstDateTimeForDisplay(now);
 }
 
 /**

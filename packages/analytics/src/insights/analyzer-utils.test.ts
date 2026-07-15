@@ -25,6 +25,11 @@ describe("getCurrentMonth", () => {
     vi.useFakeTimers({ now: new Date("2025-03-01T00:00:00Z") });
     expect(getCurrentMonth()).toBe("2025-03");
   });
+
+  it("should use JST month across UTC month boundary", () => {
+    vi.useFakeTimers({ now: new Date("2025-03-31T15:00:00Z") });
+    expect(getCurrentMonth()).toBe("2025-04");
+  });
 });
 
 describe("excludeCurrentMonth", () => {
