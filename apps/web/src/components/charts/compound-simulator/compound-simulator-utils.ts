@@ -83,7 +83,7 @@ export function computeTotalWithdrawalAmount(
   return projections.filter((p) => p.isWithdrawing).reduce((sum, p) => sum + p.yearlyWithdrawal, 0);
 }
 
-interface FanChartDataPoint {
+export interface FanChartDataPoint {
   year: number;
   p10: number;
   p25: number;
