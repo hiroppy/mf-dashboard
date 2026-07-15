@@ -15,6 +15,7 @@ import { TransactionTable } from "../../../components/info/transaction-table/tra
 import { MonthSelector } from "../../../components/layout/month-selector";
 import { PageLayout } from "../../../components/layout/page-layout";
 import { formatMonth } from "../../../lib/format";
+import { formatCashFlowPageTitle } from "./page-title";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ month: "_" }];
@@ -26,7 +27,7 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/cf/[month]">): Promise<Metadata> {
   const { month } = await params;
   return {
-    title: `収支 - ${formatMonth(month)}`,
+    title: formatCashFlowPageTitle(month),
   };
 }
 
