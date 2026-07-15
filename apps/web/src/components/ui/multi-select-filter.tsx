@@ -80,16 +80,13 @@ export function MultiSelectFilter({
             </Button>
           </div>
           <div className="p-1">
-            {options.map((option, index) => {
-              const optionId = `multi-select-${label}-${index}`;
+            {options.map((option) => {
               return (
                 <label
-                  htmlFor={optionId}
                   key={option}
                   className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-within:bg-accent focus-within:text-accent-foreground"
                 >
                   <Checkbox
-                    id={optionId}
                     checked={selected.includes(option)}
                     onCheckedChange={() => handleToggle(option)}
                     className="mr-2"
