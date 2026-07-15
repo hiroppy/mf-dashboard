@@ -2,13 +2,19 @@ import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { ScrapedData } from "@mf-dashboard/db/types";
 import type { GlobalData, GroupData } from "./scraper.js";
 
+export function formatUpdatedAt(now = new Date()): string {
+  return formatJstDateTimeForDisplay(now);
+}
+
 /**
  * GlobalData + GroupData から ScrapedData を構築
  * 「グループ選択なし」の全データ保存用
  */
-export function buildScrapedData(globalData: GlobalData, groupData: GroupData): ScrapedData {
-  const updatedAt = formatJstDateTimeForDisplay();
-
+export function buildScrapedData(
+  globalData: GlobalData,
+  groupData: GroupData,
+  updatedAt = formatUpdatedAt(),
+): ScrapedData {
   return {
     summary: groupData.summary,
     items: groupData.items,
@@ -28,9 +34,10 @@ export function buildScrapedData(globalData: GlobalData, groupData: GroupData): 
  * GroupData から ScrapedData を構築
  * 各グループのグループ固有データ保存用
  */
-export function buildGroupOnlyScrapedData(groupData: GroupData): ScrapedData {
-  const updatedAt = formatJstDateTimeForDisplay();
-
+export function buildGroupOnlyScrapedData(
+  groupData: GroupData,
+  updatedAt = formatUpdatedAt(),
+): ScrapedData {
   return {
     summary: groupData.summary,
     items: groupData.items,

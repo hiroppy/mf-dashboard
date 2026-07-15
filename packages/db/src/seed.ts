@@ -2,7 +2,7 @@
  * デモデータ seed スクリプト
  *
  * 独身社会人（30代）を想定した1年間の家計データを生成する。
- * 総資産は約500万円、銀行・証券・カード・電子マネー等すべての項目を網羅し、
+ * 総資産は約570万円、銀行・証券・暗号資産・カード・電子マネー等すべての項目を網羅し、
  * 収支・振替・取引の整合性を保つ。
  *
  * 使い方:
@@ -168,7 +168,7 @@ await db
 
 // グループ定義: どのカテゴリがどのグループに属するか
 const ALL_GROUP_IDS = [GROUP_ID, GROUP_ID_INVESTMENT, GROUP_ID_LIVING] as const;
-const investmentCategories = new Set(["証券", "年金"]);
+const investmentCategories = new Set(["証券", "暗号資産・FX・貴金属", "年金"]);
 const livingCategories = new Set([
   "銀行",
   "カード",
@@ -349,6 +349,13 @@ const accountDefs: AccountDef[] = [
     institution: "Amazon.co.jp",
     categoryName: "通販",
   },
+  // 暗号資産
+  {
+    name: "暗号資産取引所A",
+    type: "自動連携",
+    institution: "暗号資産取引所A",
+    categoryName: "暗号資産・FX・貴金属",
+  },
 ];
 
 const accountIds: Record<string, number> = {};
@@ -412,11 +419,12 @@ for (const a of accountDefs) {
 // 5. 保有資産 (Holdings) + アカウントステータス
 // ---------------------------------------------------------------------------
 
-// 資産構成 (合計 約5,000,000円)
-// - 預金・現金: 約2,300,000 (46%) ※ゆうちょ銀行（貯蓄用）約49万円を含む
-// - 投資信託:   約2,000,000 (40%)
-// - 株式:        約700,000 (14%)
-// - 年金:        約350,000 (7%)
+// 資産構成 (合計 約5,700,000円)
+// - 預金・現金: 約2,300,000 (41%) ※ゆうちょ銀行（貯蓄用）約49万円を含む
+// - 投資信託:   約2,000,000 (35%)
+// - 株式:        約700,000 (12%)
+// - 年金:        約350,000 (6%)
+// - 暗号資産:    約300,000 (5%)
 // - ポイント:     約15,000 (0.3%)
 // - 電子マネー:   約4,000 (0.1%)
 // 負債 (カード利用残高): 約130,000
@@ -567,6 +575,34 @@ const holdingDefs: HoldingDef[] = [
     dailyChange: 2100,
     unrealizedGain: 28050,
     unrealizedGainPct: 8.71,
+  },
+
+  // ---- 暗号資産 ----
+  {
+    accountName: "暗号資産取引所A",
+    name: "ビットコイン",
+    type: "asset",
+    assetCategory: "暗号資産",
+    amount: 210000, // 0.0321 × 6,542,056
+    quantity: 0.0321,
+    unitPrice: 6542056,
+    avgCostPrice: 5900000,
+    dailyChange: 3500,
+    unrealizedGain: 20610,
+    unrealizedGainPct: 10.88,
+  },
+  {
+    accountName: "暗号資産取引所A",
+    name: "イーサリアム",
+    type: "asset",
+    assetCategory: "暗号資産",
+    amount: 90000, // 0.42 × 214,286
+    quantity: 0.42,
+    unitPrice: 214286,
+    avgCostPrice: 190476,
+    dailyChange: -1800,
+    unrealizedGain: 10000,
+    unrealizedGainPct: 12.5,
   },
 
   // ---- 電子マネー ----
@@ -1713,18 +1749,26 @@ const dailyAssetData = generateDailyAssetData(GROUP_ID, totalAssets);
 //   - 投資信託: 月3から積立開始 (0→最終 ¥2,000,000)
 //   - 株式:     月5で初購入、月8で追加購入 (0→最終 ¥700,000)
 //   - 年金:     月2からiDeCo積立 (0→最終 ¥350,000)
+//   - 暗号資産: 月7から少額購入 (0→最終 ¥300,000)
 //   - ポイント:  月1から少額蓄積 (0→最終 ¥15,480)
 //   - 預金・現金: total - 他カテゴリ合計 (残り全部)
 //   - 電子マネー: 少額残高を別カテゴリとして保持
 const TOTAL_DAYS = dailyAssetData.length;
 
+function sumAssetCategory(categoryName: string): number {
+  return holdingDefs
+    .filter((h) => h.type === "asset" && h.assetCategory === categoryName)
+    .reduce((sum, h) => sum + h.amount, 0);
+}
+
 // 最終日のカテゴリ別目標額
-const FINAL_FUND = 1999859; // 1,049,966 + 580,372 + 369,521
-const FINAL_STOCK = 703040; // 281,400 + 258,700 + 162,940
-const FINAL_PENSION = 350038;
-const FINAL_POINT = 15237;
-const FINAL_PREPAID = 3842;
-const FINAL_CRYPTO = 0;
+const FINAL_DEPOSIT = sumAssetCategory("預金・現金");
+const FINAL_FUND = sumAssetCategory("投資信託");
+const FINAL_STOCK = sumAssetCategory("株式(現物)");
+const FINAL_PENSION = sumAssetCategory("年金");
+const FINAL_CRYPTO = sumAssetCategory("暗号資産");
+const FINAL_POINT = sumAssetCategory("ポイント");
+const FINAL_PREPAID = sumAssetCategory("電子マネー・プリペイド");
 
 // 各カテゴリの「開始日インデックス」を月から算出
 // 月idx: 0=2025-02, 1=2025-03, ..., 11=2026-01
@@ -1746,6 +1790,8 @@ const stockStartDay = monthStartDayIdx(3);
 const stockAddDay = monthStartDayIdx(6);
 // 年金: 月2(idx=0)の途中から → ほぼ初月から
 const pensionStartDay = monthStartDayIdx(0) + 15; // 月中から
+// 暗号資産: 月7(idx=5)から少額購入
+const cryptoStartDay = monthStartDayIdx(5);
 // ポイント: 月1(idx=0)からゆるく蓄積
 const pointStartDay = monthStartDayIdx(0);
 
@@ -1784,16 +1830,6 @@ function stockAmount(dayIdx: number): number {
   return Math.max(0, Math.round(base + randInt(-12000, 12000)));
 }
 
-// 預金・現金の最終目標額 (holdings から)
-const FINAL_DEPOSIT =
-  totalAssets -
-  FINAL_FUND -
-  FINAL_STOCK -
-  FINAL_PENSION -
-  FINAL_POINT -
-  FINAL_PREPAID -
-  FINAL_CRYPTO;
-
 // 各グループの最終資産額を計算
 const groupFinalAssets: Record<string, number> = {};
 for (const gid of ALL_GROUP_IDS) {
@@ -1804,6 +1840,7 @@ for (const gid of ALL_GROUP_IDS) {
 const INVESTMENT_FINAL_FUND = FINAL_FUND;
 const INVESTMENT_FINAL_STOCK = FINAL_STOCK;
 const INVESTMENT_FINAL_PENSION = FINAL_PENSION;
+const INVESTMENT_FINAL_CRYPTO = FINAL_CRYPTO;
 
 // 生活グループの最終カテゴリ額
 // 生活グループには「貯蓄」カテゴリ（ゆうちょ銀行）は含まれないため、別途計算
@@ -1855,6 +1892,7 @@ await db.transaction(async (tx) => {
         let fund: number,
           stock: number,
           pension: number,
+          crypto: number,
           point: number,
           prepaid: number,
           deposit: number;
@@ -1862,6 +1900,7 @@ await db.transaction(async (tx) => {
           fund = FINAL_FUND;
           stock = FINAL_STOCK;
           pension = FINAL_PENSION;
+          crypto = FINAL_CRYPTO;
           point = FINAL_POINT;
           prepaid = FINAL_PREPAID;
           deposit = FINAL_DEPOSIT;
@@ -1869,9 +1908,10 @@ await db.transaction(async (tx) => {
           fund = categoryAmount(i, FINAL_FUND, fundStartDay);
           stock = stockAmount(i);
           pension = categoryAmount(i, FINAL_PENSION, pensionStartDay);
+          crypto = categoryAmount(i, FINAL_CRYPTO, cryptoStartDay);
           point = categoryAmount(i, FINAL_POINT, pointStartDay);
           prepaid = categoryAmount(i, FINAL_PREPAID, pointStartDay);
-          deposit = Math.max(0, total - fund - stock - pension - point - prepaid);
+          deposit = Math.max(0, total - fund - stock - pension - crypto - point - prepaid);
         }
 
         await tx
@@ -1928,6 +1968,17 @@ await db.transaction(async (tx) => {
               updatedAt: ts,
             })
             .run();
+        if (crypto > 0)
+          await tx
+            .insert(schema.assetHistoryCategories)
+            .values({
+              assetHistoryId: ahId,
+              categoryName: "暗号資産",
+              amount: crypto,
+              createdAt: ts,
+              updatedAt: ts,
+            })
+            .run();
         if (point > 0)
           await tx
             .insert(schema.assetHistoryCategories)
@@ -1940,16 +1991,18 @@ await db.transaction(async (tx) => {
             })
             .run();
       } else if (groupId === GROUP_ID_INVESTMENT) {
-        // 投資グループ: 投資信託、株式、年金
-        let fund: number, stock: number, pension: number;
+        // 投資グループ: 投資信託、株式、年金、暗号資産
+        let fund: number, stock: number, pension: number, crypto: number;
         if (i === lastIdx) {
           fund = INVESTMENT_FINAL_FUND;
           stock = INVESTMENT_FINAL_STOCK;
           pension = INVESTMENT_FINAL_PENSION;
+          crypto = INVESTMENT_FINAL_CRYPTO;
         } else {
           fund = categoryAmount(i, INVESTMENT_FINAL_FUND, fundStartDay);
           stock = stockAmount(i);
           pension = categoryAmount(i, INVESTMENT_FINAL_PENSION, pensionStartDay);
+          crypto = categoryAmount(i, INVESTMENT_FINAL_CRYPTO, cryptoStartDay);
         }
 
         if (fund > 0)
@@ -1981,6 +2034,17 @@ await db.transaction(async (tx) => {
               assetHistoryId: ahId,
               categoryName: "年金",
               amount: pension,
+              createdAt: ts,
+              updatedAt: ts,
+            })
+            .run();
+        if (crypto > 0)
+          await tx
+            .insert(schema.assetHistoryCategories)
+            .values({
+              assetHistoryId: ahId,
+              categoryName: "暗号資産",
+              amount: crypto,
               createdAt: ts,
               updatedAt: ts,
             })

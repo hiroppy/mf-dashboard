@@ -8,10 +8,18 @@ function time(): string {
   });
 }
 
-export function section(title: string) {
+function section(title: string) {
   if (isCI) return;
   // oxlint-disable-next-line no-console
   console.log(`\n--- ${title} ---`);
+}
+
+export function phase(title: string) {
+  if (isCI) {
+    info(`Phase: ${title}`);
+  } else {
+    section(title);
+  }
 }
 
 export function log(...args: unknown[]) {
