@@ -234,4 +234,9 @@ describe("isInvestmentCategory", () => {
     expect(isInvestmentCategory("預金・現金")).toBe(false);
     expect(isInvestmentCategory("電子マネー・プリペイド")).toBe(false);
   });
+
+  it("does not classify empty or whitespace-only strings as investment", () => {
+    expect(isInvestmentCategory("")).toBe(false);
+    expect(isInvestmentCategory("   ")).toBe(false);
+  });
 });

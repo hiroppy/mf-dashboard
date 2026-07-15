@@ -215,6 +215,7 @@ function calculateSavings(data: CollectedData): AnalyticsMetrics["savings"] {
 
 export function isInvestmentCategory(categoryName: string): boolean {
   const normalizedCategoryName = categoryName.trim();
+  if (!normalizedCategoryName) return false;
   if (isLiquidAssetCategory(normalizedCategoryName)) return false;
   return INVESTMENT_CATEGORIES.some(
     (category) =>
