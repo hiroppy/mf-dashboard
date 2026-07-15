@@ -111,6 +111,54 @@ async function createExternalAccount(name: string): Promise<number> {
   return account.id;
 }
 
+async function createAdditionalGroup(groupId: string, name: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .insert(schema.groups)
+    .values({
+      id: groupId,
+      name,
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+}
+
+async function addAccountToGroup(accountId: number, groupId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .insert(schema.groupAccounts)
+    .values({
+      groupId,
+      accountId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+}
+
+async function countQueries<T>(fn: () => Promise<T>): Promise<{ result: T; queryCount: number }> {
+  const client = (
+    db as unknown as {
+      $client: { execute: (...args: unknown[]) => unknown };
+    }
+  ).$client;
+  const originalExecute = client.execute;
+  let queryCount = 0;
+
+  client.execute = (...args: unknown[]) => {
+    queryCount += 1;
+    return originalExecute.apply(client, args);
+  };
+
+  try {
+    return { result: await fn(), queryCount };
+  } finally {
+    client.execute = originalExecute;
+  }
+}
+
 async function createTransaction(data: {
   accountId: number;
   date: string;
@@ -236,6 +284,59 @@ describe("getMonthlySummaryByMonth", () => {
     expect(result).toBeDefined();
     expect(result!.totalIncome).toBe(100000);
     expect(result!.totalExpense).toBe(0);
+  });
+
+  it("共通グループがある振替は月次サマリーから除外される", async () => {
+    const accountId = await createTestAccount("User A Account");
+    const externalAccountId = await createExternalAccount("User B Account");
+    const sharedGroupId = "shared_group_001";
+    await createAdditionalGroup(sharedGroupId, "Group A");
+    await addAccountToGroup(accountId, sharedGroupId);
+    await addAccountToGroup(externalAccountId, sharedGroupId);
+
+    await createTransaction({
+      accountId,
+      date: "2025-04-15",
+      amount: 100000,
+      type: "transfer",
+      transferTargetAccountId: externalAccountId,
+    });
+
+    const result = await getMonthlySummaryByMonth("2025-04", undefined, db);
+
+    expect(result).toBeDefined();
+    expect(result!.totalIncome).toBe(0);
+    expect(result!.totalExpense).toBe(0);
+  });
+
+  it("重複振替は月次サマリーでは除外し、カテゴリ別表示では維持する", async () => {
+    const accountId = await createTestAccount("User A Account");
+    const externalAccountId = await createExternalAccount("User B Account");
+
+    await createTransaction({
+      accountId,
+      date: "2025-04-15",
+      amount: 50000,
+      type: "transfer",
+      transferTargetAccountId: externalAccountId,
+    });
+    await createTransaction({
+      accountId,
+      date: "2025-04-15",
+      amount: 50000,
+      type: "transfer",
+      transferTargetAccountId: externalAccountId,
+    });
+
+    const summary = await getMonthlySummaryByMonth("2025-04", undefined, db);
+    const categoryTotals = await getMonthlyCategoryTotals("2025-04", undefined, db);
+
+    expect(summary).toBeDefined();
+    expect(summary!.totalIncome).toBe(50000);
+
+    const incomeCategory = categoryTotals.find((r) => r.category === "収入");
+    expect(incomeCategory).toBeDefined();
+    expect(incomeCategory!.totalAmount).toBe(100000);
   });
 
   it("収入と支出が混在する月の計算が正しい", async () => {
@@ -914,6 +1015,22 @@ describe("getDeduplicatedTransferIncome", () => {
     expect(result.get("2025-04")).toBe(150000);
   });
 
+  it("振替収入の共通グループ判定を一括取得する", async () => {
+    const accountId = await createTestAccount("User A Account");
+    const externalAccountId = await createExternalAccount("User B Account");
+
+    await createTransferToExternal(accountId, externalAccountId, "2025-04-15", 100000);
+    await createTransferToExternal(accountId, externalAccountId, "2025-04-16", 50000);
+    await createTransferToExternal(accountId, externalAccountId, "2025-04-17", 25000);
+
+    const { result, queryCount } = await countQueries(() =>
+      getDeduplicatedTransferIncome(db, [accountId], "2025-04"),
+    );
+
+    expect(result.get("2025-04")).toBe(175000);
+    expect(queryCount).toBe(2);
+  });
+
   it("同一日・同一金額・同一account・同一targetの振替は1件のみカウント", async () => {
     const accountId = await createTestAccount("Bank A");
     const externalAccountId = await createExternalAccount("External");
@@ -1407,6 +1524,61 @@ describe("getDeduplicatedTransferExpense", () => {
     const result = await getDeduplicatedTransferExpense(db, [groupAccountId], "2025-04");
 
     expect(result.get("2025-04")).toBe(5000);
+  });
+
+  it("共通グループがあるグループ外→グループ内振替は支出としてカウントしない", async () => {
+    const groupAccountId = await createTestAccount("User A Account");
+    const externalAccountId = await createExternalAccount("User B Account");
+    const sharedGroupId = "shared_group_001";
+    await createAdditionalGroup(sharedGroupId, "Group A");
+    await addAccountToGroup(groupAccountId, sharedGroupId);
+    await addAccountToGroup(externalAccountId, sharedGroupId);
+
+    await createTransaction({
+      accountId: externalAccountId,
+      date: "2025-04-15",
+      amount: 5000,
+      type: "transfer",
+      transferTargetAccountId: groupAccountId,
+    });
+
+    const result = await getDeduplicatedTransferExpense(db, [groupAccountId], "2025-04");
+
+    expect(result.get("2025-04")).toBeUndefined();
+  });
+
+  it("振替支出の通常トランザクション重複判定を一括取得する", async () => {
+    const groupAccountId = await createTestAccount("User A Account");
+    const externalAccountId = await createExternalAccount("User B Account");
+
+    await createTransaction({
+      accountId: externalAccountId,
+      date: "2025-04-15",
+      amount: 5000,
+      type: "transfer",
+      transferTargetAccountId: groupAccountId,
+    });
+    await createTransaction({
+      accountId: externalAccountId,
+      date: "2025-04-16",
+      amount: 8000,
+      type: "transfer",
+      transferTargetAccountId: groupAccountId,
+    });
+    await createTransaction({
+      accountId: externalAccountId,
+      date: "2025-04-17",
+      amount: 3000,
+      type: "transfer",
+      transferTargetAccountId: groupAccountId,
+    });
+
+    const { result, queryCount } = await countQueries(() =>
+      getDeduplicatedTransferExpense(db, [groupAccountId], "2025-04"),
+    );
+
+    expect(result.get("2025-04")).toBe(16000);
+    expect(queryCount).toBe(3);
   });
 
   it("振替先に対応する通常トランザクションがある場合は除外する（重複回避）", async () => {

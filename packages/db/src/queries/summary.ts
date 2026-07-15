@@ -81,6 +81,113 @@ export function buildRegularIncomeSum() {
 
 const GROUP_NONE_ID = "0";
 
+type TransferClassification = "income" | "expense" | null;
+
+type TransferParticipant = {
+  accountId: number | null;
+  transferTargetAccountId: number | null;
+};
+
+type TransferClassificationContext = {
+  accountIdSet: Set<number>;
+  groupIdsByAccountId: Map<number, Set<string>>;
+};
+
+function collectTransferAccountIds(transfers: TransferParticipant[]): number[] {
+  const accountIds = new Set<number>();
+  for (const transfer of transfers) {
+    if (transfer.accountId !== null) {
+      accountIds.add(transfer.accountId);
+    }
+    if (transfer.transferTargetAccountId !== null) {
+      accountIds.add(transfer.transferTargetAccountId);
+    }
+  }
+  return Array.from(accountIds);
+}
+
+async function getGroupIdsByAccountId(
+  db: Db,
+  accountIds: number[],
+): Promise<Map<number, Set<string>>> {
+  const uniqueAccountIds = Array.from(new Set(accountIds));
+  if (uniqueAccountIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      accountId: schema.groupAccounts.accountId,
+      groupId: schema.groupAccounts.groupId,
+    })
+    .from(schema.groupAccounts)
+    .where(
+      and(
+        inArray(schema.groupAccounts.accountId, uniqueAccountIds),
+        sql`${schema.groupAccounts.groupId} != ${GROUP_NONE_ID}`,
+      ),
+    )
+    .all();
+
+  const groupIdsByAccountId = new Map<number, Set<string>>();
+  for (const row of rows) {
+    const groupIds = groupIdsByAccountId.get(row.accountId) ?? new Set<string>();
+    groupIds.add(row.groupId);
+    groupIdsByAccountId.set(row.accountId, groupIds);
+  }
+  return groupIdsByAccountId;
+}
+
+async function getTransferClassificationContext(
+  db: Db,
+  accountIds: number[],
+  transfers: TransferParticipant[],
+): Promise<TransferClassificationContext> {
+  const participantAccountIds = collectTransferAccountIds(transfers);
+  const groupIdsByAccountId = await getGroupIdsByAccountId(db, participantAccountIds);
+  return {
+    accountIdSet: new Set(accountIds),
+    groupIdsByAccountId,
+  };
+}
+
+function hasCommonGroupInContext(
+  context: TransferClassificationContext,
+  accountId1: number,
+  accountId2: number,
+): boolean {
+  const groupIds1 = context.groupIdsByAccountId.get(accountId1);
+  const groupIds2 = context.groupIdsByAccountId.get(accountId2);
+  if (!groupIds1 || !groupIds2) return false;
+
+  for (const groupId of groupIds1) {
+    if (groupIds2.has(groupId)) return true;
+  }
+  return false;
+}
+
+/**
+ * 一括取得済みのグループ所属情報を使って振替の収入/支出分類を判定する。
+ */
+function classifyTransferWithContext(
+  context: TransferClassificationContext,
+  sourceAccountId: number,
+  targetAccountId: number,
+): TransferClassification {
+  // 共通グループがある場合は内部振替として除外
+  if (hasCommonGroupInContext(context, sourceAccountId, targetAccountId)) {
+    return null;
+  }
+
+  const isSourceInGroup = context.accountIdSet.has(sourceAccountId);
+  const isTargetInGroup = context.accountIdSet.has(targetAccountId);
+
+  if (isSourceInGroup && !isTargetInGroup) {
+    return "income"; // グループ内→外 = 収入
+  } else if (!isSourceInGroup && isTargetInGroup) {
+    return "expense"; // グループ外→内 = 支出
+  }
+  return null; // グループ内→内 = 除外
+}
+
 /**
  * 振替の収入/支出分類を判定
  * @returns 'income' | 'expense' | null (nullは除外すべき振替)
@@ -90,21 +197,12 @@ export async function classifyTransfer(
   accountIdSet: Set<number>,
   sourceAccountId: number,
   targetAccountId: number,
-): Promise<"income" | "expense" | null> {
-  // 共通グループがある場合は内部振替として除外
-  if (await hasCommonGroup(db, sourceAccountId, targetAccountId)) {
-    return null;
-  }
-
-  const isSourceInGroup = accountIdSet.has(sourceAccountId);
-  const isTargetInGroup = accountIdSet.has(targetAccountId);
-
-  if (isSourceInGroup && !isTargetInGroup) {
-    return "income"; // グループ内→外 = 収入
-  } else if (!isSourceInGroup && isTargetInGroup) {
-    return "expense"; // グループ外→内 = 支出
-  }
-  return null; // グループ内→内 = 除外
+): Promise<TransferClassification> {
+  const context: TransferClassificationContext = {
+    accountIdSet,
+    groupIdsByAccountId: await getGroupIdsByAccountId(db, [sourceAccountId, targetAccountId]),
+  };
+  return classifyTransferWithContext(context, sourceAccountId, targetAccountId);
 }
 
 /**
@@ -116,29 +214,11 @@ export async function hasCommonGroup(
   accountId1: number,
   accountId2: number,
 ): Promise<boolean> {
-  const groups1 = (
-    await db
-      .select({ groupId: schema.groupAccounts.groupId })
-      .from(schema.groupAccounts)
-      .where(eq(schema.groupAccounts.accountId, accountId1))
-      .all()
-  )
-    .map((g) => g.groupId)
-    .filter((id) => id !== GROUP_NONE_ID);
-
-  const groups2Set = new Set(
-    (
-      await db
-        .select({ groupId: schema.groupAccounts.groupId })
-        .from(schema.groupAccounts)
-        .where(eq(schema.groupAccounts.accountId, accountId2))
-        .all()
-    )
-      .map((g) => g.groupId)
-      .filter((id) => id !== GROUP_NONE_ID),
-  );
-
-  return groups1.some((g) => groups2Set.has(g));
+  const context: TransferClassificationContext = {
+    accountIdSet: new Set(),
+    groupIdsByAccountId: await getGroupIdsByAccountId(db, [accountId1, accountId2]),
+  };
+  return hasCommonGroupInContext(context, accountId1, accountId2);
 }
 
 /**
@@ -158,6 +238,8 @@ export async function getDeduplicatedTransferIncome(
   accountIds: number[],
   dateCondition?: string,
 ): Promise<Map<string, number>> {
+  if (accountIds.length === 0) return new Map();
+
   // 振替トランザクションを取得
   // グループ内→グループ外への振替を収入としてカウント
   const query = db
@@ -183,15 +265,14 @@ export async function getDeduplicatedTransferIncome(
   // 重複除外: (date, amount, accountId, transferTargetAccountId) でユニーク化
   const seen = new Set<string>();
   const monthlyTotals = new Map<string, number>();
-  const accountIdSet = new Set(accountIds);
+  const classificationContext = await getTransferClassificationContext(db, accountIds, transfers);
 
   for (const t of transfers) {
     if (!t.date || !t.transferTargetAccountId || t.accountId === null) continue;
 
-    // classifyTransferで収入として判定される振替のみカウント
-    const classification = await classifyTransfer(
-      db,
-      accountIdSet,
+    // 一括取得済みのグループ所属情報で収入として判定される振替のみカウント
+    const classification = classifyTransferWithContext(
+      classificationContext,
       t.accountId,
       t.transferTargetAccountId,
     );
@@ -222,6 +303,52 @@ export function buildExpenseSum(_accountIds: number[]) {
   end)`.as("total_expense");
 }
 
+function normalTransactionKey(accountId: number, date: string, amount: number): string {
+  return `${accountId}-${date}-${amount}`;
+}
+
+async function getNormalTransactionKeysForTransfers(
+  db: Db,
+  transfers: Array<{
+    date: string | null;
+    amount: number;
+    transferTargetAccountId: number | null;
+  }>,
+  dateCondition?: string,
+): Promise<Set<string>> {
+  const targetAccountIds = Array.from(
+    new Set(
+      transfers
+        .map((transfer) => transfer.transferTargetAccountId)
+        .filter((accountId): accountId is number => accountId !== null),
+    ),
+  );
+  if (targetAccountIds.length === 0) return new Set();
+
+  const rows = await db
+    .select({
+      accountId: schema.transactions.accountId,
+      date: schema.transactions.date,
+      amount: schema.transactions.amount,
+    })
+    .from(schema.transactions)
+    .where(
+      and(
+        inArray(schema.transactions.accountId, targetAccountIds),
+        sql`${schema.transactions.type} IN ('income', 'expense')`,
+        dateCondition ? like(schema.transactions.date, `${dateCondition}%`) : sql`1=1`,
+      ),
+    )
+    .all();
+
+  const keys = new Set<string>();
+  for (const row of rows) {
+    if (row.accountId === null || row.date === null) continue;
+    keys.add(normalTransactionKey(row.accountId, row.date, row.amount));
+  }
+  return keys;
+}
+
 /**
  * グループ外→グループ内への振替支出を計算（重複除外）
  * 同一日・同一金額・同一account・同一transfer_targetの振替は1件のみカウント
@@ -240,6 +367,8 @@ export async function getDeduplicatedTransferExpense(
   accountIds: number[],
   dateCondition?: string,
 ): Promise<Map<string, number>> {
+  if (accountIds.length === 0) return new Map();
+
   // 振替トランザクションを取得
   // グループ外→グループ内への振替を支出としてカウント
   const query = db
@@ -265,26 +394,30 @@ export async function getDeduplicatedTransferExpense(
   // 重複除外: (date, amount, accountId, transferTargetAccountId) でユニーク化
   const seen = new Set<string>();
   const monthlyTotals = new Map<string, number>();
+  const normalTransactionKeys = await getNormalTransactionKeysForTransfers(
+    db,
+    transfers,
+    dateCondition,
+  );
+  const classificationContext = await getTransferClassificationContext(db, accountIds, transfers);
 
   for (const t of transfers) {
     if (!t.date || !t.transferTargetAccountId || t.accountId === null) continue;
 
+    const classification = classifyTransferWithContext(
+      classificationContext,
+      t.accountId,
+      t.transferTargetAccountId,
+    );
+    if (classification !== "expense") continue;
+
     // 振替先アカウントで同一日・同一金額の通常トランザクションがある場合は除外
     // （既に通常支出としてカウントされているため）
-    const existingNormalTx = await db
-      .select({ id: schema.transactions.id })
-      .from(schema.transactions)
-      .where(
-        and(
-          eq(schema.transactions.accountId, t.transferTargetAccountId),
-          eq(schema.transactions.date, t.date),
-          eq(schema.transactions.amount, t.amount),
-          sql`${schema.transactions.type} IN ('income', 'expense')`,
-        ),
-      )
-      .get();
-
-    if (existingNormalTx) continue;
+    if (
+      normalTransactionKeys.has(normalTransactionKey(t.transferTargetAccountId, t.date, t.amount))
+    ) {
+      continue;
+    }
 
     const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
     if (seen.has(key)) continue;
@@ -466,11 +599,8 @@ export async function getMonthlySummaryByMonth(
 // 現在のクローラーは「グループ選択なし」でスクレイプしているため、
 // グループ固有のカテゴリ情報を取得できない。
 //
-// 振替の分類はhasCommonGroupを使用して、getMonthlySummaryByMonthと同じロジックで行う。
-// 共通グループがある場合は内部振替として収支に含めない。
-// 共通グループがない場合:
-// - グループ内→グループ外: 収入としてカウント
-// - グループ外→グループ内: 支出としてカウント（ただし既存の通常TXと重複する場合は除外）
+// 振替の分類は収支サマリーと同じ分類コンテキストを使う。
+// 一方で、カテゴリ別表示はMoney Forward本家の表示に合わせて重複振替も表示集計に含める。
 export async function getMonthlyCategoryTotals(
   month: string,
   groupIdParam?: string,
@@ -509,18 +639,21 @@ export async function getMonthlyCategoryTotals(
   // This matches the logic in getMonthlySummaryByMonth / getDeduplicatedTransferIncome
   type CategoryTotal = { category: string; type: "income" | "expense"; totalAmount: number };
   const categoryMap = new Map<string, CategoryTotal>();
-
-  const accountIdSet = new Set(accountIds);
+  const transferResults = results.filter((result) => result.type === "transfer");
+  const classificationContext = await getTransferClassificationContext(
+    db,
+    accountIds,
+    transferResults,
+  );
 
   for (const r of results) {
     let effectiveCategory = r.category;
     let effectiveType: "income" | "expense" = r.type as "income" | "expense";
 
     if (r.type === "transfer" && r.transferTargetAccountId !== null && r.accountId !== null) {
-      // classifyTransferで振替の分類を判定
-      const classification = await classifyTransfer(
-        db,
-        accountIdSet,
+      // 一括取得済みのグループ所属情報で振替の分類を判定
+      const classification = classifyTransferWithContext(
+        classificationContext,
         r.accountId,
         r.transferTargetAccountId,
       );

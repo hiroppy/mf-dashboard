@@ -10,6 +10,8 @@ Money Forwardでは、振替は以下の2つの形式で記録されることが
 2. **通常トランザクション** (`type='expense'` or `type='income'`)
 
 同じ振替が両方の形式で記録される場合があり、重複カウントを避ける必要がある。
+収支サマリーでは重複除外を行うが、カテゴリ別表示ではMoney Forward本家の表示に合わせて
+重複振替も表示集計に残す。
 
 ## 振替の方向と意味
 
@@ -33,6 +35,8 @@ Money Forwardでは、振替は以下の2つの形式で記録されることが
 
 **理由:**
 グループ視点で見ると、グループ内アカウントからグループ外への送金記録は「収入」として扱う。
+共通グループ判定に必要な `group_accounts` は、対象振替の `accountId` と
+`transferTargetAccountId` をまとめて一括取得する。
 
 ### 支出としてカウント（`getDeduplicatedTransferExpense`）
 
@@ -43,11 +47,14 @@ Money Forwardでは、振替は以下の2つの形式で記録されることが
 - `type='transfer'`
 - `accountId ∉ グループ内`（振替元がグループ外）
 - `transferTargetAccountId ∈ グループ内`（振替先がグループ内）
+- `hasCommonGroup=false`（振替元と振替先が共通のユーザー定義グループに属していない）
 - **振替先アカウントに同一日・同一金額の通常トランザクションがない**
 
 **理由:**
 グループ外からの入金が振替としてのみ記録されている場合、支出としてカウントする。
 既に通常トランザクション（expense）として記録されている場合は、重複を避けるため振替はカウントしない。
+通常トランザクションの存在判定に必要な `accountId/date/amount` は、対象振替の
+`transferTargetAccountId` をまとめて一括取得し、メモリ上のキーで照合する。
 
 ### 内部振替（カウントしない）
 
@@ -60,6 +67,21 @@ Money Forwardでは、振替は以下の2つの形式で記録されることが
 ```
 key = `${date}-${amount}-${accountId}-${transferTargetAccountId}`
 ```
+
+## サマリー集計とカテゴリ別表示の違い
+
+### 収支サマリー
+
+`getMonthlySummaryByMonth()` / `getMonthlySummaries()` / `getYearToDateSummary()` は、
+実際の収支としてカウントする値を返す。振替は分類後に重複除外され、通常トランザクションで
+既にカウント済みの支出振替も除外される。
+
+### カテゴリ別表示
+
+`getMonthlyCategoryTotals()` はMoney Forward本家の表示差異に合わせた表示用集計を返す。
+振替分類にはサマリーと同じ group membership context を使うが、重複除外は行わない。
+そのため、同一日・同一金額・同一account・同一transfer_target の振替が複数ある場合、
+カテゴリ別表示では複数件分が合算される。
 
 ## 具体例
 
@@ -95,6 +117,7 @@ key = `${date}-${amount}-${accountId}-${transferTargetAccountId}`
 - `packages/db/src/queries/summary.ts`
   - `getDeduplicatedTransferIncome()`: 振替収入を計算
   - `getDeduplicatedTransferExpense()`: 振替支出を計算
+  - transfer classification context: 一括取得済みの group membership で振替分類
   - `hasCommonGroup()`: 2つのアカウントが共通グループに属するか判定
   - `classifyTransfer()`: 振替の収入/支出分類を判定
 
