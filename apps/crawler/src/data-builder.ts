@@ -1,14 +1,19 @@
 import type { ScrapedData } from "@mf-dashboard/db/types";
 import type { GlobalData, GroupData } from "./scraper.js";
 
+export function formatUpdatedAt(now = new Date()): string {
+  return now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+}
+
 /**
  * GlobalData + GroupData から ScrapedData を構築
  * 「グループ選択なし」の全データ保存用
  */
-export function buildScrapedData(globalData: GlobalData, groupData: GroupData): ScrapedData {
-  const now = new Date();
-  const updatedAt = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
-
+export function buildScrapedData(
+  globalData: GlobalData,
+  groupData: GroupData,
+  updatedAt = formatUpdatedAt(),
+): ScrapedData {
   return {
     summary: groupData.summary,
     items: groupData.items,
@@ -28,10 +33,10 @@ export function buildScrapedData(globalData: GlobalData, groupData: GroupData): 
  * GroupData から ScrapedData を構築
  * 各グループのグループ固有データ保存用
  */
-export function buildGroupOnlyScrapedData(groupData: GroupData): ScrapedData {
-  const now = new Date();
-  const updatedAt = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
-
+export function buildGroupOnlyScrapedData(
+  groupData: GroupData,
+  updatedAt = formatUpdatedAt(),
+): ScrapedData {
   return {
     summary: groupData.summary,
     items: groupData.items,

@@ -10,8 +10,10 @@ try {
 // Global mock for logger to suppress console output in unit tests
 vi.mock("../src/logger.js", () => ({
   log: vi.fn(),
+  info: vi.fn(),
   debug: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   section: vi.fn(),
+  phase: vi.fn(),
 }));

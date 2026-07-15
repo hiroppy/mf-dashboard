@@ -1,6 +1,6 @@
 import type { Group, ScrapedData } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
-import { log, warn, section } from "./logger.js";
+import { log, warn, phase } from "./logger.js";
 import { getAssetHistory } from "./scrapers/asset-history.js";
 import { getAssetItems } from "./scrapers/asset-items.js";
 import { getAssetSummary } from "./scrapers/asset-summary.js";
@@ -152,7 +152,7 @@ function buildGroupsToProcess(allGroups: Group[]): Group[] {
 }
 
 async function runPhase1(page: Page, options: ScrapeOptions): Promise<GlobalData> {
-  section("Phase 1: Global Data");
+  phase("Scrape: Global Data");
   await switchGroup(page, NO_GROUP_ID);
   return scrapeGlobalData(page, options);
 }
@@ -162,7 +162,7 @@ async function runPhase2(
   groupsToProcess: Group[],
   defaultGroup: Group | null,
 ): Promise<GroupData[]> {
-  section("Phase 2: Group Data");
+  phase("Scrape: Group Data");
   const groupDataList: GroupData[] = [];
 
   for (const groupEntry of groupsToProcess) {
