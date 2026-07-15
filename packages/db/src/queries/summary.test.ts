@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import { schema } from "../index";
 import {
   createTestDb,
@@ -144,18 +144,13 @@ async function countQueries<T>(fn: () => Promise<T>): Promise<{ result: T; query
       $client: { execute: (...args: unknown[]) => unknown };
     }
   ).$client;
-  const originalExecute = client.execute;
-  let queryCount = 0;
-
-  client.execute = (...args: unknown[]) => {
-    queryCount += 1;
-    return originalExecute.apply(client, args);
-  };
+  const spy = vi.spyOn(client, "execute");
 
   try {
-    return { result: await fn(), queryCount };
+    const result = await fn();
+    return { result, queryCount: spy.mock.calls.length };
   } finally {
-    client.execute = originalExecute;
+    spy.mockRestore();
   }
 }
 

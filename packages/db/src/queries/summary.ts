@@ -1,5 +1,5 @@
 import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
-import { eq, and, like, sql, inArray, or, notInArray } from "drizzle-orm";
+import { eq, and, like, sql, inArray, or, notInArray, ne } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { generateMonthRange } from "../shared/utils";
@@ -123,7 +123,7 @@ async function getGroupIdsByAccountId(
     .where(
       and(
         inArray(schema.groupAccounts.accountId, uniqueAccountIds),
-        sql`${schema.groupAccounts.groupId} != ${GROUP_NONE_ID}`,
+        ne(schema.groupAccounts.groupId, GROUP_NONE_ID),
       ),
     )
     .all();
