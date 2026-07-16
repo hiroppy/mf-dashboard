@@ -8,6 +8,12 @@ const meta = {
   tags: ["autodocs"],
   parameters: {
     layout: "centered",
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        pathname: "/",
+      },
+    },
   },
 } satisfies Meta<typeof ActionIcons>;
 
