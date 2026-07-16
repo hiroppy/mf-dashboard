@@ -26,7 +26,7 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ### すべての情報を可視化
 
-[demoページ](https://hiroppy.github.io/mf-dashboard)を参考。予算機能以外はすべて対応済み。
+[demo](https://mf-dashboard-demo.vercel.app/) データで確認できる。予算機能以外はすべて対応済み。
 
 <img src="./.github/assets/demo-month.png" alt="month page" width="50%" /><img src="./.github/assets/demo-dashboard.png" alt="dashboard page" width="50%" />
 
@@ -75,13 +75,13 @@ graph LR
 - Cloudflare
   - Cloudflare oneでサイトへのアクセス制限 (e.g. googleログイン)
 
-このプロダクトはスケールさせる必要がないことから、当初GitHubだけで完結するように設計されていた。しかし、Private repoの場合はGitHub Pagesが有料限定ということでページの公開と認証はCloudflareを利用するようにした経緯がある。
+このプロダクトはスケールさせる必要がないことから、当初GitHubだけで完結するように設計されていた。その後、ページの公開と認証はCloudflareを利用するようにした経緯がある。
 
 SQLiteを今後、pushしなくても良いオプションを作る可能性はあるが、毎回1年分のデータ取得と取得毎のdiffが取れなくなるデメリットがあるため現段階では実装していない。またインフラは今後変える可能性あり。
 
 ## 開発
 
-[UIコンポーネント集](https://hiroppy.github.io/mf-dashboard/storybook/)
+UIコンポーネント集は `pnpm --filter @mf-dashboard/web storybook` で確認する。
 
 Storybook story 必須対象: `apps/web/src/components/` 配下の再利用 UI component は
 同階層に `*.stories.tsx` を置く。例外は `.client.tsx`、context/provider、hook、types、
@@ -105,10 +105,4 @@ $ pnpm dev
 
 ```sh
 $ pnpm --filter @mf-dashboard/db build:demo
-```
-
-## 更新
-
-```sh
-$ sh update.sh
 ```

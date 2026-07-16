@@ -8,15 +8,19 @@ import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
 
-const metadataBase =
-  process.env.GITHUB_PAGES === "true"
-    ? new URL(
-        `https://${process.env.NEXT_PUBLIC_GITHUB_ORG}.github.io/${process.env.NEXT_PUBLIC_GITHUB_REPO}/`,
-      )
-    : undefined;
+function createMetadataBase() {
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
+    process.env.VERCEL_URL;
+
+  if (!siteUrl) return undefined;
+
+  return new URL(siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`);
+}
 
 export const metadata: Metadata = {
-  metadataBase,
+  metadataBase: createMetadataBase(),
   title: {
     template: "%s | MoneyForward Me Dashboard",
     default: "MoneyForward Me Dashboard",

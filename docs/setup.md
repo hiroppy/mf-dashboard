@@ -5,7 +5,6 @@
 - [MoneyForward Me](https://moneyforward.com/)
 - [1Password](https://1password.com/jp)
 - [Cloudflare](https://www.cloudflare.com/ja-jp/)
-  - GitHub Pagesが使えるならなくてもいいが、workflowを変更する必要あり
 
 ## 1. プライベートリポジトリの作成
 
@@ -111,15 +110,3 @@ Cloudflare OneにIdentity Providerの登録(`/integrations/identity-providers`)�
 ## 4. 実行
 
 作ったリポジトリの`/actions/workflows/daily-update.yml`へ行くとRun Workflowがあるので、手動実行し、SQLiteがコミットされたら成功。
-
-## バージョン更新
-
-```sh
-$ sh update.sh
-```
-
-```sh
-$ git pull origin main
-$ git pull upstream --no-ff
-$ git push -f origin main
-```

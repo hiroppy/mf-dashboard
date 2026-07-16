@@ -14,7 +14,7 @@ export default function Error({
       <Card className="max-w-lg w-full">
         <CardContent className="text-center py-12 space-y-5">
           <Image
-            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/cry.png`}
+            src="/cry.png"
             alt="エラーが発生しました"
             width={120}
             height={120}
