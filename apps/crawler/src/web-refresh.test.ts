@@ -126,4 +126,27 @@ describe("notifyWebRefresh", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  test("REFRESH_RETRY_DELAY が空の場合はデフォルト秒数を使う", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.WEB_URL = "http://web:8765";
+    process.env.REFRESH_TOKEN = "refresh-token";
+    process.env.REFRESH_MAX_ATTEMPTS = "2";
+    process.env.REFRESH_RETRY_DELAY = "";
+
+    const refreshPromise = notifyWebRefresh();
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await refreshPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

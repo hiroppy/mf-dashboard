@@ -14,10 +14,9 @@ afterEach(() => {
 });
 
 describe("next config", () => {
-  it("excludes TypeScript route handlers from GitHub Pages static export builds", async () => {
+  it("excludes TypeScript route handlers from demo static export builds", async () => {
     const config = await loadConfig({
-      GITHUB_PAGES: "true",
-      NEXT_PUBLIC_GITHUB_REPO: "mf-dashboard",
+      DEMO_MODE: "true",
     });
 
     expect(config.output).toBe("export");

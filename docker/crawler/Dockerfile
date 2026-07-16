@@ -41,6 +41,7 @@ COPY . .
 
 RUN mkdir -p /app/data /app/crawler-state /pnpm \
     && chown -R pwuser:pwuser /app /pnpm /home/pwuser /ms-playwright \
+    && chmod 1777 /app/crawler-state \
     && chmod -R a+rX /pnpm
 USER pwuser
 

@@ -17,7 +17,6 @@ afterEach(() => {
 describe("waitForRuntimeData", () => {
   it("waits for a runtime request outside demo export builds", async () => {
     delete process.env.DEMO_MODE;
-    delete process.env.GITHUB_PAGES;
 
     await waitForRuntimeData();
 
@@ -26,7 +25,6 @@ describe("waitForRuntimeData", () => {
 
   it("does not force runtime rendering for demo static export builds", async () => {
     process.env.DEMO_MODE = "true";
-    process.env.GITHUB_PAGES = "true";
 
     await waitForRuntimeData();
 
