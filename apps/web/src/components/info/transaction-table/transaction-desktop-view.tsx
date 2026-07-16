@@ -22,13 +22,10 @@ export function TransactionDesktopView({
   sortDirection,
   onSort,
 }: TransactionDesktopViewProps) {
+  // Scrollable table content must be focusable for keyboard panning.
   return (
-    <div
-      className="hidden md:block overflow-x-auto"
-      tabIndex={0}
-      role="region"
-      aria-label="取引一覧"
-    >
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <section className="hidden md:block overflow-x-auto" aria-label="取引一覧" tabIndex={0}>
       <Table>
         <TableHeader>
           <TableRow>
@@ -129,6 +126,6 @@ export function TransactionDesktopView({
           )}
         </TableBody>
       </Table>
-    </div>
+    </section>
   );
 }

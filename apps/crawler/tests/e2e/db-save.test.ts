@@ -112,17 +112,17 @@ describe("DB保存", () => {
       (hv) => hv.asset_categories.name === "投資信託" || hv.asset_categories.name === "株式(現物)",
     );
 
-    if (investmentHoldings.length > 0) {
-      const sample = investmentHoldings[0].holding_values;
-      // 数量が保存されている
-      expect(sample.quantity).not.toBeNull();
-      // 単価が保存されている
-      expect(sample.unitPrice).not.toBeNull();
-      // 前日比は0も有効な値なのでnullでないことのみ確認
-      expect(sample.dailyChange).not.toBeNull();
-      // 評価損益が保存されている
-      expect(sample.unrealizedGain).not.toBeNull();
-    }
+    // 投資商品がある場合は、詳細値が保存されている
+    expect(
+      investmentHoldings.every(({ holding_values: value }) => {
+        return (
+          value.quantity !== null &&
+          value.unitPrice !== null &&
+          value.dailyChange !== null &&
+          value.unrealizedGain !== null
+        );
+      }),
+    ).toBe(true);
   });
 
   test("口座ステータスが保存される", async () => {

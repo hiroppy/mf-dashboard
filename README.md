@@ -83,6 +83,10 @@ SQLiteを今後、pushしなくても良いオプションを作る可能性は�
 
 [UIコンポーネント集](https://hiroppy.github.io/mf-dashboard/storybook/)
 
+Storybook story 必須対象: `apps/web/src/components/` 配下の再利用 UI component は
+同階層に `*.stories.tsx` を置く。例外は `.client.tsx`、context/provider、hook、types、
+および親 component の story で直接検証される実装専用 component に限る。
+
 ```sh
 $ git clone xxx
 $ cd mf-dashboard
@@ -101,10 +105,4 @@ $ pnpm dev
 
 ```sh
 $ pnpm --filter @mf-dashboard/db build:demo
-```
-
-## 更新
-
-```sh
-$ sh update.sh
 ```

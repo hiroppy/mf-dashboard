@@ -202,7 +202,9 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
         </div>
 
         {/* Sankey diagram */}
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="キャッシュフロー図">
+        {/* Scrollable Sankey content must be focusable for Safari keyboard access. */}
+        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+        <section className="overflow-x-auto" aria-label="キャッシュフロー図" tabIndex={0}>
           <div className="min-w-150" style={{ height }}>
             <ResponsiveSankey
               data={data}
@@ -250,7 +252,7 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
               )}
             />
           </div>
-        </div>
+        </section>
 
         {/* Legend */}
         <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">

@@ -42,11 +42,13 @@ describe("scrapeAllGroups", () => {
     });
 
     test("defaultGroupがnullまたは有効なGroupオブジェクト", () => {
-      if (result.defaultGroup) {
-        expect(result.defaultGroup.id).toBeTruthy();
-        expect(result.defaultGroup.name).toBeTruthy();
-        expect(typeof result.defaultGroup.isCurrent).toBe("boolean");
-      }
+      const isValidDefaultGroup =
+        result.defaultGroup === null ||
+        (Boolean(result.defaultGroup.id) &&
+          Boolean(result.defaultGroup.name) &&
+          typeof result.defaultGroup.isCurrent === "boolean");
+
+      expect(isValidDefaultGroup).toBe(true);
     });
   });
 
@@ -133,10 +135,11 @@ describe("scrapeAllGroups", () => {
     });
 
     test("isCurrent=trueのグループはdefaultGroupと一致する", () => {
-      if (result.defaultGroup) {
-        const currentGroup = result.groupDataList.find((gd) => gd.group.isCurrent);
-        expect(currentGroup?.group.id).toBe(result.defaultGroup.id);
-      }
+      const currentGroup = result.groupDataList.find((gd) => gd.group.isCurrent);
+      const matchesDefaultGroup =
+        result.defaultGroup === null || currentGroup?.group.id === result.defaultGroup.id;
+
+      expect(matchesDefaultGroup).toBe(true);
     });
   });
 

@@ -1,5 +1,6 @@
 import { ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
 import { getCategoryColor } from "../../../lib/colors";
+import { formatCurrency } from "../../../lib/format";
 import { cn } from "../../../lib/utils";
 import { AmountDisplay, getAmountColorClass } from "../../ui/amount-display";
 import { SubCategoryAccordion } from "./sub-category-accordion";
@@ -32,6 +33,15 @@ export function CategoryAccordion({
   const color = getCategoryColor(item.category);
   const hasSubCategories = item.subCategories && item.subCategories.length > 0;
   const delta = prevAmount !== undefined ? item.amount - prevAmount : null;
+  const accessibleLabel = [
+    item.category,
+    formatCurrency(item.amount),
+    `${percentage.toFixed(1)}%`,
+    hasPrevData && delta !== null ? `前回比${formatCurrency(delta, true)}` : null,
+    hasSubCategories ? `内訳を${isExpanded ? "閉じる" : "開く"}` : null,
+  ]
+    .filter((value) => value !== null)
+    .join(" ");
 
   return (
     <div className="space-y-1">
@@ -39,6 +49,8 @@ export function CategoryAccordion({
         type="button"
         className={cn("w-full text-left space-y-1", hasSubCategories && "cursor-pointer")}
         onClick={() => hasSubCategories && onToggle()}
+        aria-label={accessibleLabel}
+        aria-expanded={hasSubCategories ? isExpanded : undefined}
       >
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">

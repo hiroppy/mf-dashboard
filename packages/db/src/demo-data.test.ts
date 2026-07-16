@@ -307,22 +307,22 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
           .limit(1)
           .get();
 
-        if (holdingTotal?.total && latestAssetHistory) {
-          // 資産のみの合計を比較（負債は除く）
-          const assetHoldingTotal = await db
-            .select({ total: sql<number>`SUM(${schema.holdingValues.amount})` })
-            .from(schema.holdingValues)
-            .innerJoin(schema.holdings, eq(schema.holdingValues.holdingId, schema.holdings.id))
-            .where(
-              and(
-                eq(schema.holdingValues.snapshotId, snapshot.id),
-                eq(schema.holdings.type, "asset"),
-              ),
-            )
-            .get();
+        // 資産のみの合計を比較（負債は除く）
+        const assetHoldingTotal = await db
+          .select({ total: sql<number>`SUM(${schema.holdingValues.amount})` })
+          .from(schema.holdingValues)
+          .innerJoin(schema.holdings, eq(schema.holdingValues.holdingId, schema.holdings.id))
+          .where(
+            and(
+              eq(schema.holdingValues.snapshotId, snapshot.id),
+              eq(schema.holdings.type, "asset"),
+            ),
+          )
+          .get();
 
-          expect(assetHoldingTotal?.total).toBe(latestAssetHistory.totalAssets);
-        }
+        expect(holdingTotal?.total).toBeDefined();
+        expect(latestAssetHistory).toBeDefined();
+        expect(assetHoldingTotal?.total).toBe(latestAssetHistory?.totalAssets);
       }
     });
 

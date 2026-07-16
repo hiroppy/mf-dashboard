@@ -165,10 +165,8 @@ describe("資産履歴（グループ別）", () => {
         .where(eq(schema.assetHistory.groupId, groupId))
         .all();
 
-      // assetHistoryのポイント数と一致
-      if (groupData.assetHistory.points.length > 0) {
-        expect(history.length).toBeGreaterThan(0);
-      }
+      // assetHistoryのポイントがあるグループはDBにも履歴を持つ
+      expect(groupData.assetHistory.points.length === 0 || history.length > 0).toBe(true);
     }
   });
 });

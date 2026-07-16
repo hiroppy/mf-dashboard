@@ -46,9 +46,8 @@ export function MultiSelectFilter({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          role="combobox"
           aria-expanded={open}
-          aria-controls="multi-select-listbox"
+          aria-haspopup="dialog"
           aria-label={buttonLabel}
           className="w-full justify-between sm:w-auto"
         >
@@ -61,11 +60,7 @@ export function MultiSelectFilter({
         align="end"
         initialFocus={false}
       >
-        <div
-          role="listbox"
-          id="multi-select-listbox"
-          className="max-h-[300px] overflow-y-auto overflow-x-hidden"
-        >
+        <div className="max-h-[300px] overflow-y-auto overflow-x-hidden">
           <div className="flex gap-2 p-2 border-b">
             <Button
               variant="ghost"
@@ -85,29 +80,22 @@ export function MultiSelectFilter({
             </Button>
           </div>
           <div className="p-1">
-            {options.map((option) => (
-              <div
-                key={option}
-                role="option"
-                tabIndex={0}
-                aria-selected={selected.includes(option)}
-                onClick={() => handleToggle(option)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleToggle(option);
-                  }
-                }}
-                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
-              >
-                <Checkbox
-                  checked={selected.includes(option)}
-                  className="mr-2"
-                  aria-label={`${displayLabel(option)}を選択`}
-                />
-                {displayLabel(option)}
-              </div>
-            ))}
+            {options.map((option) => {
+              return (
+                <label
+                  key={option}
+                  className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-within:bg-accent focus-within:text-accent-foreground"
+                >
+                  <Checkbox
+                    checked={selected.includes(option)}
+                    onCheckedChange={() => handleToggle(option)}
+                    className="mr-2"
+                    aria-label={`${displayLabel(option)}を選択`}
+                  />
+                  {displayLabel(option)}
+                </label>
+              );
+            })}
           </div>
         </div>
       </PopoverContent>

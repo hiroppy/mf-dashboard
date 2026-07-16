@@ -59,6 +59,14 @@ function createMockMetrics(
   };
 }
 
+function createSpendingAnomalies(count: number): FullMetrics["spending"]["anomalies"] {
+  return Array.from({ length: count }, (_, index) => ({
+    category: `category-${index + 1}`,
+    amount: 100000 - index * 1000,
+    deviation: 3 - index * 0.1,
+  }));
+}
+
 describe("calculateHealthScore", () => {
   it("should return perfect score for ideal metrics", () => {
     const metrics = createMockMetrics({
@@ -147,17 +155,22 @@ describe("calculateHealthScore", () => {
     const anomaly0 = calculateHealthScore(createMockMetrics({ spending: { anomalies: [] } }));
     const anomaly1 = calculateHealthScore(
       createMockMetrics({
-        spending: { anomalies: [{ category: "a", amount: 100000, deviation: 3 }] },
+        spending: { anomalies: createSpendingAnomalies(1) },
       }),
     );
     const anomaly2 = calculateHealthScore(
       createMockMetrics({
-        spending: {
-          anomalies: [
-            { category: "a", amount: 100000, deviation: 3 },
-            { category: "b", amount: 80000, deviation: 2.5 },
-          ],
-        },
+        spending: { anomalies: createSpendingAnomalies(2) },
+      }),
+    );
+    const anomaly3 = calculateHealthScore(
+      createMockMetrics({
+        spending: { anomalies: createSpendingAnomalies(3) },
+      }),
+    );
+    const anomaly4 = calculateHealthScore(
+      createMockMetrics({
+        spending: { anomalies: createSpendingAnomalies(4) },
       }),
     );
 
@@ -167,6 +180,8 @@ describe("calculateHealthScore", () => {
     expect(get(anomaly0)).toBe(15);
     expect(get(anomaly1)).toBe(10);
     expect(get(anomaly2)).toBe(5);
+    expect(get(anomaly3)).toBe(0);
+    expect(get(anomaly4)).toBe(0);
   });
 
   it("should have 5 categories that sum to totalScore", () => {

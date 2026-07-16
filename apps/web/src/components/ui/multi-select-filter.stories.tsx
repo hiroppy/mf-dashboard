@@ -55,7 +55,7 @@ export const WithPlayTest: Story = {
     const canvas = within(canvasElement);
 
     // Open popover
-    const button = canvas.getByRole("combobox");
+    const button = canvas.getByRole("button", { name: "カテゴリー" });
     await userEvent.click(button);
 
     // Wait for popover to open

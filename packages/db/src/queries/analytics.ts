@@ -107,6 +107,8 @@ const INVESTMENT_CATEGORIES = [
   "暗号資産・FX・貴金属",
 ];
 const ANALYSIS_MONTHS = 12;
+const SPENDING_STABILITY_MAX_SCORE = 15;
+const SPENDING_STABILITY_ANOMALY_PENALTY = 5;
 
 // ============================================================================
 // データ収集
@@ -510,10 +512,10 @@ function scoreGrowth(monthlyGrowthRate: number): number {
 }
 
 function scoreSpendingStability(anomalyCount: number): number {
-  if (anomalyCount === 0) return 15;
-  if (anomalyCount === 1) return 10;
-  if (anomalyCount === 2) return 5;
-  return 0;
+  return Math.max(
+    0,
+    SPENDING_STABILITY_MAX_SCORE - anomalyCount * SPENDING_STABILITY_ANOMALY_PENALTY,
+  );
 }
 
 export function calculateHealthScore(
@@ -543,7 +545,7 @@ export function calculateHealthScore(
     {
       name: "支出安定性",
       score: scoreSpendingStability(metrics.spending.anomalies.length),
-      maxScore: 15,
+      maxScore: SPENDING_STABILITY_MAX_SCORE,
     },
   ];
   const totalScore = categories.reduce((sum, c) => sum + c.score, 0);
