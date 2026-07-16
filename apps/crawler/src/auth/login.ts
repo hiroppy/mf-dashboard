@@ -1,5 +1,5 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import type { BrowserContext, Page } from "playwright";
+import { errors, type BrowserContext, type Page } from "playwright";
 import { log, debug } from "../logger.js";
 import { getCredentials, getOTP } from "./credentials.js";
 import { hasAuthState, saveAuthState } from "./state.js";
@@ -57,19 +57,25 @@ async function maybeHandleOtp(
     timeout?: number;
   },
 ): Promise<void> {
-  try {
-    debug(`Checking for ${label} OTP...`);
-    const otpInput = page.locator(inputSelector).first();
-    await otpInput.waitFor({ state: "visible", timeout });
+  debug(`Checking for ${label} OTP...`);
+  const otpInput = page.locator(inputSelector).first();
 
-    debug(`${label} OTP required, generating from environment secret...`);
-    const otp = await getOTP();
-    await otpInput.fill(otp);
-    debug("Clicking verify button...");
-    await page.locator(submitSelector).first().click();
-  } catch {
-    debug(`${label} OTP not required`);
+  try {
+    await otpInput.waitFor({ state: "visible", timeout });
+  } catch (err) {
+    if (err instanceof errors.TimeoutError) {
+      debug(`${label} OTP not required`);
+      return;
+    }
+
+    throw err;
   }
+
+  debug(`${label} OTP required, generating from environment secret...`);
+  const otp = await getOTP();
+  await otpInput.fill(otp);
+  debug("Clicking verify button...");
+  await page.locator(submitSelector).first().click();
 }
 
 /**

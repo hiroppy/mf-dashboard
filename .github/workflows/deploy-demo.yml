@@ -26,8 +26,10 @@ jobs:
       - id: check
         env:
           MONEY_FORWARD_EMAIL: ${{ secrets.MONEY_FORWARD_EMAIL }}
+          MONEY_FORWARD_PASSWORD: ${{ secrets.MONEY_FORWARD_PASSWORD }}
+          MONEY_FORWARD_TOTP_SECRET: ${{ secrets.MONEY_FORWARD_TOTP_SECRET }}
           HAS_DEMO: ${{ vars.HAS_DEMO }}
-        run: echo "should-run=${{ env.MONEY_FORWARD_EMAIL == '' && env.HAS_DEMO == 'true' }}" >> $GITHUB_OUTPUT
+        run: echo "should-run=${{ (env.MONEY_FORWARD_EMAIL == '' || env.MONEY_FORWARD_PASSWORD == '' || env.MONEY_FORWARD_TOTP_SECRET == '') && env.HAS_DEMO == 'true' }}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: check
