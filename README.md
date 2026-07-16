@@ -106,17 +106,3 @@ $ pnpm dev
 ```sh
 $ pnpm --filter @mf-dashboard/db build:demo
 ```
-
-## demo の Vercel デプロイ
-
-demo は Vercel の Git 連携で `apps/web` を Root Directory にしてデプロイする。
-`apps/web/vercel.json` で以下を固定している。
-
-- Framework Preset: `Next.js`
-- Build Command: `cd ../.. && pnpm turbo build:demo --filter=@mf-dashboard/web...`
-- Output Directory: `out`
-- Environment Variables: System Environment Variables を有効化する。独自ドメインを使う場合は
-  `NEXT_PUBLIC_SITE_URL` に公開 URL を設定する。
-
-`packages/db#build:demo` が `data/demo.db` を生成し、`@mf-dashboard/web#build:demo` が
-`DEMO_MODE=true` で static export を作成する。demo DB は生成物なので Git には含めない。
