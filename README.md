@@ -26,7 +26,7 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ### すべての情報を可視化
 
-demo データで確認できる。予算機能以外はすべて対応済み。
+[demo](https://mf-dashboard-demo.vercel.app/) データで確認できる。予算機能以外はすべて対応済み。
 
 <img src="./.github/assets/demo-month.png" alt="month page" width="50%" /><img src="./.github/assets/demo-dashboard.png" alt="dashboard page" width="50%" />
 
