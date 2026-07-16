@@ -4,7 +4,6 @@
 
 - [MoneyForward Me](https://moneyforward.com/)
 - [Cloudflare](https://www.cloudflare.com/ja-jp/)
-  - GitHub Pagesが使えるならなくてもいいが、workflowを変更する必要あり
 
 ## 1. プライベートリポジトリの作成
 
