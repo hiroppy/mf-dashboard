@@ -16,7 +16,8 @@ const basePath = isGitHubPages ? `/${process.env.NEXT_PUBLIC_GITHUB_REPO}` : "";
 process.env.NEXT_PUBLIC_BASE_PATH = basePath;
 
 const nextConfig: NextConfig = {
-  output: "export",
+  output: isGitHubPages ? "export" : undefined,
+  pageExtensions: isGitHubPages ? ["tsx"] : ["tsx", "ts"],
   typedRoutes: true,
   images: {
     unoptimized: true,

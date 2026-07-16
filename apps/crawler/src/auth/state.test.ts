@@ -23,8 +23,9 @@ describe("state", () => {
   describe("getAuthStatePath", () => {
     test("returns path to auth-state.json in data directory", () => {
       const result = getAuthStatePath();
-      expect(result).toContain("data");
-      expect(result).toContain("auth-state.json");
+      const expectedPath = path.resolve(import.meta.dirname, "../../../../data/auth-state.json");
+
+      expect(result).toBe(expectedPath);
       expect(path.isAbsolute(result)).toBe(true);
     });
   });

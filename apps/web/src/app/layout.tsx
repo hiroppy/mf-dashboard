@@ -7,6 +7,7 @@ import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
+import { waitForRuntimeData } from "../lib/runtime-rendering";
 
 const metadataBase =
   process.env.GITHUB_PAGES === "true"
@@ -44,7 +45,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await waitForRuntimeData();
+
   if (!isDatabaseAvailable()) {
     return (
       <html lang="ja">
