@@ -62,7 +62,7 @@ async function maybeHandleOtp(
     const otpInput = page.locator(inputSelector).first();
     await otpInput.waitFor({ state: "visible", timeout });
 
-    debug(`${label} OTP required, getting from 1Password...`);
+    debug(`${label} OTP required, generating from environment secret...`);
     const otp = await getOTP();
     await otpInput.fill(otp);
     debug("Clicking verify button...");

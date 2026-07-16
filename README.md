@@ -47,8 +47,8 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 ```mermaid
 graph LR
     A[GitHub Actions<br/>Cron] -->|1. 実行| B[Crawler<br/>Playwright]
-    B -->|2. OTP取得| E[1Password<br/>Service Account]
-    E -->|3. 認証情報| B
+    A -->|2. Secrets注入| E[.env / GitHub Secrets]
+    E -->|3. 認証情報とTOTP secret| B
     B -->|4. アクセス| F[MoneyForward Me]
     F -->|5. データ| B
     B -->|6. 保存| C[SQLite<br/>Database]
@@ -59,7 +59,7 @@ graph LR
 **処理の流れ:**
 
 - **定期実行**: GitHub Actionsのcronスケジュールで自動実行
-- **認証**: 1Password Service AccountからOTPを取得
+- **認証**: `.env` / GitHub Secretsのメールアドレス・パスワード・TOTP secretからログインし、OTPを生成
 - **データ取得**: Playwrightを使用してMoneyForward Meからデータをスクレイピング
 - **データ保存**: SQLiteデータベースに構造化して保存
 - **コミット**: SQLiteファイルをリポジトリにコミットすることにより、cloudflareをキック

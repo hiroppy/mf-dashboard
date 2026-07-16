@@ -18,9 +18,11 @@ jobs:
     steps:
       - id: check
         env:
-          OP_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          MONEY_FORWARD_EMAIL: ${{ secrets.MONEY_FORWARD_EMAIL }}
+          MONEY_FORWARD_PASSWORD: ${{ secrets.MONEY_FORWARD_PASSWORD }}
+          MONEY_FORWARD_TOTP_SECRET: ${{ secrets.MONEY_FORWARD_TOTP_SECRET }}
           SHOULD_RUN: ${{ vars.SHOULD_RUN_CRAWLER_E2E }}
-        run: echo "should-run=${{ env.OP_TOKEN != '' && env.SHOULD_RUN == 'true' }}" >> "$GITHUB_OUTPUT"
+        run: echo "should-run=${{ env.MONEY_FORWARD_EMAIL != '' && env.MONEY_FORWARD_PASSWORD != '' && env.MONEY_FORWARD_TOTP_SECRET != '' && env.SHOULD_RUN == 'true' }}" >> "$GITHUB_OUTPUT"
   e2e:
     needs: check
     if: needs.check.outputs.should-run == 'true'
@@ -37,10 +39,9 @@ jobs:
       - name: Run e2e tests
         run: pnpm --filter @mf-dashboard/crawler test:e2e
         env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          OP_VAULT: ${{ secrets.OP_VAULT }}
-          OP_ITEM: ${{ secrets.OP_ITEM }}
-          OP_TOTP_FIELD: ${{ secrets.OP_TOTP_FIELD }}
+          MONEY_FORWARD_EMAIL: ${{ secrets.MONEY_FORWARD_EMAIL }}
+          MONEY_FORWARD_PASSWORD: ${{ secrets.MONEY_FORWARD_PASSWORD }}
+          MONEY_FORWARD_TOTP_SECRET: ${{ secrets.MONEY_FORWARD_TOTP_SECRET }}
       - uses: ./.github/actions/auth-state-cache
         if: always()
         with:

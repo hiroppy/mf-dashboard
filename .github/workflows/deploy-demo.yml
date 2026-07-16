@@ -25,9 +25,9 @@ jobs:
     steps:
       - id: check
         env:
-          OP_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          MONEY_FORWARD_EMAIL: ${{ secrets.MONEY_FORWARD_EMAIL }}
           HAS_DEMO: ${{ vars.HAS_DEMO }}
-        run: echo "should-run=${{ env.OP_TOKEN == '' && env.HAS_DEMO == 'true' }}" >> $GITHUB_OUTPUT
+        run: echo "should-run=${{ env.MONEY_FORWARD_EMAIL == '' && env.HAS_DEMO == 'true' }}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: check

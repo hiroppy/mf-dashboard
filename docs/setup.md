@@ -3,7 +3,6 @@
 ## 必須要件
 
 - [MoneyForward Me](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)
 - [Cloudflare](https://www.cloudflare.com/ja-jp/)
   - GitHub Pagesが使えるならなくてもいいが、workflowを変更する必要あり
 
@@ -22,8 +21,7 @@ $ git remote add upstream https://github.com/hiroppy/mf-dashboard
 ## 2. 各種アカウント設定
 
 - MoneyForwardでワンタイムパスワードの設定を行う ([参考](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95))
-- 1Passwordでservice accountを発行する ([参考](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account))
-  - Private, Familyなど最初から作成されているvaultにMoneyForwardのアカウントを保存している場合、service accountはそのvaultへアクセスできないので注意。その場合は、手で作ったvaultへ移動させる必要がある
+  - 後続の環境変数設定で使うため、設定時に表示されるTOTP secretを控える
 - Cloudflareにプロジェクトを作り、そのリポジトリとGitHub連携を行う ([参考](https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/))
   - ビルド構成
     - ビルド コマンド: `pnpm build --filter="@mf-dashboard/web"`
@@ -81,32 +79,26 @@ Cloudflare OneにIdentity Providerの登録(`/integrations/identity-providers`)�
 
 ### Secrets
 
-| Key                      | Required | Value                                            | Why                                                 |
-| ------------------------ | -------- | ------------------------------------------------ | --------------------------------------------------- |
-| OP_SERVICE_ACCOUNT_TOKEN | ✅       | 1passwordのサービスアカウントトークン            | ログインに必要                                      |
-| OP_VAULT                 | ✅       | 保管庫ID                                         | ログインに必要                                      |
-| OP_ITEM                  | ✅       | MoneyForwardのアイテムID                         | ログインに必要                                      |
-| OP_TOTP_FIELD            | ✅       | MoneyForwardのワンタイムパスワードのフィールドID | ログインに必要                                      |
-| DASHBOARD_URL            |          | デプロイ先URL                                    | Slack投稿でダッシュボードリンクを生成               |
-| SLACK_BOT_TOKEN          |          | bot token                                        | Slackへ結果投稿のため                               |
-| SLACK_CHANNEL_ID         |          | 投稿先のチャンネルID                             | Slackへ結果投稿のため                               |
-| DISCORD_WEBHOOK_URL      |          | Discord Incoming Webhook URL                     | crawler/e2e結果をDiscordへ通知するため              |
-| DISCORD_AVATAR_URL       |          | Discord通知のアイコン画像URL                     | Discord通知の `avatar_url` を上書きするため         |
-| NEXT_PUBLIC_GITHUB_ORG   |          | このリポジトリの組織名                           | UIからGitHub workflowへアクセスするためのリンク作成 |
-| NEXT_PUBLIC_GITHUB_REPO  |          | このリポジトリのリポジトリ名                     | UIからGitHub workflowへアクセスするためのリンク作成 |
+| Key                       | Required | Value                                | Why                                                 |
+| ------------------------- | -------- | ------------------------------------ | --------------------------------------------------- |
+| MONEY_FORWARD_EMAIL       | ✅       | MoneyForwardのログインメールアドレス | ログインに必要                                      |
+| MONEY_FORWARD_PASSWORD    | ✅       | MoneyForwardのログインパスワード     | ログインに必要                                      |
+| MONEY_FORWARD_TOTP_SECRET | ✅       | TOTP secret(base32またはotpauth URI) | ワンタイムパスワード生成に必要                      |
+| DASHBOARD_URL             |          | デプロイ先URL                        | Slack投稿でダッシュボードリンクを生成               |
+| SLACK_BOT_TOKEN           |          | bot token                            | Slackへ結果投稿のため                               |
+| SLACK_CHANNEL_ID          |          | 投稿先のチャンネルID                 | Slackへ結果投稿のため                               |
+| DISCORD_WEBHOOK_URL       |          | Discord Incoming Webhook URL         | crawler/e2e結果をDiscordへ通知するため              |
+| DISCORD_AVATAR_URL        |          | Discord通知のアイコン画像URL         | Discord通知の `avatar_url` を上書きするため         |
+| NEXT_PUBLIC_GITHUB_ORG    |          | このリポジトリの組織名               | UIからGitHub workflowへアクセスするためのリンク作成 |
+| NEXT_PUBLIC_GITHUB_REPO   |          | このリポジトリのリポジトリ名         | UIからGitHub workflowへアクセスするためのリンク作成 |
 
 `NEXT_PUBLIC_GITHUB_ORG`, `NEXT_PUBLIC_GITHUB_REPO`に関しては、Next.jsのビルド時に必要な環境変数なので、Cloudflare側で設定する必要がある。
 
-### 1PasswordのIDの見つけ方 (アプリ)
+### TOTP secretの設定
 
-1password/sdkは日本語に対応しておらずエラーとなってしまうため日本語のものは全部UUIDを利用する必要がある。
+`MONEY_FORWARD_TOTP_SECRET` には、MoneyForwardでワンタイムパスワードを設定するときに表示されるセットアップキーを設定する。base32のsecretをそのまま指定できるほか、`otpauth://` から始まるURIも指定できる。
 
-- `OP_VAULT`
-  - サイドバーでその保管庫を右クリックすると、UUIDをコピーが出てくる
-- `OP_ITEM`
-  - MoneyForwardのアイテム画面右上にあるケバブメニュー(`︙`)をクリックすると、UUIDをコピーが出てくる
-- `OP_TOTP_FIELD`
-  - `OP_ITEM`同様、メニューを開きアイテムのJSONをコピーを押し、そのJSONの中からUUIDを探す。`u`に`TOTP_`開始の文字列があったらそれが正解
+すでにワンタイムパスワードを設定済みでsecretが分からない場合は、MoneyForward側でワンタイムパスワードを再設定し、新しく表示されるsecretを保存する。
 
 ## 4. 実行
 

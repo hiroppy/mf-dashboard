@@ -23,9 +23,11 @@ jobs:
     steps:
       - id: check
         env:
-          OP_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          MONEY_FORWARD_EMAIL: ${{ secrets.MONEY_FORWARD_EMAIL }}
+          MONEY_FORWARD_PASSWORD: ${{ secrets.MONEY_FORWARD_PASSWORD }}
+          MONEY_FORWARD_TOTP_SECRET: ${{ secrets.MONEY_FORWARD_TOTP_SECRET }}
           RUN_TASK: ${{ vars.RUN_TASK }}
-        run: echo "should-run=${{ env.OP_TOKEN != '' && env.RUN_TASK == 'true' }}" >> $GITHUB_OUTPUT
+        run: echo "should-run=${{ env.MONEY_FORWARD_EMAIL != '' && env.MONEY_FORWARD_PASSWORD != '' && env.MONEY_FORWARD_TOTP_SECRET != '' && env.RUN_TASK == 'true' }}" >> $GITHUB_OUTPUT
 
   update:
     needs: check
@@ -43,10 +45,9 @@ jobs:
           enabled: ${{ vars.CACHE_AUTH_STATE }}
       - run: pnpm --filter @mf-dashboard/crawler start
         env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          OP_VAULT: ${{ secrets.OP_VAULT }}
-          OP_ITEM: ${{ secrets.OP_ITEM }}
-          OP_TOTP_FIELD: ${{ secrets.OP_TOTP_FIELD }}
+          MONEY_FORWARD_EMAIL: ${{ secrets.MONEY_FORWARD_EMAIL }}
+          MONEY_FORWARD_PASSWORD: ${{ secrets.MONEY_FORWARD_PASSWORD }}
+          MONEY_FORWARD_TOTP_SECRET: ${{ secrets.MONEY_FORWARD_TOTP_SECRET }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

@@ -1,81 +1,98 @@
-import { createClient, type Client } from "@1password/sdk";
-import { debug, error } from "../logger.js";
+import { createHmac } from "node:crypto";
+import { debug } from "../logger.js";
 
 interface Credentials {
   username: string;
   password: string;
 }
 
-// 1Password SDK client (singleton)
-let _opClient: Client | null = null;
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const TOTP_STEP_SECONDS = 30;
+const TOTP_DIGITS = 6;
 
-/**
- * 1Password SDK クライアントを取得する
- */
-async function getOpClient(): Promise<Client> {
-  if (_opClient) {
-    return _opClient;
+function getRequiredEnv(name: string, options: { trim?: boolean } = {}): string {
+  const rawValue = process.env[name];
+  const value = options.trim ? rawValue?.trim() : rawValue;
+  if (!value) {
+    throw new Error(`${name} が設定されていません`);
   }
 
-  const token = process.env.OP_SERVICE_ACCOUNT_TOKEN;
-  if (!token) {
-    error("OP_SERVICE_ACCOUNT_TOKEN が設定されていません");
-    process.exit(1);
-  }
-
-  debug("1Password SDK クライアントを初期化しています...");
-  _opClient = await createClient({
-    auth: token,
-    integrationName: "mf-dashboard",
-    integrationVersion: "1.0.0",
-  });
-
-  return _opClient;
+  return value;
 }
 
 export async function getCredentials(): Promise<Credentials> {
-  const vault = process.env.OP_VAULT || "";
-  const item = process.env.OP_ITEM || "";
+  debug("環境変数から認証情報を取得しています...");
 
-  const client = await getOpClient();
+  return {
+    username: getRequiredEnv("MONEY_FORWARD_EMAIL", { trim: true }),
+    password: getRequiredEnv("MONEY_FORWARD_PASSWORD"),
+  };
+}
 
-  debug("1Password から認証情報を取得しています...");
-  const [username, password] = await Promise.all([
-    client.secrets.resolve(`op://${vault}/${item}/username`),
-    client.secrets.resolve(`op://${vault}/${item}/password`),
-  ]);
+function extractSecret(input: string): string {
+  const value = input.trim();
 
-  if (!username || !password) {
-    throw new Error("Failed to get credentials from 1Password");
+  if (value.startsWith("otpauth://")) {
+    const secret = new URL(value).searchParams.get("secret");
+    if (!secret) {
+      throw new Error("MONEY_FORWARD_TOTP_SECRET に secret パラメータがありません");
+    }
+    return secret;
   }
 
-  return { username, password };
+  return value;
+}
+
+function decodeBase32(input: string): Buffer {
+  const normalized = extractSecret(input)
+    .toUpperCase()
+    .replace(/[\s=-]/g, "");
+
+  if (!normalized) {
+    throw new Error("MONEY_FORWARD_TOTP_SECRET が設定されていません");
+  }
+
+  const bytes: number[] = [];
+  let bits = 0;
+  let value = 0;
+
+  for (const char of normalized) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index === -1) {
+      throw new Error("MONEY_FORWARD_TOTP_SECRET は base32 形式で設定してください");
+    }
+
+    value = (value << 5) | index;
+    bits += 5;
+
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+      value &= (1 << bits) - 1;
+    }
+  }
+
+  return Buffer.from(bytes);
+}
+
+export function generateTotp(secret: string, timestampMs = Date.now()): string {
+  const key = decodeBase32(secret);
+  const counter = Math.floor(timestampMs / 1000 / TOTP_STEP_SECONDS);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+
+  const digest = createHmac("sha1", key).update(counterBuffer).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+
+  return (binary % 10 ** TOTP_DIGITS).toString().padStart(TOTP_DIGITS, "0");
 }
 
 export async function getOTP(): Promise<string> {
-  const vault = process.env.OP_VAULT || "";
-  const item = process.env.OP_ITEM || "";
-  const totpField = process.env.OP_TOTP_FIELD || "";
-
-  if (!totpField) {
-    throw new Error("OP_TOTP_FIELD が設定されていません");
-  }
-
-  const client = await getOpClient();
-
-  debug("1Password から OTP を取得しています...");
-  const otp = await client.secrets.resolve(`op://${vault}/${item}/${totpField}?attribute=totp`);
-
-  if (!otp) {
-    throw new Error("OTP の取得に失敗しました");
-  }
-
-  return otp;
-}
-
-/**
- * テスト用: クライアントをリセット
- */
-export function _resetOpClient(): void {
-  _opClient = null;
+  debug("環境変数から OTP を生成しています...");
+  return generateTotp(getRequiredEnv("MONEY_FORWARD_TOTP_SECRET"));
 }

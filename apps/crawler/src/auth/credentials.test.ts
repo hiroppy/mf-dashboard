@@ -1,101 +1,75 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
-
-type AnyMock = (...args: any[]) => any;
-
-// Use vi.hoisted to create mock before hoisting
-const { mockResolve, mockCreateClient } = vi.hoisted(() => {
-  const mockResolve = vi.fn<AnyMock>();
-  const mockCreateClient = vi.fn<AnyMock>().mockResolvedValue({
-    secrets: {
-      resolve: mockResolve,
-    },
-  });
-  return { mockResolve, mockCreateClient };
-});
-
-// Mock 1Password SDK
-vi.mock("@1password/sdk", () => ({
-  createClient: mockCreateClient,
-}));
-
-// Mock process.exit
-vi.spyOn(process, "exit").mockImplementation(() => {
-  throw new Error("process.exit called");
-});
-
-import { getCredentials, getOTP, _resetOpClient } from "./credentials.js";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { getCredentials, getOTP, generateTotp } from "./credentials.js";
 
 describe("credentials", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    _resetOpClient();
+    vi.useFakeTimers();
     process.env = {
       ...originalEnv,
-      OP_SERVICE_ACCOUNT_TOKEN: "test-token",
-      OP_VAULT: "test-vault",
-      OP_ITEM: "test-item",
-      OP_TOTP_FIELD: "totp",
+      MONEY_FORWARD_EMAIL: "user-a@example.com",
+      MONEY_FORWARD_PASSWORD: "test-password",
+      MONEY_FORWARD_TOTP_SECRET: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
     };
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     process.env = originalEnv;
   });
 
   describe("getCredentials", () => {
-    test("returns credentials from 1Password", async () => {
-      mockResolve.mockImplementation((path: string) => {
-        if (path.includes("username")) return Promise.resolve("test-user@example.com");
-        if (path.includes("password")) return Promise.resolve("test-password");
-        return Promise.resolve("");
-      });
-
+    test("returns credentials from environment variables", async () => {
       const result = await getCredentials();
 
       expect(result).toEqual({
-        username: "test-user@example.com",
+        username: "user-a@example.com",
         password: "test-password",
       });
-      expect(mockResolve).toHaveBeenCalledWith("op://test-vault/test-item/username");
-      expect(mockResolve).toHaveBeenCalledWith("op://test-vault/test-item/password");
     });
 
-    test("throws error when credentials are empty", async () => {
-      mockResolve.mockResolvedValue("");
+    test("throws error when email is not set", async () => {
+      delete process.env.MONEY_FORWARD_EMAIL;
 
-      await expect(getCredentials()).rejects.toThrow("Failed to get credentials from 1Password");
+      await expect(getCredentials()).rejects.toThrow("MONEY_FORWARD_EMAIL が設定されていません");
     });
 
-    test("exits when OP_SERVICE_ACCOUNT_TOKEN is not set", async () => {
-      delete process.env.OP_SERVICE_ACCOUNT_TOKEN;
-      _resetOpClient();
+    test("throws error when password is not set", async () => {
+      delete process.env.MONEY_FORWARD_PASSWORD;
 
-      await expect(getCredentials()).rejects.toThrow("process.exit called");
+      await expect(getCredentials()).rejects.toThrow("MONEY_FORWARD_PASSWORD が設定されていません");
     });
   });
 
   describe("getOTP", () => {
-    test("returns OTP from 1Password", async () => {
-      mockResolve.mockResolvedValue("123456");
+    test("returns OTP generated from environment variable", async () => {
+      vi.setSystemTime(new Date("1970-01-01T00:00:59Z"));
 
       const result = await getOTP();
 
-      expect(result).toBe("123456");
-      expect(mockResolve).toHaveBeenCalledWith("op://test-vault/test-item/totp?attribute=totp");
+      expect(result).toBe("287082");
     });
 
-    test("throws error when OP_TOTP_FIELD is not set", async () => {
-      delete process.env.OP_TOTP_FIELD;
+    test("generates OTP from otpauth URI", () => {
+      const result = generateTotp(
+        "otpauth://totp/MoneyForward:user-a@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=MoneyForward",
+        Date.parse("1970-01-01T00:00:59Z"),
+      );
 
-      await expect(getOTP()).rejects.toThrow("OP_TOTP_FIELD が設定されていません");
+      expect(result).toBe("287082");
     });
 
-    test("throws error when OTP is empty", async () => {
-      mockResolve.mockResolvedValue("");
+    test("throws error when TOTP secret is not set", async () => {
+      delete process.env.MONEY_FORWARD_TOTP_SECRET;
 
-      await expect(getOTP()).rejects.toThrow("OTP の取得に失敗しました");
+      await expect(getOTP()).rejects.toThrow("MONEY_FORWARD_TOTP_SECRET が設定されていません");
+    });
+
+    test("throws error when TOTP secret is not base32", () => {
+      expect(() => generateTotp("invalid-secret!")).toThrow(
+        "MONEY_FORWARD_TOTP_SECRET は base32 形式で設定してください",
+      );
     });
   });
 });
