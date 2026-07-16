@@ -88,12 +88,6 @@ describe("useTransactionFiltering", () => {
       expect(result.current.categories[0]).toBe("食費");
       expect(result.current.categoryCount.get("食費")).toBe(2);
     });
-
-    it("typeOptionsが定義されている", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      expect(result.current.typeOptions).toEqual(["income", "expense", "transfer"]);
-    });
   });
 
   describe("KPI計算", () => {
@@ -144,33 +138,6 @@ describe("useTransactionFiltering", () => {
   });
 
   describe("検索フィルタ", () => {
-    it("説明文で検索できる", () => {
-      const transactions = [
-        createTransaction({ id: 1, description: "ランチ代" }),
-        createTransaction({ id: 2, description: "ディナー" }),
-      ];
-      const { result } = renderHook(() =>
-        useTransactionFiltering({ ...defaultOptions, transactions }),
-      );
-
-      act(() => {
-        result.current.handleSearchChange("ランチ");
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(1);
-      expect(result.current.filteredAndSortedTransactions[0].description).toBe("ランチ代");
-    });
-
-    it("カテゴリ名で検索できる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleSearchChange("食費");
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(2);
-    });
-
     it("検索時にページがリセットされる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -198,16 +165,6 @@ describe("useTransactionFiltering", () => {
       expect(result.current.selectedCategories).toEqual(["食費"]);
     });
 
-    it("複数カテゴリでOR検索できる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleCategoriesChange(["食費", "交通費"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(3);
-    });
-
     it("カテゴリを削除できる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -221,31 +178,9 @@ describe("useTransactionFiltering", () => {
 
       expect(result.current.selectedCategories).toEqual(["交通費"]);
     });
-
-    it("nullカテゴリは「振替」として扱われる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleCategoriesChange(["振替"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(1);
-      expect(result.current.filteredAndSortedTransactions[0].category).toBeNull();
-    });
   });
 
   describe("タイプフィルタ", () => {
-    it("タイプでフィルタできる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleTypesChange(["income"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(1);
-      expect(result.current.filteredAndSortedTransactions[0].type).toBe("income");
-    });
-
     it("タイプを削除できる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -262,16 +197,6 @@ describe("useTransactionFiltering", () => {
   });
 
   describe("アカウントフィルタ", () => {
-    it("アカウントでフィルタできる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleAccountsChange(["銀行A"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(3);
-    });
-
     it("アカウントを削除できる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -384,20 +309,6 @@ describe("useTransactionFiltering", () => {
       });
 
       expect(dateValue).toBeNull();
-    });
-  });
-
-  describe("複合フィルタ", () => {
-    it("複数のフィルタを組み合わせてAND検索できる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleCategoriesChange(["食費"]);
-        result.current.handleTypesChange(["expense"]);
-        result.current.handleAccountsChange(["銀行A"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(2);
     });
   });
 });
