@@ -107,7 +107,7 @@ $ pnpm dev
 
 local 開発では `DB_PATH` と `WEB_URL` を未設定のままにする。`DB_PATH` は repo root の
 `data/moneyforward.db` に自動解決され、`WEB_URL` 未設定時は crawler 完了後の web refresh
-通知を skip する。Docker Composeでは `compose.yml` が `WEB_URL=http://web:8765` と crawler 専用の `AUTH_STATE_PATH=/app/crawler-state/auth-state.json` を設定する。
+通知を skip する。Docker Composeでは `compose.yml` が `WEB_URL=http://web:8765` と crawler 専用の `AUTH_STATE_PATH=/app/crawler-state/auth-state.json` を設定する。Linux host で `./data` に書き込めない場合は `.env` の `HOST_UID` / `HOST_GID` を host user に合わせる。
 
 `data/demo.db` は生成物として扱い、Git には含めない。`pnpm dev:demo` / `pnpm build:demo`
 実行時に自動生成される。手動で作り直したい場合は次を実行する。

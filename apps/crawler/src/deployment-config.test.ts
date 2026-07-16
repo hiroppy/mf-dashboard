@@ -59,12 +59,11 @@ describe("Deployment configuration", () => {
     expect(terraformGitignore).toContain("*.tfvars");
   });
 
-  test("runs the crawler as the non-root image user without host UID overrides", () => {
-    expect(compose).not.toContain("HOST_UID");
-    expect(compose).not.toContain("HOST_GID");
-    expect(compose).not.toContain("HOME: /tmp");
-    expect(envExample).not.toContain("HOST_UID=");
-    expect(envExample).not.toContain("HOST_GID=");
+  test("runs the crawler as a non-root host user for writable bind mounts", () => {
+    expect(compose).toContain('user: "${HOST_UID:-1000}:${HOST_GID:-1000}"');
+    expect(compose).toContain("HOME: /tmp");
+    expect(envExample).toContain("# HOST_UID=1000");
+    expect(envExample).toContain("# HOST_GID=1000");
     expect(crawlerDockerfile).toContain("USER pwuser");
   });
 

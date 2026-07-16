@@ -42,6 +42,7 @@ services:
     build:
       context: .
       dockerfile: docker/crawler/Dockerfile
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
@@ -54,6 +55,7 @@ services:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       DRY_RUN: ${DRY_RUN:-}
       HEADED: ${HEADED:-}
+      HOME: /tmp
       MAX_WAIT_MINUTES: ${MAX_WAIT_MINUTES:-}
       OP_ITEM: ${OP_ITEM:-}
       OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN:-}

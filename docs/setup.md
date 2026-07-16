@@ -85,7 +85,7 @@ openssl rand -hex 32
 
 `openssl` の出力を `.env` の `REFRESH_TOKEN` に設定する。この token は crawler と web が共有するアプリ用の認証情報であり、Terraform では管理しない。
 
-既存の GitHub Actions secrets に入れていた MoneyForward / 通知系の値は、そのまま `.env` に移して使える。Slack / Discord / dashboard link は必要な場合だけ設定する。local の `pnpm db:dev` / `pnpm dev` では `DB_PATH` と `WEB_URL` を未設定のままにし、repo root の `data/moneyforward.db` と refresh skip の既定挙動を使う。
+既存の GitHub Actions secrets に入れていた MoneyForward / 通知系の値は、そのまま `.env` に移して使える。Slack / Discord / dashboard link は必要な場合だけ設定する。Linux host で `./data` bind mount に書き込めない場合は、`.env` の `HOST_UID=$(id -u)` / `HOST_GID=$(id -g)` を設定して crawler を host user と同じ UID/GID で起動する。local の `pnpm db:dev` / `pnpm dev` では `DB_PATH` と `WEB_URL` を未設定のままにし、repo root の `data/moneyforward.db` と refresh skip の既定挙動を使う。
 
 | `.env` Key                                   | 必須     | 値                                                                                                    |
 | -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
@@ -95,6 +95,7 @@ openssl rand -hex 32
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | optional | Slack 通知                                                                                            |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | optional | Discord 通知                                                                                          |
 | `DASHBOARD_URL`                              | optional | 公開している `https://<hostname>/`                                                                    |
+| `HOST_UID` / `HOST_GID`                      | optional | Linux host の bind mount 書き込み用 UID/GID。Docker Compose の既定値は `1000:1000`                    |
 | `AUTH_STATE_PATH`                            | optional | local 実行時の browser session 保存先。Docker Compose では crawler 専用 volume を使うため通常は未設定 |
 
 #### 1Password の ID の見つけ方
