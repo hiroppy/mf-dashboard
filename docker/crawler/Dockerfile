@@ -35,14 +35,13 @@ COPY packages/analytics/package.json ./packages/analytics/
 
 RUN package_manager=$(node -p "require('./package.json').packageManager") \
     && corepack prepare "$package_manager" --activate \
-    && pnpm install --frozen-lockfile --filter "@mf-dashboard/crawler..."
+    && pnpm install --frozen-lockfile --filter "@mf-dashboard/crawler..." \
+    && rm -rf /pnpm/store
 
 COPY . .
 
-RUN mkdir -p /app/data /app/crawler-state /pnpm \
-    && chown -R pwuser:pwuser /app /pnpm /home/pwuser /ms-playwright \
-    && chmod 1777 /app/crawler-state \
-    && chmod -R a+rX /pnpm
+RUN mkdir -p /app/data /app/crawler-state \
+    && chmod 1777 /app/crawler-state
 USER pwuser
 
 ENTRYPOINT ["/usr/bin/tini", "--", "supercronic", "/app/docker/crawler/crontab"]

@@ -96,9 +96,11 @@ describe("Deployment configuration", () => {
     );
     expect(webDockerfile).toContain('pnpm rebuild --pending --filter "@mf-dashboard/web..."');
     expect(webDockerfile).toContain("RUN cd apps/web && ./node_modules/.bin/next build");
-    expect(webDockerfile).toContain(
-      'CMD ["/app/apps/web/node_modules/.bin/next", "start", "--port", "8765"]',
-    );
+    expect(webDockerfile).toContain("/app/apps/web/.next/standalone");
+    expect(webDockerfile).toContain('CMD ["node", "apps/web/server.js"]');
+    expect(webDockerfile).not.toContain("chown -R");
+    expect(crawlerDockerfile).not.toContain("chown -R");
+    expect(crawlerDockerfile).not.toContain("chmod -R");
   });
 
   test("stores crawler auth state outside the web data mount", () => {
@@ -111,7 +113,7 @@ describe("Deployment configuration", () => {
     expect(compose).toContain("crawler_auth_state:");
     expect(webSection).not.toContain("crawler_auth_state");
     expect(webSection).not.toContain("/app/crawler-state");
-    expect(crawlerDockerfile).toContain("mkdir -p /app/data /app/crawler-state /pnpm");
+    expect(crawlerDockerfile).toContain("mkdir -p /app/data /app/crawler-state");
     expect(crawlerDockerfile).toContain("chmod 1777 /app/crawler-state");
   });
 
