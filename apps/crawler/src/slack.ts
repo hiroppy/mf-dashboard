@@ -67,7 +67,7 @@ export async function sendErrorNotification(err: Error): Promise<void> {
   });
 }
 
-function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
+export function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
   const { summary, items, updatedAt, groupName } = data;
 
   // Extract "合計" from items to get daily change
@@ -150,7 +150,7 @@ function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
 
     const lines = data.accountIssues.map((issue) => {
       const statusLabel = issue.status === "updating" ? "更新中" : "エラー";
-      if (issue.errorMessage) {
+      if (issue.status === "error" && issue.errorMessage) {
         return `• ${issue.name} (${statusLabel}: ${issue.errorMessage})`;
       }
       return `• ${issue.name} (${statusLabel})`;
