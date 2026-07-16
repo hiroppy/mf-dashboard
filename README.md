@@ -106,9 +106,3 @@ $ pnpm dev
 ```sh
 $ pnpm --filter @mf-dashboard/db build:demo
 ```
-
-## 更新
-
-```sh
-$ sh update.sh
-```
