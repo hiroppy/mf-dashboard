@@ -9,8 +9,11 @@ if (existsSync(rootEnvPath)) {
   loadEnvFile(rootEnvPath);
 }
 
+const isStaticDemoBuild = process.env.DEMO_MODE === "true";
+
 const nextConfig: NextConfig = {
-  output: "export",
+  output: isStaticDemoBuild ? "export" : undefined,
+  pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
   typedRoutes: true,
   images: {
     unoptimized: true,

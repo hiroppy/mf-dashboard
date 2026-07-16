@@ -19,6 +19,9 @@ test-moneyforward.db*
 data/demo.db
 *.db-shm
 *.db-wal
+data/moneyforward.db
+data/cloudflared-token
+secrets/
 
 playwright-report
 test-results
@@ -29,3 +32,5 @@ apps/crawler/tests/e2e/screenshots/
 .worktrees/
 docs/plans
 error-*.png
+.claude/scheduled_tasks.lock
+com.mf-dashboard.e2e-crawler.plist

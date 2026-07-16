@@ -13,8 +13,9 @@ import {
   runSetupPhase,
   type CrawlerRuntime,
 } from "./crawler-phases.js";
-import { info } from "./logger.js";
+import { error, info } from "./logger.js";
 import { createGroupScope } from "./scrapers/group.js";
+import { notifyWebRefresh } from "./web-refresh.js";
 
 async function main() {
   const config = runLoadPhase();
@@ -32,6 +33,12 @@ async function main() {
     await runCashFlowHistoryPhase(runtime.db, runtime.page, config);
     await runAnalyticsPhase(runtime.db, scrapeResult.groupDataList);
     await runNotificationPhase(scrapeResult.groupDataList, groupScope.originalGroup);
+
+    try {
+      await notifyWebRefresh();
+    } catch (err) {
+      error("Failed to refresh web cache:", err);
+    }
 
     info("Completed!");
   } catch (err) {
