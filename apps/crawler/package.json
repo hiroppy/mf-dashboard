@@ -15,6 +15,7 @@
   },
   "scripts": {
     "dev:scrape": "DEBUG=true SKIP_REFRESH=true tsx src/index.ts",
+    "serve": "tsx src/server.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run --project unit",
     "test:e2e": "vitest run --project e2e",
@@ -27,11 +28,11 @@
     "@mf-dashboard/meta": "workspace:*",
     "@slack/web-api": "7.17.0",
     "drizzle-orm": "catalog:",
+    "playwright": "catalog:",
     "tsx": "4.22.4"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "playwright": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

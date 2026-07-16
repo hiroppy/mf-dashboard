@@ -26,7 +26,8 @@ describe("next config", () => {
   it("keeps TypeScript route handlers available for runtime server builds", async () => {
     const config = await loadConfig();
 
-    expect(config.output).toBeUndefined();
+    expect(config.output).toBe("standalone");
+    expect(config.outputFileTracingRoot).toBeDefined();
     expect(config.pageExtensions).toEqual(["tsx", "ts"]);
   });
 });

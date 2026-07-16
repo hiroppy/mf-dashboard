@@ -27,6 +27,12 @@ The following rules must always be followed. Code violating these rules will be 
 - [ ] Do NOT create barrel files (`index.ts` for re-exports)
 - [ ] Import directly from the source file
 
+### Docker Cleanup (Orchestrator)
+
+- [ ] When an orchestrator or LLM agent starts Docker Compose for validation, it MUST run `docker compose down --remove-orphans` before finishing, including after failures
+- [ ] Do NOT pass `--volumes` to cleanup commands unless the user explicitly authorizes deleting persistent data
+- [ ] One-off validation containers MUST be started with `docker run --rm` or explicitly removed after use
+
 ### Logging (Crawler)
 
 For the crawler (`apps/crawler`), use the following log functions appropriately:

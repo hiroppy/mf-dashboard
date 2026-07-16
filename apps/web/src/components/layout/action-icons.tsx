@@ -1,14 +1,45 @@
 "use client";
 
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import { Home, Code2, HelpCircle } from "lucide-react";
-import type { ReactNode } from "react";
+import { Home, Code2, HelpCircle, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { formatDateTime } from "../../lib/format";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
+
+const STATUS_POLL_INTERVAL_MS = 15_000;
 
 interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
+}
+
+interface CrawlerRefreshStatus {
+  available: boolean;
+  running: boolean;
+  startedAt: string | null;
+}
+
+interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
+  isPending: boolean;
+}
+
+const unavailableStatus: CrawlerRefreshStatus = {
+  available: false,
+  running: false,
+  startedAt: null,
+};
+
+async function readCrawlerRefreshStatus(): Promise<CrawlerRefreshStatus> {
+  const res = await fetch("/api/crawler/refresh/", { cache: "no-store" });
+  const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
+
+  return {
+    available: res.ok && body.available !== false,
+    running: Boolean(body.running),
+    startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
+  };
 }
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
@@ -26,10 +57,96 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
   return (
     <div className="flex items-center gap-1">
       {notifications}
+      <RefreshButton iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
       <GitHubButton iconSize={iconSize} className="hidden lg:block" />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
+  );
+}
+
+function RefreshButton({ iconSize }: { iconSize: string }) {
+  const router = useRouter();
+  const wasRunningRef = useRef(false);
+  const [state, setState] = useState<CrawlerRefreshButtonState>({
+    ...unavailableStatus,
+    isPending: true,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function updateStatus() {
+      try {
+        const nextStatus = await readCrawlerRefreshStatus();
+        if (isMounted) {
+          setState({ ...nextStatus, isPending: false });
+          if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
+            router.refresh();
+          }
+          wasRunningRef.current = nextStatus.running;
+        }
+      } catch {
+        if (isMounted) {
+          setState({ ...unavailableStatus, isPending: false });
+          wasRunningRef.current = false;
+        }
+      }
+    }
+
+    void updateStatus();
+    const intervalId = window.setInterval(updateStatus, STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [router]);
+
+  async function startRefresh() {
+    if (!state.available || state.running || state.isPending) {
+      return;
+    }
+
+    setState((prev) => ({ ...prev, running: true, isPending: true }));
+
+    try {
+      const res = await fetch("/api/crawler/refresh/", { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
+
+      if (!res.ok && res.status !== 409) {
+        setState({ ...unavailableStatus, isPending: false });
+        return;
+      }
+
+      const running = Boolean(body.running ?? true);
+      wasRunningRef.current ||= running;
+      setState({
+        available: body.available !== false,
+        running,
+        startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
+        isPending: false,
+      });
+    } catch {
+      setState({ ...unavailableStatus, isPending: false });
+    }
+  }
+
+  const isBusy = state.isPending || state.running;
+  const isDisabled = isBusy || !state.available;
+  let title = state.available ? "更新" : "更新サービス未接続";
+  if (state.running) {
+    title = state.startedAt ? `更新中（開始: ${formatDateTime(state.startedAt)}）` : "更新中";
+  }
+
+  return (
+    <IconButton
+      icon={<RefreshCw className={`${iconSize} ${isBusy ? "animate-spin" : ""}`} />}
+      onClick={() => void startRefresh()}
+      ariaLabel="金融機関データを更新"
+      disabled={isDisabled}
+      title={title}
+    />
   );
 }
 

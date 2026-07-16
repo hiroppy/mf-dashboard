@@ -9,7 +9,9 @@ const readRepositoryFile = (filePath: string) =>
   readFileSync(path.join(repositoryRoot, filePath), "utf8");
 
 const compose = readRepositoryFile("compose.yml");
+const crawlerCrontab = readRepositoryFile("docker/crawler/crontab");
 const crawlerDockerfile = readRepositoryFile("docker/crawler/Dockerfile");
+const crawlerEntrypoint = readRepositoryFile("docker/crawler/entrypoint.sh");
 const dockerignore = readRepositoryFile(".dockerignore");
 const envExample = readRepositoryFile(".env.example");
 const terraform = readRepositoryFile("terraform/main.tf");
@@ -64,7 +66,7 @@ describe("Deployment configuration", () => {
     expect(compose).toContain("HOME: /tmp");
     expect(envExample).toContain("# HOST_UID=1000");
     expect(envExample).toContain("# HOST_GID=1000");
-    expect(crawlerDockerfile).toContain("USER pwuser");
+    expect(crawlerDockerfile).toContain("USER node");
   });
 
   test("prepares the package manager pinned by the repository in Docker images", () => {
@@ -96,9 +98,41 @@ describe("Deployment configuration", () => {
     );
     expect(webDockerfile).toContain('pnpm rebuild --pending --filter "@mf-dashboard/web..."');
     expect(webDockerfile).toContain("RUN cd apps/web && ./node_modules/.bin/next build");
-    expect(webDockerfile).toContain(
-      'CMD ["/app/apps/web/node_modules/.bin/next", "start", "--port", "8765"]',
+    expect(webDockerfile).toContain("/app/apps/web/.next/standalone");
+    expect(webDockerfile).toContain('CMD ["node", "apps/web/server.js"]');
+    expect(webDockerfile).not.toContain("chown -R");
+    expect(crawlerDockerfile).not.toContain("chown -R");
+    expect(crawlerDockerfile).not.toContain("chmod -R");
+  });
+
+  test("installs only Chromium in the crawler image", () => {
+    expect(crawlerDockerfile).toContain("FROM node:22-bookworm-slim");
+    expect(crawlerDockerfile).not.toContain("mcr.microsoft.com/playwright");
+    expect(crawlerDockerfile).toContain("PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
+    expect(crawlerDockerfile).toContain(
+      'pnpm install --frozen-lockfile --prod --filter "@mf-dashboard/crawler..." --ignore-scripts',
     );
+    expect(crawlerDockerfile).toContain(
+      'pnpm rebuild --pending --filter "@mf-dashboard/crawler..."',
+    );
+    expect(crawlerDockerfile).toContain("playwright install --with-deps chromium");
+    expect(crawlerDockerfile).not.toContain("playwright install --with-deps firefox");
+    expect(crawlerDockerfile).not.toContain("playwright install --with-deps webkit");
+  });
+
+  test("connects the web refresh action to the crawler trigger server", () => {
+    const webSection = compose.match(/  web:\n[\s\S]*?\n\n  cloudflared:/)?.[0] ?? "";
+    const crawlerSection = compose.match(/  crawler:\n[\s\S]*?\n\nsecrets:/)?.[0] ?? "";
+
+    expect(webSection).toContain("CRAWLER_URL: http://crawler:8766");
+    expect(crawlerSection).toContain('- "8766"');
+    expect(crawlerDockerfile).toContain(
+      'ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/crawler/entrypoint.sh"]',
+    );
+    expect(crawlerEntrypoint).toContain("node --import tsx src/server.ts");
+    expect(crawlerEntrypoint).toContain("supercronic /app/docker/crawler/crontab");
+    expect(crawlerCrontab).toContain("CRAWLER_RUN_SOURCE=scheduled node --import tsx src/index.ts");
+    expect(crawlerCrontab).not.toContain("pnpm");
   });
 
   test("stores crawler auth state outside the web data mount", () => {
@@ -111,7 +145,7 @@ describe("Deployment configuration", () => {
     expect(compose).toContain("crawler_auth_state:");
     expect(webSection).not.toContain("crawler_auth_state");
     expect(webSection).not.toContain("/app/crawler-state");
-    expect(crawlerDockerfile).toContain("mkdir -p /app/data /app/crawler-state /pnpm");
+    expect(crawlerDockerfile).toContain("mkdir -p /app/data /app/crawler-state");
     expect(crawlerDockerfile).toContain("chmod 1777 /app/crawler-state");
   });
 

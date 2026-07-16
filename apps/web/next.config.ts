@@ -12,7 +12,8 @@ if (existsSync(rootEnvPath)) {
 const isStaticDemoBuild = process.env.DEMO_MODE === "true";
 
 const nextConfig: NextConfig = {
-  output: isStaticDemoBuild ? "export" : undefined,
+  output: isStaticDemoBuild ? "export" : "standalone",
+  outputFileTracingRoot: join(import.meta.dirname, "../.."),
   pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
   typedRoutes: true,
   images: {

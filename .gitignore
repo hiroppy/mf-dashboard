@@ -16,11 +16,9 @@ test-auth-state.json
 
 test-groups-moneyforward.db
 test-moneyforward.db*
-data/demo.db
+data/*
 *.db-shm
 *.db-wal
-data/moneyforward.db
-data/cloudflared-token
 secrets/
 
 playwright-report

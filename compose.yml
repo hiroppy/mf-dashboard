@@ -21,6 +21,7 @@ services:
         NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE: ${NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE:-}
         NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME: ${NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME:-}
     environment:
+      CRAWLER_URL: http://crawler:8766
       REFRESH_TOKEN: ${REFRESH_TOKEN:-}
       TZ: Asia/Tokyo
     volumes:
@@ -72,6 +73,8 @@ services:
     volumes:
       - ./data:/app/data
       - crawler_auth_state:/app/crawler-state
+    expose:
+      - "8766"
     depends_on:
       - web
     restart: unless-stopped
