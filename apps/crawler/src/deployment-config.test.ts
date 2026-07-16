@@ -64,7 +64,7 @@ describe("Deployment configuration", () => {
     expect(compose).toContain("HOME: /tmp");
     expect(envExample).toContain("# HOST_UID=1000");
     expect(envExample).toContain("# HOST_GID=1000");
-    expect(crawlerDockerfile).toContain("USER pwuser");
+    expect(crawlerDockerfile).toContain("USER node");
   });
 
   test("prepares the package manager pinned by the repository in Docker images", () => {
@@ -101,6 +101,21 @@ describe("Deployment configuration", () => {
     expect(webDockerfile).not.toContain("chown -R");
     expect(crawlerDockerfile).not.toContain("chown -R");
     expect(crawlerDockerfile).not.toContain("chmod -R");
+  });
+
+  test("installs only Chromium in the crawler image", () => {
+    expect(crawlerDockerfile).toContain("FROM node:22-bookworm-slim");
+    expect(crawlerDockerfile).not.toContain("mcr.microsoft.com/playwright");
+    expect(crawlerDockerfile).toContain("PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
+    expect(crawlerDockerfile).toContain(
+      'pnpm install --frozen-lockfile --prod --filter "@mf-dashboard/crawler..." --ignore-scripts',
+    );
+    expect(crawlerDockerfile).toContain(
+      'pnpm rebuild --pending --filter "@mf-dashboard/crawler..."',
+    );
+    expect(crawlerDockerfile).toContain("playwright install --with-deps chromium");
+    expect(crawlerDockerfile).not.toContain("playwright install --with-deps firefox");
+    expect(crawlerDockerfile).not.toContain("playwright install --with-deps webkit");
   });
 
   test("stores crawler auth state outside the web data mount", () => {
