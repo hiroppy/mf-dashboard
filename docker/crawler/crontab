@@ -1,0 +1,2 @@
+0 7  * * * cd /app && pnpm --filter @mf-dashboard/crawler start
+30 15 * * * cd /app && pnpm --filter @mf-dashboard/crawler start

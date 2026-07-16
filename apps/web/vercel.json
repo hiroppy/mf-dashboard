@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "cd $(git rev-parse --show-toplevel) && pnpm install --frozen-lockfile",
-  "buildCommand": "cd $(git rev-parse --show-toplevel) && pnpm turbo build:demo --filter=@mf-dashboard/web...",
-  "outputDirectory": "out"
+  "buildCommand": "cd ../.. && pnpm turbo build:demo --filter=@mf-dashboard/web...",
+  "outputDirectory": ".next"
 }
