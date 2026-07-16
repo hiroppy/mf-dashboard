@@ -15,6 +15,7 @@
   },
   "scripts": {
     "dev:scrape": "DEBUG=true SKIP_REFRESH=true tsx src/index.ts",
+    "serve": "tsx src/server.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run --project unit",
     "test:e2e": "vitest run --project e2e",

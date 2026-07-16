@@ -42,11 +42,12 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ## アーキテクチャ
 
-ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) を持ち、JST 7:00 / 15:30 に MoneyForward をスクレイピング → 完了後 web の `/api/refresh/` を Docker bridge 経由で Bearer 認証付き POST し、`revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
+ローカル PC で **Docker Compose** を使い、`web` (Next.js) / `cloudflared` / `crawler` の 3 サービスを常駐させる。crawler コンテナは内部に **supercronic** (containers 向けの cron) と手動更新 API を持ち、JST 7:00 / 15:30 または UI の更新ボタンから MoneyForward をスクレイピング → 完了後 web の `/api/refresh/` を Docker bridge 経由で Bearer 認証付き POST し、`revalidatePath` で全ルートを再生成する。SQLite は volume 経由で web/crawler が共有し、Git には commit しない。外部公開は Cloudflare Tunnel + Access (Google IdP + email allowlist)。
 
 ```mermaid
 graph LR
     A[crawler コンテナ<br/>supercronic] -->|1. JST 7:00/15:30| B[crawler<br/>Playwright]
+    W -->|手動更新<br/>crawler:8766| B
     B -->|2. OTP取得| E[1Password<br/>Service Account]
     E -->|3. 認証情報| B
     B -->|4. アクセス| F[MoneyForward Me]
@@ -63,7 +64,7 @@ graph LR
 **処理の流れ:**
 
 - **常駐**: Docker Desktop の自動起動 + `restart: unless-stopped` で 3 コンテナがホスト起動時に立ち上がる
-- **スケジューリング**: crawler コンテナの supercronic が `docker/crawler/crontab` を回す (TZ=Asia/Tokyo)
+- **スケジューリング**: crawler コンテナの supercronic が `docker/crawler/crontab` を回す (TZ=Asia/Tokyo)。web の更新ボタンから内部 API 経由でも即時実行できる
 - **データ取得**: Playwright で MoneyForward Me からスクレイピング
 - **認証**: 1Password Service Account から OTP を取得
 - **データ保存**: 共有 volume の SQLite (`./data/moneyforward.db`) に保存。MoneyForward の browser session は crawler 専用 volume に分離し、web から mount しない

@@ -44,7 +44,8 @@ RUN package_manager=$(node -p "require('./package.json').packageManager") \
 COPY . .
 
 RUN mkdir -p /app/data /app/crawler-state \
-    && chmod 1777 /app/crawler-state
+    && chmod 1777 /app/crawler-state \
+    && chmod 0755 /app/docker/crawler/entrypoint.sh
 USER node
 
-ENTRYPOINT ["/usr/bin/tini", "--", "supercronic", "/app/docker/crawler/crontab"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/crawler/entrypoint.sh"]

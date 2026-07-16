@@ -9,7 +9,9 @@ const readRepositoryFile = (filePath: string) =>
   readFileSync(path.join(repositoryRoot, filePath), "utf8");
 
 const compose = readRepositoryFile("compose.yml");
+const crawlerCrontab = readRepositoryFile("docker/crawler/crontab");
 const crawlerDockerfile = readRepositoryFile("docker/crawler/Dockerfile");
+const crawlerEntrypoint = readRepositoryFile("docker/crawler/entrypoint.sh");
 const dockerignore = readRepositoryFile(".dockerignore");
 const envExample = readRepositoryFile(".env.example");
 const terraform = readRepositoryFile("terraform/main.tf");
@@ -116,6 +118,21 @@ describe("Deployment configuration", () => {
     expect(crawlerDockerfile).toContain("playwright install --with-deps chromium");
     expect(crawlerDockerfile).not.toContain("playwright install --with-deps firefox");
     expect(crawlerDockerfile).not.toContain("playwright install --with-deps webkit");
+  });
+
+  test("connects the web refresh action to the crawler trigger server", () => {
+    const webSection = compose.match(/  web:\n[\s\S]*?\n\n  cloudflared:/)?.[0] ?? "";
+    const crawlerSection = compose.match(/  crawler:\n[\s\S]*?\n\nsecrets:/)?.[0] ?? "";
+
+    expect(webSection).toContain("CRAWLER_URL: http://crawler:8766");
+    expect(crawlerSection).toContain('- "8766"');
+    expect(crawlerDockerfile).toContain(
+      'ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/crawler/entrypoint.sh"]',
+    );
+    expect(crawlerEntrypoint).toContain("node --import tsx src/server.ts");
+    expect(crawlerEntrypoint).toContain("supercronic /app/docker/crawler/crontab");
+    expect(crawlerCrontab).toContain("CRAWLER_RUN_SOURCE=scheduled node --import tsx src/index.ts");
+    expect(crawlerCrontab).not.toContain("pnpm");
   });
 
   test("stores crawler auth state outside the web data mount", () => {

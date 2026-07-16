@@ -1,6 +1,6 @@
 # セットアップ
 
-ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 7:00 / 15:30 に走り、完了後 web の `/api/refresh/` を Bearer 認証付きで叩いて `revalidatePath` で全ルートを再生成する。
+ローカル PC で **Docker Compose** を使い、Next.js (web) / cloudflared / crawler の 3 サービスを常駐させる構成のセットアップ手順。crawler は **コンテナ内 cron** (supercronic) で JST 7:00 / 15:30 に走るほか、dashboard の更新ボタンから即時実行できる。完了後は web の `/api/refresh/` を Bearer 認証付きで叩いて `revalidatePath` で全ルートを再生成する。
 
 ## 必須要件
 
@@ -182,7 +182,7 @@ Terraform apply が成功し、`secrets/cloudflared-token` が作成されてか
 
 - **web** — Next.js を `next start --port 8765` で常駐。Docker image build 時は dashboard route を request-time rendering にし、起動後は volume 経由の本番 DB を読む
 - **cloudflared** — Compose secretとしてmountされた `secrets/cloudflared-token` でCloudflare Edgeに接続
-- **crawler** — Docker image の非rootユーザーで動作し、supercronic で `crontab` (`docker/crawler/crontab`) を回して、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。MoneyForward の browser session は crawler 専用 volume (`/app/crawler-state/auth-state.json`) に保存し、web から mount しない。crawler 自身が完了時に `WEB_URL/api/refresh/` へ `REFRESH_TOKEN` を Bearer 認証で POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外部は Cloudflare Access で保護)
+- **crawler** — Docker image の非rootユーザーで動作し、手動更新 API (`crawler:8766`) と supercronic を常駐。`crontab` (`docker/crawler/crontab`) により JST 7:00 / 15:30 に、または dashboard の更新ボタンから `pnpm --filter @mf-dashboard/crawler start` 相当の処理を起動する。MoneyForward の browser session は crawler 専用 volume (`/app/crawler-state/auth-state.json`) に保存し、web から mount しない。crawler 自身が完了時に `WEB_URL/api/refresh/` へ `REFRESH_TOKEN` を Bearer 認証で POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外部は Cloudflare Access で保護)
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
 
