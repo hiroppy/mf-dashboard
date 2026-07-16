@@ -52,6 +52,7 @@ graph LR
     B -->|4. アクセス| F[MoneyForward Me]
     F -->|5. データ| B
     B -->|6. 保存| C[(SQLite<br/>./data volume)]
+    B -->|session保存| K[(crawler_auth_state<br/>auth-state.json)]
     C -.読む.-> W[web コンテナ<br/>next start]
     B -->|7. POST /api/refresh/<br/>Bearer token| W
     W -->|8. Docker bridge<br/>web:8765| H[cloudflared コンテナ]
@@ -65,7 +66,7 @@ graph LR
 - **スケジューリング**: crawler コンテナの supercronic が `docker/crawler/crontab` を回す (TZ=Asia/Tokyo)
 - **データ取得**: Playwright で MoneyForward Me からスクレイピング
 - **認証**: 1Password Service Account から OTP を取得
-- **データ保存**: 共有 volume の SQLite (`./data/moneyforward.db`) に保存
+- **データ保存**: 共有 volume の SQLite (`./data/moneyforward.db`) に保存。MoneyForward の browser session は crawler 専用 volume に分離し、web から mount しない
 - **静的再生成**: crawler 完了後、web コンテナの `/api/refresh/` を Docker bridge 経由で Bearer 認証付き POST → `revalidatePath('/', 'layout')` で全ルートを invalidate。次のリクエストで新しい DB の内容を反映 (`expose:` のみでhost portには直接公開せず、外部アクセスはCloudflare Access経由に限定)
 - **公開**: cloudflared コンテナが Cloudflare Edge と接続し、Access (Google IdP + email allowlist) を経由して許可ユーザーのみアクセス可能
 
@@ -106,7 +107,7 @@ $ pnpm dev
 
 local 開発では `DB_PATH` と `WEB_URL` を未設定のままにする。`DB_PATH` は repo root の
 `data/moneyforward.db` に自動解決され、`WEB_URL` 未設定時は crawler 完了後の web refresh
-通知を skip する。Docker Composeでは `compose.yml` が `WEB_URL=http://web:8765` を設定する。
+通知を skip する。Docker Composeでは `compose.yml` が `WEB_URL=http://web:8765` と crawler 専用の `AUTH_STATE_PATH=/app/crawler-state/auth-state.json` を設定する。
 
 `data/demo.db` は生成物として扱い、Git には含めない。`pnpm dev:demo` / `pnpm build:demo`
 実行時に自動生成される。手動で作り直したい場合は次を実行する。

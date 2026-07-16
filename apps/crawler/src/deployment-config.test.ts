@@ -102,6 +102,20 @@ describe("Deployment configuration", () => {
     );
   });
 
+  test("stores crawler auth state outside the web data mount", () => {
+    const webSection = compose.match(/  web:\n[\s\S]*?\n\n  cloudflared:/)?.[0] ?? "";
+    const crawlerSection = compose.match(/  crawler:\n[\s\S]*?\n\nsecrets:/)?.[0] ?? "";
+
+    expect(crawlerSection).toContain(
+      "AUTH_STATE_PATH: ${AUTH_STATE_PATH:-/app/crawler-state/auth-state.json}",
+    );
+    expect(crawlerSection).toContain("- crawler_auth_state:/app/crawler-state");
+    expect(compose).toContain("crawler_auth_state:");
+    expect(webSection).not.toContain("crawler_auth_state");
+    expect(webSection).not.toContain("/app/crawler-state");
+    expect(crawlerDockerfile).toContain("mkdir -p /app/data /app/crawler-state /pnpm");
+  });
+
   test("installs web build-time dependencies before setting production runtime env", () => {
     const installIndex = webDockerfile.indexOf("pnpm install --frozen-lockfile");
     const buildIndex = webDockerfile.indexOf("RUN cd apps/web && ./node_modules/.bin/next build");

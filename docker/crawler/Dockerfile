@@ -39,7 +39,7 @@ RUN package_manager=$(node -p "require('./package.json').packageManager") \
 
 COPY . .
 
-RUN mkdir -p /app/data /pnpm \
+RUN mkdir -p /app/data /app/crawler-state /pnpm \
     && chown -R pwuser:pwuser /app /pnpm /home/pwuser /ms-playwright \
     && chmod -R a+rX /pnpm
 USER pwuser

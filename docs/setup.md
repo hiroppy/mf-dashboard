@@ -87,14 +87,15 @@ openssl rand -hex 32
 
 既存の GitHub Actions secrets に入れていた MoneyForward / 通知系の値は、そのまま `.env` に移して使える。Slack / Discord / dashboard link は必要な場合だけ設定する。local の `pnpm db:dev` / `pnpm dev` では `DB_PATH` と `WEB_URL` を未設定のままにし、repo root の `data/moneyforward.db` と refresh skip の既定挙動を使う。
 
-| `.env` Key                                   | 必須     | 値                                                                    |
-| -------------------------------------------- | -------- | --------------------------------------------------------------------- |
-| `REFRESH_TOKEN`                              | ✅       | crawler と web が共有する `/api/refresh/` 用 Bearer token             |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | ✅       | 1Password Service Account token                                       |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照) |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | optional | Slack 通知                                                            |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | optional | Discord 通知                                                          |
-| `DASHBOARD_URL`                              | optional | 公開している `https://<hostname>/`                                    |
+| `.env` Key                                   | 必須     | 値                                                                                                    |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `REFRESH_TOKEN`                              | ✅       | crawler と web が共有する `/api/refresh/` 用 Bearer token                                             |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | ✅       | 1Password Service Account token                                                                       |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | ✅       | MoneyForward の保管先 (UUID 推奨。「1Password の ID の見つけ方」参照)                                 |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | optional | Slack 通知                                                                                            |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | optional | Discord 通知                                                                                          |
+| `DASHBOARD_URL`                              | optional | 公開している `https://<hostname>/`                                                                    |
+| `AUTH_STATE_PATH`                            | optional | local 実行時の browser session 保存先。Docker Compose では crawler 専用 volume を使うため通常は未設定 |
 
 #### 1Password の ID の見つけ方
 
@@ -163,7 +164,7 @@ terraform -chdir=terraform output
 ls -l secrets/cloudflared-token
 ```
 
-`tunnel_id`、`hostname`、`google_identity_provider_id` が出力され、`secrets/cloudflared-token` の権限が `-r--r--r--` (mode `444`) なら成功。この file は cloudflared container の non-root UID から読めるようにしつつ、web/crawler が mount する `./data` とは分離する。
+`tunnel_id`、`hostname`、`google_identity_provider_id` が出力され、`secrets/cloudflared-token` の権限が `-r--r--r--` (mode `444`) なら成功。この file は cloudflared container の non-root UID から読めるようにしつつ、web/crawler が mount する DB 用の `./data` とは分離する。
 
 ### 3.5 Docker Compose の起動
 
@@ -180,7 +181,7 @@ Terraform apply が成功し、`secrets/cloudflared-token` が作成されてか
 
 - **web** — Next.js を `next start --port 8765` で常駐。Docker image build 時は dashboard route を request-time rendering にし、起動後は volume 経由の本番 DB を読む
 - **cloudflared** — Compose secretとしてmountされた `secrets/cloudflared-token` でCloudflare Edgeに接続
-- **crawler** — Docker image の非rootユーザーで動作し、supercronic で `crontab` (`docker/crawler/crontab`) を回して、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。crawler 自身が完了時に `WEB_URL/api/refresh/` へ `REFRESH_TOKEN` を Bearer 認証で POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外部は Cloudflare Access で保護)
+- **crawler** — Docker image の非rootユーザーで動作し、supercronic で `crontab` (`docker/crawler/crontab`) を回して、JST 7:00 / 15:30 に `pnpm --filter @mf-dashboard/crawler start` を起動。MoneyForward の browser session は crawler 専用 volume (`/app/crawler-state/auth-state.json`) に保存し、web から mount しない。crawler 自身が完了時に `WEB_URL/api/refresh/` へ `REFRESH_TOKEN` を Bearer 認証で POST して `revalidatePath` をトリガー (Docker bridge 内部のみ到達可能、外部は Cloudflare Access で保護)
 
 スケジュールを変えたい場合は `docker/crawler/crontab` を編集して `docker compose build crawler` し直す。
 

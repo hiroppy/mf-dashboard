@@ -46,6 +46,7 @@ services:
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_PROVIDER: ${AI_PROVIDER:-}
+      AUTH_STATE_PATH: ${AUTH_STATE_PATH:-/app/crawler-state/auth-state.json}
       CLEANUP_GROUPS: ${CLEANUP_GROUPS:-}
       DASHBOARD_URL: ${DASHBOARD_URL:-}
       DEBUG: ${DEBUG:-}
@@ -69,6 +70,7 @@ services:
       WEB_URL: ${WEB_URL:-http://web:8765}
     volumes:
       - ./data:/app/data
+      - crawler_auth_state:/app/crawler-state
     depends_on:
       - web
     restart: unless-stopped
@@ -76,3 +78,6 @@ services:
 secrets:
   tunnel_token:
     file: ./secrets/cloudflared-token
+
+volumes:
+  crawler_auth_state:
