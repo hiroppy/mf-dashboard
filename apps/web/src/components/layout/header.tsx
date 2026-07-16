@@ -26,7 +26,7 @@ export function Header({ groupSelector, notifications }: HeaderProps) {
             className="lg:hidden shrink-0"
           />
           <Image
-            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/logo.png`}
+            src="/logo.png"
             alt="Logo"
             width={32}
             height={32}
