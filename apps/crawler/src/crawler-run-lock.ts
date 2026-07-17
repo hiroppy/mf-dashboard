@@ -118,6 +118,10 @@ function toRunState(record: CrawlerRunLockRecord): CrawlerRunState {
   };
 }
 
+function toUnknownRunningState(): CrawlerRunState {
+  return { running: true, pid: null, source: null, startedAt: null };
+}
+
 function isExpired(startedAt: string, staleMs: number): boolean {
   const startedAtMs = Date.parse(startedAt);
   return Number.isNaN(startedAtMs) || Date.now() - startedAtMs > staleMs;
@@ -422,10 +426,23 @@ export async function getCrawlerRunState(
   options: CrawlerRunLockOptions = {},
 ): Promise<CrawlerRunState> {
   const resolved = getOptions(options);
-  const snapshot = await readLockSnapshot(resolved.lockPath);
+  let snapshot = await readLockSnapshot(resolved.lockPath);
 
   if (!snapshot) {
-    return { running: false, pid: null, source: null, startedAt: null };
+    const mutationGuard = await tryAcquireLockMutationGuard(resolved);
+    if (!mutationGuard) {
+      return toUnknownRunningState();
+    }
+    try {
+      await recoverQuarantinedLock(resolved.lockPath);
+    } finally {
+      await mutationGuard.release();
+    }
+
+    snapshot = await readLockSnapshot(resolved.lockPath);
+    if (!snapshot) {
+      return { running: false, pid: null, source: null, startedAt: null };
+    }
   }
 
   const { record } = snapshot;
@@ -465,12 +482,7 @@ export async function acquireCrawlerRunLock(
 
   const mutationGuard = await tryAcquireLockMutationGuard(resolved);
   if (!mutationGuard) {
-    throw new CrawlerAlreadyRunningError({
-      running: true,
-      pid: null,
-      source: null,
-      startedAt: null,
-    });
+    throw new CrawlerAlreadyRunningError(toUnknownRunningState());
   }
 
   const record: CrawlerRunLockRecord = {

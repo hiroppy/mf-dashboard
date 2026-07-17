@@ -346,6 +346,14 @@ describe("crawler run lock", () => {
       }),
     ).rejects.toThrow("interrupted cleanup");
 
+    await expect(
+      getCrawlerRunState({ lockPath, pidExists: (pid) => pid === process.pid }),
+    ).resolves.toEqual({
+      running: true,
+      pid: process.pid,
+      source: "scheduled",
+      startedAt: replacement.startedAt,
+    });
     await expect(acquireCrawlerRunLock("manual", { lockPath })).rejects.toBeInstanceOf(
       CrawlerAlreadyRunningError,
     );
