@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chat/cards": "./src/chat/cards.ts",
     "./chat/tools": "./src/chat/tools.ts",
     "./categorization": "./src/categorization.ts",
     "./tools/analysis": "./src/insights/analysis-tools.ts",
