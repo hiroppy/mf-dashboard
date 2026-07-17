@@ -6,7 +6,11 @@ const { searchTransactions } = vi.hoisted(() => ({
   searchTransactions: vi.fn<(options: unknown, db: Db) => never[]>(() => []),
 }));
 
-vi.mock("@mf-dashboard/db", () => ({ searchTransactions }));
+vi.mock("@mf-dashboard/db", () => ({
+  searchTransactions,
+  SEARCH_TRANSACTIONS_MAX_LIMIT: 100,
+  SEARCH_TRANSACTIONS_MAX_OFFSET: 10_000,
+}));
 
 const db = {} as Db;
 const execOptions = {
@@ -25,6 +29,8 @@ describe("createTransactionSearchTool", () => {
       minAmount: 10000,
       includeTransfers: false,
       includeExcluded: false,
+      limit: 25,
+      offset: 50,
     };
 
     await tool.execute?.(options, execOptions);

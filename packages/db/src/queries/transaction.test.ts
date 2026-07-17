@@ -5,6 +5,8 @@ import {
   getTransactions,
   getTransactionsByMonth,
   getTransactionsByAccountId,
+  SEARCH_TRANSACTIONS_DEFAULT_LIMIT,
+  SEARCH_TRANSACTIONS_MAX_LIMIT,
   searchTransactions,
 } from "./transaction";
 
@@ -62,6 +64,14 @@ async function createTestAccount(name: string, groupId = TEST_GROUP_ID): Promise
     .run();
 
   return account.id;
+}
+
+async function addAccountToGroup(accountId: number, groupId: string) {
+  const now = new Date().toISOString();
+  await db
+    .insert(schema.groupAccounts)
+    .values({ groupId, accountId, createdAt: now, updatedAt: now })
+    .run();
 }
 
 async function createTransaction(data: {
@@ -256,6 +266,126 @@ describe("searchTransactions", () => {
     expect(
       await searchTransactions({ groupId: TEST_GROUP_ID, includeTransfers: false }, db),
     ).toHaveLength(4);
+  });
+
+  it("対象groupへの外部口座振替を支出として検索する", async () => {
+    const targetAccountId = await createTestAccount("Bank A");
+    const now = new Date().toISOString();
+    const sourceAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "external_source",
+        name: "External Source",
+        type: "bank",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+
+    await createTransaction({
+      accountId: sourceAccount.id,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+
+    const result = await searchTransactions(
+      { groupId: TEST_GROUP_ID, type: "expense", includeTransfers: false },
+      db,
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        amount: 6000,
+        type: "expense",
+        category: "支出",
+        subCategory: "振替出金",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      }),
+    ]);
+  });
+
+  it("別の共通group内の振替を収入へ変換しない", async () => {
+    const sourceAccountId = await createTestAccount("Bank A");
+    const commonGroupId = "common_group";
+    const now = new Date().toISOString();
+    await db
+      .insert(schema.groups)
+      .values({
+        id: commonGroupId,
+        name: "Common Group",
+        isCurrent: false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    const targetAccountId = await createTestAccount("Bank B", commonGroupId);
+    await addAccountToGroup(sourceAccountId, commonGroupId);
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-07",
+      amount: 7000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+
+    expect(await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db)).toEqual([]);
+    expect(await searchTransactions({ groupId: TEST_GROUP_ID, type: "transfer" }, db)).toEqual([
+      expect.objectContaining({ amount: 7000, type: "transfer", isTransfer: true }),
+    ]);
+  });
+
+  it("既定件数と最大件数で結果を制限しoffsetを適用する", async () => {
+    const accountId = await createTestAccount("Card A");
+    for (let day = 0; day <= SEARCH_TRANSACTIONS_MAX_LIMIT; day += 1) {
+      await createTransaction({
+        accountId,
+        date: `2025-06-${String((day % 28) + 1).padStart(2, "0")}`,
+        amount: day,
+        type: "expense",
+      });
+    }
+
+    const defaultResult = await searchTransactions({ groupId: TEST_GROUP_ID }, db);
+    const cappedResult = await searchTransactions(
+      { groupId: TEST_GROUP_ID, limit: SEARCH_TRANSACTIONS_MAX_LIMIT + 1 },
+      db,
+    );
+    const offsetResult = await searchTransactions(
+      { groupId: TEST_GROUP_ID, limit: 1, offset: 1 },
+      db,
+    );
+
+    expect(defaultResult).toHaveLength(SEARCH_TRANSACTIONS_DEFAULT_LIMIT);
+    expect(cappedResult).toHaveLength(SEARCH_TRANSACTIONS_MAX_LIMIT);
+    expect(offsetResult).toEqual([cappedResult[1]]);
+  });
+
+  it("取得batchより後の一致結果も検索する", async () => {
+    const accountId = await createTestAccount("Card A");
+    await createTransaction({
+      accountId,
+      date: "2025-05-01",
+      amount: 5000,
+      type: "expense",
+      category: "食費",
+    });
+    for (let day = 0; day < SEARCH_TRANSACTIONS_DEFAULT_LIMIT; day += 1) {
+      await createTransaction({
+        accountId,
+        date: `2025-06-${String((day % 28) + 1).padStart(2, "0")}`,
+        amount: day,
+        type: "expense",
+        category: "交通費",
+      });
+    }
+
+    expect(await searchTransactions({ groupId: TEST_GROUP_ID, category: "食費" }, db)).toEqual([
+      expect.objectContaining({ amount: 5000, category: "食費" }),
+    ]);
   });
 
   it("明示されたgroupIdのアカウントだけを検索する", async () => {
