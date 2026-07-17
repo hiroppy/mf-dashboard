@@ -3,6 +3,7 @@ import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import {
   convertToModelMessages,
+  isToolUIPart,
   safeValidateUIMessages,
   stepCountIs,
   streamText,
@@ -66,6 +67,10 @@ export async function POST(request: Request): Promise<Response> {
 
   if (validation.data.some((message) => message.role === "system")) {
     return errorResponse(400, "SYSTEM_MESSAGE_NOT_ALLOWED", "systemメッセージは指定できません。");
+  }
+
+  if (validation.data.some((message) => message.parts.some(isToolUIPart))) {
+    return errorResponse(400, "TOOL_HISTORY_NOT_ALLOWED", "過去のtool実行結果は再送できません。");
   }
 
   if (!isLLMEnabled()) {
