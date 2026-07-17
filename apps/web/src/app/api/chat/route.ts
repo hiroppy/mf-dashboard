@@ -34,6 +34,15 @@ function isWithinChatAccessBoundary(request: Request): boolean {
   return process.env.VERCEL !== "1" && Boolean(request.headers.get("cf-access-jwt-assertion"));
 }
 
+function removeToolParts(messages: UIMessage[]): UIMessage[] {
+  return messages
+    .map((message) => ({
+      ...message,
+      parts: message.parts.filter((part) => !isToolUIPart(part)),
+    }))
+    .filter((message) => message.parts.length > 0);
+}
+
 export async function POST(request: Request): Promise<Response> {
   if (!isWithinChatAccessBoundary(request)) {
     return errorResponse(403, "CHAT_ACCESS_DENIED", "チャットAPIへのアクセスが拒否されました。");
@@ -67,10 +76,6 @@ export async function POST(request: Request): Promise<Response> {
 
   if (validation.data.some((message) => message.role === "system")) {
     return errorResponse(400, "SYSTEM_MESSAGE_NOT_ALLOWED", "systemメッセージは指定できません。");
-  }
-
-  if (validation.data.some((message) => message.parts.some(isToolUIPart))) {
-    return errorResponse(400, "TOOL_HISTORY_NOT_ALLOWED", "過去のtool実行結果は再送できません。");
   }
 
   if (!isLLMEnabled()) {
@@ -107,11 +112,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const tools = createFinanceChatTools(db, group.id);
+  const modelInputMessages = removeToolParts(validation.data);
   const result = streamText({
     abortSignal: request.signal,
     model,
     system: SYSTEM_PROMPT,
-    messages: await convertToModelMessages(validation.data, { tools }),
+    messages: await convertToModelMessages(modelInputMessages, { tools }),
     tools,
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
   });

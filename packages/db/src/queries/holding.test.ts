@@ -75,6 +75,17 @@ async function createSnapshot(): Promise<number> {
   return snapshot.id;
 }
 
+async function createEmptyGroup(): Promise<void> {
+  const now = new Date().toISOString();
+  await db.insert(schema.groups).values({
+    id: "empty-group",
+    name: "Group A",
+    isCurrent: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 async function createAssetCategory(name: string): Promise<number> {
   const now = new Date().toISOString();
   const category = await db
@@ -278,6 +289,16 @@ describe("getHoldingsWithLatestValues", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Holding A");
   });
+
+  it("口座がないグループでは他グループの保有資産を返さない", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const holdingId = await createHolding({ accountId, name: "Holding A" });
+    await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+    await createEmptyGroup();
+
+    expect(await getHoldingsWithLatestValues("empty-group", db)).toEqual([]);
+  });
 });
 
 describe("getHoldingsByAccountId", () => {
@@ -357,6 +378,16 @@ describe("getHoldingsWithDailyChange", () => {
   it("スナップショットがない場合は空配列を返す", async () => {
     const result = await getHoldingsWithDailyChange(undefined, db);
     expect(result).toEqual([]);
+  });
+
+  it("口座がないグループでは他グループの日次変動を返さない", async () => {
+    const accountId = await createTestAccount("Bank A");
+    const snapshotId = await createSnapshot();
+    const holdingId = await createHolding({ accountId, name: "Stock A" });
+    await createHoldingValue({ holdingId, snapshotId, dailyChange: 5000 });
+    await createEmptyGroup();
+
+    expect(await getHoldingsWithDailyChange("empty-group", db)).toEqual([]);
   });
 });
 

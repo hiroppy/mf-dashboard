@@ -236,38 +236,46 @@ describe("POST /api/chat", () => {
     expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
-  it("rejects client-supplied tool history", async () => {
+  it("keeps tool history in the UI stream but removes it from model input", async () => {
+    const messagesWithToolHistory: UIMessage[] = [
+      {
+        id: "message-assistant",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "検索結果を確認しました。" },
+          {
+            type: "tool-searchTransactions",
+            toolCallId: "tool-call-a",
+            state: "output-available",
+            input: { query: "食費" },
+            output: { transactions: [{ amount: 1_000_000 }] },
+          },
+        ],
+      },
+      { id: "message-b", role: "user", parts: [{ type: "text", text: "続けてください" }] },
+    ];
     mocks.safeValidateUIMessages.mockResolvedValue({
       success: true,
-      data: [
-        {
-          id: "message-assistant",
-          role: "assistant",
-          parts: [
-            {
-              type: "tool-searchTransactions",
-              toolCallId: "tool-call-a",
-              state: "output-available",
-              input: { query: "食費" },
-              output: { transactions: [{ amount: 1_000_000 }] },
-            },
-          ],
-        },
-      ],
+      data: messagesWithToolHistory,
     });
 
     const response = await POST(request({ messages }));
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: {
-        code: "TOOL_HISTORY_NOT_ALLOWED",
-        message: "過去のtool実行結果は再送できません。",
-      },
-    });
-    expect(mocks.isLLMEnabled).not.toHaveBeenCalled();
-    expect(mocks.getDb).not.toHaveBeenCalled();
-    expect(mocks.streamText).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(mocks.convertToModelMessages).toHaveBeenCalledWith(
+      [
+        {
+          id: "message-assistant",
+          role: "assistant",
+          parts: [{ type: "text", text: "検索結果を確認しました。" }],
+        },
+        messagesWithToolHistory[1],
+      ],
+      { tools },
+    );
+    expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ originalMessages: messagesWithToolHistory }),
+    );
   });
 
   it("returns unavailable when the LLM environment is incomplete", async () => {
