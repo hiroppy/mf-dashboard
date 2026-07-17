@@ -139,9 +139,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@ai-sdk/react':
+        specifier: 4.0.33
+        version: 4.0.33(react@19.2.7)(zod@4.4.3)
       '@base-ui/react':
         specifier: 1.5.0
         version: 1.5.0(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@mf-dashboard/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@mf-dashboard/date-utils':
         specifier: workspace:*
         version: link:../../packages/date-utils
@@ -371,6 +377,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/mcp@2.0.14':
+    resolution: {integrity: sha512-Vf2THTWylnOiPUZgPEzTcbin+6pIBKMdJnDNAMHD0u+upNoO5747HMMFUJJnNNjk8eroAPomaVmF0w8gadA4WA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/openai@4.0.15':
     resolution: {integrity: sha512-JpTLQp5RUbRcs5nOyPEu5NRdxZLUnD/uCyT3qzy26D+iunCeL7KJV58ER9kwisAKnTjWravfNblaQNiWr20M9A==}
     engines: {node: '>=22'}
@@ -386,6 +398,12 @@ packages:
   '@ai-sdk/provider@4.0.3':
     resolution: {integrity: sha512-e0CpNWJUY7OxAFAnCZkw+ri9QOHWwTs1tXP42782KFGCU07qt8NiXCrCVowyCB5dP2r5/Uls+g2oPd8kOJn9dw==}
     engines: {node: '>=22'}
+
+  '@ai-sdk/react@4.0.33':
+    resolution: {integrity: sha512-THPfbAeW8kJo6x3rBbovVhUJA5AyUwKjQ8qehQ3qciD9BwJ9dnPl5yt3P5tH26WEWoZdgPbtK+NRu4UR9NV3yw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
 
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -4248,6 +4266,10 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
+  pkce-challenge@5.0.1:
+    resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
+    engines: {node: '>=16.20.0'}
+
   playwright-core@1.61.0:
     resolution: {integrity: sha512-caX7TrY3Ml6egyDX0WUcTHDxodl/b51y5wJOdCEA36QviK/s2g081hvmGs8eaE3DWb6NYZQ6BjO/QkNRPenoPA==}
     engines: {node: '>=18'}
@@ -4547,6 +4569,11 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
+  swr@2.4.2:
+    resolution: {integrity: sha512-ej644Y2bvkIajfR32KGeSSdBXQW+ScjGjkybZgSE7kFpk9eGnV44XY9FJylXi+W75pavSX1PVNB57W5EbhGIYw==}
+    peerDependencies:
+      react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
@@ -4569,6 +4596,10 @@ packages:
 
   third-party-capital@1.0.20:
     resolution: {integrity: sha512-oB7yIimd8SuGptespDAZnNkzIz+NWaJCu2RMsbs4Wmp9zSDUM8Nhi3s2OOcqYuv3mN4hitXc8DVx+LyUmbUDiA==}
+
+  throttleit@2.1.0:
+    resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
+    engines: {node: '>=18'}
 
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
@@ -4937,6 +4968,13 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.10(zod@4.4.3)
       zod: 4.4.3
 
+  '@ai-sdk/mcp@2.0.14(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.10(zod@4.4.3)
+      pkce-challenge: 5.0.1
+      zod: 4.4.3
+
   '@ai-sdk/openai@4.0.15(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 4.0.3
@@ -4954,6 +4992,18 @@ snapshots:
   '@ai-sdk/provider@4.0.3':
     dependencies:
       json-schema: 0.4.0
+
+  '@ai-sdk/react@4.0.33(react@19.2.7)(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/mcp': 2.0.14(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.10(zod@4.4.3)
+      ai: 7.0.30(zod@4.4.3)
+      react: 19.2.7
+      swr: 2.4.2(react@19.2.7)
+      throttleit: 2.1.0
+    transitivePeerDependencies:
+      - zod
 
   '@alloc/quick-lru@5.2.0': {}
 
@@ -8087,6 +8137,8 @@ snapshots:
 
   picomatch@4.0.4: {}
 
+  pkce-challenge@5.0.1: {}
+
   playwright-core@1.61.0: {}
 
   playwright@1.61.0:
@@ -8469,6 +8521,12 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
+  swr@2.4.2(react@19.2.7):
+    dependencies:
+      dequal: 2.0.3
+      react: 19.2.7
+      use-sync-external-store: 1.6.0(react@19.2.7)
+
   symbol-tree@3.2.4: {}
 
   tailwind-merge@3.6.0: {}
@@ -8495,6 +8553,8 @@ snapshots:
     optional: true
 
   third-party-capital@1.0.20: {}
+
+  throttleit@2.1.0: {}
 
   tiny-invariant@1.3.3: {}
 
