@@ -26,7 +26,7 @@ MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopか
 
 ### すべての情報を可視化
 
-[demoページ](https://hiroppy.github.io/mf-dashboard)を参考。予算機能以外はすべて対応済み。
+[demo](https://mf-dashboard-demo.vercel.app/) データで確認できる。予算機能以外はすべて対応済み。
 
 <img src="./.github/assets/demo-month.png" alt="month page" width="50%" /><img src="./.github/assets/demo-dashboard.png" alt="dashboard page" width="50%" />
 
@@ -87,7 +87,7 @@ Cloudflare 側の Google IdP / Tunnel / DNS / Access は `terraform/` で宣言�
 
 ## 開発
 
-[UIコンポーネント集](https://hiroppy.github.io/mf-dashboard/storybook/)
+UIコンポーネント集は `pnpm --filter @mf-dashboard/web storybook` で確認する。
 
 Storybook story 必須対象: `apps/web/src/components/` 配下の再利用 UI component は
 同階層に `*.stories.tsx` を置く。例外は `.client.tsx`、context/provider、hook、types、
