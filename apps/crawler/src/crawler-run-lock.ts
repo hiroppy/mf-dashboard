@@ -24,9 +24,10 @@ interface CrawlerRunLockRecord {
 }
 
 interface CrawlerRunLockOptions {
+  afterLockMutationGuardAcquired?: () => Promise<void>;
+  afterLockMutationGuardBlocked?: () => Promise<void>;
   afterLockMutationIntentPublished?: () => Promise<void>;
   afterStaleLockQuarantine?: () => Promise<void>;
-  beforeQuarantinedLockCheck?: () => Promise<void>;
   beforeStaleLockRemoval?: () => Promise<void>;
   lockPath?: string;
   getPidStartedAt?: (pid: number) => string | null;
@@ -100,9 +101,10 @@ function getLinuxPidStartedAt(pid: number): string | null {
 
 function getOptions(options: CrawlerRunLockOptions = {}) {
   return {
+    afterLockMutationGuardAcquired: options.afterLockMutationGuardAcquired,
+    afterLockMutationGuardBlocked: options.afterLockMutationGuardBlocked,
     afterLockMutationIntentPublished: options.afterLockMutationIntentPublished,
     afterStaleLockQuarantine: options.afterStaleLockQuarantine,
-    beforeQuarantinedLockCheck: options.beforeQuarantinedLockCheck,
     beforeStaleLockRemoval: options.beforeStaleLockRemoval,
     getPidStartedAt: options.getPidStartedAt ?? getLinuxPidStartedAt,
     lockPath: options.lockPath ?? DEFAULT_LOCK_PATH,
@@ -207,6 +209,15 @@ function isStaleLock(
   return isExpired(record.startedAt, options.staleMs);
 }
 
+function isStaleSnapshot(
+  snapshot: LockFileSnapshot,
+  options: ReturnType<typeof getOptions>,
+): boolean {
+  return snapshot.record
+    ? isStaleLock(snapshot.record, options)
+    : Date.now() - snapshot.mtimeMs > options.staleMs;
+}
+
 function parseLockMutationIntent(contents: string): LockMutationIntentRecord | null {
   try {
     const parsed = JSON.parse(contents) as Partial<LockMutationIntentRecord>;
@@ -303,6 +314,7 @@ async function tryAcquireLockMutationGuard(
   try {
     while (true) {
       if ((await getActiveLockMutationIntents(directory, ownerPrefixes)).length > 0) {
+        await options.afterLockMutationGuardBlocked?.();
         await rm(candidatePath, { force: true });
         return null;
       }
@@ -319,11 +331,13 @@ async function tryAcquireLockMutationGuard(
 
       // Another candidate may have become owner since the initial owner check.
       if ((await getActiveLockMutationIntents(directory, ownerPrefixes)).length > 0) {
+        await options.afterLockMutationGuardBlocked?.();
         await rm(candidatePath, { force: true });
         return null;
       }
 
       await rename(candidatePath, ownerPath);
+      await options.afterLockMutationGuardAcquired?.();
       return {
         release: () => rm(ownerPath, { force: true }),
       };
@@ -439,24 +453,21 @@ export async function getCrawlerRunState(
   options: CrawlerRunLockOptions = {},
 ): Promise<CrawlerRunState> {
   const resolved = getOptions(options);
+  await mkdir(path.dirname(resolved.lockPath), { recursive: true });
   let snapshot = await readLockSnapshot(resolved.lockPath);
-  let isQuarantined = false;
 
   if (!snapshot) {
-    await resolved.beforeQuarantinedLockCheck?.();
-    for (const quarantinePath of await getQuarantinePaths(resolved.lockPath)) {
-      snapshot = await readLockSnapshot(quarantinePath);
-      if (snapshot) {
-        isQuarantined = true;
-        break;
-      }
+    const mutationGuard = await tryAcquireLockMutationGuard(resolved);
+    if (!mutationGuard) {
+      return toUnknownRunningState();
+    }
+    try {
+      await recoverQuarantinedLock(resolved.lockPath);
+    } finally {
+      await mutationGuard.release();
     }
 
-    const current = await readLockSnapshot(resolved.lockPath);
-    if (current) {
-      snapshot = current;
-      isQuarantined = false;
-    }
+    snapshot = await readLockSnapshot(resolved.lockPath);
     if (!snapshot) {
       return { running: false, pid: null, source: null, startedAt: null };
     }
@@ -472,15 +483,7 @@ export async function getCrawlerRunState(
         startedAt: new Date(snapshot.mtimeMs).toISOString(),
       };
 
-  if (isQuarantined) {
-    return snapshotState;
-  }
-
-  const isStale = record
-    ? isStaleLock(record, resolved)
-    : Date.now() - snapshot.mtimeMs > resolved.staleMs;
-
-  if (!isStale) {
+  if (!isStaleSnapshot(snapshot, resolved)) {
     return snapshotState;
   }
 
@@ -502,9 +505,15 @@ export async function acquireCrawlerRunLock(
   const resolved = getOptions(options);
   await mkdir(path.dirname(resolved.lockPath), { recursive: true });
 
-  const mutationGuard = await tryAcquireLockMutationGuard(resolved);
-  if (!mutationGuard) {
-    throw new CrawlerAlreadyRunningError(toUnknownRunningState());
+  let mutationGuard = await tryAcquireLockMutationGuard(resolved);
+  while (!mutationGuard) {
+    const snapshot = await readLockSnapshot(resolved.lockPath);
+    if (snapshot && !isStaleSnapshot(snapshot, resolved)) {
+      throw new CrawlerAlreadyRunningError(toUnknownRunningState());
+    }
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    mutationGuard = await tryAcquireLockMutationGuard(resolved);
   }
 
   const record: CrawlerRunLockRecord = {

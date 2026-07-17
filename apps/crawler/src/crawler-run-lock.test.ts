@@ -42,26 +42,33 @@ describe("crawler run lock", () => {
     });
   });
 
-  test("does not block acquisition during an idle status check", async () => {
-    let markStatusCheckingQuarantine: () => void;
-    const statusCheckingQuarantine = new Promise<void>((resolve) => {
-      markStatusCheckingQuarantine = resolve;
+  test("allows acquisition to wait for an idle status check", async () => {
+    let markStatusGuardAcquired: () => void;
+    const statusGuardAcquired = new Promise<void>((resolve) => {
+      markStatusGuardAcquired = resolve;
     });
     let finishStatusCheck!: () => void;
     const statusMayFinish = new Promise<void>((resolve) => {
       finishStatusCheck = resolve;
     });
     const statePromise = getCrawlerRunState({
-      beforeQuarantinedLockCheck: async () => {
-        markStatusCheckingQuarantine();
+      afterLockMutationGuardAcquired: async () => {
+        markStatusGuardAcquired();
         await statusMayFinish;
       },
       lockPath,
     });
-    await statusCheckingQuarantine;
+    await statusGuardAcquired;
 
-    const lock = await acquireCrawlerRunLock("manual", { lockPath });
-    await lock.release();
+    let markAcquisitionBlocked: () => void;
+    const acquisitionBlocked = new Promise<void>((resolve) => {
+      markAcquisitionBlocked = resolve;
+    });
+    const lockPromise = acquireCrawlerRunLock("manual", {
+      afterLockMutationGuardBlocked: async () => markAcquisitionBlocked(),
+      lockPath,
+    });
+    await acquisitionBlocked;
     finishStatusCheck();
 
     await expect(statePromise).resolves.toEqual({
@@ -70,7 +77,9 @@ describe("crawler run lock", () => {
       source: null,
       startedAt: null,
     });
+    const lock = await lockPromise;
     expect(lock.record.source).toBe("manual");
+    await lock.release();
   });
 
   test("acquires when a mutation guard was left without a lock", async () => {
@@ -332,12 +341,22 @@ describe("crawler run lock", () => {
       source: "scheduled",
       startedAt: new Date().toISOString(),
     };
+    let intrusion!: ReturnType<typeof acquireCrawlerRunLock>;
+    let intrusionSettled = false;
 
     const state = await getCrawlerRunState({
       afterStaleLockQuarantine: async () => {
-        await expect(acquireCrawlerRunLock("intruder", { lockPath })).rejects.toBeInstanceOf(
-          CrawlerAlreadyRunningError,
+        intrusion = acquireCrawlerRunLock("intruder", { lockPath });
+        void intrusion.then(
+          () => {
+            intrusionSettled = true;
+          },
+          () => {
+            intrusionSettled = true;
+          },
         );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(intrusionSettled).toBe(false);
       },
       beforeStaleLockRemoval: async () => {
         await rm(lockPath);
@@ -346,6 +365,7 @@ describe("crawler run lock", () => {
       lockPath,
       pidExists: (pid) => pid === process.pid,
     });
+    await expect(intrusion).rejects.toBeInstanceOf(CrawlerAlreadyRunningError);
 
     expect(state).toEqual({
       running: true,
@@ -400,6 +420,86 @@ describe("crawler run lock", () => {
       CrawlerAlreadyRunningError,
     );
     await expect(readFile(lockPath, "utf8")).resolves.toBe(JSON.stringify(replacement));
+  });
+
+  test("clears a stale lock left quarantined by interrupted cleanup", async () => {
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "stale-lock",
+        pid: 999_999,
+        source: "scheduled",
+        startedAt: new Date().toISOString(),
+      }),
+    );
+
+    await expect(
+      getCrawlerRunState({
+        afterStaleLockQuarantine: async () => {
+          throw new Error("interrupted cleanup");
+        },
+        lockPath,
+        pidExists: () => false,
+      }),
+    ).rejects.toThrow("interrupted cleanup");
+
+    await expect(getCrawlerRunState({ lockPath, pidExists: () => false })).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+  });
+
+  test("allows acquisition to wait for status to remove a stale lock", async () => {
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "stale-lock",
+        pid: 999_999,
+        source: "scheduled",
+        startedAt: new Date().toISOString(),
+      }),
+    );
+    let markCleanupGuardAcquired: () => void;
+    const cleanupGuardAcquired = new Promise<void>((resolve) => {
+      markCleanupGuardAcquired = resolve;
+    });
+    let finishCleanup!: () => void;
+    const cleanupMayFinish = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    const statePromise = getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        markCleanupGuardAcquired();
+        await cleanupMayFinish;
+      },
+      lockPath,
+      pidExists: () => false,
+    });
+    await cleanupGuardAcquired;
+
+    let markAcquisitionBlocked: () => void;
+    const acquisitionBlocked = new Promise<void>((resolve) => {
+      markAcquisitionBlocked = resolve;
+    });
+    const lockPromise = acquireCrawlerRunLock("manual", {
+      afterLockMutationGuardBlocked: async () => markAcquisitionBlocked(),
+      lockPath,
+      pidExists: () => false,
+    });
+    await acquisitionBlocked;
+    finishCleanup();
+
+    await expect(statePromise).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+    const lock = await lockPromise;
+    expect(lock.record.source).toBe("manual");
+    await lock.release();
   });
 
   test("treats a fresh invalid lock as running", async () => {
