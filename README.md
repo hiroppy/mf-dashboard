@@ -22,7 +22,7 @@ hookが提供されているので、スクレイピング時に用意したス�
 
 ### MCP経由でAIアシスタントと連携
 
-MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopから、家計・資産・投資データを自然言語で照会できる。詳細は [apps/mcp/README.md](apps/mcp/README.md) を参照。
+MCP (Model Context Protocol) サーバーを内蔵。ChatGPTデスクトップアプリ、Codex、Claude Desktop、Claude Codeから、家計・資産・投資データを自然言語で照会できる。詳細は [apps/mcp/README.md](apps/mcp/README.md) を参照。
 
 ### すべての情報を可視化
 

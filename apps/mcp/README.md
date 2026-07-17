@@ -1,6 +1,6 @@
 # @mf-dashboard/mcp
 
-MCP (Model Context Protocol) サーバー。ローカルの SQLite データベースに対して、Claude Desktop や Claude Code などの MCP クライアントから家計データを照会できる。
+MCP (Model Context Protocol) サーバー。ローカルの SQLite データベースに対して、ChatGPTデスクトップアプリ、Codex、Claude Desktop、Claude CodeなどのMCPクライアントから家計データを照会できる。
 
 ## セットアップ
 
@@ -10,6 +10,18 @@ pnpm --filter @mf-dashboard/mcp build
 ```
 
 `dist/index.cjs` が生成される。
+
+## Codex／ChatGPTデスクトップアプリでの設定
+
+Codex CLI、Codex IDE extension、ChatGPTデスクトップアプリは、同じホスト上のCodex MCP設定を共有する。次のコマンドではデモDBを使用する。
+
+```bash
+codex mcp add moneyforward \
+  --env DB_PATH=/absolute/path/to/mf-dashboard/data/demo.db \
+  -- node /absolute/path/to/mf-dashboard/apps/mcp/dist/index.cjs
+```
+
+`/absolute/path/to/mf-dashboard` は、このリポジトリの絶対パスに置き換える。設定後、`codex mcp list` で接続設定を確認する。ChatGPTデスクトップアプリまたはIDE extensionを使用する場合は、設定後に再起動する。
 
 ## Claude Desktop での設定
 
@@ -32,23 +44,26 @@ pnpm --filter @mf-dashboard/mcp build
 > `DB_PATH` を省略すると `data/moneyforward.db` がデフォルトで使われる。デモ用には `data/demo.db` を指定する。
 > `data/demo.db` がない場合は、先に `pnpm --filter @mf-dashboard/db build:demo` で生成する。
 
-## Claude Code での設定
+## Claude Codeでの設定
 
-`.claude/settings.json` または `.mcp.json`:
+プロジェクトルートの `.mcp.json` に共有設定を記述する。`${CLAUDE_PROJECT_DIR:-.}` により、Claude Codeを起動した場所に依存せずリポジトリ内のファイルを参照できる。
 
 ```json
 {
   "mcpServers": {
     "moneyforward": {
+      "type": "stdio",
       "command": "node",
-      "args": ["apps/mcp/dist/index.cjs"],
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/apps/mcp/dist/index.cjs"],
       "env": {
-        "DB_PATH": "data/demo.db"
+        "DB_PATH": "${CLAUDE_PROJECT_DIR:-.}/data/demo.db"
       }
     }
   }
 }
 ```
+
+`claude mcp list` またはClaude Code内の `/mcp` で接続状態を確認する。
 
 ## 利用可能なツール
 
