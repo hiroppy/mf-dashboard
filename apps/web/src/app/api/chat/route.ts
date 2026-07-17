@@ -1,6 +1,6 @@
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
 import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
-import { getCurrentGroup, getDb } from "@mf-dashboard/db";
+import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import {
   convertToModelMessages,
   safeValidateUIMessages,
@@ -46,10 +46,18 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(400, "INVALID_REQUEST", "JSON形式のリクエストが必要です。");
   }
 
-  const messages =
-    typeof body === "object" && body !== null && "messages" in body
-      ? (body as { messages: unknown }).messages
-      : undefined;
+  const requestBody =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const messages = requestBody.messages;
+  const requestedGroupId = requestBody.groupId ?? undefined;
+
+  if (
+    requestedGroupId !== undefined &&
+    (typeof requestedGroupId !== "string" || requestedGroupId.trim().length === 0)
+  ) {
+    return errorResponse(400, "INVALID_GROUP_ID", "有効なグループIDが必要です。");
+  }
+
   const validation = await safeValidateUIMessages<UIMessage>({ messages });
 
   if (!validation.success) {
@@ -68,10 +76,20 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const db = getDb();
-  const currentGroup = await getCurrentGroup(db);
+  if (!isDatabaseAvailable()) {
+    return errorResponse(503, "DATABASE_NOT_AVAILABLE", "家計データがまだ利用できません。");
+  }
 
-  if (!currentGroup) {
+  const db = getDb();
+  const group = requestedGroupId
+    ? (await getAllGroups(db)).find(({ id }) => id === requestedGroupId)
+    : await getCurrentGroup(db);
+
+  if (!group && requestedGroupId) {
+    return errorResponse(404, "GROUP_NOT_FOUND", "指定されたグループが見つかりません。");
+  }
+
+  if (!group) {
     return errorResponse(409, "CURRENT_GROUP_NOT_FOUND", "現在のグループが選択されていません。");
   }
 
@@ -83,8 +101,9 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(503, "LLM_NOT_CONFIGURED", "LLM設定を確認してください。");
   }
 
-  const tools = createFinanceChatTools(db, currentGroup.id);
+  const tools = createFinanceChatTools(db, group.id);
   const result = streamText({
+    abortSignal: request.signal,
     model,
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(validation.data, { tools }),

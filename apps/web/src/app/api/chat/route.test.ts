@@ -6,9 +6,11 @@ type AnyMock = (...args: any[]) => any;
 const mocks = vi.hoisted(() => ({
   convertToModelMessages: vi.fn<AnyMock>(),
   createFinanceChatTools: vi.fn<AnyMock>(),
+  getAllGroups: vi.fn<AnyMock>(),
   getCurrentGroup: vi.fn<AnyMock>(),
   getDb: vi.fn<AnyMock>(),
   getModel: vi.fn<AnyMock>(),
+  isDatabaseAvailable: vi.fn<AnyMock>(),
   isLLMEnabled: vi.fn<AnyMock>(),
   safeValidateUIMessages: vi.fn<AnyMock>(),
   stepCountIs: vi.fn<AnyMock>(),
@@ -26,8 +28,10 @@ vi.mock("@mf-dashboard/analytics/config", () => ({
 }));
 
 vi.mock("@mf-dashboard/db", () => ({
+  getAllGroups: mocks.getAllGroups,
   getCurrentGroup: mocks.getCurrentGroup,
   getDb: mocks.getDb,
+  isDatabaseAvailable: mocks.isDatabaseAvailable,
 }));
 
 vi.mock("ai", () => ({
@@ -59,7 +63,12 @@ describe("POST /api/chat", () => {
     vi.clearAllMocks();
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: messages });
     mocks.isLLMEnabled.mockReturnValue(true);
+    mocks.isDatabaseAvailable.mockReturnValue(true);
     mocks.getDb.mockReturnValue(db);
+    mocks.getAllGroups.mockResolvedValue([
+      { id: "group-a", isCurrent: true },
+      { id: "group-b", isCurrent: false },
+    ]);
     mocks.getCurrentGroup.mockResolvedValue({ id: "group-a" });
     mocks.getModel.mockReturnValue("test-model");
     mocks.createFinanceChatTools.mockReturnValue(tools);
@@ -89,6 +98,7 @@ describe("POST /api/chat", () => {
     expect(mocks.convertToModelMessages).toHaveBeenCalledWith(messages, { tools });
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
         model: "test-model",
         messages: modelMessages,
         tools,
@@ -125,6 +135,16 @@ describe("POST /api/chat", () => {
     await expect(response.json()).resolves.toEqual({
       error: { code: "INVALID_MESSAGES", message: "有効なチャットメッセージが必要です。" },
     });
+  });
+
+  it("rejects invalid group IDs", async () => {
+    const response = await POST(request({ groupId: 42, messages }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "INVALID_GROUP_ID", message: "有効なグループIDが必要です。" },
+    });
+    expect(mocks.safeValidateUIMessages).not.toHaveBeenCalled();
   });
 
   it("rejects production requests outside the Cloudflare Access boundary", async () => {
@@ -224,6 +244,40 @@ describe("POST /api/chat", () => {
       },
     });
     expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
+  it("returns unavailable without creating a missing database", async () => {
+    mocks.isDatabaseAvailable.mockReturnValue(false);
+
+    const response = await POST(request({ messages }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "DATABASE_NOT_AVAILABLE",
+        message: "家計データがまだ利用できません。",
+      },
+    });
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
+  it("scopes finance tools to a requested group", async () => {
+    const response = await POST(request({ groupId: "group-b", messages }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.getAllGroups).toHaveBeenCalledWith(db);
+    expect(mocks.getCurrentGroup).not.toHaveBeenCalled();
+    expect(mocks.createFinanceChatTools).toHaveBeenCalledWith(db, "group-b");
+  });
+
+  it("rejects an unknown requested group", async () => {
+    const response = await POST(request({ groupId: "group-unknown", messages }));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "GROUP_NOT_FOUND", message: "指定されたグループが見つかりません。" },
+    });
+    expect(mocks.createFinanceChatTools).not.toHaveBeenCalled();
   });
 
   it("returns a conflict when no current group exists", async () => {
