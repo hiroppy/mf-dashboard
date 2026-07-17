@@ -6,6 +6,7 @@ import path from "node:path";
 const DEFAULT_LOCK_PATH = path.resolve(import.meta.dirname, "../../../data/crawler-run.lock");
 const DEFAULT_MAX_WAIT_MINUTES = 20;
 const LOCK_STALE_BUFFER_MINUTES = 100;
+const LOCK_MUTATION_INTENT_STALE_MS = 60_000;
 
 export interface CrawlerRunState {
   running: boolean;
@@ -57,6 +58,7 @@ interface LockMutationGuard {
 }
 
 interface LockMutationIntentRecord {
+  createdAt: string;
   pid: number;
   pidStartedAt: string | null;
 }
@@ -203,19 +205,28 @@ function parseLockMutationIntent(contents: string): LockMutationIntentRecord | n
   try {
     const parsed = JSON.parse(contents) as Partial<LockMutationIntentRecord>;
     if (
+      typeof parsed.createdAt !== "string" ||
       typeof parsed.pid !== "number" ||
       (parsed.pidStartedAt !== null && typeof parsed.pidStartedAt !== "string")
     ) {
       return null;
     }
-    return { pid: parsed.pid, pidStartedAt: parsed.pidStartedAt };
+    return {
+      createdAt: parsed.createdAt,
+      pid: parsed.pid,
+      pidStartedAt: parsed.pidStartedAt,
+    };
   } catch {
     return null;
   }
 }
 
 function isLockMutationIntentActive(record: LockMutationIntentRecord | null): boolean {
-  if (!record || !defaultPidExists(record.pid)) {
+  if (
+    !record ||
+    isExpired(record.createdAt, LOCK_MUTATION_INTENT_STALE_MS) ||
+    !defaultPidExists(record.pid)
+  ) {
     return false;
   }
 
@@ -262,6 +273,7 @@ async function tryAcquireLockMutationGuard(
   const candidatePrefix = `${basename}.mutation-candidate-`;
   const ownerPrefixes = [`${basename}.mutation-owner-`, `${basename}.mutation-active-`];
   const record: LockMutationIntentRecord = {
+    createdAt: new Date().toISOString(),
     pid: process.pid,
     pidStartedAt: getLinuxPidStartedAt(process.pid),
   };
@@ -314,6 +326,46 @@ async function tryAcquireLockMutationGuard(
     await rm(candidatePath, { force: true });
     await rm(ownerPath, { force: true });
     throw err;
+  }
+}
+
+async function recoverQuarantinedLock(lockPath: string): Promise<void> {
+  const directory = path.dirname(lockPath);
+  const quarantinePrefix = `${path.basename(lockPath)}.stale-`;
+
+  for (const name of (await readdir(directory)).sort()) {
+    if (!name.startsWith(quarantinePrefix)) {
+      continue;
+    }
+
+    const quarantinePath = path.join(directory, name);
+    try {
+      await link(quarantinePath, lockPath);
+      await rm(quarantinePath, { force: true });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        continue;
+      }
+      if (code !== "EEXIST") {
+        throw err;
+      }
+
+      const [quarantined, current] = await Promise.all([
+        readLockSnapshot(quarantinePath),
+        readLockSnapshot(lockPath),
+      ]);
+      if (
+        quarantined &&
+        current &&
+        quarantined.device === current.device &&
+        quarantined.inode === current.inode
+      ) {
+        await rm(quarantinePath, { force: true });
+      }
+      return;
+    }
   }
 }
 
@@ -432,6 +484,7 @@ export async function acquireCrawlerRunLock(
   let file: Awaited<ReturnType<typeof open>> | null = null;
   let lockExists = false;
   try {
+    await recoverQuarantinedLock(resolved.lockPath);
     file = await open(resolved.lockPath, "wx");
     await file.writeFile(JSON.stringify(record));
   } catch (err) {

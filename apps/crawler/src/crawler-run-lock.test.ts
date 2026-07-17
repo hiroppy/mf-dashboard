@@ -37,6 +37,14 @@ describe("crawler run lock", () => {
       `${lockPath}.mutation-active-stale-owner`,
       JSON.stringify({ pid: 999_999, pidStartedAt: null }),
     );
+    await writeFile(
+      `${lockPath}.mutation-owner-reused-pid`,
+      JSON.stringify({
+        createdAt: new Date(Date.now() - 120_000).toISOString(),
+        pid: process.pid,
+        pidStartedAt: null,
+      }),
+    );
 
     const lock = await acquireCrawlerRunLock("manual", {
       lockPath,
@@ -303,6 +311,44 @@ describe("crawler run lock", () => {
       source: "scheduled",
       startedAt: replacement.startedAt,
     });
+    await expect(readFile(lockPath, "utf8")).resolves.toBe(JSON.stringify(replacement));
+  });
+
+  test("recovers a replacement left quarantined by interrupted cleanup", async () => {
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "stale-lock",
+        pid: 123,
+        source: "manual",
+        startedAt: new Date(Date.now() - 120_000).toISOString(),
+      }),
+    );
+
+    const replacement = {
+      id: "replacement-lock",
+      pid: process.pid,
+      source: "scheduled",
+      startedAt: new Date().toISOString(),
+    };
+
+    await expect(
+      getCrawlerRunState({
+        afterStaleLockQuarantine: async () => {
+          throw new Error("interrupted cleanup");
+        },
+        beforeStaleLockRemoval: async () => {
+          await rm(lockPath);
+          await writeFile(lockPath, JSON.stringify(replacement));
+        },
+        lockPath,
+        pidExists: (pid) => pid === process.pid,
+      }),
+    ).rejects.toThrow("interrupted cleanup");
+
+    await expect(acquireCrawlerRunLock("manual", { lockPath })).rejects.toBeInstanceOf(
+      CrawlerAlreadyRunningError,
+    );
     await expect(readFile(lockPath, "utf8")).resolves.toBe(JSON.stringify(replacement));
   });
 
