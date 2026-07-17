@@ -2,6 +2,12 @@
 
 <!-- Describe what changed and why. Include relevant issue links. -->
 
+## Linear Issue
+
+<!-- If a Linear issue exists, add it as `[ISSUE-ID](https://linear.app/.../issue/ISSUE-ID)`. Otherwise, write "N/A". -->
+
+-
+
 ## QA Plan
 
 <!--
