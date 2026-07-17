@@ -1,6 +1,5 @@
 export interface CategoryRuleConfig {
-  accountName?: string;
-  descriptionContains?: string;
+  contains: string | string[];
   category: string;
   subCategory: string;
 }

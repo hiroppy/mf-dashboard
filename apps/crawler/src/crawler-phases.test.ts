@@ -81,7 +81,7 @@ function categoryDecisionRuntime(): CategoryDecisionRuntime {
   return {
     config: {
       llm: { enabled: false, maxPerRun: 5, minConfidence: 0.65 },
-      rules: [{ descriptionContains: "Service A", category: "食費", subCategory: "食料品" }],
+      rules: [{ contains: "Service A", category: "食費", subCategory: "食料品" }],
     },
     usage: { llmCallsUsed: 0 },
   };

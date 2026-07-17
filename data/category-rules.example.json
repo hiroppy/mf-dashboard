@@ -6,12 +6,12 @@
   },
   "rules": [
     {
-      "accountName": "コープデリ eフレンズ",
+      "contains": ["コープデリ", "eフレンズ"],
       "category": "食費",
       "subCategory": "食料品"
     },
     {
-      "descriptionContains": "Netflix",
+      "contains": "Netflix",
       "category": "趣味・娯楽",
       "subCategory": "動画・音楽"
     }

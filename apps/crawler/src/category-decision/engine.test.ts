@@ -72,8 +72,7 @@ describe("CategoryDecisionEngine", () => {
       llm: { enabled: true, maxPerRun: 5, minConfidence: 0.65 },
       rules: [
         {
-          accountName: "カードA",
-          descriptionContains: "Service A",
+          contains: ["カードA", "Service A"],
           category: "食費",
           subCategory: "食料品",
         },
@@ -105,7 +104,7 @@ describe("CategoryDecisionEngine", () => {
       llm: { enabled: false, maxPerRun: 5, minConfidence: 0.65 },
       rules: [
         {
-          descriptionContains: "Service A",
+          contains: "Service A",
           category: "存在しない大項目",
           subCategory: "存在しない中項目",
         },
@@ -119,13 +118,12 @@ describe("CategoryDecisionEngine", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Invalid category rule"));
   });
 
-  test("口座名か取引内容の一方でも異なる場合はmatchしない", async () => {
+  test("contains配列の要素が一つでも含まれない場合はmatchしない", async () => {
     const config: NormalizedCategoryDecisionConfig = {
       llm: { enabled: false, maxPerRun: 5, minConfidence: 0.65 },
       rules: [
         {
-          accountName: "カードA",
-          descriptionContains: "Service A",
+          contains: ["カードA", "Service A"],
           category: "食費",
           subCategory: "食料品",
         },
@@ -134,8 +132,8 @@ describe("CategoryDecisionEngine", () => {
     const engine = new CategoryDecisionEngine({ config, candidates });
 
     const result = await engine.decideMany([
-      tx({ mfId: "wrong-account", accountName: "カードB" }),
-      tx({ mfId: "wrong-description", description: "Service B 利用料" }),
+      tx({ mfId: "missing-account-term", accountName: "カードB" }),
+      tx({ mfId: "missing-description-term", description: "Service B 利用料" }),
     ]);
 
     expect(result).toEqual([]);
@@ -146,8 +144,8 @@ describe("CategoryDecisionEngine", () => {
     const config: NormalizedCategoryDecisionConfig = {
       llm: { enabled: false, maxPerRun: 5, minConfidence: 0.65 },
       rules: [
-        { descriptionContains: "", category: "食費", subCategory: "食料品" },
-        { accountName: "", category: "食費", subCategory: "食料品" },
+        { contains: "", category: "食費", subCategory: "食料品" },
+        { contains: [], category: "食費", subCategory: "食料品" },
       ],
     };
     const engine = new CategoryDecisionEngine({ config, candidates, warn });

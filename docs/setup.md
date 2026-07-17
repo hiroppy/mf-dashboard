@@ -106,8 +106,6 @@ openssl rand -hex 32
 cp data/category-rules.example.json data/category-rules.json
 ```
 
-`data/category-rules.json` は `.gitignore` 対象なのでコミットしない。Docker Compose の crawler には repo root の `data` directory が mount されるため、host 側に作成した設定が定期実行でも使われる。
-
 設定例:
 
 ```json
@@ -119,12 +117,12 @@ cp data/category-rules.example.json data/category-rules.json
   },
   "rules": [
     {
-      "accountName": "コープデリ eフレンズ",
+      "contains": ["コープデリ", "eフレンズ"],
       "category": "食費",
       "subCategory": "食料品"
     },
     {
-      "descriptionContains": "Netflix",
+      "contains": "Netflix",
       "category": "趣味・娯楽",
       "subCategory": "動画・音楽"
     }
@@ -135,7 +133,7 @@ cp data/category-rules.example.json data/category-rules.json
 動作:
 
 - 対象は「新規」「未分類」「非振替」「計算対象」の取引のみ。
-- `accountName` は取引の口座名への完全一致、`descriptionContains` は取引内容への部分一致。どちらか一方、または両方を指定でき、両方を指定した場合は両条件に一致する取引だけが match する。
+- `contains` は `accountName + description` への部分一致。配列の場合は全要素を含む取引だけが match する。
 - 固定ルールが match した場合は、そのカテゴリを優先し LLM は呼ばない。
 - 固定ルールに match せず、`llm.enabled` が `true` の場合のみ LLM 推論する。サンプル設定では誤送信を避けるため `false` にしている。
 - LLM 推論は MoneyForward から取得した候補カテゴリ一覧から選ばせ、カテゴリ ID は生成させない。
@@ -145,7 +143,7 @@ cp data/category-rules.example.json data/category-rules.json
 - 採用したカテゴリは MoneyForward の `/cf/update` へ反映し、対象月を再スクレイプして DB へ保存する。
 - 更新に失敗しても crawler は停止せず、対象取引は未分類のまま保存する。
 
-LLM fallback を使う場合は、`llm.enabled` を `true` に変更し、既存の AI 設定として `.env` に `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` も設定する。LLM には取引の日付、種別、金額、内容、候補カテゴリ ID / 名称を送るため、外部 provider へ送信してよい場合だけ有効にする。専用のカテゴリ決定 env はなく、機能 ON / OFF は `data/category-rules.json` の有無で決まる。
+LLM fallback を使う場合は、`llm.enabled` を `true` に変更し、既存の AI 設定として `.env` に `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` も設定する。LLM には取引の日付、種別、金額、内容、候補カテゴリ ID / 名称を送るため、外部 provider へ送信してよい場合だけ有効にする。
 
 #### 1Password の ID の見つけ方
 

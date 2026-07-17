@@ -31,8 +31,7 @@ describe("loadCategoryDecisionConfig", () => {
         llm: { enabled: true },
         rules: [
           {
-            accountName: "カードA",
-            descriptionContains: "Service A",
+            contains: ["カードA", "Service A"],
             category: "食費",
             subCategory: "食料品",
           },
@@ -51,8 +50,7 @@ describe("loadCategoryDecisionConfig", () => {
       },
       rules: [
         {
-          accountName: "カードA",
-          descriptionContains: "Service A",
+          contains: ["カードA", "Service A"],
           category: "食費",
           subCategory: "食料品",
         },
@@ -95,10 +93,11 @@ describe("loadCategoryDecisionConfig", () => {
       JSON.stringify({
         rules: [
           { category: "食費", subCategory: "食料品" },
-          { accountName: "", category: "食費", subCategory: "食料品" },
-          { descriptionContains: "   ", category: "食費", subCategory: "食料品" },
-          { accountName: [], category: "食費", subCategory: "食料品" },
-          { descriptionContains: "Service B", category: "食費", subCategory: "食料品" },
+          { contains: "", category: "食費", subCategory: "食料品" },
+          { contains: "   ", category: "食費", subCategory: "食料品" },
+          { contains: [], category: "食費", subCategory: "食料品" },
+          { contains: ["Service B", ""], category: "食費", subCategory: "食料品" },
+          { contains: "Service B", category: "食費", subCategory: "食料品" },
         ],
       }),
     );
@@ -107,9 +106,9 @@ describe("loadCategoryDecisionConfig", () => {
 
     expect(result.enabled).toBe(true);
     expect(result.config?.rules).toEqual([
-      { descriptionContains: "Service B", category: "食費", subCategory: "食料品" },
+      { contains: "Service B", category: "食費", subCategory: "食料品" },
     ]);
-    expect(warn).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalledTimes(5);
     expect(warn.mock.calls[0]?.[0]).toEqual(
       expect.stringContaining("Invalid category rule ignored"),
     );
