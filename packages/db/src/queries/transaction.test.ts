@@ -66,6 +66,23 @@ async function createTestAccount(name: string, groupId = TEST_GROUP_ID): Promise
   return account.id;
 }
 
+async function createExternalAccount(name: string): Promise<number> {
+  const now = new Date().toISOString();
+  const account = await db
+    .insert(schema.accounts)
+    .values({
+      mfId: `mf_${name}`,
+      name,
+      type: "bank",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning()
+    .get();
+
+  return account.id;
+}
+
 async function addAccountToGroup(accountId: number, groupId: string) {
   const now = new Date().toISOString();
   await db
@@ -305,6 +322,89 @@ describe("searchTransactions", () => {
         isTransfer: false,
         isExcludedFromCalculation: false,
       }),
+    ]);
+  });
+
+  it("通常明細と重複する対象groupへの振替支出を除外する", async () => {
+    const targetAccountId = await createTestAccount("Bank A");
+    const sourceAccountId = await createExternalAccount("External Bank");
+
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+    await createTransaction({
+      accountId: targetAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "expense",
+    });
+
+    const result = await searchTransactions(
+      { groupId: TEST_GROUP_ID, type: "expense", includeTransfers: false },
+      db,
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({ accountId: targetAccountId, amount: 6000, type: "expense" }),
+    ]);
+  });
+
+  it("重複する対象groupからの振替収入を1件だけ返す", async () => {
+    const sourceAccountId = await createTestAccount("Bank A");
+    const targetAccountId = await createExternalAccount("External Bank");
+
+    for (let index = 0; index < 2; index += 1) {
+      await createTransaction({
+        accountId: sourceAccountId,
+        date: "2025-06-06",
+        amount: 6000,
+        type: "transfer",
+        transferTargetAccountId: targetAccountId,
+      });
+    }
+
+    const result = await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db);
+
+    expect(result).toEqual([
+      expect.objectContaining({ accountId: sourceAccountId, amount: 6000, type: "income" }),
+    ]);
+  });
+
+  it("共通groupを持つ外部口座から対象groupへの振替を支出として検索する", async () => {
+    const targetAccountId = await createTestAccount("Bank A");
+    const commonGroupId = "common_group";
+    const now = new Date().toISOString();
+    await db
+      .insert(schema.groups)
+      .values({
+        id: commonGroupId,
+        name: "Common Group",
+        isCurrent: false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    const sourceAccountId = await createTestAccount("External Bank", commonGroupId);
+    await addAccountToGroup(targetAccountId, commonGroupId);
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+
+    const result = await searchTransactions(
+      { groupId: TEST_GROUP_ID, type: "expense", includeTransfers: false },
+      db,
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({ accountId: sourceAccountId, amount: 6000, type: "expense" }),
     ]);
   });
 

@@ -223,6 +223,28 @@ export function buildExpenseSum(_accountIds: number[]) {
   end)`.as("total_expense");
 }
 
+export async function hasMatchingNormalTransaction(
+  db: Db,
+  accountId: number,
+  date: string,
+  amount: number,
+): Promise<boolean> {
+  const transaction = await db
+    .select({ id: schema.transactions.id })
+    .from(schema.transactions)
+    .where(
+      and(
+        eq(schema.transactions.accountId, accountId),
+        eq(schema.transactions.date, date),
+        eq(schema.transactions.amount, amount),
+        sql`${schema.transactions.type} IN ('income', 'expense')`,
+      ),
+    )
+    .get();
+
+  return transaction !== undefined;
+}
+
 /**
  * グループ外→グループ内への振替支出を計算（重複除外）
  * 同一日・同一金額・同一account・同一transfer_targetの振替は1件のみカウント
@@ -272,20 +294,9 @@ export async function getDeduplicatedTransferExpense(
 
     // 振替先アカウントで同一日・同一金額の通常トランザクションがある場合は除外
     // （既に通常支出としてカウントされているため）
-    const existingNormalTx = await db
-      .select({ id: schema.transactions.id })
-      .from(schema.transactions)
-      .where(
-        and(
-          eq(schema.transactions.accountId, t.transferTargetAccountId),
-          eq(schema.transactions.date, t.date),
-          eq(schema.transactions.amount, t.amount),
-          sql`${schema.transactions.type} IN ('income', 'expense')`,
-        ),
-      )
-      .get();
-
-    if (existingNormalTx) continue;
+    if (await hasMatchingNormalTransaction(db, t.transferTargetAccountId, t.date, t.amount)) {
+      continue;
+    }
 
     const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
     if (seen.has(key)) continue;

@@ -2,7 +2,7 @@ import { and, desc, eq, gte, inArray, like, lte, or, sql, type SQL } from "drizz
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { transformTransferToIncome } from "../shared/transfer";
-import { classifyTransfer } from "./summary";
+import { classifyTransfer, hasMatchingNormalTransaction } from "./summary";
 
 export const SEARCH_TRANSACTIONS_DEFAULT_LIMIT = 50;
 export const SEARCH_TRANSACTIONS_MAX_LIMIT = 100;
@@ -96,17 +96,45 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
   const keyword = options.keyword?.toLocaleLowerCase();
   const accountIdSet = new Set(accountIds);
+  const seenTransfers = new Set<string>();
   type SearchTransaction = Awaited<ReturnType<typeof fetchBatch>>[number];
 
   const transformTransaction = async (
     transaction: SearchTransaction,
-  ): Promise<SearchTransaction> => {
+  ): Promise<SearchTransaction | null> => {
     if (
       transaction.type !== "transfer" ||
       transaction.accountId === null ||
       transaction.transferTargetAccountId === null
     ) {
       return transaction;
+    }
+
+    const sourceInGroup = accountIdSet.has(transaction.accountId);
+    const targetInGroup = accountIdSet.has(transaction.transferTargetAccountId);
+    const transferKey = `${transaction.date}-${transaction.amount}-${transaction.accountId}-${transaction.transferTargetAccountId}`;
+
+    if (!sourceInGroup && targetInGroup) {
+      if (
+        (await hasMatchingNormalTransaction(
+          db,
+          transaction.transferTargetAccountId,
+          transaction.date,
+          transaction.amount,
+        )) ||
+        seenTransfers.has(transferKey)
+      ) {
+        return null;
+      }
+      seenTransfers.add(transferKey);
+      return {
+        ...transaction,
+        type: "expense",
+        category: "支出",
+        subCategory: "振替出金",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      };
     }
 
     const classification = await classifyTransfer(
@@ -116,17 +144,9 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       transaction.transferTargetAccountId,
     );
     if (classification === "income") {
+      if (seenTransfers.has(transferKey)) return null;
+      seenTransfers.add(transferKey);
       return transformTransferToIncome(transaction, accountIds);
-    }
-    if (classification === "expense") {
-      return {
-        ...transaction,
-        type: "expense",
-        category: "支出",
-        subCategory: "振替出金",
-        isTransfer: false,
-        isExcludedFromCalculation: false,
-      };
     }
     return transaction;
   };
@@ -152,9 +172,10 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
   while (page.length < limit) {
     const batch = await fetchBatch(batchOffset);
-    const transformedBatch = await Promise.all(batch.map(transformTransaction));
 
-    for (const transaction of transformedBatch) {
+    for (const rawTransaction of batch) {
+      const transaction = await transformTransaction(rawTransaction);
+      if (!transaction) continue;
       if (!matchesOptions(transaction)) continue;
       if (remainingOffset > 0) {
         remainingOffset -= 1;
