@@ -25,7 +25,19 @@ function errorResponse(status: number, code: string, message: string): Response 
   return Response.json({ error: { code, message } }, { status });
 }
 
+function isWithinChatAccessBoundary(request: Request): boolean {
+  if (process.env.NODE_ENV !== "production") {
+    return true;
+  }
+
+  return process.env.VERCEL !== "1" && Boolean(request.headers.get("cf-access-jwt-assertion"));
+}
+
 export async function POST(request: Request): Promise<Response> {
+  if (!isWithinChatAccessBoundary(request)) {
+    return errorResponse(403, "CHAT_ACCESS_DENIED", "チャットAPIへのアクセスが拒否されました。");
+  }
+
   let body: unknown;
 
   try {
@@ -42,6 +54,10 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!validation.success) {
     return errorResponse(400, "INVALID_MESSAGES", "有効なチャットメッセージが必要です。");
+  }
+
+  if (validation.data.some((message) => message.role === "system")) {
+    return errorResponse(400, "SYSTEM_MESSAGE_NOT_ALLOWED", "systemメッセージは指定できません。");
   }
 
   if (!isLLMEnabled()) {
