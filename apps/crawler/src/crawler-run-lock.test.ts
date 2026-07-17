@@ -219,6 +219,47 @@ describe("crawler run lock", () => {
     );
   });
 
+  test("rejects acquisition while a raced replacement is quarantined", async () => {
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "stale-lock",
+        pid: 123,
+        source: "manual",
+        startedAt: new Date(Date.now() - 120_000).toISOString(),
+      }),
+    );
+
+    const replacement = {
+      id: "replacement-lock",
+      pid: process.pid,
+      source: "scheduled",
+      startedAt: new Date().toISOString(),
+    };
+
+    const state = await getCrawlerRunState({
+      afterStaleLockQuarantine: async () => {
+        await expect(acquireCrawlerRunLock("intruder", { lockPath })).rejects.toBeInstanceOf(
+          CrawlerAlreadyRunningError,
+        );
+      },
+      beforeStaleLockRemoval: async () => {
+        await rm(lockPath);
+        await writeFile(lockPath, JSON.stringify(replacement));
+      },
+      lockPath,
+      pidExists: (pid) => pid === process.pid,
+    });
+
+    expect(state).toEqual({
+      running: true,
+      pid: process.pid,
+      source: "scheduled",
+      startedAt: replacement.startedAt,
+    });
+    await expect(readFile(lockPath, "utf8")).resolves.toBe(JSON.stringify(replacement));
+  });
+
   test("treats a fresh invalid lock as running", async () => {
     await writeFile(lockPath, "");
 
