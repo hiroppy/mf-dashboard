@@ -9,12 +9,12 @@ import {
 } from "@mf-dashboard/db";
 import { tool } from "ai";
 import { z } from "zod";
-import { analyzeIncomeStability } from "./analyze-income-stability.js";
-import { analyzeMoMTrend } from "./analyze-mom-trend.js";
-import { analyzePortfolioRisk } from "./analyze-portfolio-risk.js";
-import { analyzeSavingsTrajectory } from "./analyze-savings-trajectory.js";
-import { analyzeSpendingComparison } from "./analyze-spending-comparison.js";
-import { excludeCurrentMonth, getCurrentMonth } from "./analyzer-utils.js";
+import { analyzeIncomeStability } from "./analyze-income-stability";
+import { analyzeMoMTrend } from "./analyze-mom-trend";
+import { analyzePortfolioRisk } from "./analyze-portfolio-risk";
+import { analyzeSavingsTrajectory } from "./analyze-savings-trajectory";
+import { analyzeSpendingComparison } from "./analyze-spending-comparison";
+import { excludeCurrentMonth, getCurrentMonth } from "./analyzer-utils";
 
 export function createAnalysisTools(db: Db, groupId: string) {
   return {

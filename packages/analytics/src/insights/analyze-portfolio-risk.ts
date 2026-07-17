@@ -1,4 +1,4 @@
-import type { HoldingInfo, DailyChangeInfo, PortfolioRiskResult } from "./analyzer-types.js";
+import type { HoldingInfo, DailyChangeInfo, PortfolioRiskResult } from "./analyzer-types";
 
 export function analyzePortfolioRisk(
   holdings: HoldingInfo[],

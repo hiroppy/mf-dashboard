@@ -1,9 +1,5 @@
-import type {
-  CategoryTotal,
-  CategoryComparison,
-  SpendingComparisonResult,
-} from "./analyzer-types.js";
-import { calcAverage, calcLinearSlope, calcStdDev } from "./analyzer-utils.js";
+import type { CategoryTotal, CategoryComparison, SpendingComparisonResult } from "./analyzer-types";
+import { calcAverage, calcLinearSlope, calcStdDev } from "./analyzer-utils";
 
 export function analyzeSpendingComparison(
   monthlyCategoryTotals: CategoryTotal[],

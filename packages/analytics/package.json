@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./chat/cards": "./src/chat/cards.ts",
     "./chat/tools": "./src/chat/tools.ts",
+    "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
     "./tools/analysis": "./src/insights/analysis-tools.ts",
     "./tools/financial": "./src/insights/tools.ts",

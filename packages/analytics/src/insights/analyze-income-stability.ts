@@ -1,5 +1,5 @@
-import type { MonthlySummary, IncomeStabilityResult } from "./analyzer-types.js";
-import { calcAverage, calcLinearSlope, calcMedian, calcStdDev } from "./analyzer-utils.js";
+import type { MonthlySummary, IncomeStabilityResult } from "./analyzer-types";
+import { calcAverage, calcLinearSlope, calcMedian, calcStdDev } from "./analyzer-utils";
 
 export function analyzeIncomeStability(monthlySummaries: MonthlySummary[]): IncomeStabilityResult {
   if (monthlySummaries.length === 0) {

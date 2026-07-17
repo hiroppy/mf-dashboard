@@ -1,5 +1,5 @@
-import type { MonthlySummary, SavingsInput, SavingsTrajectoryResult } from "./analyzer-types.js";
-import { calcAverage, calcLinearSlope, calcSavingsRate } from "./analyzer-utils.js";
+import type { MonthlySummary, SavingsInput, SavingsTrajectoryResult } from "./analyzer-types";
+import { calcAverage, calcLinearSlope, calcSavingsRate } from "./analyzer-utils";
 
 export function analyzeSavingsTrajectory(
   currentMetrics: SavingsInput,

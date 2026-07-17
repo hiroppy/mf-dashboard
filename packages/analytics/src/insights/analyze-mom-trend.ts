@@ -1,11 +1,11 @@
-import type { MonthlySummary, MonthComparison, MoMTrendResult } from "./analyzer-types.js";
+import type { MonthlySummary, MonthComparison, MoMTrendResult } from "./analyzer-types";
 import {
   calcAverage,
   calcChangeRate,
   calcLinearSlope,
   calcSavingsRate,
   calcStreak,
-} from "./analyzer-utils.js";
+} from "./analyzer-utils";
 
 export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendResult {
   if (monthlySummaries.length === 0) {
