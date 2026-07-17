@@ -28,6 +28,7 @@ interface CrawlerRunLockOptions {
   afterLockMutationGuardBlocked?: () => Promise<void>;
   afterLockMutationIntentPublished?: () => Promise<void>;
   afterStaleLockQuarantine?: () => Promise<void>;
+  beforeStaleLockCleanup?: () => Promise<void>;
   beforeStaleLockRemoval?: () => Promise<void>;
   lockPath?: string;
   getPidStartedAt?: (pid: number) => string | null;
@@ -105,6 +106,7 @@ function getOptions(options: CrawlerRunLockOptions = {}) {
     afterLockMutationGuardBlocked: options.afterLockMutationGuardBlocked,
     afterLockMutationIntentPublished: options.afterLockMutationIntentPublished,
     afterStaleLockQuarantine: options.afterStaleLockQuarantine,
+    beforeStaleLockCleanup: options.beforeStaleLockCleanup,
     beforeStaleLockRemoval: options.beforeStaleLockRemoval,
     getPidStartedAt: options.getPidStartedAt ?? getLinuxPidStartedAt,
     lockPath: options.lockPath ?? DEFAULT_LOCK_PATH,
@@ -349,6 +351,18 @@ async function tryAcquireLockMutationGuard(
   }
 }
 
+async function waitForLockMutationGuard(
+  options: ReturnType<typeof getOptions>,
+): Promise<LockMutationGuard> {
+  while (true) {
+    const mutationGuard = await tryAcquireLockMutationGuard(options);
+    if (mutationGuard) {
+      return mutationGuard;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
 async function getQuarantinePaths(lockPath: string): Promise<string[]> {
   const directory = path.dirname(lockPath);
   const quarantinePrefix = `${path.basename(lockPath)}.stale-`;
@@ -487,6 +501,7 @@ export async function getCrawlerRunState(
     return snapshotState;
   }
 
+  await resolved.beforeStaleLockCleanup?.();
   const removal = await removeStaleLockIfCurrent(snapshot, resolved);
   if (removal === "removed") {
     return { running: false, pid: null, source: null, startedAt: null };
@@ -554,9 +569,14 @@ export async function acquireCrawlerRunLock(
   return {
     record,
     release: async () => {
-      const current = await readLockRecord(resolved.lockPath);
-      if (current?.id === record.id) {
-        await rm(resolved.lockPath, { force: true });
+      const mutationGuard = await waitForLockMutationGuard(resolved);
+      try {
+        const current = await readLockRecord(resolved.lockPath);
+        if (current?.id === record.id) {
+          await rm(resolved.lockPath, { force: true });
+        }
+      } finally {
+        await mutationGuard.release();
       }
     },
   };

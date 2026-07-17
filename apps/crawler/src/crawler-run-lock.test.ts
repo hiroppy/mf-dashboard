@@ -376,6 +376,49 @@ describe("crawler run lock", () => {
     await expect(readFile(lockPath, "utf8")).resolves.toBe(JSON.stringify(replacement));
   });
 
+  test("releases a replacement that finishes while quarantined", async () => {
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "stale-lock",
+        pid: 999_999,
+        source: "scheduled",
+        startedAt: new Date().toISOString(),
+      }),
+    );
+    let replacementLock!: Awaited<ReturnType<typeof acquireCrawlerRunLock>>;
+    let releasePromise!: Promise<void>;
+    let releaseSettled = false;
+
+    await getCrawlerRunState({
+      afterStaleLockQuarantine: async () => {
+        releasePromise = replacementLock.release();
+        void releasePromise.then(
+          () => {
+            releaseSettled = true;
+          },
+          () => undefined,
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(releaseSettled).toBe(false);
+      },
+      beforeStaleLockCleanup: async () => {
+        await rm(lockPath);
+        replacementLock = await acquireCrawlerRunLock("replacement", { lockPath });
+      },
+      lockPath,
+      pidExists: (pid) => pid === process.pid,
+    });
+    await releasePromise;
+
+    await expect(getCrawlerRunState({ lockPath })).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+  });
+
   test("recovers a replacement left quarantined by interrupted cleanup", async () => {
     await writeFile(
       lockPath,
