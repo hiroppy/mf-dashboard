@@ -76,6 +76,36 @@ describe("crawler run lock", () => {
     await lock.release();
   });
 
+  test("allows exactly one of two simultaneous acquisitions", async () => {
+    let publishedCount = 0;
+    let releasePublished: () => void;
+    const bothPublished = new Promise<void>((resolve) => {
+      releasePublished = resolve;
+    });
+    const options = {
+      afterLockMutationIntentPublished: async () => {
+        publishedCount += 1;
+        if (publishedCount === 2) {
+          releasePublished();
+        }
+        await bothPublished;
+      },
+      lockPath,
+    };
+    const results = await Promise.allSettled([
+      acquireCrawlerRunLock("manual", options),
+      acquireCrawlerRunLock("scheduled", options),
+    ]);
+    const acquired = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected");
+
+    expect(acquired).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.reason).toBeInstanceOf(CrawlerAlreadyRunningError);
+
+    await acquired[0]?.value.release();
+  });
+
   test("clears a stale lock when its process is gone", async () => {
     await writeFile(
       lockPath,

@@ -23,6 +23,7 @@ interface CrawlerRunLockRecord {
 }
 
 interface CrawlerRunLockOptions {
+  afterLockMutationIntentPublished?: () => Promise<void>;
   afterStaleLockQuarantine?: () => Promise<void>;
   beforeStaleLockRemoval?: () => Promise<void>;
   lockPath?: string;
@@ -96,6 +97,7 @@ function getLinuxPidStartedAt(pid: number): string | null {
 
 function getOptions(options: CrawlerRunLockOptions = {}) {
   return {
+    afterLockMutationIntentPublished: options.afterLockMutationIntentPublished,
     afterStaleLockQuarantine: options.afterStaleLockQuarantine,
     beforeStaleLockRemoval: options.beforeStaleLockRemoval,
     getPidStartedAt: options.getPidStartedAt ?? getLinuxPidStartedAt,
@@ -212,11 +214,8 @@ function parseLockMutationIntent(contents: string): LockMutationIntentRecord | n
   }
 }
 
-function isLockMutationIntentActive(
-  record: LockMutationIntentRecord | null,
-  options: ReturnType<typeof getOptions>,
-): boolean {
-  if (!record || !options.pidExists(record.pid)) {
+function isLockMutationIntentActive(record: LockMutationIntentRecord | null): boolean {
+  if (!record || !defaultPidExists(record.pid)) {
     return false;
   }
 
@@ -224,8 +223,30 @@ function isLockMutationIntentActive(
     return true;
   }
 
-  const currentPidStartedAt = options.getPidStartedAt(record.pid);
+  const currentPidStartedAt = getLinuxPidStartedAt(record.pid);
   return !currentPidStartedAt || currentPidStartedAt === record.pidStartedAt;
+}
+
+async function getActiveLockMutationIntents(
+  directory: string,
+  prefixes: string[],
+): Promise<string[]> {
+  const activeIntents: string[] = [];
+  for (const name of await readdir(directory)) {
+    if (!prefixes.some((prefix) => name.startsWith(prefix))) {
+      continue;
+    }
+
+    const intentPath = path.join(directory, name);
+    const snapshot = await readLockSnapshot(intentPath);
+    const record = snapshot ? parseLockMutationIntent(snapshot.contents) : null;
+    if (isLockMutationIntentActive(record)) {
+      activeIntents.push(intentPath);
+    } else {
+      await rm(intentPath, { force: true });
+    }
+  }
+  return activeIntents.sort();
 }
 
 async function tryAcquireLockMutationGuard(
@@ -236,11 +257,13 @@ async function tryAcquireLockMutationGuard(
   const id = randomUUID();
   // Active intent paths are unique and never reused, so dead owners can be removed by exact path.
   const pendingPath = path.join(directory, `${basename}.mutation-pending-${id}`);
-  const intentPath = path.join(directory, `${basename}.mutation-active-${id}`);
-  const intentPrefix = `${basename}.mutation-active-`;
+  const candidatePath = path.join(directory, `${basename}.mutation-candidate-${id}`);
+  const ownerPath = path.join(directory, `${basename}.mutation-owner-${id}`);
+  const candidatePrefix = `${basename}.mutation-candidate-`;
+  const ownerPrefixes = [`${basename}.mutation-owner-`, `${basename}.mutation-active-`];
   const record: LockMutationIntentRecord = {
     pid: process.pid,
-    pidStartedAt: options.getPidStartedAt(process.pid),
+    pidStartedAt: getLinuxPidStartedAt(process.pid),
   };
   let file: Awaited<ReturnType<typeof open>> | null = null;
 
@@ -251,39 +274,45 @@ async function tryAcquireLockMutationGuard(
     } finally {
       await file?.close();
     }
-    await rename(pendingPath, intentPath);
+    await rename(pendingPath, candidatePath);
+    await options.afterLockMutationIntentPublished?.();
   } catch (err) {
     await rm(pendingPath, { force: true });
+    await rm(candidatePath, { force: true });
     throw err;
   }
 
   try {
-    let hasOtherActiveIntent = false;
-    for (const name of await readdir(directory)) {
-      if (!name.startsWith(intentPrefix)) {
+    while (true) {
+      if ((await getActiveLockMutationIntents(directory, ownerPrefixes)).length > 0) {
+        await rm(candidatePath, { force: true });
+        return null;
+      }
+
+      const candidates = await getActiveLockMutationIntents(directory, [candidatePrefix]);
+      if (candidates[0] !== candidatePath) {
+        await rm(candidatePath, { force: true });
+        return null;
+      }
+      if (candidates.length > 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
         continue;
       }
 
-      const candidatePath = path.join(directory, name);
-      const snapshot = await readLockSnapshot(candidatePath);
-      const candidate = snapshot ? parseLockMutationIntent(snapshot.contents) : null;
-      if (isLockMutationIntentActive(candidate, options)) {
-        hasOtherActiveIntent ||= candidatePath !== intentPath;
-      } else {
+      // Another candidate may have become owner since the initial owner check.
+      if ((await getActiveLockMutationIntents(directory, ownerPrefixes)).length > 0) {
         await rm(candidatePath, { force: true });
+        return null;
       }
-    }
 
-    if (hasOtherActiveIntent) {
-      await rm(intentPath, { force: true });
-      return null;
+      await rename(candidatePath, ownerPath);
+      return {
+        release: () => rm(ownerPath, { force: true }),
+      };
     }
-
-    return {
-      release: () => rm(intentPath, { force: true }),
-    };
   } catch (err) {
-    await rm(intentPath, { force: true });
+    await rm(candidatePath, { force: true });
+    await rm(ownerPath, { force: true });
     throw err;
   }
 }
