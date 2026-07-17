@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { link, mkdir, open, rename, rm } from "node:fs/promises";
+import { link, mkdir, open, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_LOCK_PATH = path.resolve(import.meta.dirname, "../../../data/crawler-run.lock");
@@ -53,6 +53,11 @@ interface LockFileSnapshot {
 
 interface LockMutationGuard {
   release: () => Promise<void>;
+}
+
+interface LockMutationIntentRecord {
+  pid: number;
+  pidStartedAt: string | null;
 }
 
 type StaleLockRemovalResult = "busy" | "changed" | "removed";
@@ -174,30 +179,6 @@ async function readLockRecord(lockPath: string): Promise<CrawlerRunLockRecord | 
   return (await readLockSnapshot(lockPath))?.record ?? null;
 }
 
-async function tryAcquireLockMutationGuard(lockPath: string): Promise<LockMutationGuard | null> {
-  const guardPath = `${lockPath}.mutation`;
-  let file: Awaited<ReturnType<typeof open>>;
-
-  try {
-    file = await open(guardPath, "wx");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
-      return null;
-    }
-    throw err;
-  }
-
-  return {
-    release: async () => {
-      try {
-        await file.close();
-      } finally {
-        await rm(guardPath, { force: true });
-      }
-    },
-  };
-}
-
 function isStaleLock(
   record: CrawlerRunLockRecord,
   options: ReturnType<typeof getOptions>,
@@ -216,24 +197,113 @@ function isStaleLock(
   return isExpired(record.startedAt, options.staleMs);
 }
 
+function parseLockMutationIntent(contents: string): LockMutationIntentRecord | null {
+  try {
+    const parsed = JSON.parse(contents) as Partial<LockMutationIntentRecord>;
+    if (
+      typeof parsed.pid !== "number" ||
+      (parsed.pidStartedAt !== null && typeof parsed.pidStartedAt !== "string")
+    ) {
+      return null;
+    }
+    return { pid: parsed.pid, pidStartedAt: parsed.pidStartedAt };
+  } catch {
+    return null;
+  }
+}
+
+function isLockMutationIntentActive(
+  record: LockMutationIntentRecord | null,
+  options: ReturnType<typeof getOptions>,
+): boolean {
+  if (!record || !options.pidExists(record.pid)) {
+    return false;
+  }
+
+  if (!record.pidStartedAt) {
+    return true;
+  }
+
+  const currentPidStartedAt = options.getPidStartedAt(record.pid);
+  return !currentPidStartedAt || currentPidStartedAt === record.pidStartedAt;
+}
+
+async function tryAcquireLockMutationGuard(
+  options: ReturnType<typeof getOptions>,
+): Promise<LockMutationGuard | null> {
+  const directory = path.dirname(options.lockPath);
+  const basename = path.basename(options.lockPath);
+  const id = randomUUID();
+  // Active intent paths are unique and never reused, so dead owners can be removed by exact path.
+  const pendingPath = path.join(directory, `${basename}.mutation-pending-${id}`);
+  const intentPath = path.join(directory, `${basename}.mutation-active-${id}`);
+  const intentPrefix = `${basename}.mutation-active-`;
+  const record: LockMutationIntentRecord = {
+    pid: process.pid,
+    pidStartedAt: options.getPidStartedAt(process.pid),
+  };
+  let file: Awaited<ReturnType<typeof open>> | null = null;
+
+  try {
+    try {
+      file = await open(pendingPath, "wx");
+      await file.writeFile(JSON.stringify(record));
+    } finally {
+      await file?.close();
+    }
+    await rename(pendingPath, intentPath);
+  } catch (err) {
+    await rm(pendingPath, { force: true });
+    throw err;
+  }
+
+  try {
+    let hasOtherActiveIntent = false;
+    for (const name of await readdir(directory)) {
+      if (!name.startsWith(intentPrefix)) {
+        continue;
+      }
+
+      const candidatePath = path.join(directory, name);
+      const snapshot = await readLockSnapshot(candidatePath);
+      const candidate = snapshot ? parseLockMutationIntent(snapshot.contents) : null;
+      if (isLockMutationIntentActive(candidate, options)) {
+        hasOtherActiveIntent ||= candidatePath !== intentPath;
+      } else {
+        await rm(candidatePath, { force: true });
+      }
+    }
+
+    if (hasOtherActiveIntent) {
+      await rm(intentPath, { force: true });
+      return null;
+    }
+
+    return {
+      release: () => rm(intentPath, { force: true }),
+    };
+  } catch (err) {
+    await rm(intentPath, { force: true });
+    throw err;
+  }
+}
+
 async function removeStaleLockIfCurrent(
-  lockPath: string,
   expected: LockFileSnapshot,
-  beforeRemoval?: () => Promise<void>,
-  afterQuarantine?: () => Promise<void>,
+  options: ReturnType<typeof getOptions>,
 ): Promise<StaleLockRemovalResult> {
-  const mutationGuard = await tryAcquireLockMutationGuard(lockPath);
+  const mutationGuard = await tryAcquireLockMutationGuard(options);
   if (!mutationGuard) {
     return "busy";
   }
 
-  const quarantinePath = `${lockPath}.stale-${randomUUID()}`;
+  const quarantinePath = `${options.lockPath}.stale-${randomUUID()}`;
 
   try {
     try {
-      await beforeRemoval?.();
-      await rename(lockPath, quarantinePath);
-      await afterQuarantine?.();
+      await options.beforeStaleLockRemoval?.();
+      await rename(options.lockPath, quarantinePath);
+      await options.afterStaleLockQuarantine?.();
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return "changed";
@@ -253,7 +323,7 @@ async function removeStaleLockIfCurrent(
     }
 
     try {
-      await link(quarantinePath, lockPath);
+      await link(quarantinePath, options.lockPath);
       await rm(quarantinePath, { force: true });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
@@ -294,12 +364,7 @@ export async function getCrawlerRunState(
     return snapshotState;
   }
 
-  const removal = await removeStaleLockIfCurrent(
-    resolved.lockPath,
-    snapshot,
-    resolved.beforeStaleLockRemoval,
-    resolved.afterStaleLockQuarantine,
-  );
+  const removal = await removeStaleLockIfCurrent(snapshot, resolved);
   if (removal === "removed") {
     return { running: false, pid: null, source: null, startedAt: null };
   }
@@ -317,7 +382,7 @@ export async function acquireCrawlerRunLock(
   const resolved = getOptions(options);
   await mkdir(path.dirname(resolved.lockPath), { recursive: true });
 
-  const mutationGuard = await tryAcquireLockMutationGuard(resolved.lockPath);
+  const mutationGuard = await tryAcquireLockMutationGuard(resolved);
   if (!mutationGuard) {
     throw new CrawlerAlreadyRunningError({
       running: true,

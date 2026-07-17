@@ -31,6 +31,22 @@ describe("crawler run lock", () => {
     });
   });
 
+  test("acquires when a mutation guard was left without a lock", async () => {
+    await writeFile(`${lockPath}.mutation`, "");
+    await writeFile(
+      `${lockPath}.mutation-active-stale-owner`,
+      JSON.stringify({ pid: 999_999, pidStartedAt: null }),
+    );
+
+    const lock = await acquireCrawlerRunLock("manual", {
+      lockPath,
+      pidExists: (pid) => pid === process.pid,
+    });
+
+    expect(lock.record.source).toBe("manual");
+    await lock.release();
+  });
+
   test("reports running state while a lock is held and idle after release", async () => {
     const lock = await acquireCrawlerRunLock("manual", { lockPath });
 
