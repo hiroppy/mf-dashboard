@@ -11,6 +11,7 @@ describe("createChatTools", () => {
     const analysisTools = createAnalysisTools(db, groupId);
 
     expect(Object.keys(createChatTools(db, groupId))).toEqual([
+      "searchTransactions",
       ...Object.keys(financialTools),
       ...Object.keys(analysisTools),
     ]);
@@ -21,6 +22,7 @@ describe("createChatTools", () => {
 
     expect(tools).toEqual(
       expect.objectContaining({
+        searchTransactions: expect.any(Object),
         getMonthlySummaryByMonth: expect.any(Object),
         getMonthlyCategoryTotals: expect.any(Object),
         getAssetBreakdownByCategory: expect.any(Object),
