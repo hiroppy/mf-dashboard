@@ -1,6 +1,6 @@
 import type { Db } from "@mf-dashboard/db";
-import { createAnalysisTools } from "../tools/analysis.js";
-import { createFinancialTools } from "../tools/financial.js";
+import { createAnalysisTools } from "../insights/analysis-tools.js";
+import { createFinancialTools } from "../insights/tools.js";
 
 export { createAnalysisTools, createFinancialTools };
 

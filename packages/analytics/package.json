@@ -7,8 +7,8 @@
     ".": "./src/index.ts",
     "./chat/tools": "./src/chat/tools.ts",
     "./categorization": "./src/categorization.ts",
-    "./tools/analysis": "./src/tools/analysis.ts",
-    "./tools/financial": "./src/tools/financial.ts",
+    "./tools/analysis": "./src/insights/analysis-tools.ts",
+    "./tools/financial": "./src/insights/tools.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {
