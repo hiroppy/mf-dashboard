@@ -27,10 +27,10 @@ export async function runCrawler(): Promise<void> {
 
     await using groupScope = await createGroupScope(runtime.page);
     const scrapeResult = await runScrapePhase(runtime.page, config);
-    await runSavePhase(runtime.db, scrapeResult);
+    await runSavePhase(runtime.db, runtime.page, scrapeResult, runtime.categoryDecision);
     await runCleanupPhase(runtime.db, scrapeResult.groupDataList, config);
     await runInstitutionCategoryPhase(runtime.db, runtime.page);
-    await runCashFlowHistoryPhase(runtime.db, runtime.page, config);
+    await runCashFlowHistoryPhase(runtime.db, runtime.page, config, runtime.categoryDecision);
     await runAnalyticsPhase(runtime.db, scrapeResult.groupDataList);
     await runNotificationPhase(scrapeResult.groupDataList, groupScope.originalGroup);
 
