@@ -5,7 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chat/tools": "./src/chat/tools.ts",
     "./categorization": "./src/categorization.ts",
+    "./tools/analysis": "./src/tools/analysis.ts",
+    "./tools/financial": "./src/tools/financial.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {
