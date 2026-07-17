@@ -6,7 +6,7 @@
 
 Money Forward MEの家計・資産・投資データを定期的に取得し、Webダッシュボードで確認できる。更新結果の通知、取引カテゴリの自動決定、AIアシスタントからのデータ照会にも対応する。
 
-[デモを見る](https://mf-dashboard-demo.vercel.app/) · [本番環境をセットアップする](docs/setup.md) · [MCP連携を設定する](apps/mcp/README.md)
+[デモを見る](https://mf-dashboard-demo.vercel.app/) · [本番環境をセットアップする](docs/setup.md)
 
 ## デモデータですぐ試す
 
@@ -52,9 +52,7 @@ crawlerコンテナ内のsupercronicが、登録金融機関の「一括更新�
 
 ### AIアシスタントから家計データを照会
 
-MCP（Model Context Protocol）サーバーを内蔵。ChatGPTデスクトップアプリ、Codex、Claude Desktop、Claude Codeから、家計・資産・投資データを自然言語で照会できる。
-
-[MCP連携の設定を見る](apps/mcp/README.md)
+Webアプリ内のAIアシスタントから、家計・資産・投資データを自然言語で照会できる。
 
 ### 家計・資産情報を可視化
 

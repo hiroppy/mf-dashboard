@@ -37,6 +37,24 @@ afterEach(() => {
 });
 
 describe("ActionIcons", () => {
+  it("describes the in-app AI assistant in the help dialog", async () => {
+    render(<ActionIcons variant="header" />);
+
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "金融機関データを更新" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "ヘルプ" }));
+
+    expect(screen.getByText("AI アシスタント")).not.toBeNull();
+    expect(
+      screen.getByText("Webアプリ内で家計・資産・投資データを自然言語で照会できます。"),
+    ).not.toBeNull();
+    expect(screen.queryByText("MCP 連携")).toBeNull();
+  });
+
   it("does not render a link to the removed daily update workflow", () => {
     process.env.NEXT_PUBLIC_GITHUB_ORG = "org-a";
     process.env.NEXT_PUBLIC_GITHUB_REPO = "repo-a";
