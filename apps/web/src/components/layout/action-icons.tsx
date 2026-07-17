@@ -188,9 +188,9 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
                   </span>
                 </li>
                 <li>
-                  <span className="font-medium text-foreground">MCP 連携</span>
+                  <span className="font-medium text-foreground">AI アシスタント</span>
                   <span className="block ml-5 mt-1">
-                    ChatGPT、Codex、Claudeから家計・資産・投資データを自然言語で照会できます。
+                    Webアプリ内で家計・資産・投資データを自然言語で照会できます。
                   </span>
                 </li>
               </ul>
