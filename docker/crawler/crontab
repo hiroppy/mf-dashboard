@@ -1,2 +1,2 @@
-0 7  * * * cd /app/apps/crawler && CRAWLER_RUN_SOURCE=scheduled node --import tsx src/index.ts
+30 6 * * * cd /app/apps/crawler && CRAWLER_RUN_SOURCE=scheduled node --import tsx src/index.ts
 30 15 * * * cd /app/apps/crawler && CRAWLER_RUN_SOURCE=scheduled node --import tsx src/index.ts
