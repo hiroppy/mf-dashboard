@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, open, readFile, rm, stat } from "node:fs/promises";
+import { link, mkdir, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_LOCK_PATH = path.resolve(import.meta.dirname, "../../../data/crawler-run.lock");
@@ -23,6 +23,7 @@ interface CrawlerRunLockRecord {
 }
 
 interface CrawlerRunLockOptions {
+  beforeStaleLockRemoval?: () => Promise<void>;
   lockPath?: string;
   getPidStartedAt?: (pid: number) => string | null;
   pidExists?: (pid: number) => boolean;
@@ -39,6 +40,14 @@ export class CrawlerAlreadyRunningError extends Error {
 interface CrawlerRunLock {
   record: CrawlerRunLockRecord;
   release: () => Promise<void>;
+}
+
+interface LockFileSnapshot {
+  contents: string;
+  device: number;
+  inode: number;
+  mtimeMs: number;
+  record: CrawlerRunLockRecord | null;
 }
 
 function defaultPidExists(pid: number): boolean {
@@ -75,6 +84,7 @@ function getLinuxPidStartedAt(pid: number): string | null {
 
 function getOptions(options: CrawlerRunLockOptions = {}) {
   return {
+    beforeStaleLockRemoval: options.beforeStaleLockRemoval,
     getPidStartedAt: options.getPidStartedAt ?? getLinuxPidStartedAt,
     lockPath: options.lockPath ?? DEFAULT_LOCK_PATH,
     pidExists: options.pidExists ?? defaultPidExists,
@@ -96,44 +106,64 @@ function isExpired(startedAt: string, staleMs: number): boolean {
   return Number.isNaN(startedAtMs) || Date.now() - startedAtMs > staleMs;
 }
 
-async function readLockRecord(lockPath: string): Promise<CrawlerRunLockRecord | null> {
+function parseLockRecord(contents: string): CrawlerRunLockRecord | null {
+  let parsed: Partial<CrawlerRunLockRecord>;
   try {
-    const raw = await readFile(lockPath, "utf8");
-    let parsed: Partial<CrawlerRunLockRecord>;
-    try {
-      parsed = JSON.parse(raw) as Partial<CrawlerRunLockRecord>;
-    } catch {
-      return null;
-    }
+    parsed = JSON.parse(contents) as Partial<CrawlerRunLockRecord>;
+  } catch {
+    return null;
+  }
 
-    const pidStartedAt =
-      parsed.pidStartedAt === undefined || parsed.pidStartedAt === null
-        ? null
-        : parsed.pidStartedAt;
+  const pidStartedAt =
+    parsed.pidStartedAt === undefined || parsed.pidStartedAt === null ? null : parsed.pidStartedAt;
 
-    if (
-      typeof parsed.id !== "string" ||
-      typeof parsed.pid !== "number" ||
-      (pidStartedAt !== null && typeof pidStartedAt !== "string") ||
-      typeof parsed.source !== "string" ||
-      typeof parsed.startedAt !== "string"
-    ) {
-      return null;
-    }
+  if (
+    typeof parsed.id !== "string" ||
+    typeof parsed.pid !== "number" ||
+    (pidStartedAt !== null && typeof pidStartedAt !== "string") ||
+    typeof parsed.source !== "string" ||
+    typeof parsed.startedAt !== "string"
+  ) {
+    return null;
+  }
 
-    return {
-      id: parsed.id,
-      pid: parsed.pid,
-      pidStartedAt,
-      source: parsed.source,
-      startedAt: parsed.startedAt,
-    };
+  return {
+    id: parsed.id,
+    pid: parsed.pid,
+    pidStartedAt,
+    source: parsed.source,
+    startedAt: parsed.startedAt,
+  };
+}
+
+async function readLockSnapshot(lockPath: string): Promise<LockFileSnapshot | null> {
+  let file: Awaited<ReturnType<typeof open>>;
+  try {
+    file = await open(lockPath, "r");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
     }
     throw err;
   }
+
+  try {
+    const contents = await file.readFile("utf8");
+    const stats = await file.stat();
+    return {
+      contents,
+      device: stats.dev,
+      inode: stats.ino,
+      mtimeMs: stats.mtimeMs,
+      record: parseLockRecord(contents),
+    };
+  } finally {
+    await file.close();
+  }
+}
+
+async function readLockRecord(lockPath: string): Promise<CrawlerRunLockRecord | null> {
+  return (await readLockSnapshot(lockPath))?.record ?? null;
 }
 
 function isStaleLock(
@@ -156,71 +186,78 @@ function isStaleLock(
 
 async function removeStaleLockIfCurrent(
   lockPath: string,
-  record: CrawlerRunLockRecord | null,
-  staleMtimeMs?: number,
+  expected: LockFileSnapshot,
+  beforeRemoval?: () => Promise<void>,
 ): Promise<boolean> {
+  const quarantinePath = `${lockPath}.stale-${randomUUID()}`;
+
   try {
-    const current = await readLockRecord(lockPath);
-
-    if (record) {
-      if (current?.id !== record.id) {
-        return false;
-      }
-    } else {
-      if (current) {
-        return false;
-      }
-
-      if (staleMtimeMs !== undefined) {
-        const stats = await stat(lockPath);
-        if (stats.mtimeMs !== staleMtimeMs) {
-          return false;
-        }
-      }
-    }
-
-    await rm(lockPath, { force: true });
-    return true;
+    await beforeRemoval?.();
+    await rename(lockPath, quarantinePath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }
     throw err;
   }
+
+  const current = await readLockSnapshot(quarantinePath);
+  if (
+    current &&
+    current.device === expected.device &&
+    current.inode === expected.inode &&
+    current.contents === expected.contents
+  ) {
+    await rm(quarantinePath, { force: true });
+    return true;
+  }
+
+  try {
+    await link(quarantinePath, lockPath);
+    await rm(quarantinePath, { force: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw err;
+    }
+  }
+
+  return false;
 }
 
 export async function getCrawlerRunState(
   options: CrawlerRunLockOptions = {},
 ): Promise<CrawlerRunState> {
   const resolved = getOptions(options);
-  const record = await readLockRecord(resolved.lockPath);
+  const snapshot = await readLockSnapshot(resolved.lockPath);
+
+  if (!snapshot) {
+    return { running: false, pid: null, source: null, startedAt: null };
+  }
+
+  const { record } = snapshot;
 
   if (!record) {
-    try {
-      const stats = await stat(resolved.lockPath);
-      if (Date.now() - stats.mtimeMs > resolved.staleMs) {
-        if (await removeStaleLockIfCurrent(resolved.lockPath, record, stats.mtimeMs)) {
-          return { running: false, pid: null, source: null, startedAt: null };
-        }
-        return getCrawlerRunState(options);
+    if (Date.now() - snapshot.mtimeMs > resolved.staleMs) {
+      if (
+        await removeStaleLockIfCurrent(resolved.lockPath, snapshot, resolved.beforeStaleLockRemoval)
+      ) {
+        return { running: false, pid: null, source: null, startedAt: null };
       }
-
-      return {
-        running: true,
-        pid: null,
-        source: null,
-        startedAt: new Date(stats.mtimeMs).toISOString(),
-      };
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw err;
-      }
-      return { running: false, pid: null, source: null, startedAt: null };
+      return getCrawlerRunState(options);
     }
+
+    return {
+      running: true,
+      pid: null,
+      source: null,
+      startedAt: new Date(snapshot.mtimeMs).toISOString(),
+    };
   }
 
   if (isStaleLock(record, resolved)) {
-    if (await removeStaleLockIfCurrent(resolved.lockPath, record)) {
+    if (
+      await removeStaleLockIfCurrent(resolved.lockPath, snapshot, resolved.beforeStaleLockRemoval)
+    ) {
       return { running: false, pid: null, source: null, startedAt: null };
     }
     return getCrawlerRunState(options);
