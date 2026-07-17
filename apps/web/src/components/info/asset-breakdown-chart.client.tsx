@@ -95,6 +95,7 @@ export function AssetBreakdownChartClient({
                   outerRadius={60}
                   dataKey="value"
                   strokeWidth={0}
+                  isAnimationActive={false}
                 >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
