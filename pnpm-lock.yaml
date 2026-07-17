@@ -142,6 +142,9 @@ importers:
       '@base-ui/react':
         specifier: 1.5.0
         version: 1.5.0(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@mf-dashboard/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@mf-dashboard/date-utils':
         specifier: workspace:*
         version: link:../../packages/date-utils
