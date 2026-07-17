@@ -63,6 +63,7 @@ export function TransactionMobileView({ transactions }: TransactionMobileViewPro
               {transaction.category ?? "振替"}
             </Badge>
             <TypeBadge type={transaction.type} isTransfer={transaction.isTransfer} />
+            {transaction.isExcludedFromCalculation && <Badge variant="secondary">計算対象外</Badge>}
           </div>
         </div>
       ))}

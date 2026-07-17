@@ -1,6 +1,6 @@
 import { getTransactions, getTransactionsByMonth } from "@mf-dashboard/db";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { mocked } from "storybook/test";
+import { expect, mocked, within } from "storybook/test";
 import { DateFilterProvider } from "../date-filter-context";
 import { TransactionTable } from "./transaction-table";
 
@@ -29,6 +29,7 @@ const tx = (
   type: string,
   accountName: string,
   isTransfer = false,
+  isExcludedFromCalculation = false,
 ) => ({
   id,
   mfId: `mf-${id}`,
@@ -39,7 +40,7 @@ const tx = (
   amount,
   type,
   isTransfer,
-  isExcludedFromCalculation: false,
+  isExcludedFromCalculation,
   accountId: 1,
   accountName,
   transferTargetAccountId: null,
@@ -87,6 +88,18 @@ export const ByMonth: Story = {
   },
   beforeEach() {
     mocked(getTransactionsByMonth).mockResolvedValue(aprilTransactions);
+  },
+};
+
+export const ExcludedFromCalculation: Story = {
+  beforeEach() {
+    mocked(getTransactions).mockResolvedValue([
+      tx(22, "2025-04-26", "食費", "対象外の取引", 2500, "expense", "サンプルカード", false, true),
+    ]);
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByText("計算対象外")).toHaveLength(2);
   },
 };
 

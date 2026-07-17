@@ -97,7 +97,12 @@ export function TransactionDesktopView({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <TypeBadge type={transaction.type} isTransfer={transaction.isTransfer} />
+                  <div className="flex items-center gap-2">
+                    <TypeBadge type={transaction.type} isTransfer={transaction.isTransfer} />
+                    {transaction.isExcludedFromCalculation && (
+                      <Badge variant="secondary">計算対象外</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {transaction.accountName || "-"}
