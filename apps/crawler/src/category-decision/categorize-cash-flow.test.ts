@@ -35,7 +35,7 @@ vi.mock("./apply.js", () => ({
 
 const config: NormalizedCategoryDecisionConfig = {
   llm: { enabled: false, maxPerRun: 5, minConfidence: 0.65 },
-  rules: [{ contains: "Service A", category: "食費", subCategory: "食料品" }],
+  rules: [{ descriptionContains: "Service A", category: "食費", subCategory: "食料品" }],
 };
 
 function cashFlow(month: string, items: CashFlowItem[]): CashFlowSummary {

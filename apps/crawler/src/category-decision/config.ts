@@ -23,16 +23,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseContains(value: unknown): string | string[] | null {
-  if (typeof value === "string" && value.trim().length > 0) return value;
-  if (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((item) => typeof item === "string" && item.trim().length > 0)
-  ) {
-    return value;
-  }
-  return null;
+function parseOptionalNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 function parseRules(value: unknown, warn: (...args: unknown[]) => void): CategoryRuleConfig[] {
@@ -45,10 +37,16 @@ function parseRules(value: unknown, warn: (...args: unknown[]) => void): Categor
       continue;
     }
 
-    const contains = parseContains(item.contains);
-    if (contains && typeof item.category === "string" && typeof item.subCategory === "string") {
+    const accountName = parseOptionalNonEmptyString(item.accountName);
+    const descriptionContains = parseOptionalNonEmptyString(item.descriptionContains);
+    if (
+      (accountName || descriptionContains) &&
+      typeof item.category === "string" &&
+      typeof item.subCategory === "string"
+    ) {
       rules.push({
-        contains,
+        ...(accountName ? { accountName } : {}),
+        ...(descriptionContains ? { descriptionContains } : {}),
         category: item.category,
         subCategory: item.subCategory,
       });
@@ -56,7 +54,7 @@ function parseRules(value: unknown, warn: (...args: unknown[]) => void): Categor
     }
 
     warn(
-      "Invalid category rule ignored: contains must be a non-empty string or non-empty string array",
+      "Invalid category rule ignored: accountName or descriptionContains must be a non-empty string",
     );
   }
   return rules;

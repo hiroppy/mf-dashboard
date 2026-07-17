@@ -117,12 +117,12 @@ cp data/category-rules.example.json data/category-rules.json
   },
   "rules": [
     {
-      "contains": ["コープデリ", "eフレンズ"],
+      "accountName": "コープデリ eフレンズ",
       "category": "食費",
       "subCategory": "食料品"
     },
     {
-      "contains": "Netflix",
+      "descriptionContains": "Netflix",
       "category": "趣味・娯楽",
       "subCategory": "動画・音楽"
     }
@@ -133,7 +133,7 @@ cp data/category-rules.example.json data/category-rules.json
 動作:
 
 - 対象は「新規」「未分類」「非振替」「計算対象」の取引のみ。
-- `contains` は `accountName + description` への部分一致。配列の場合は全要素を含む取引だけが match する。
+- `accountName` は取引の口座名への完全一致、`descriptionContains` は取引内容への部分一致。どちらか一方、または両方を指定でき、両方を指定した場合は両条件に一致する取引だけが match する。
 - 固定ルールが match した場合は、そのカテゴリを優先し LLM は呼ばない。
 - 固定ルールに match せず、`llm.enabled` が `true` の場合のみ LLM 推論する。サンプル設定では誤送信を避けるため `false` にしている。
 - LLM 推論は MoneyForward から取得した候補カテゴリ一覧から選ばせ、カテゴリ ID は生成させない。

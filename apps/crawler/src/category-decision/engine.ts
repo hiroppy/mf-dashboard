@@ -75,11 +75,12 @@ function ruleMatches(
   transaction: TransactionForCategorization,
   rule: NormalizedCategoryDecisionConfig["rules"][number],
 ): boolean {
-  const target = `${transaction.accountName ?? ""} ${transaction.description}`;
-  const needles = Array.isArray(rule.contains) ? rule.contains : [rule.contains];
-  return (
-    needles.length > 0 && needles.every((needle) => needle.length > 0 && target.includes(needle))
-  );
+  if (!rule.accountName && !rule.descriptionContains) return false;
+  if (rule.accountName && transaction.accountName !== rule.accountName) return false;
+  if (rule.descriptionContains && !transaction.description.includes(rule.descriptionContains)) {
+    return false;
+  }
+  return true;
 }
 
 export class CategoryDecisionEngine {
@@ -165,7 +166,12 @@ export class CategoryDecisionEngine {
         category: rule.category,
         subCategory: rule.subCategory,
         confidence: 1,
-        reason: `Matched rule: ${Array.isArray(rule.contains) ? rule.contains.join(" + ") : rule.contains}`,
+        reason: `Matched rule: ${[
+          rule.accountName ? `accountName=${rule.accountName}` : null,
+          rule.descriptionContains ? `descriptionContains=${rule.descriptionContains}` : null,
+        ]
+          .filter(Boolean)
+          .join(" + ")}`,
       };
 
       return {
