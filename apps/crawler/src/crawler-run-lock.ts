@@ -26,6 +26,7 @@ interface CrawlerRunLockRecord {
 interface CrawlerRunLockOptions {
   afterLockMutationIntentPublished?: () => Promise<void>;
   afterStaleLockQuarantine?: () => Promise<void>;
+  beforeQuarantinedLockCheck?: () => Promise<void>;
   beforeStaleLockRemoval?: () => Promise<void>;
   lockPath?: string;
   getPidStartedAt?: (pid: number) => string | null;
@@ -101,6 +102,7 @@ function getOptions(options: CrawlerRunLockOptions = {}) {
   return {
     afterLockMutationIntentPublished: options.afterLockMutationIntentPublished,
     afterStaleLockQuarantine: options.afterStaleLockQuarantine,
+    beforeQuarantinedLockCheck: options.beforeQuarantinedLockCheck,
     beforeStaleLockRemoval: options.beforeStaleLockRemoval,
     getPidStartedAt: options.getPidStartedAt ?? getLinuxPidStartedAt,
     lockPath: options.lockPath ?? DEFAULT_LOCK_PATH,
@@ -333,16 +335,27 @@ async function tryAcquireLockMutationGuard(
   }
 }
 
-async function recoverQuarantinedLock(lockPath: string): Promise<void> {
+async function getQuarantinePaths(lockPath: string): Promise<string[]> {
   const directory = path.dirname(lockPath);
   const quarantinePrefix = `${path.basename(lockPath)}.stale-`;
-
-  for (const name of (await readdir(directory)).sort()) {
-    if (!name.startsWith(quarantinePrefix)) {
-      continue;
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
     }
+    throw err;
+  }
 
-    const quarantinePath = path.join(directory, name);
+  return names
+    .filter((name) => name.startsWith(quarantinePrefix))
+    .sort()
+    .map((name) => path.join(directory, name));
+}
+
+async function recoverQuarantinedLock(lockPath: string): Promise<void> {
+  for (const quarantinePath of await getQuarantinePaths(lockPath)) {
     try {
       await link(quarantinePath, lockPath);
       await rm(quarantinePath, { force: true });
@@ -427,19 +440,23 @@ export async function getCrawlerRunState(
 ): Promise<CrawlerRunState> {
   const resolved = getOptions(options);
   let snapshot = await readLockSnapshot(resolved.lockPath);
+  let isQuarantined = false;
 
   if (!snapshot) {
-    const mutationGuard = await tryAcquireLockMutationGuard(resolved);
-    if (!mutationGuard) {
-      return toUnknownRunningState();
-    }
-    try {
-      await recoverQuarantinedLock(resolved.lockPath);
-    } finally {
-      await mutationGuard.release();
+    await resolved.beforeQuarantinedLockCheck?.();
+    for (const quarantinePath of await getQuarantinePaths(resolved.lockPath)) {
+      snapshot = await readLockSnapshot(quarantinePath);
+      if (snapshot) {
+        isQuarantined = true;
+        break;
+      }
     }
 
-    snapshot = await readLockSnapshot(resolved.lockPath);
+    const current = await readLockSnapshot(resolved.lockPath);
+    if (current) {
+      snapshot = current;
+      isQuarantined = false;
+    }
     if (!snapshot) {
       return { running: false, pid: null, source: null, startedAt: null };
     }
@@ -454,6 +471,11 @@ export async function getCrawlerRunState(
         source: null,
         startedAt: new Date(snapshot.mtimeMs).toISOString(),
       };
+
+  if (isQuarantined) {
+    return snapshotState;
+  }
+
   const isStale = record
     ? isStaleLock(record, resolved)
     : Date.now() - snapshot.mtimeMs > resolved.staleMs;

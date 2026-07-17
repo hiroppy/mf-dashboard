@@ -31,6 +31,48 @@ describe("crawler run lock", () => {
     });
   });
 
+  test("returns idle state when the lock directory does not exist", async () => {
+    const missingDirectoryLockPath = path.join(tempDir, "missing", "crawler-run.lock");
+
+    await expect(getCrawlerRunState({ lockPath: missingDirectoryLockPath })).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+  });
+
+  test("does not block acquisition during an idle status check", async () => {
+    let markStatusCheckingQuarantine: () => void;
+    const statusCheckingQuarantine = new Promise<void>((resolve) => {
+      markStatusCheckingQuarantine = resolve;
+    });
+    let finishStatusCheck!: () => void;
+    const statusMayFinish = new Promise<void>((resolve) => {
+      finishStatusCheck = resolve;
+    });
+    const statePromise = getCrawlerRunState({
+      beforeQuarantinedLockCheck: async () => {
+        markStatusCheckingQuarantine();
+        await statusMayFinish;
+      },
+      lockPath,
+    });
+    await statusCheckingQuarantine;
+
+    const lock = await acquireCrawlerRunLock("manual", { lockPath });
+    await lock.release();
+    finishStatusCheck();
+
+    await expect(statePromise).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+    expect(lock.record.source).toBe("manual");
+  });
+
   test("acquires when a mutation guard was left without a lock", async () => {
     await writeFile(`${lockPath}.mutation`, "");
     await writeFile(
