@@ -6,10 +6,9 @@ import {
 import type { Db } from "@mf-dashboard/db";
 import { generateText, Output, stepCountIs } from "ai";
 import { z } from "zod";
+import { createChatTools } from "../chat/tools.js";
 import { getModel } from "../config.js";
 import type { AnalyticsInsights } from "../types.js";
-import { createAnalysisTools } from "./analysis-tools.js";
-import { createFinancialTools } from "./tools.js";
 
 const insightsSchema = z.object({
   summary: z
@@ -166,9 +165,7 @@ const STAGE2_SYSTEM_PROMPT = `あなたはプロの個人財務アドバイザ�
 - 英語の技術用語（netIncome, savingsRate 等）をそのまま出力すること。必ず日本語（純収入、貯蓄率 等）に置き換える`;
 
 export async function generateInsights(db: Db, groupId: string): Promise<AnalyticsInsights> {
-  const dbTools = createFinancialTools(db, groupId);
-  const analysisTools = createAnalysisTools(db, groupId);
-  const allTools = { ...dbTools, ...analysisTools };
+  const allTools = createChatTools(db, groupId);
 
   // 日付情報を算出
   const today = getJstTodayIsoDate();

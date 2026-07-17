@@ -17,17 +17,17 @@ vi.mock("../config.js", () => ({
   getModel: vi.fn<AnyMock>(() => "mock-model"),
 }));
 
-vi.mock("./tools.js", () => ({
-  createFinancialTools: vi.fn<AnyMock>(() => ({ dbTool1: {}, dbTool2: {} })),
-}));
-
-vi.mock("./analysis-tools.js", () => ({
-  createAnalysisTools: vi.fn<AnyMock>(() => ({ analysisTool1: {}, analysisTool2: {} })),
+vi.mock("../chat/tools.js", () => ({
+  createChatTools: vi.fn<AnyMock>(() => ({
+    dbTool1: {},
+    dbTool2: {},
+    analysisTool1: {},
+    analysisTool2: {},
+  })),
 }));
 
 const { generateInsights } = await import("./generator");
-const { createFinancialTools } = await import("./tools.js");
-const { createAnalysisTools } = await import("./analysis-tools.js");
+const { createChatTools } = await import("../chat/tools.js");
 
 const mockDb = {} as any;
 const groupId = "test-group";
@@ -65,14 +65,13 @@ describe("generateInsights", () => {
     vi.useRealTimers();
   });
 
-  it("should call createFinancialTools and createAnalysisTools with db and groupId", async () => {
+  it("should create chat tools with db and groupId", async () => {
     mockGenerateText
       .mockResolvedValueOnce(mockStage1Result("analysis memo", ["getFinancialMetrics"]))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
-    expect(createFinancialTools).toHaveBeenCalledWith(mockDb, groupId);
-    expect(createAnalysisTools).toHaveBeenCalledWith(mockDb, groupId);
+    expect(createChatTools).toHaveBeenCalledWith(mockDb, groupId);
   });
 
   it("should call generateText twice (2-stage)", async () => {
