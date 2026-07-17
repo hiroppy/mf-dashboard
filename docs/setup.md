@@ -98,6 +98,53 @@ openssl rand -hex 32
 | `HOST_UID` / `HOST_GID`                      | optional | Linux host の bind mount 書き込み用 UID/GID。Docker Compose の既定値は `1000:1000`                    |
 | `AUTH_STATE_PATH`                            | optional | local 実行時の browser session 保存先。Docker Compose では crawler 専用 volume を使うため通常は未設定 |
 
+#### 未分類取引のカテゴリ決定
+
+`data/category-rules.json` を作成すると、crawler は DB 保存前に新規の未分類取引のカテゴリ決定を試みる。ファイルが存在しない場合、この機能は無効になり、未分類のまま従来通り保存する。
+
+```sh
+cp data/category-rules.example.json data/category-rules.json
+```
+
+設定例:
+
+```json
+{
+  "llm": {
+    "enabled": false,
+    "maxPerRun": 5,
+    "minConfidence": 0.65
+  },
+  "rules": [
+    {
+      "accountName": "コープデリ eフレンズ",
+      "category": "食費",
+      "subCategory": "食料品"
+    },
+    {
+      "descriptionContains": "Netflix",
+      "category": "趣味・娯楽",
+      "subCategory": "動画・音楽"
+    }
+  ]
+}
+```
+
+動作:
+
+- 対象は「新規」「未分類」「非振替」「計算対象」の取引のみ。
+- `accountName` は取引の口座名への完全一致、`descriptionContains` は取引内容への部分一致。どちらか一方、または両方を指定でき、両方を指定した場合は両条件に一致する取引だけが match する。
+- 固定ルールが match した場合は、そのカテゴリを優先し LLM は呼ばない。
+- 固定ルールに match せず、`llm.enabled` が `true` の場合のみ LLM 推論する。サンプル設定では誤送信を避けるため `false` にしている。
+- LLM 推論は MoneyForward から取得した候補カテゴリ一覧から選ばせ、カテゴリ ID は生成させない。
+- `llm.maxPerRun` の default は `5`、`llm.minConfidence` の default は `0.65`。
+- `category` / `subCategory` が MoneyForward の候補に存在しない場合、そのルールや LLM 結果は採用しない。
+- confidence が `minConfidence` 未満の LLM 結果は MoneyForward へ反映しない。
+- 採用したカテゴリは MoneyForward の `/cf/update` へ反映し、対象月を再スクレイプして DB へ保存する。
+- 更新に失敗しても crawler は停止せず、対象取引は未分類のまま保存する。
+
+LLM fallback を使う場合は、`llm.enabled` を `true` に変更し、既存の AI 設定として `.env` に `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` も設定する。LLM には取引の日付、種別、金額、内容、候補カテゴリ ID / 名称を送るため、外部 provider へ送信してよい場合だけ有効にする。
+
 #### 1Password の ID の見つけ方
 
 1password/sdk は日本語に対応しておらずエラーになるため日本語のものは UUID を使う:

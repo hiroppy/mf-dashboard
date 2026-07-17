@@ -20,6 +20,10 @@ Slack botの設定をすることにより、前日との差分を投稿可能�
 
 hookが提供されているので、スクレイピング時に用意したスクリプトを実行可能。例えば、特定の金融機関の取引の場合に大項目、中項目を常に食品に設定する等。Playwrightの`Page`を持っているので基本何でもできる。
 
+### 未分類取引のカテゴリを自動決定
+
+`data/category-rules.json` を置くと、MoneyForwardから取得した新規の未分類取引に対して固定ルールを優先適用し、必要に応じてLLM推論へfallbackできる。決定したカテゴリはMoneyForward側へ反映し、対象月を再取得してDBに保存する。設定方法は [docs/setup.md](docs/setup.md#未分類取引のカテゴリ決定) を参照。
+
 ### MCP経由でAIアシスタントと連携
 
 MCP (Model Context Protocol) サーバーを内蔵。ChatGPTデスクトップアプリ、Codex、Claude Desktop、Claude Codeから、家計・資産・投資データを自然言語で照会できる。詳細は [apps/mcp/README.md](apps/mcp/README.md) を参照。
