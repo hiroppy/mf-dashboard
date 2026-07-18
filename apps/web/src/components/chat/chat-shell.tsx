@@ -17,18 +17,22 @@ const PANEL_ID = "finance-ai-chat-panel";
 function getFinanceCards(message: UIMessage): FinanceChatCardData[] {
   if (message.role !== "assistant") return [];
 
-  return message.parts.flatMap((part) => {
-    if (
-      !isToolUIPart(part) ||
-      getToolName(part) !== "presentFinanceCards" ||
-      part.state !== "output-available"
-    ) {
-      return [];
-    }
+  const presentationOutputs: unknown[] = [];
 
-    const result = financeChatCardsSchema.safeParse(part.output);
-    return result.success ? result.data : [];
-  });
+  for (const part of message.parts) {
+    if (
+      isToolUIPart(part) &&
+      getToolName(part) === "presentFinanceCards" &&
+      part.state === "output-available"
+    ) {
+      presentationOutputs.push(part.output);
+    }
+  }
+
+  if (presentationOutputs.length !== 1) return [];
+
+  const result = financeChatCardsSchema.safeParse(presentationOutputs[0]);
+  return result.success ? result.data : [];
 }
 
 export function ChatShell() {

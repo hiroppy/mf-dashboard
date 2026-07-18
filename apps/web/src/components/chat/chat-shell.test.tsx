@@ -126,6 +126,42 @@ describe("ChatShell", () => {
     );
   });
 
+  it("rejects multiple presentation outputs in one response", () => {
+    render(
+      <ChatProvider
+        initialMessages={[
+          {
+            ...structuredMessage,
+            parts: [
+              ...structuredMessage.parts,
+              {
+                type: "tool-presentFinanceCards" as const,
+                toolCallId: "present-b",
+                state: "output-available" as const,
+                input: { cards: [] },
+                output: [
+                  {
+                    type: "empty" as const,
+                    title: "該当する支出はありません",
+                    description: "別の日付で確認できます",
+                    prompts: ["今月の支出を見たい"],
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+        initialOpen
+      >
+        <ChatShell />
+      </ChatProvider>,
+    );
+
+    expect(screen.getByText("6月10日の支出です。")).toBeTruthy();
+    expect(screen.queryByText("6月10日の支出")).toBeNull();
+    expect(screen.queryByText("該当する支出はありません")).toBeNull();
+  });
+
   it("ignores unvalidated or unrelated tool output", () => {
     render(
       <ChatProvider
