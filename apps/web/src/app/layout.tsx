@@ -1,4 +1,4 @@
-import { isDatabaseAvailable } from "@mf-dashboard/db";
+import { getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
 import type { Metadata } from "next";
@@ -85,15 +85,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </div>
       </SidebarProvider>
     );
-    content =
-      process.env.DEMO_MODE === "true" ? (
-        dashboard
-      ) : (
-        <ChatProvider>
+    if (process.env.DEMO_MODE === "true") {
+      content = dashboard;
+    } else {
+      const currentGroup = await getCurrentGroup();
+      content = (
+        <ChatProvider currentGroupId={currentGroup?.id ?? null}>
           {dashboard}
           <ChatShell />
         </ChatProvider>
       );
+    }
   }
 
   return (

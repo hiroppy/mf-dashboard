@@ -36,7 +36,7 @@ function getFinanceCards(message: UIMessage): FinanceChatCardData[] {
 }
 
 export function ChatShell() {
-  const { addUserMessage, close, draft, error, isOpen, messages, open, setDraft } =
+  const { addUserMessage, close, draft, error, isOpen, isSubmitting, messages, open, setDraft } =
     useFinanceChat();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -64,7 +64,7 @@ export function ChatShell() {
     event.preventDefault();
     const message = draft.trim();
 
-    if (!message) return;
+    if (!message || isSubmitting) return;
 
     addUserMessage(message);
     setDraft("");
@@ -203,7 +203,7 @@ export function ChatShell() {
                   type="submit"
                   size="icon"
                   aria-label="メッセージを送信"
-                  disabled={!draft.trim()}
+                  disabled={isSubmitting || !draft.trim()}
                 >
                   <Send aria-hidden="true" />
                 </Button>

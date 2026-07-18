@@ -58,6 +58,7 @@ describe("ChatShell", () => {
       draft: "",
       error: new Error("secret provider response"),
       isOpen: true,
+      isSubmitting: false,
       messages: [],
       open: vi.fn<() => void>(),
       setDraft: vi.fn<(draft: string) => void>(),
@@ -69,6 +70,27 @@ describe("ChatShell", () => {
       "AI_PROVIDER、AI_MODEL、AI_API_KEYと接続状況を確認してください。",
     );
     expect(screen.queryByText("secret provider response")).toBeNull();
+  });
+
+  it("blocks another submission while a response is in progress", () => {
+    const addUserMessage = vi.fn<(text: string) => void>();
+    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+      addUserMessage,
+      close: vi.fn<() => void>(),
+      draft: "重ねて送らない",
+      isOpen: true,
+      isSubmitting: true,
+      messages: [],
+      open: vi.fn<() => void>(),
+      setDraft: vi.fn<(draft: string) => void>(),
+    });
+
+    render(<ChatShell />);
+
+    const submit = screen.getByRole("button", { name: "メッセージを送信" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(submit.closest("form")!);
+    expect(addUserMessage).not.toHaveBeenCalled();
   });
 
   it("opens, focuses the input, and restores focus after Escape", async () => {

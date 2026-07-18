@@ -33,7 +33,11 @@ function DraftEditor() {
 describe("ChatProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.useChat.mockReturnValue({ messages: [], sendMessage: mocks.sendMessage });
+    mocks.useChat.mockReturnValue({
+      messages: [],
+      sendMessage: mocks.sendMessage,
+      status: "ready",
+    });
   });
 
   it("sends the selected group ID from a group page", () => {
@@ -55,11 +59,11 @@ describe("ChatProvider", () => {
     );
   });
 
-  it("sends a null group ID from the current-group route", () => {
+  it("resolves the current group on a top-level route", () => {
     mocks.usePathname.mockReturnValue("/cf");
 
     render(
-      <ChatProvider>
+      <ChatProvider currentGroupId="group-a">
         <ChatSender />
       </ChatProvider>,
     );
@@ -67,10 +71,36 @@ describe("ChatProvider", () => {
 
     expect(mocks.sendMessage).toHaveBeenCalledWith(
       { text: "家計を見直したい" },
-      { body: { groupId: null } },
+      { body: { groupId: "group-a" } },
     );
     expect(mocks.useChat).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "finance-chat:current" }),
+      expect.objectContaining({ id: "finance-chat:group-a" }),
+    );
+  });
+
+  it("keeps the current-group chat and draft on its explicit group route", () => {
+    mocks.usePathname.mockReturnValue("/cf");
+    const { rerender } = render(
+      <ChatProvider currentGroupId="group-a">
+        <DraftEditor />
+      </ChatProvider>,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "下書き" }), {
+      target: { value: "引き継ぐ下書き" },
+    });
+
+    mocks.usePathname.mockReturnValue("/group-a/cf");
+    rerender(
+      <ChatProvider currentGroupId="group-a">
+        <DraftEditor />
+      </ChatProvider>,
+    );
+
+    expect(mocks.useChat).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "finance-chat:group-a" }),
+    );
+    expect((screen.getByRole("textbox", { name: "下書き" }) as HTMLInputElement).value).toBe(
+      "引き継ぐ下書き",
     );
   });
 
