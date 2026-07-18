@@ -41,6 +41,15 @@ describe("buildFinanceChatHref", () => {
     );
     expect(() => buildFinanceChatHref({ page: "accounts", accountId: "" })).toThrow("Too small");
   });
+
+  it.each(["accounts", "bs", "cf", "insights", "simulator"])(
+    "rejects the reserved group ID %s",
+    (groupId) => {
+      expect(() => buildFinanceChatHref({ page: "dashboard", groupId })).toThrow(
+        "Reserved route segment",
+      );
+    },
+  );
 });
 
 describe("financeChatCardSchema", () => {

@@ -14,6 +14,10 @@ const routeSegmentSchema = z
 
 const yearMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 const topLevelPages = new Set(["accounts", "bs", "cf", "insights", "simulator"]);
+const groupIdSchema = routeSegmentSchema.refine(
+  (groupId) => !topLevelPages.has(groupId),
+  "Reserved route segment",
+);
 
 export function isFinanceChatHrefSafe(href: string): boolean {
   if (!href.startsWith("/") || href.startsWith("//") || href.includes("?") || href.includes("#")) {
@@ -190,7 +194,8 @@ function encodeRouteSegment(segment: string): string {
 }
 
 export function buildFinanceChatHref(route: FinanceChatRoute): string {
-  const segments = route.groupId === undefined ? [] : [encodeRouteSegment(route.groupId)];
+  const segments =
+    route.groupId === undefined ? [] : [encodeRouteSegment(groupIdSchema.parse(route.groupId))];
 
   switch (route.page) {
     case "dashboard":

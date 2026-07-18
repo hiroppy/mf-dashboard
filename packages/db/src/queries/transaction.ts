@@ -2,7 +2,6 @@ import { and, desc, eq, gte, inArray, like, lte, or, sql, type SQL } from "drizz
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { transformTransferToIncome } from "../shared/transfer";
-import { classifyTransfer, hasMatchingNormalTransaction } from "./summary";
 
 export const SEARCH_TRANSACTIONS_DEFAULT_LIMIT = 50;
 export const SEARCH_TRANSACTIONS_MAX_LIMIT = 100;
@@ -98,10 +97,86 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
   const accountIdSet = new Set(accountIds);
   const seenTransfers = new Set<string>();
   type SearchTransaction = Awaited<ReturnType<typeof fetchBatch>>[number];
+  type TransferTransaction = SearchTransaction & {
+    accountId: number;
+    transferTargetAccountId: number;
+  };
+  interface TransferLookups {
+    groupsByAccountId: Map<number, Set<string>>;
+    normalTransactionKeys: Set<string>;
+  }
 
-  const transformTransaction = async (
+  const normalTransactionKey = (accountId: number, date: string, amount: number) =>
+    `${accountId}\0${date}\0${amount}`;
+
+  const loadTransferLookups = async (batch: SearchTransaction[]) => {
+    const transfers = batch.filter(
+      (transaction): transaction is TransferTransaction =>
+        transaction.type === "transfer" &&
+        transaction.accountId !== null &&
+        transaction.transferTargetAccountId !== null,
+    );
+    const transferAccountIds = [
+      ...new Set(
+        transfers.flatMap((transaction) => [
+          transaction.accountId,
+          transaction.transferTargetAccountId,
+        ]),
+      ),
+    ];
+    const groupsByAccountId = new Map<number, Set<string>>();
+    const normalTransactionKeys = new Set<string>();
+
+    if (transferAccountIds.length === 0) {
+      return { groupsByAccountId, normalTransactionKeys };
+    }
+
+    const groupAccounts = await db
+      .select({ accountId: schema.groupAccounts.accountId, groupId: schema.groupAccounts.groupId })
+      .from(schema.groupAccounts)
+      .where(inArray(schema.groupAccounts.accountId, transferAccountIds))
+      .all();
+
+    for (const { accountId, groupId } of groupAccounts) {
+      if (groupId === "0") continue;
+      const groups = groupsByAccountId.get(accountId) ?? new Set<string>();
+      groups.add(groupId);
+      groupsByAccountId.set(accountId, groups);
+    }
+
+    const dates = [...new Set(transfers.map((transaction) => transaction.date))];
+    const amounts = [...new Set(transfers.map((transaction) => transaction.amount))];
+    const normalTransactions = await db
+      .select({
+        accountId: schema.transactions.accountId,
+        date: schema.transactions.date,
+        amount: schema.transactions.amount,
+      })
+      .from(schema.transactions)
+      .where(
+        and(
+          inArray(schema.transactions.accountId, transferAccountIds),
+          inArray(schema.transactions.date, dates),
+          inArray(schema.transactions.amount, amounts),
+          sql`${schema.transactions.type} IN ('income', 'expense')`,
+        ),
+      )
+      .all();
+
+    for (const transaction of normalTransactions) {
+      if (transaction.accountId === null) continue;
+      normalTransactionKeys.add(
+        normalTransactionKey(transaction.accountId, transaction.date, transaction.amount),
+      );
+    }
+
+    return { groupsByAccountId, normalTransactionKeys };
+  };
+
+  const transformTransaction = (
     transaction: SearchTransaction,
-  ): Promise<SearchTransaction | null> => {
+    lookups: TransferLookups,
+  ): SearchTransaction | null => {
     if (
       transaction.type !== "transfer" ||
       transaction.accountId === null ||
@@ -113,15 +188,29 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     const sourceInGroup = accountIdSet.has(transaction.accountId);
     const targetInGroup = accountIdSet.has(transaction.transferTargetAccountId);
     const transferKey = `${transaction.date}-${transaction.amount}-${transaction.accountId}-${transaction.transferTargetAccountId}`;
+    const sourceGroups = lookups.groupsByAccountId.get(transaction.accountId);
+    const targetGroups = lookups.groupsByAccountId.get(transaction.transferTargetAccountId);
+    const hasCommonGroup =
+      sourceGroups !== undefined &&
+      targetGroups !== undefined &&
+      [...sourceGroups].some((groupId) => targetGroups.has(groupId));
+    let classification: "income" | "expense" | null = null;
 
-    if (!sourceInGroup && targetInGroup) {
+    if (!hasCommonGroup && sourceInGroup && !targetInGroup) {
+      classification = "income";
+    } else if (!hasCommonGroup && !sourceInGroup && targetInGroup) {
+      classification = "expense";
+    }
+
+    if (classification === "expense") {
       if (
-        (await hasMatchingNormalTransaction(
-          db,
-          transaction.transferTargetAccountId,
-          transaction.date,
-          transaction.amount,
-        )) ||
+        lookups.normalTransactionKeys.has(
+          normalTransactionKey(
+            transaction.transferTargetAccountId,
+            transaction.date,
+            transaction.amount,
+          ),
+        ) ||
         seenTransfers.has(transferKey)
       ) {
         return null;
@@ -137,13 +226,14 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       };
     }
 
-    const classification = await classifyTransfer(
-      db,
-      accountIdSet,
-      transaction.accountId,
-      transaction.transferTargetAccountId,
-    );
     if (classification === "income") {
+      if (
+        lookups.normalTransactionKeys.has(
+          normalTransactionKey(transaction.accountId, transaction.date, transaction.amount),
+        )
+      ) {
+        return null;
+      }
       if (seenTransfers.has(transferKey)) return null;
       seenTransfers.add(transferKey);
       return transformTransferToIncome(transaction, accountIds);
@@ -172,9 +262,10 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
   while (page.length < limit) {
     const batch = await fetchBatch(batchOffset);
+    const transferLookups = await loadTransferLookups(batch);
 
     for (const rawTransaction of batch) {
-      const transaction = await transformTransaction(rawTransaction);
+      const transaction = transformTransaction(rawTransaction, transferLookups);
       if (!transaction) continue;
       if (!matchesOptions(transaction)) continue;
       if (remainingOffset > 0) {

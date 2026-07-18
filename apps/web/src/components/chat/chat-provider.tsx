@@ -2,7 +2,7 @@
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { extractGroupIdFromPath } from "../../lib/url";
 
 interface ChatContextValue {
@@ -39,6 +39,10 @@ export function ChatProvider({
   });
   const close = useCallback(() => setIsOpen(false), []);
   const open = useCallback(() => setIsOpen(true), []);
+
+  useEffect(() => {
+    setDraft("");
+  }, [groupId]);
 
   const addUserMessage = (text: string) => {
     void sendMessage({ text }, { body: { groupId } });

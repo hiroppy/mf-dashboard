@@ -74,7 +74,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </div>
     );
   } else {
-    content = (
+    const dashboard = (
       <SidebarProvider>
         <Header groupSelector={<GroupSelector />} notifications={<AccountNotifications />} />
         <div className="flex pt-14">
@@ -85,16 +85,20 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </div>
       </SidebarProvider>
     );
+    content =
+      process.env.DEMO_MODE === "true" ? (
+        dashboard
+      ) : (
+        <ChatProvider>
+          {dashboard}
+          <ChatShell />
+        </ChatProvider>
+      );
   }
 
   return (
     <html lang="ja">
-      <body className={bodyClassName}>
-        <ChatProvider>
-          {content}
-          <ChatShell />
-        </ChatProvider>
-      </body>
+      <body className={bodyClassName}>{content}</body>
     </html>
   );
 }

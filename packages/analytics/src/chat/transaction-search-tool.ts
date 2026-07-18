@@ -7,7 +7,7 @@ import {
 import { tool } from "ai";
 import { z } from "zod";
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z.iso.date();
 const monthSchema = z.string().regex(/^\d{4}-\d{2}$/);
 
 export function createTransactionSearchTool(db: Db, groupId: string) {

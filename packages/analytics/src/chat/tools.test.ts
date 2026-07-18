@@ -1,11 +1,8 @@
 import type { Db } from "@mf-dashboard/db";
 import { describe, expect, it } from "vitest";
-import {
-  createAnalysisTools,
-  createChatTools,
-  createFinanceChatTools,
-  createFinancialTools,
-} from "./tools.js";
+import { createAnalysisTools } from "../insights/analysis-tools.js";
+import { createFinancialTools } from "../insights/tools.js";
+import { createChatTools, createFinanceChatTools } from "./tools.js";
 
 const db = {} as Db;
 const groupId = "test-group";
