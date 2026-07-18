@@ -24,7 +24,7 @@ describe("ChatShell", () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
-  it("keeps the draft and messages when surrounding page content changes", () => {
+  it("keeps the draft and messages when surrounding page content changes", async () => {
     const { rerender } = render(
       <ChatProvider>
         <span>ページ A</span>
@@ -47,7 +47,7 @@ describe("ChatShell", () => {
       "入力途中",
     );
     fireEvent.submit(screen.getByLabelText("家計AIへのメッセージ").closest("form")!);
-    expect(screen.getByText("入力途中")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("入力途中")).toBeTruthy());
   });
 
   it("does not write chat state to browser storage", () => {

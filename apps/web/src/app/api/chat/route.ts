@@ -34,8 +34,9 @@ function isWithinChatAccessBoundary(request: Request): boolean {
   return process.env.VERCEL !== "1" && Boolean(request.headers.get("cf-access-jwt-assertion"));
 }
 
-function removeToolParts(messages: UIMessage[]): UIMessage[] {
+function getTrustedUserMessages(messages: UIMessage[]): UIMessage[] {
   return messages
+    .filter((message) => message.role === "user")
     .map((message) => ({
       ...message,
       parts: message.parts.filter((part) => !isToolUIPart(part)),
@@ -112,7 +113,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const tools = createFinanceChatTools(db, group.id);
-  const modelInputMessages = removeToolParts(validation.data);
+  const modelInputMessages = getTrustedUserMessages(validation.data);
   const result = streamText({
     abortSignal: request.signal,
     model,

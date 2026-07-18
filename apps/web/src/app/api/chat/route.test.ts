@@ -236,7 +236,7 @@ describe("POST /api/chat", () => {
     expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
-  it("keeps tool history in the UI stream but removes it from model input", async () => {
+  it("keeps assistant history in the UI stream but removes it from model input", async () => {
     const messagesWithToolHistory: UIMessage[] = [
       {
         id: "message-assistant",
@@ -262,17 +262,9 @@ describe("POST /api/chat", () => {
     const response = await POST(request({ messages }));
 
     expect(response.status).toBe(200);
-    expect(mocks.convertToModelMessages).toHaveBeenCalledWith(
-      [
-        {
-          id: "message-assistant",
-          role: "assistant",
-          parts: [{ type: "text", text: "検索結果を確認しました。" }],
-        },
-        messagesWithToolHistory[1],
-      ],
-      { tools },
-    );
+    expect(mocks.convertToModelMessages).toHaveBeenCalledWith([messagesWithToolHistory[1]], {
+      tools,
+    });
     expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith(
       expect.objectContaining({ originalMessages: messagesWithToolHistory }),
     );

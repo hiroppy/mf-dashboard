@@ -1,7 +1,9 @@
 "use client";
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
+import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { extractGroupIdFromPath } from "../../lib/url";
 
 interface ChatContextValue {
   draft: string;
@@ -28,19 +30,14 @@ export function ChatProvider({
 }: ChatProviderProps) {
   const [isOpen, setIsOpen] = useState(initialOpen);
   const [draft, setDraft] = useState("");
-  const { messages, setMessages } = useChat({ messages: initialMessages });
+  const pathname = usePathname();
+  const groupId = pathname ? extractGroupIdFromPath(pathname) : null;
+  const { messages, sendMessage } = useChat({ messages: initialMessages });
   const close = useCallback(() => setIsOpen(false), []);
   const open = useCallback(() => setIsOpen(true), []);
 
   const addUserMessage = (text: string) => {
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        id: crypto.randomUUID(),
-        role: "user",
-        parts: [{ type: "text", text }],
-      },
-    ]);
+    void sendMessage({ text }, { body: { groupId } });
   };
 
   return (
