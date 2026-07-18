@@ -7,6 +7,7 @@ import { extractGroupIdFromPath } from "../../lib/url";
 
 interface ChatContextValue {
   draft: string;
+  error?: Error;
   isOpen: boolean;
   messages: UIMessage[];
   addUserMessage: (text: string) => void;
@@ -32,7 +33,7 @@ export function ChatProvider({
   const [draft, setDraft] = useState("");
   const pathname = usePathname();
   const groupId = pathname ? extractGroupIdFromPath(pathname) : null;
-  const { messages, sendMessage } = useChat({
+  const { error, messages, sendMessage } = useChat({
     id: `finance-chat:${groupId ?? "current"}`,
     messages: initialMessages,
   });
@@ -47,6 +48,7 @@ export function ChatProvider({
     <ChatContext.Provider
       value={{
         draft,
+        error,
         isOpen,
         messages,
         addUserMessage,

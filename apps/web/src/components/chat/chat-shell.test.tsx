@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { ChatProvider } from "./chat-provider";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as chatProvider from "./chat-provider";
 import { ChatShell } from "./chat-shell";
+
+const { ChatProvider } = chatProvider;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const structuredMessage = {
   id: "assistant-structured",
@@ -45,6 +51,26 @@ const structuredMessage = {
 };
 
 describe("ChatShell", () => {
+  it("shows an accessible configuration hint when chat fails", () => {
+    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+      addUserMessage: vi.fn<(text: string) => void>(),
+      close: vi.fn<() => void>(),
+      draft: "",
+      error: new Error("secret provider response"),
+      isOpen: true,
+      messages: [],
+      open: vi.fn<() => void>(),
+      setDraft: vi.fn<(draft: string) => void>(),
+    });
+
+    render(<ChatShell />);
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "AI_PROVIDER、AI_MODEL、AI_API_KEYと接続状況を確認してください。",
+    );
+    expect(screen.queryByText("secret provider response")).toBeNull();
+  });
+
   it("opens, focuses the input, and restores focus after Escape", async () => {
     render(
       <ChatProvider>

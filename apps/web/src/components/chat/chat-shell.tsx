@@ -36,7 +36,8 @@ function getFinanceCards(message: UIMessage): FinanceChatCardData[] {
 }
 
 export function ChatShell() {
-  const { addUserMessage, close, draft, isOpen, messages, open, setDraft } = useFinanceChat();
+  const { addUserMessage, close, draft, error, isOpen, messages, open, setDraft } =
+    useFinanceChat();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -123,7 +124,7 @@ export function ChatShell() {
             </header>
 
             <div aria-live="polite" className="flex-1 space-y-4 overflow-y-auto p-4">
-              {messages.length === 0 ? (
+              {messages.length === 0 && !error ? (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                   <Bot aria-hidden="true" className="mb-3 size-10 text-muted-foreground" />
                   <p className="font-medium">家計の相談を始めましょう</p>
@@ -173,6 +174,14 @@ export function ChatShell() {
                     </div>
                   );
                 })
+              )}
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  回答を取得できませんでした。AI_PROVIDER、AI_MODEL、AI_API_KEYと接続状況を確認してください。
+                </p>
               )}
             </div>
 

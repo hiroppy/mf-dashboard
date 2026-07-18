@@ -100,6 +100,7 @@ openssl rand -hex 32
 | `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する`/api/refresh/`用Bearerトークン                    |
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                   |
+| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須         |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                              |
 | `DASHBOARD_URL`                              | 任意 | 通知へ記載するダッシュボードのURL                                        |
@@ -242,6 +243,45 @@ terraform -chdir=terraform output -raw tunnel_id
 
 1. 通知先チャンネルの「連携サービス」からIncoming Webhookを作成する
 2. `.env`の`DISCORD_WEBHOOK_URL`へ、発行された`https://discord.com/api/webhooks/...`形式のURLを設定する
+
+### 家計AIチャット
+
+家計AIチャットを利用する場合は、`.env`に次の3項目を設定する。いずれかが空の場合、チャットは`AI_PROVIDER、AI_MODEL、AI_API_KEYと接続状況を確認してください。`と表示し、家計データや外部AI APIへ接続しない。
+
+```dotenv
+AI_PROVIDER=openai
+AI_MODEL=<provider-model-id>
+AI_API_KEY=<provider-api-key>
+```
+
+- `AI_PROVIDER`: `openai`、`anthropic`、`google`のいずれか
+- `AI_MODEL`: 選択したプロバイダーで利用可能なモデルID
+- `AI_API_KEY`: 選択したプロバイダーのAPIキー。ブラウザーへは公開せず、`.env`だけに保存する
+
+ローカルでデモデータを使って確認する場合は、リポジトリルートで次を実行する。
+
+```sh
+pnpm install
+pnpm --filter @mf-dashboard/db build:demo
+DB_PATH=../../data/demo.db pnpm --filter @mf-dashboard/web dev
+```
+
+`pnpm dev:demo`は静的な公開デモ用でAPI routeを含まないため、家計AIチャットの確認には使用しない。
+
+Docker Composeで設定を反映する場合は、webイメージを再ビルドして起動する。
+
+```sh
+docker compose build web
+docker compose up -d web
+```
+
+起動後、ダッシュボード右下の「家計AIチャットを開く」ボタンを選び、質問を入力して送信する。回答には根拠となる家計データと、該当画面へ移動するリンクが表示される。該当データがない場合は金額を推測せず、条件を変える候補を表示する。
+
+チャットの質問と、回答に必要な家計データは設定したAIプロバイダーへ送信される。会話はブラウザーのストレージへ保存されないが、AIプロバイダー側のデータ取扱方針を確認し、送信を許可できる場合だけ有効にする。本番環境ではCloudflare Accessを経由したリクエストだけを許可する。
+
+回答生成に失敗した場合はチャット内にエラーが表示される。まず3つのAI環境変数、APIキーの権限・利用上限、モデルIDを確認する。家計データが未取得の場合はcrawlerを実行してから再度質問する。
+
+従来のMCPサーバーとAIクライアント側のMCPセットアップは廃止済み。家計データの照会にはWebアプリ内の家計AIチャットを使用する。
 
 ### 未分類取引のカテゴリ決定
 
