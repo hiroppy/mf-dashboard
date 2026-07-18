@@ -106,6 +106,25 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     groupsByAccountId: Map<number, Set<string>>;
     normalTransactionKeys: Set<string>;
   }
+  let nextBoundaryTransactionId = -1;
+
+  const projectBoundaryTransfer = (
+    transaction: SearchTransaction,
+    groupAccountId: number,
+    lookups: TransferLookups,
+  ): SearchTransaction => {
+    const id = nextBoundaryTransactionId--;
+    return {
+      ...transaction,
+      id,
+      mfId: `boundary-transfer-${Math.abs(id)}`,
+      description: "口座間振替",
+      accountId: groupAccountId,
+      accountName: lookups.accountNamesById.get(groupAccountId) ?? null,
+      transferTarget: null,
+      transferTargetAccountId: null,
+    };
+  };
 
   const normalTransactionKey = (
     accountId: number,
@@ -245,11 +264,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
         return null;
       }
       return {
-        ...transaction,
-        accountId: transaction.transferTargetAccountId,
-        accountName:
-          lookups.accountNamesById.get(transaction.transferTargetAccountId) ??
-          transaction.transferTarget,
+        ...projectBoundaryTransfer(transaction, transaction.transferTargetAccountId, lookups),
         type: "expense",
         category: "支出",
         subCategory: "振替出金",
@@ -271,8 +286,23 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       ) {
         return null;
       }
-      return transformTransferToIncome(transaction, accountIds);
+      return {
+        ...projectBoundaryTransfer(transaction, transaction.accountId, lookups),
+        type: "income",
+        category: "収入",
+        subCategory: "振替入金",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      };
     }
+
+    if (sourceInGroup !== targetInGroup) {
+      const groupAccountId = sourceInGroup
+        ? transaction.accountId
+        : transaction.transferTargetAccountId;
+      return projectBoundaryTransfer(transaction, groupAccountId, lookups);
+    }
+
     return transaction;
   };
 

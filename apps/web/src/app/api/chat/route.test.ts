@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   consumeStream: vi.fn<AnyMock>(),
   convertToModelMessages: vi.fn<AnyMock>(),
   createFinanceChatTools: vi.fn<AnyMock>(),
+  createRemoteJWKSet: vi.fn<AnyMock>(),
   getAllGroups: vi.fn<AnyMock>(),
   getCurrentGroup: vi.fn<AnyMock>(),
   getDb: vi.fn<AnyMock>(),
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   isToolUIPart: vi.fn<AnyMock>(),
   isDatabaseAvailable: vi.fn<AnyMock>(),
   isLLMEnabled: vi.fn<AnyMock>(),
+  jwtVerify: vi.fn<AnyMock>(),
+  remoteJwks: vi.fn<AnyMock>(),
   safeValidateUIMessages: vi.fn<AnyMock>(),
   stepCountIs: vi.fn<AnyMock>(),
   streamText: vi.fn<AnyMock>(),
@@ -47,6 +50,11 @@ vi.mock("ai", () => ({
   streamText: mocks.streamText,
 }));
 
+vi.mock("jose", () => ({
+  createRemoteJWKSet: mocks.createRemoteJWKSet,
+  jwtVerify: mocks.jwtVerify,
+}));
+
 const { POST } = await import("./route");
 
 const messages: UIMessage[] = [
@@ -68,6 +76,8 @@ describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("AI_API_KEY", "test-api-key");
+    mocks.createRemoteJWKSet.mockReturnValue(mocks.remoteJwks);
+    mocks.jwtVerify.mockResolvedValue({ payload: {} });
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: messages });
     mocks.isLLMEnabled.mockReturnValue(true);
     mocks.isDatabaseAvailable.mockReturnValue(true);
@@ -203,6 +213,8 @@ describe("POST /api/chat", () => {
 
   it("accepts production requests forwarded by Cloudflare Access", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CF_ACCESS_TEAM_DOMAIN", "https://team.cloudflareaccess.com");
+    vi.stubEnv("CF_ACCESS_AUD", "finance-chat-audience");
 
     const response = await POST(
       new Request("https://dashboard.example.com/api/chat", {
@@ -217,6 +229,54 @@ describe("POST /api/chat", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.getDb).toHaveBeenCalledOnce();
+    expect(mocks.createRemoteJWKSet).toHaveBeenCalledWith(
+      new URL("https://team.cloudflareaccess.com/cdn-cgi/access/certs"),
+    );
+    expect(mocks.jwtVerify).toHaveBeenCalledWith("signed-access-assertion", mocks.remoteJwks, {
+      algorithms: ["RS256"],
+      audience: "finance-chat-audience",
+      issuer: "https://team.cloudflareaccess.com",
+    });
+  });
+
+  it("rejects production requests when Access verification settings are missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    const response = await POST(
+      new Request("https://dashboard.example.com/api/chat", {
+        method: "POST",
+        headers: {
+          "cf-access-jwt-assertion": "unverified-access-assertion",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ messages }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.jwtVerify).not.toHaveBeenCalled();
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
+  it("rejects production requests with an invalid Access assertion", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CF_ACCESS_TEAM_DOMAIN", "https://team.cloudflareaccess.com");
+    vi.stubEnv("CF_ACCESS_AUD", "finance-chat-audience");
+    mocks.jwtVerify.mockRejectedValue(new Error("invalid signature"));
+
+    const response = await POST(
+      new Request("https://dashboard.example.com/api/chat", {
+        method: "POST",
+        headers: {
+          "cf-access-jwt-assertion": "forged-access-assertion",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ messages }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
   it("keeps the chat API disabled on public Vercel deployments", async () => {

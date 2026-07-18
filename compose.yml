@@ -24,6 +24,8 @@ services:
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_PROVIDER: ${AI_PROVIDER:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       CRAWLER_URL: http://crawler:8766
       REFRESH_TOKEN: ${REFRESH_TOKEN:-}
       TZ: Asia/Tokyo

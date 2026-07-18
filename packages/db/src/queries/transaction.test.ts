@@ -315,6 +315,9 @@ describe("searchTransactions", () => {
 
     expect(result).toEqual([
       expect.objectContaining({
+        id: expect.any(Number),
+        mfId: "boundary-transfer-1",
+        description: "口座間振替",
         accountId: targetAccountId,
         accountName: "Bank A",
         amount: 6000,
@@ -323,8 +326,11 @@ describe("searchTransactions", () => {
         subCategory: "振替出金",
         isTransfer: false,
         isExcludedFromCalculation: false,
+        transferTarget: null,
+        transferTargetAccountId: null,
       }),
     ]);
+    expect(result[0]!.id).toBeLessThan(0);
     expect(result.every(({ accountId }) => accountId === targetAccountId)).toBe(true);
   });
 
@@ -402,8 +408,12 @@ describe("searchTransactions", () => {
       result.every(
         (transaction) =>
           transaction.accountId === sourceAccountId &&
+          transaction.mfId.startsWith("boundary-transfer-") &&
+          transaction.description === "口座間振替" &&
           transaction.amount === 6000 &&
-          transaction.type === "income",
+          transaction.type === "income" &&
+          transaction.transferTarget === null &&
+          transaction.transferTargetAccountId === null,
       ),
     ).toBe(true);
   });
@@ -484,7 +494,16 @@ describe("searchTransactions", () => {
 
     expect(await searchTransactions({ groupId: TEST_GROUP_ID, type: "expense" }, db)).toEqual([]);
     expect(await searchTransactions({ groupId: TEST_GROUP_ID, type: "transfer" }, db)).toEqual([
-      expect.objectContaining({ accountId: sourceAccountId, amount: 6000, type: "transfer" }),
+      expect.objectContaining({
+        accountId: targetAccountId,
+        accountName: "Bank A",
+        description: "口座間振替",
+        mfId: "boundary-transfer-1",
+        amount: 6000,
+        type: "transfer",
+        transferTarget: null,
+        transferTargetAccountId: null,
+      }),
     ]);
   });
 
@@ -514,7 +533,17 @@ describe("searchTransactions", () => {
 
     expect(await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db)).toEqual([]);
     expect(await searchTransactions({ groupId: TEST_GROUP_ID, type: "transfer" }, db)).toEqual([
-      expect.objectContaining({ amount: 7000, type: "transfer", isTransfer: true }),
+      expect.objectContaining({
+        accountId: sourceAccountId,
+        accountName: "Bank A",
+        description: "口座間振替",
+        mfId: "boundary-transfer-1",
+        amount: 7000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: null,
+        transferTargetAccountId: null,
+      }),
     ]);
   });
 
