@@ -1,10 +1,12 @@
 import { createHmac } from "node:crypto";
+import { financeChatCardsSchema, type FinanceChatCard } from "@mf-dashboard/analytics/chat/cards";
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
 import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import {
   consumeStream,
   convertToModelMessages,
+  getToolName,
   isToolUIPart,
   safeValidateUIMessages,
   stepCountIs,
@@ -23,7 +25,23 @@ const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタン�
 - ページへ誘導するときは、ツール結果とアプリのroute builderから提供された内部リンクだけを使用してください。URLを自作しないでください。
 - 個人情報や家計データを必要以上に繰り返さず、外部共有を促さないでください。
 - 断定できない場合は不足している根拠を明示し、追加確認を促してください。
-- 回答は簡潔な日本語で、実行可能な家計改善策を優先してください。`;
+- 回答は簡潔な日本語で、実行可能な家計改善策を優先してください。
+- データ取得後は必ずpresentFinanceCardsを1回呼び、本文の要点をstructured cardsでも提示してください。
+- 「6/10の支出を見たい」など日付別支出には、expenseを検索し、summary、transactionList、actionの順で提示してください。
+- 「今月どう？」など月次状況には、対象月の収支を取得し、summaryとinsightを提示してください。
+- 「今月の食費は？」などカテゴリ支出には、対象月・カテゴリの取引とカテゴリ合計を取得し、summary、categoryBreakdown、transactionListを提示してください。
+- 「削れそうな支出ある？」には、固定費・変動費と過去比較を取得し、変動費の候補を中心に、固定費を別枠のinsightで提示してください。手残りと貯蓄率がどれだけ改善するかを主な判断基準にしてください。
+- 「総資産は？」には最新の総資産を取得し、summaryを提示してください。
+- 該当データがない場合、金額を推測せずemptyだけを提示し、期間や条件を変える代替promptを1〜3件含めてください。
+- empty以外ではgetFinanceDashboardRouteを呼び、その結果だけをhrefまたはactionに使って、詳細ページへ遷移できるCTAを少なくとも1件含めてください。
+- 投資余力を扱う場合は、手残り、貯蓄率、予備資金、負債、資産の集中度をすべて確認し、不足する観点があれば結論を保留してください。`;
+
+function getSystemPrompt(): string {
+  const currentDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
+    new Date(),
+  );
+  return `${SYSTEM_PROMPT}\n- 現在日付は${currentDate}（Asia/Tokyo）です。年のない日付はこの日付を基準に解釈してください。`;
+}
 
 function errorResponse(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
@@ -44,8 +62,35 @@ function getMessageText(message: UIMessage): string {
     .join("");
 }
 
-function signAssistantMessage(groupId: string, text: string): string {
-  return createHmac("sha256", process.env.AI_API_KEY!).update(`${groupId}\0${text}`).digest("hex");
+function getPresentationCards(message: UIMessage): FinanceChatCard[] {
+  const outputs: unknown[] = [];
+
+  for (const part of message.parts) {
+    if (
+      !isToolUIPart(part) ||
+      getToolName(part) !== "presentFinanceCards" ||
+      part.state !== "output-available"
+    ) {
+      continue;
+    }
+
+    outputs.push(part.output);
+  }
+
+  return getSinglePresentationCards(outputs);
+}
+
+function getSinglePresentationCards(outputs: unknown[]): FinanceChatCard[] {
+  if (outputs.length !== 1) return [];
+
+  const result = financeChatCardsSchema.safeParse(outputs[0]);
+  return result.success ? result.data : [];
+}
+
+function signAssistantMessage(groupId: string, text: string, cards: FinanceChatCard[]): string {
+  return createHmac("sha256", process.env.AI_API_KEY!)
+    .update(`${groupId}\0${text}\0${JSON.stringify(cards)}`)
+    .digest("hex");
 }
 
 function hasValidAssistantSignature(message: UIMessage, groupId: string): boolean {
@@ -55,7 +100,8 @@ function hasValidAssistantSignature(message: UIMessage, groupId: string): boolea
     typeof metadata === "object" &&
     metadata !== null &&
     SIGNATURE_METADATA_KEY in metadata &&
-    metadata[SIGNATURE_METADATA_KEY] === signAssistantMessage(groupId, getMessageText(message))
+    metadata[SIGNATURE_METADATA_KEY] ===
+      signAssistantMessage(groupId, getMessageText(message), getPresentationCards(message))
   );
 }
 
@@ -66,12 +112,23 @@ function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMess
         message.role === "user" ||
         (message.role === "assistant" && hasValidAssistantSignature(message, groupId)),
     )
-    .map((message) => ({
-      ...message,
-      parts: message.parts.filter((part) =>
-        message.role === "assistant" ? part.type === "text" : !isToolUIPart(part),
-      ),
-    }))
+    .map((message) => {
+      if (message.role !== "assistant") {
+        return { ...message, parts: message.parts.filter((part) => !isToolUIPart(part)) };
+      }
+
+      const cards = getPresentationCards(message);
+      const parts = message.parts.filter((part) => part.type === "text");
+
+      if (cards.length > 0) {
+        parts.push({
+          type: "text",
+          text: `\n\n直前の回答で表示したカード: ${JSON.stringify(cards)}`,
+        });
+      }
+
+      return { ...message, parts };
+    })
     .filter((message) => message.parts.length > 0);
 }
 
@@ -146,13 +203,17 @@ export async function POST(request: Request): Promise<Response> {
   const tools = createFinanceChatTools(db, group.id);
   const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
   let assistantText = "";
+  const presentationOutputs: unknown[] = [];
   const result = streamText({
     abortSignal: request.signal,
     model,
-    system: SYSTEM_PROMPT,
+    system: getSystemPrompt(),
     messages: await convertToModelMessages(modelInputMessages, { tools }),
     onChunk: ({ chunk }) => {
       if (chunk.type === "text-delta") assistantText += chunk.text;
+      if (chunk.type === "tool-result" && chunk.toolName === "presentFinanceCards") {
+        presentationOutputs.push(chunk.output);
+      }
     },
     tools,
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
@@ -162,7 +223,13 @@ export async function POST(request: Request): Promise<Response> {
     consumeSseStream: consumeStream,
     messageMetadata: ({ part }) =>
       part.type === "finish"
-        ? { [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText) }
+        ? {
+            [SIGNATURE_METADATA_KEY]: signAssistantMessage(
+              group.id,
+              assistantText,
+              getSinglePresentationCards(presentationOutputs),
+            ),
+          }
         : undefined,
     originalMessages: validation.data,
     onError: () => "回答の生成中にエラーが発生しました。",

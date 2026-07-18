@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentGroup: vi.fn<AnyMock>(),
   getDb: vi.fn<AnyMock>(),
   getModel: vi.fn<AnyMock>(),
+  getToolName: vi.fn<AnyMock>(),
   isToolUIPart: vi.fn<AnyMock>(),
   isDatabaseAvailable: vi.fn<AnyMock>(),
   isLLMEnabled: vi.fn<AnyMock>(),
@@ -39,6 +40,7 @@ vi.mock("@mf-dashboard/db", () => ({
 vi.mock("ai", () => ({
   consumeStream: mocks.consumeStream,
   convertToModelMessages: mocks.convertToModelMessages,
+  getToolName: mocks.getToolName,
   isToolUIPart: mocks.isToolUIPart,
   safeValidateUIMessages: mocks.safeValidateUIMessages,
   stepCountIs: mocks.stepCountIs,
@@ -79,6 +81,7 @@ describe("POST /api/chat", () => {
     mocks.isToolUIPart.mockImplementation(
       (part) => part.type === "dynamic-tool" || part.type.startsWith("tool-"),
     );
+    mocks.getToolName.mockImplementation((part) => part.type.replace(/^tool-/, ""));
     mocks.createFinanceChatTools.mockReturnValue(tools);
     mocks.convertToModelMessages.mockResolvedValue(modelMessages);
     mocks.stepCountIs.mockReturnValue("finite-stop-condition");
@@ -123,6 +126,22 @@ describe("POST /api/chat", () => {
       }),
     );
     await expect(response.text()).resolves.toContain("tool-output-available");
+  });
+
+  it("defines the MVP card recipes and household improvement criteria", async () => {
+    await POST(request({ messages }));
+
+    const systemPrompt = mocks.streamText.mock.calls[0]![0].system as string;
+    expect(systemPrompt).toContain(
+      "日付別支出には、expenseを検索し、summary、transactionList、action",
+    );
+    expect(systemPrompt).toContain("月次状況には、対象月の収支を取得し、summaryとinsight");
+    expect(systemPrompt).toContain("summary、categoryBreakdown、transactionList");
+    expect(systemPrompt).toContain("手残りと貯蓄率がどれだけ改善するか");
+    expect(systemPrompt).toContain("最新の総資産を取得し、summary");
+    expect(systemPrompt).toContain("emptyだけを提示");
+    expect(systemPrompt).toContain("手残り、貯蓄率、予備資金、負債、資産の集中度");
+    expect(systemPrompt).toMatch(/現在日付は\d{4}-\d{2}-\d{2}（Asia\/Tokyo）/);
   });
 
   it("rejects malformed JSON", async () => {
@@ -278,10 +297,21 @@ describe("POST /api/chat", () => {
     );
   });
 
-  it("keeps signed assistant text in model history without tool outputs", async () => {
+  it("keeps signed assistant text and presentation context without raw data tool outputs", async () => {
     await POST(request({ groupId: "group-b", messages }));
     const streamOptions = mocks.streamText.mock.calls[0]![0];
     streamOptions.onChunk({ chunk: { type: "text-delta", text: "支出を見直しましょう。" } });
+    const cards = [
+      {
+        type: "action" as const,
+        title: "詳細を確認",
+        description: "収支ページで確認できます",
+        action: { label: "収支を見る", href: "/group-b/cf/2026-07" },
+      },
+    ];
+    streamOptions.onChunk({
+      chunk: { type: "tool-result", toolName: "presentFinanceCards", output: cards },
+    });
     const responseOptions = mocks.toUIMessageStreamResponse.mock.calls[0]![0];
     const metadata = responseOptions.messageMetadata({ part: { type: "finish" } });
     const signedAssistantMessage: UIMessage = {
@@ -296,6 +326,13 @@ describe("POST /api/chat", () => {
           state: "output-available",
           input: { query: "食費" },
           output: { transactions: [{ amount: 1_000 }] },
+        },
+        {
+          type: "tool-presentFinanceCards",
+          toolCallId: "tool-call-b",
+          state: "output-available",
+          input: { cards },
+          output: cards,
         },
       ],
     };
@@ -314,8 +351,102 @@ describe("POST /api/chat", () => {
         messages[0],
         {
           ...signedAssistantMessage,
-          parts: [{ type: "text", text: "支出を見直しましょう。" }],
+          parts: [
+            { type: "text", text: "支出を見直しましょう。" },
+            {
+              type: "text",
+              text: `\n\n直前の回答で表示したカード: ${JSON.stringify(cards)}`,
+            },
+          ],
         },
+        followUpMessages[2],
+      ],
+      { tools },
+    );
+
+    const tamperedMessages = structuredClone(followUpMessages);
+    const presentationPart = tamperedMessages[1]!.parts[2];
+    if (presentationPart?.type === "tool-presentFinanceCards") {
+      presentationPart.output = [
+        {
+          ...cards[0],
+          action: { ...cards[0]!.action, href: "/group-a/cf/2026-07" },
+        },
+      ];
+    }
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: tamperedMessages });
+
+    await POST(request({ groupId: "group-b", messages: tamperedMessages }));
+
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [tamperedMessages[0], tamperedMessages[2]],
+      { tools },
+    );
+  });
+
+  it("does not preserve cards from multiple presentation calls in follow-up context", async () => {
+    await POST(request({ groupId: "group-b", messages }));
+    const streamOptions = mocks.streamText.mock.calls[0]![0];
+    streamOptions.onChunk({ chunk: { type: "text-delta", text: "確認しました。" } });
+    const cards = [
+      {
+        type: "action" as const,
+        title: "詳細を確認",
+        description: "収支ページで確認できます",
+        action: { label: "収支を見る", href: "/group-b/cf/2026-07" },
+      },
+    ];
+    const emptyCards = [
+      {
+        type: "empty" as const,
+        title: "支出がありません",
+        description: "条件を変えて確認してください",
+        prompts: ["今月の支出は？"],
+      },
+    ];
+    streamOptions.onChunk({
+      chunk: { type: "tool-result", toolName: "presentFinanceCards", output: cards },
+    });
+    streamOptions.onChunk({
+      chunk: { type: "tool-result", toolName: "presentFinanceCards", output: emptyCards },
+    });
+    const responseOptions = mocks.toUIMessageStreamResponse.mock.calls[0]![0];
+    const metadata = responseOptions.messageMetadata({ part: { type: "finish" } });
+    const signedAssistantMessage: UIMessage = {
+      id: "message-assistant",
+      role: "assistant",
+      metadata,
+      parts: [
+        { type: "text", text: "確認しました。" },
+        {
+          type: "tool-presentFinanceCards",
+          toolCallId: "tool-call-a",
+          state: "output-available",
+          input: { cards },
+          output: cards,
+        },
+        {
+          type: "tool-presentFinanceCards",
+          toolCallId: "tool-call-b",
+          state: "output-available",
+          input: { cards: emptyCards },
+          output: emptyCards,
+        },
+      ],
+    };
+    const followUpMessages = [
+      messages[0],
+      signedAssistantMessage,
+      { id: "message-b", role: "user", parts: [{ type: "text", text: "続けて" }] },
+    ] satisfies UIMessage[];
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: followUpMessages });
+
+    await POST(request({ groupId: "group-b", messages: followUpMessages }));
+
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [
+        messages[0],
+        { ...signedAssistantMessage, parts: [{ type: "text", text: "確認しました。" }] },
         followUpMessages[2],
       ],
       { tools },

@@ -1,12 +1,39 @@
 "use client";
 
+import {
+  financeChatCardsSchema,
+  type FinanceChatCard as FinanceChatCardData,
+} from "@mf-dashboard/analytics/chat/cards";
+import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import { Bot, Send, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, type FormEvent } from "react";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import { FinanceChatCard } from "./cards/finance-chat-card";
 import { useFinanceChat } from "./chat-provider";
 
 const PANEL_ID = "finance-ai-chat-panel";
+
+function getFinanceCards(message: UIMessage): FinanceChatCardData[] {
+  if (message.role !== "assistant") return [];
+
+  const presentationOutputs: unknown[] = [];
+
+  for (const part of message.parts) {
+    if (
+      isToolUIPart(part) &&
+      getToolName(part) === "presentFinanceCards" &&
+      part.state === "output-available"
+    ) {
+      presentationOutputs.push(part.output);
+    }
+  }
+
+  if (presentationOutputs.length !== 1) return [];
+
+  const result = financeChatCardsSchema.safeParse(presentationOutputs[0]);
+  return result.success ? result.data : [];
+}
 
 export function ChatShell() {
   const { addUserMessage, close, draft, isOpen, messages, open, setDraft } = useFinanceChat();
@@ -110,8 +137,9 @@ export function ChatShell() {
                     .filter((part) => part.type === "text")
                     .map((part) => part.text)
                     .join("");
+                  const cards = getFinanceCards(message);
 
-                  if (!text) return null;
+                  if (!text && cards.length === 0) return null;
 
                   return (
                     <div
@@ -121,16 +149,27 @@ export function ChatShell() {
                         message.role === "user" ? "justify-end" : "justify-start",
                       )}
                     >
-                      <p
-                        className={cn(
-                          "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
-                          message.role === "user"
-                            ? "rounded-br-sm bg-primary text-primary-foreground"
-                            : "rounded-bl-sm bg-muted text-foreground",
+                      <div className="max-w-[85%] space-y-3">
+                        {text && (
+                          <p
+                            className={cn(
+                              "whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
+                              message.role === "user"
+                                ? "rounded-br-sm bg-primary text-primary-foreground"
+                                : "rounded-bl-sm bg-muted text-foreground",
+                            )}
+                          >
+                            {text}
+                          </p>
                         )}
-                      >
-                        {text}
-                      </p>
+                        {cards.map((card, index) => (
+                          <FinanceChatCard
+                            key={`${card.type}-${card.title}-${index}`}
+                            card={card}
+                            onPromptSelect={addUserMessage}
+                          />
+                        ))}
+                      </div>
                     </div>
                   );
                 })
