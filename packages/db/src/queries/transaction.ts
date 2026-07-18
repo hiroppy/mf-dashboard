@@ -104,9 +104,10 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
   interface TransferLookups {
     accountNamesById: Map<number, string>;
     groupsByAccountId: Map<number, Set<string>>;
-    normalTransactionKeys: Set<string>;
+    normalTransactionCounts: Map<string, number>;
   }
   let nextBoundaryTransactionId = -1;
+  const consumedNormalTransactionCounts = new Map<string, number>();
 
   const projectBoundaryTransfer = (
     transaction: SearchTransaction,
@@ -133,6 +134,15 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     type: NormalTransactionType,
   ) => `${accountId}\0${date}\0${amount}\0${type}`;
 
+  const consumeNormalTransaction = (key: string, lookups: TransferLookups) => {
+    const available = lookups.normalTransactionCounts.get(key) ?? 0;
+    const consumed = consumedNormalTransactionCounts.get(key) ?? 0;
+    if (consumed >= available) return false;
+
+    consumedNormalTransactionCounts.set(key, consumed + 1);
+    return true;
+  };
+
   const loadTransferLookups = async (batch: SearchTransaction[]) => {
     const transfers = batch.filter(
       (transaction): transaction is TransferTransaction =>
@@ -150,10 +160,10 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     ];
     const accountNamesById = new Map<number, string>();
     const groupsByAccountId = new Map<number, Set<string>>();
-    const normalTransactionKeys = new Set<string>();
+    const normalTransactionCounts = new Map<string, number>();
 
     if (transferAccountIds.length === 0) {
-      return { accountNamesById, groupsByAccountId, normalTransactionKeys };
+      return { accountNamesById, groupsByAccountId, normalTransactionCounts };
     }
 
     const dates = [...new Set(transfers.map((transaction) => transaction.date))];
@@ -209,17 +219,16 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       ) {
         continue;
       }
-      normalTransactionKeys.add(
-        normalTransactionKey(
-          transaction.accountId,
-          transaction.date,
-          transaction.amount,
-          transaction.type,
-        ),
+      const key = normalTransactionKey(
+        transaction.accountId,
+        transaction.date,
+        transaction.amount,
+        transaction.type,
       );
+      normalTransactionCounts.set(key, (normalTransactionCounts.get(key) ?? 0) + 1);
     }
 
-    return { accountNamesById, groupsByAccountId, normalTransactionKeys };
+    return { accountNamesById, groupsByAccountId, normalTransactionCounts };
   };
 
   const transformTransaction = (
@@ -252,13 +261,14 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
     if (classification === "expense") {
       if (
-        lookups.normalTransactionKeys.has(
+        consumeNormalTransaction(
           normalTransactionKey(
             transaction.transferTargetAccountId,
             transaction.date,
             transaction.amount,
             "expense",
           ),
+          lookups,
         )
       ) {
         return null;
@@ -275,13 +285,14 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
     if (classification === "income") {
       if (
-        lookups.normalTransactionKeys.has(
+        consumeNormalTransaction(
           normalTransactionKey(
             transaction.accountId,
             transaction.date,
             transaction.amount,
             "income",
           ),
+          lookups,
         )
       ) {
         return null;

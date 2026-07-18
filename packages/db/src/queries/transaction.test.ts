@@ -443,6 +443,32 @@ describe("searchTransactions", () => {
     ]);
   });
 
+  it("通常収入1件との重複では同額の振替収入を1件だけ除外する", async () => {
+    const sourceAccountId = await createTestAccount("Bank A");
+    const targetAccountId = await createExternalAccount("External Bank");
+
+    for (let index = 0; index < 2; index += 1) {
+      await createTransaction({
+        accountId: sourceAccountId,
+        date: "2025-06-06",
+        amount: 6000,
+        type: "transfer",
+        transferTargetAccountId: targetAccountId,
+      });
+    }
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "income",
+    });
+
+    const result = await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db);
+
+    expect(result).toHaveLength(2);
+    expect(result.filter(({ mfId }) => mfId.startsWith("boundary-transfer-"))).toHaveLength(1);
+  });
+
   it("同額の通常支出があっても対象groupからの振替収入を保持する", async () => {
     const sourceAccountId = await createTestAccount("Bank A");
     const targetAccountId = await createExternalAccount("External Bank");
