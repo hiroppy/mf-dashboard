@@ -7,18 +7,8 @@ import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
+import { createMetadataBase } from "../lib/metadata";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
-
-function createMetadataBase() {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
-    process.env.VERCEL_URL;
-
-  if (!siteUrl) return undefined;
-
-  return new URL(siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`);
-}
 
 export const metadata: Metadata = {
   metadataBase: createMetadataBase(),

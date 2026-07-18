@@ -3,6 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getChartColorArray } from "../../lib/colors";
 import { formatCurrency, formatPercent } from "../../lib/format";
 import { cn } from "../../lib/utils";
@@ -102,7 +103,11 @@ function CategoryCard({
       <div className="flex flex-col sm:flex-row sm:items-start gap-6 p-4">
         {/* Donut chart */}
         <div className="w-56 h-56 shrink-0 self-center sm:self-auto">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+            initialDimension={CHART_INITIAL_DIMENSION}
+          >
             <PieChart>
               <Pie
                 data={chartData}
