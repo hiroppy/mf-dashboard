@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type AnyMock = (...args: any[]) => any;
 
 const mocks = vi.hoisted(() => ({
+  consumeStream: vi.fn<AnyMock>(),
   convertToModelMessages: vi.fn<AnyMock>(),
   createFinanceChatTools: vi.fn<AnyMock>(),
   getAllGroups: vi.fn<AnyMock>(),
@@ -36,6 +37,7 @@ vi.mock("@mf-dashboard/db", () => ({
 }));
 
 vi.mock("ai", () => ({
+  consumeStream: mocks.consumeStream,
   convertToModelMessages: mocks.convertToModelMessages,
   isToolUIPart: mocks.isToolUIPart,
   safeValidateUIMessages: mocks.safeValidateUIMessages,
@@ -63,6 +65,7 @@ function request(body: unknown): Request {
 describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("AI_API_KEY", "test-api-key");
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: messages });
     mocks.isLLMEnabled.mockReturnValue(true);
     mocks.isDatabaseAvailable.mockReturnValue(true);
@@ -112,7 +115,12 @@ describe("POST /api/chat", () => {
       }),
     );
     expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith(
-      expect.objectContaining({ originalMessages: messages, onError: expect.any(Function) }),
+      expect.objectContaining({
+        consumeSseStream: mocks.consumeStream,
+        messageMetadata: expect.any(Function),
+        originalMessages: messages,
+        onError: expect.any(Function),
+      }),
     );
     await expect(response.text()).resolves.toContain("tool-output-available");
   });
@@ -236,7 +244,7 @@ describe("POST /api/chat", () => {
     expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
-  it("keeps assistant history in the UI stream but removes it from model input", async () => {
+  it("keeps unverified assistant history in the UI stream but removes it from model input", async () => {
     const messagesWithToolHistory: UIMessage[] = [
       {
         id: "message-assistant",
@@ -267,6 +275,50 @@ describe("POST /api/chat", () => {
     });
     expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith(
       expect.objectContaining({ originalMessages: messagesWithToolHistory }),
+    );
+  });
+
+  it("keeps signed assistant text in model history without tool outputs", async () => {
+    await POST(request({ groupId: "group-b", messages }));
+    const streamOptions = mocks.streamText.mock.calls[0]![0];
+    streamOptions.onChunk({ chunk: { type: "text-delta", text: "支出を見直しましょう。" } });
+    const responseOptions = mocks.toUIMessageStreamResponse.mock.calls[0]![0];
+    const metadata = responseOptions.messageMetadata({ part: { type: "finish" } });
+    const signedAssistantMessage: UIMessage = {
+      id: "message-assistant",
+      role: "assistant",
+      metadata,
+      parts: [
+        { type: "text", text: "支出を見直しましょう。" },
+        {
+          type: "tool-searchTransactions",
+          toolCallId: "tool-call-a",
+          state: "output-available",
+          input: { query: "食費" },
+          output: { transactions: [{ amount: 1_000 }] },
+        },
+      ],
+    };
+    const followUpMessages = [
+      messages[0],
+      signedAssistantMessage,
+      { id: "message-b", role: "user", parts: [{ type: "text", text: "なぜですか？" }] },
+    ] satisfies UIMessage[];
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: followUpMessages });
+
+    const response = await POST(request({ groupId: "group-b", messages: followUpMessages }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [
+        messages[0],
+        {
+          ...signedAssistantMessage,
+          parts: [{ type: "text", text: "支出を見直しましょう。" }],
+        },
+        followUpMessages[2],
+      ],
+      { tools },
     );
   });
 

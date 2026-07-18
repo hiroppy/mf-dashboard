@@ -1,7 +1,9 @@
+import { createHmac } from "node:crypto";
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
 import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import {
+  consumeStream,
   convertToModelMessages,
   isToolUIPart,
   safeValidateUIMessages,
@@ -13,6 +15,7 @@ import {
 export const maxDuration = 30;
 
 const MAX_TOOL_STEPS = 8;
+const SIGNATURE_METADATA_KEY = "serverSignature";
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
 - 回答前に必要な家計データをツールで取得し、提案には根拠となる期間・項目・数値を明記してください。
@@ -34,12 +37,40 @@ function isWithinChatAccessBoundary(request: Request): boolean {
   return process.env.VERCEL !== "1" && Boolean(request.headers.get("cf-access-jwt-assertion"));
 }
 
-function getTrustedUserMessages(messages: UIMessage[]): UIMessage[] {
+function getMessageText(message: UIMessage): string {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+}
+
+function signAssistantMessage(groupId: string, text: string): string {
+  return createHmac("sha256", process.env.AI_API_KEY!).update(`${groupId}\0${text}`).digest("hex");
+}
+
+function hasValidAssistantSignature(message: UIMessage, groupId: string): boolean {
+  const metadata = message.metadata;
+
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    SIGNATURE_METADATA_KEY in metadata &&
+    metadata[SIGNATURE_METADATA_KEY] === signAssistantMessage(groupId, getMessageText(message))
+  );
+}
+
+function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMessage[] {
   return messages
-    .filter((message) => message.role === "user")
+    .filter(
+      (message) =>
+        message.role === "user" ||
+        (message.role === "assistant" && hasValidAssistantSignature(message, groupId)),
+    )
     .map((message) => ({
       ...message,
-      parts: message.parts.filter((part) => !isToolUIPart(part)),
+      parts: message.parts.filter((part) =>
+        message.role === "assistant" ? part.type === "text" : !isToolUIPart(part),
+      ),
     }))
     .filter((message) => message.parts.length > 0);
 }
@@ -113,17 +144,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const tools = createFinanceChatTools(db, group.id);
-  const modelInputMessages = getTrustedUserMessages(validation.data);
+  const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
+  let assistantText = "";
   const result = streamText({
     abortSignal: request.signal,
     model,
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(modelInputMessages, { tools }),
+    onChunk: ({ chunk }) => {
+      if (chunk.type === "text-delta") assistantText += chunk.text;
+    },
     tools,
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
   });
 
   return result.toUIMessageStreamResponse({
+    consumeSseStream: consumeStream,
+    messageMetadata: ({ part }) =>
+      part.type === "finish"
+        ? { [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText) }
+        : undefined,
     originalMessages: validation.data,
     onError: () => "回答の生成中にエラーが発生しました。",
   });

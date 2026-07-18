@@ -4,11 +4,12 @@ import { ChatProvider, useFinanceChat } from "./chat-provider";
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn<(...args: unknown[]) => unknown>(),
+  useChat: vi.fn<(...args: unknown[]) => unknown>(),
   usePathname: vi.fn<() => string>(),
 }));
 
 vi.mock("@ai-sdk/react", () => ({
-  useChat: () => ({ messages: [], sendMessage: mocks.sendMessage }),
+  useChat: mocks.useChat,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -24,6 +25,7 @@ function ChatSender() {
 describe("ChatProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.useChat.mockReturnValue({ messages: [], sendMessage: mocks.sendMessage });
   });
 
   it("sends the selected group ID from a group page", () => {
@@ -40,6 +42,9 @@ describe("ChatProvider", () => {
       { text: "家計を見直したい" },
       { body: { groupId: "group-b" } },
     );
+    expect(mocks.useChat).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "finance-chat:group-b" }),
+    );
   });
 
   it("sends a null group ID from the current-group route", () => {
@@ -55,6 +60,29 @@ describe("ChatProvider", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith(
       { text: "家計を見直したい" },
       { body: { groupId: null } },
+    );
+    expect(mocks.useChat).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "finance-chat:current" }),
+    );
+  });
+
+  it("uses a separate chat ID after the selected group changes", () => {
+    mocks.usePathname.mockReturnValue("/group-a/cf");
+    const { rerender } = render(
+      <ChatProvider>
+        <ChatSender />
+      </ChatProvider>,
+    );
+
+    mocks.usePathname.mockReturnValue("/group-b/cf");
+    rerender(
+      <ChatProvider>
+        <ChatSender />
+      </ChatProvider>,
+    );
+
+    expect(mocks.useChat).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "finance-chat:group-b" }),
     );
   });
 });

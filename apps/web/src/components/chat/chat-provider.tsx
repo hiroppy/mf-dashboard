@@ -32,7 +32,10 @@ export function ChatProvider({
   const [draft, setDraft] = useState("");
   const pathname = usePathname();
   const groupId = pathname ? extractGroupIdFromPath(pathname) : null;
-  const { messages, sendMessage } = useChat({ messages: initialMessages });
+  const { messages, sendMessage } = useChat({
+    id: `finance-chat:${groupId ?? "current"}`,
+    messages: initialMessages,
+  });
   const close = useCallback(() => setIsOpen(false), []);
   const open = useCallback(() => setIsOpen(true), []);
 
