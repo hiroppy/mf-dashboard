@@ -356,7 +356,32 @@ describe("searchTransactions", () => {
     ]);
   });
 
-  it("重複する対象groupからの振替収入を1件だけ返す", async () => {
+  it("同額の通常収入があっても対象groupへの振替支出を保持する", async () => {
+    const targetAccountId = await createTestAccount("Bank A");
+    const sourceAccountId = await createExternalAccount("External Bank");
+
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+    await createTransaction({
+      accountId: targetAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "income",
+    });
+
+    const result = await searchTransactions({ groupId: TEST_GROUP_ID, type: "expense" }, db);
+
+    expect(result).toEqual([
+      expect.objectContaining({ accountId: targetAccountId, amount: 6000, type: "expense" }),
+    ]);
+  });
+
+  it("同日同額の対象groupからの振替収入を別取引として返す", async () => {
     const sourceAccountId = await createTestAccount("Bank A");
     const targetAccountId = await createExternalAccount("External Bank");
 
@@ -372,9 +397,15 @@ describe("searchTransactions", () => {
 
     const result = await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db);
 
-    expect(result).toEqual([
-      expect.objectContaining({ accountId: sourceAccountId, amount: 6000, type: "income" }),
-    ]);
+    expect(result).toHaveLength(2);
+    expect(
+      result.every(
+        (transaction) =>
+          transaction.accountId === sourceAccountId &&
+          transaction.amount === 6000 &&
+          transaction.type === "income",
+      ),
+    ).toBe(true);
   });
 
   it("通常収入と重複する対象groupからの振替収入を除外する", async () => {
@@ -393,6 +424,31 @@ describe("searchTransactions", () => {
       date: "2025-06-06",
       amount: 6000,
       type: "income",
+    });
+
+    const result = await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db);
+
+    expect(result).toEqual([
+      expect.objectContaining({ accountId: sourceAccountId, amount: 6000, type: "income" }),
+    ]);
+  });
+
+  it("同額の通常支出があっても対象groupからの振替収入を保持する", async () => {
+    const sourceAccountId = await createTestAccount("Bank A");
+    const targetAccountId = await createExternalAccount("External Bank");
+
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "expense",
     });
 
     const result = await searchTransactions({ groupId: TEST_GROUP_ID, type: "income" }, db);

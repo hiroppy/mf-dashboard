@@ -95,20 +95,24 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
   const keyword = options.keyword?.toLocaleLowerCase();
   const accountIdSet = new Set(accountIds);
-  const seenTransfers = new Set<string>();
   type SearchTransaction = Awaited<ReturnType<typeof fetchBatch>>[number];
   type TransferTransaction = SearchTransaction & {
     accountId: number;
     transferTargetAccountId: number;
   };
+  type NormalTransactionType = "income" | "expense";
   interface TransferLookups {
     accountNamesById: Map<number, string>;
     groupsByAccountId: Map<number, Set<string>>;
     normalTransactionKeys: Set<string>;
   }
 
-  const normalTransactionKey = (accountId: number, date: string, amount: number) =>
-    `${accountId}\0${date}\0${amount}`;
+  const normalTransactionKey = (
+    accountId: number,
+    date: string,
+    amount: number,
+    type: NormalTransactionType,
+  ) => `${accountId}\0${date}\0${amount}\0${type}`;
 
   const loadTransferLookups = async (batch: SearchTransaction[]) => {
     const transfers = batch.filter(
@@ -154,6 +158,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
           accountId: schema.transactions.accountId,
           date: schema.transactions.date,
           amount: schema.transactions.amount,
+          type: schema.transactions.type,
         })
         .from(schema.transactions)
         .where(
@@ -179,9 +184,19 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     }
 
     for (const transaction of normalTransactions) {
-      if (transaction.accountId === null) continue;
+      if (
+        transaction.accountId === null ||
+        (transaction.type !== "income" && transaction.type !== "expense")
+      ) {
+        continue;
+      }
       normalTransactionKeys.add(
-        normalTransactionKey(transaction.accountId, transaction.date, transaction.amount),
+        normalTransactionKey(
+          transaction.accountId,
+          transaction.date,
+          transaction.amount,
+          transaction.type,
+        ),
       );
     }
 
@@ -202,7 +217,6 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
     const sourceInGroup = accountIdSet.has(transaction.accountId);
     const targetInGroup = accountIdSet.has(transaction.transferTargetAccountId);
-    const transferKey = `${transaction.date}-${transaction.amount}-${transaction.accountId}-${transaction.transferTargetAccountId}`;
     const sourceGroups = lookups.groupsByAccountId.get(transaction.accountId);
     const targetGroups = lookups.groupsByAccountId.get(transaction.transferTargetAccountId);
     const hasCommonGroup =
@@ -224,13 +238,12 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
             transaction.transferTargetAccountId,
             transaction.date,
             transaction.amount,
+            "expense",
           ),
-        ) ||
-        seenTransfers.has(transferKey)
+        )
       ) {
         return null;
       }
-      seenTransfers.add(transferKey);
       return {
         ...transaction,
         accountId: transaction.transferTargetAccountId,
@@ -248,13 +261,16 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     if (classification === "income") {
       if (
         lookups.normalTransactionKeys.has(
-          normalTransactionKey(transaction.accountId, transaction.date, transaction.amount),
+          normalTransactionKey(
+            transaction.accountId,
+            transaction.date,
+            transaction.amount,
+            "income",
+          ),
         )
       ) {
         return null;
       }
-      if (seenTransfers.has(transferKey)) return null;
-      seenTransfers.add(transferKey);
       return transformTransferToIncome(transaction, accountIds);
     }
     return transaction;
