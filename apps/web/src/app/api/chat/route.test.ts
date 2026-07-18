@@ -384,6 +384,75 @@ describe("POST /api/chat", () => {
     );
   });
 
+  it("does not preserve cards from multiple presentation calls in follow-up context", async () => {
+    await POST(request({ groupId: "group-b", messages }));
+    const streamOptions = mocks.streamText.mock.calls[0]![0];
+    streamOptions.onChunk({ chunk: { type: "text-delta", text: "確認しました。" } });
+    const cards = [
+      {
+        type: "action" as const,
+        title: "詳細を確認",
+        description: "収支ページで確認できます",
+        action: { label: "収支を見る", href: "/group-b/cf/2026-07" },
+      },
+    ];
+    const emptyCards = [
+      {
+        type: "empty" as const,
+        title: "支出がありません",
+        description: "条件を変えて確認してください",
+        prompts: ["今月の支出は？"],
+      },
+    ];
+    streamOptions.onChunk({
+      chunk: { type: "tool-result", toolName: "presentFinanceCards", output: cards },
+    });
+    streamOptions.onChunk({
+      chunk: { type: "tool-result", toolName: "presentFinanceCards", output: emptyCards },
+    });
+    const responseOptions = mocks.toUIMessageStreamResponse.mock.calls[0]![0];
+    const metadata = responseOptions.messageMetadata({ part: { type: "finish" } });
+    const signedAssistantMessage: UIMessage = {
+      id: "message-assistant",
+      role: "assistant",
+      metadata,
+      parts: [
+        { type: "text", text: "確認しました。" },
+        {
+          type: "tool-presentFinanceCards",
+          toolCallId: "tool-call-a",
+          state: "output-available",
+          input: { cards },
+          output: cards,
+        },
+        {
+          type: "tool-presentFinanceCards",
+          toolCallId: "tool-call-b",
+          state: "output-available",
+          input: { cards: emptyCards },
+          output: emptyCards,
+        },
+      ],
+    };
+    const followUpMessages = [
+      messages[0],
+      signedAssistantMessage,
+      { id: "message-b", role: "user", parts: [{ type: "text", text: "続けて" }] },
+    ] satisfies UIMessage[];
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: followUpMessages });
+
+    await POST(request({ groupId: "group-b", messages: followUpMessages }));
+
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [
+        messages[0],
+        { ...signedAssistantMessage, parts: [{ type: "text", text: "確認しました。" }] },
+        followUpMessages[2],
+      ],
+      { tools },
+    );
+  });
+
   it("returns unavailable when the LLM environment is incomplete", async () => {
     mocks.isLLMEnabled.mockReturnValue(false);
 

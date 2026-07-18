@@ -63,18 +63,28 @@ function getMessageText(message: UIMessage): string {
 }
 
 function getPresentationCards(message: UIMessage): FinanceChatCard[] {
-  return message.parts.flatMap((part) => {
+  const outputs: unknown[] = [];
+
+  for (const part of message.parts) {
     if (
       !isToolUIPart(part) ||
       getToolName(part) !== "presentFinanceCards" ||
       part.state !== "output-available"
     ) {
-      return [];
+      continue;
     }
 
-    const result = financeChatCardsSchema.safeParse(part.output);
-    return result.success ? result.data : [];
-  });
+    outputs.push(part.output);
+  }
+
+  return getSinglePresentationCards(outputs);
+}
+
+function getSinglePresentationCards(outputs: unknown[]): FinanceChatCard[] {
+  if (outputs.length !== 1) return [];
+
+  const result = financeChatCardsSchema.safeParse(outputs[0]);
+  return result.success ? result.data : [];
 }
 
 function signAssistantMessage(groupId: string, text: string, cards: FinanceChatCard[]): string {
@@ -193,7 +203,7 @@ export async function POST(request: Request): Promise<Response> {
   const tools = createFinanceChatTools(db, group.id);
   const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
   let assistantText = "";
-  let assistantCards: FinanceChatCard[] = [];
+  const presentationOutputs: unknown[] = [];
   const result = streamText({
     abortSignal: request.signal,
     model,
@@ -202,8 +212,7 @@ export async function POST(request: Request): Promise<Response> {
     onChunk: ({ chunk }) => {
       if (chunk.type === "text-delta") assistantText += chunk.text;
       if (chunk.type === "tool-result" && chunk.toolName === "presentFinanceCards") {
-        const parsedCards = financeChatCardsSchema.safeParse(chunk.output);
-        if (parsedCards.success) assistantCards.push(...parsedCards.data);
+        presentationOutputs.push(chunk.output);
       }
     },
     tools,
@@ -215,7 +224,11 @@ export async function POST(request: Request): Promise<Response> {
     messageMetadata: ({ part }) =>
       part.type === "finish"
         ? {
-            [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText, assistantCards),
+            [SIGNATURE_METADATA_KEY]: signAssistantMessage(
+              group.id,
+              assistantText,
+              getSinglePresentationCards(presentationOutputs),
+            ),
           }
         : undefined,
     originalMessages: validation.data,
