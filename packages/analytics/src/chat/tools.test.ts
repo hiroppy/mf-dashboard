@@ -1,6 +1,11 @@
 import type { Db } from "@mf-dashboard/db";
 import { describe, expect, it } from "vitest";
-import { createAnalysisTools, createChatTools, createFinancialTools } from "./tools.js";
+import {
+  createAnalysisTools,
+  createChatTools,
+  createFinanceChatTools,
+  createFinancialTools,
+} from "./tools.js";
 
 const db = {} as Db;
 const groupId = "test-group";
@@ -15,6 +20,12 @@ describe("createChatTools", () => {
       ...Object.keys(financialTools),
       ...Object.keys(analysisTools),
     ]);
+  });
+
+  it("keeps the existing tool factory compatible", () => {
+    expect(Object.keys(createChatTools(db, groupId))).toEqual(
+      Object.keys(createFinanceChatTools(db, groupId)),
+    );
   });
 
   it("includes tools for each household finance chat capability", () => {

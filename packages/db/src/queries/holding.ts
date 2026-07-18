@@ -47,14 +47,14 @@ export function buildHoldingWhereCondition(
  * snapshotIdで駆動し、グループでフィルタリング
  */
 export async function getHoldingsWithLatestValues(groupIdParam?: string, db: Db = getDb()) {
-  const latestSnapshot = await getLatestSnapshot(db);
-
-  if (!latestSnapshot) {
-    return [];
-  }
-
   const groupId = await resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
+  if (!groupId) return [];
+
+  const accountIds = await getAccountIdsForGroup(db, groupId);
+  if (accountIds.length === 0) return [];
+
+  const latestSnapshot = await getLatestSnapshot(db);
+  if (!latestSnapshot) return [];
 
   const whereCondition = buildHoldingWhereCondition(latestSnapshot.id, accountIds);
 
@@ -153,14 +153,14 @@ export async function getHoldingsWithDailyChange(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<HoldingWithDailyChange[]> {
-  const latestSnapshot = await getLatestSnapshot(db);
-
-  if (!latestSnapshot) {
-    return [];
-  }
-
   const groupId = await resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
+  if (!groupId) return [];
+
+  const accountIds = await getAccountIdsForGroup(db, groupId);
+  if (accountIds.length === 0) return [];
+
+  const latestSnapshot = await getLatestSnapshot(db);
+  if (!latestSnapshot) return [];
 
   const whereCondition = buildHoldingWhereCondition(
     latestSnapshot.id,

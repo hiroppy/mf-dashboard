@@ -27,6 +27,8 @@ import {
 import { tool } from "ai";
 import { z } from "zod";
 
+const yearMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+
 export function createFinancialTools(db: Db, groupId: string) {
   return {
     getAccountsWithAssets: tool({
@@ -42,7 +44,7 @@ export function createFinancialTools(db: Db, groupId: string) {
     getTransactionsByMonth: tool({
       description: "指定月の全取引を取得",
       inputSchema: z.object({
-        month: z.string().describe("対象月 (YYYY-MM形式)"),
+        month: yearMonthSchema.describe("対象月 (YYYY-MM形式)"),
       }),
       execute: async ({ month }) => await getTransactionsByMonth(month, groupId, db),
     }),
@@ -66,21 +68,21 @@ export function createFinancialTools(db: Db, groupId: string) {
     getMonthlySummaryByMonth: tool({
       description: "指定月の収支サマリーを取得",
       inputSchema: z.object({
-        month: z.string().describe("対象月 (YYYY-MM形式)"),
+        month: yearMonthSchema.describe("対象月 (YYYY-MM形式)"),
       }),
       execute: async ({ month }) => await getMonthlySummaryByMonth(month, groupId, db),
     }),
     getMonthlyCategoryTotals: tool({
       description: "指定月のカテゴリ別支出・収入合計を取得",
       inputSchema: z.object({
-        month: z.string().describe("対象月 (YYYY-MM形式)"),
+        month: yearMonthSchema.describe("対象月 (YYYY-MM形式)"),
       }),
       execute: async ({ month }) => await getMonthlyCategoryTotals(month, groupId, db),
     }),
     getExpenseByFixedVariable: tool({
       description: "指定月の支出を固定費・変動費に分類して取得",
       inputSchema: z.object({
-        month: z.string().describe("対象月 (YYYY-MM形式)"),
+        month: yearMonthSchema.describe("対象月 (YYYY-MM形式)"),
       }),
       execute: async ({ month }) => await getExpenseByFixedVariable(month, groupId, db),
     }),

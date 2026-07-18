@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { ZodType } from "zod";
 import { createFinancialTools } from "./tools";
 
 type AnyMock = (...args: any[]) => any;
@@ -82,6 +83,20 @@ describe("createFinancialTools", () => {
     const tools = createFinancialTools(mockDb, groupId);
     await tools.getTransactionsByMonth.execute!({ month: "2025-01" }, execOpts);
     expect(getTransactionsByMonth).toHaveBeenCalledWith("2025-01", groupId, mockDb);
+  });
+
+  it.each([
+    ["getTransactionsByMonth", "2025-01", true],
+    ["getMonthlySummaryByMonth", "2025-12", true],
+    ["getMonthlyCategoryTotals", "2025", false],
+    ["getExpenseByFixedVariable", "2025-00", false],
+    ["getExpenseByFixedVariable", "2025-13", false],
+    ["getMonthlySummaryByMonth", "%", false],
+  ] as const)("validates YYYY-MM for %s", (toolName, month, success) => {
+    const tools = createFinancialTools(mockDb, groupId);
+
+    const inputSchema = tools[toolName].inputSchema as ZodType;
+    expect(inputSchema.safeParse({ month }).success).toBe(success);
   });
 
   it("should pass limit to getMonthlySummaries", async () => {

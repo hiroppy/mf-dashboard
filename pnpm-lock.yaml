@@ -160,6 +160,9 @@ importers:
       '@nivo/sankey':
         specifier: 0.99.0
         version: 0.99.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      ai:
+        specifier: 7.0.30
+        version: 7.0.30(zod@4.4.3)
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
