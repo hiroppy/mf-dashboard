@@ -1,6 +1,6 @@
 import type { FinanceChatCard as FinanceChatCardData } from "@mf-dashboard/analytics/chat/cards";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { FinanceChatCard } from "./finance-chat-card";
 
 describe("FinanceChatCard", () => {
@@ -36,9 +36,33 @@ describe("FinanceChatCard", () => {
       description: "詳細を確認できます",
       action: { label: "確認する", href: "/insights" },
     },
+    {
+      type: "empty",
+      title: "支出が見つかりません",
+      description: "期間を変えて確認してください",
+      prompts: ["今月の支出を見たい"],
+    },
   ])("renders the $type card", (card) => {
     render(<FinanceChatCard card={card} />);
     expect(screen.getByText(card.title)).not.toBeNull();
+  });
+
+  it("submits an alternative prompt from the empty state", () => {
+    const onPromptSelect = vi.fn<(prompt: string) => void>();
+    render(
+      <FinanceChatCard
+        card={{
+          type: "empty",
+          title: "見つかりません",
+          description: "別の条件をお試しください",
+          prompts: ["先月の支出を見たい"],
+        }}
+        onPromptSelect={onPromptSelect}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "先月の支出を見たい" }));
+    expect(onPromptSelect).toHaveBeenCalledWith("先月の支出を見たい");
   });
 
   it("uses semantic monetary colors and an allowed internal link", () => {

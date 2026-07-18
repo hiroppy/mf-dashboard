@@ -4,13 +4,17 @@ export {
   createAnalysisTools,
   createChatTools,
   createFinanceChatTools,
+  createFinanceNavigationTool,
+  createFinancePresentationTool,
   createFinancialTools,
 } from "./chat/tools.js";
 export {
   actionCardSchema,
   buildFinanceChatHref,
   categoryBreakdownCardSchema,
+  emptyCardSchema,
   financeChatCardSchema,
+  financeChatCardsSchema,
   financeChatHrefSchema,
   insightCardSchema,
   isFinanceChatHrefSafe,
@@ -20,6 +24,7 @@ export {
 export type {
   ActionCard,
   CategoryBreakdownCard,
+  EmptyCard,
   FinanceChatCard,
   InsightCard,
   SummaryCard,

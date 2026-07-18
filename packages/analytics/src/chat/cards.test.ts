@@ -76,6 +76,12 @@ describe("financeChatCardSchema", () => {
         description: "収支ページで確認できます",
         action: { label: "収支を見る", href: "/cf/2026-07" },
       },
+      {
+        type: "empty",
+        title: "支出が見つかりません",
+        description: "期間を変えて確認してください",
+        prompts: ["今月の支出を見たい"],
+      },
     ];
 
     for (const card of cards) expect(financeChatCardSchema.safeParse(card).success).toBe(true);

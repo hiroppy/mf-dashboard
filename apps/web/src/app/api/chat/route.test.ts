@@ -125,6 +125,22 @@ describe("POST /api/chat", () => {
     await expect(response.text()).resolves.toContain("tool-output-available");
   });
 
+  it("defines the MVP card recipes and household improvement criteria", async () => {
+    await POST(request({ messages }));
+
+    const systemPrompt = mocks.streamText.mock.calls[0]![0].system as string;
+    expect(systemPrompt).toContain(
+      "日付別支出には、expenseを検索し、summary、transactionList、action",
+    );
+    expect(systemPrompt).toContain("月次状況には、対象月の収支を取得し、summaryとinsight");
+    expect(systemPrompt).toContain("summary、categoryBreakdown、transactionList");
+    expect(systemPrompt).toContain("手残りと貯蓄率がどれだけ改善するか");
+    expect(systemPrompt).toContain("最新の総資産を取得し、summary");
+    expect(systemPrompt).toContain("emptyだけを提示");
+    expect(systemPrompt).toContain("手残り、貯蓄率、予備資金、負債、資産の集中度");
+    expect(systemPrompt).toMatch(/現在日付は\d{4}-\d{2}-\d{2}（Asia\/Tokyo）/);
+  });
+
   it("rejects malformed JSON", async () => {
     const response = await POST(
       new Request("http://localhost/api/chat", { method: "POST", body: "{" }),

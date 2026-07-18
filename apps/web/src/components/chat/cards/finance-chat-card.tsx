@@ -2,12 +2,13 @@ import {
   isFinanceChatHrefSafe,
   type ActionCard as ActionCardData,
   type CategoryBreakdownCard as CategoryBreakdownCardData,
+  type EmptyCard as EmptyCardData,
   type FinanceChatCard as FinanceChatCardData,
   type InsightCard as InsightCardData,
   type SummaryCard as SummaryCardData,
   type TransactionListCard as TransactionListCardData,
 } from "@mf-dashboard/analytics/chat/cards";
-import { ArrowRight, ChartPie, Lightbulb, ReceiptText, WalletCards } from "lucide-react";
+import { ArrowRight, ChartPie, Inbox, Lightbulb, ReceiptText, WalletCards } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -17,6 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 
 interface FinanceChatCardProps {
   card: FinanceChatCardData;
+  onPromptSelect?: (prompt: string) => void;
 }
 
 interface CardShellProps {
@@ -180,7 +182,36 @@ function ActionCard({ card }: { card: ActionCardData }) {
   );
 }
 
-export function FinanceChatCard({ card }: FinanceChatCardProps) {
+function EmptyCard({
+  card,
+  onPromptSelect,
+}: {
+  card: EmptyCardData;
+  onPromptSelect?: (prompt: string) => void;
+}) {
+  return (
+    <CardShell>
+      <CardHeader>
+        <CardTitle icon={Inbox}>{card.title}</CardTitle>
+        <CardDescription>{card.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {card.prompts.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            className="block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => onPromptSelect?.(prompt)}
+          >
+            {prompt}
+          </button>
+        ))}
+      </CardContent>
+    </CardShell>
+  );
+}
+
+export function FinanceChatCard({ card, onPromptSelect }: FinanceChatCardProps) {
   switch (card.type) {
     case "summary":
       return <SummaryCard card={card} />;
@@ -192,5 +223,7 @@ export function FinanceChatCard({ card }: FinanceChatCardProps) {
       return <InsightCard card={card} />;
     case "action":
       return <ActionCard card={card} />;
+    case "empty":
+      return <EmptyCard card={card} onPromptSelect={onPromptSelect} />;
   }
 }

@@ -125,13 +125,23 @@ export const actionCardSchema = z.object({
   action: actionSchema,
 });
 
+export const emptyCardSchema = z.object({
+  type: z.literal("empty"),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  prompts: z.array(z.string().min(1)).min(1).max(3),
+});
+
 export const financeChatCardSchema = z.discriminatedUnion("type", [
   summaryCardSchema,
   transactionListCardSchema,
   categoryBreakdownCardSchema,
   insightCardSchema,
   actionCardSchema,
+  emptyCardSchema,
 ]);
+
+export const financeChatCardsSchema = z.array(financeChatCardSchema).min(1).max(6);
 
 export type FinanceChatCard = z.infer<typeof financeChatCardSchema>;
 export type SummaryCard = z.infer<typeof summaryCardSchema>;
@@ -139,6 +149,7 @@ export type TransactionListCard = z.infer<typeof transactionListCardSchema>;
 export type CategoryBreakdownCard = z.infer<typeof categoryBreakdownCardSchema>;
 export type InsightCard = z.infer<typeof insightCardSchema>;
 export type ActionCard = z.infer<typeof actionCardSchema>;
+export type EmptyCard = z.infer<typeof emptyCardSchema>;
 
 type FinanceChatRoute =
   | { page: "dashboard"; groupId?: string }

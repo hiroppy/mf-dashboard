@@ -3,6 +3,47 @@ import { describe, expect, it, vi } from "vitest";
 import { ChatProvider } from "./chat-provider";
 import { ChatShell } from "./chat-shell";
 
+const structuredMessage = {
+  id: "assistant-structured",
+  role: "assistant" as const,
+  parts: [
+    { type: "text" as const, text: "6月10日の支出です。" },
+    {
+      type: "tool-presentFinanceCards" as const,
+      toolCallId: "present-a",
+      state: "output-available" as const,
+      input: { cards: [] },
+      output: [
+        {
+          type: "summary" as const,
+          title: "6月10日の支出",
+          metrics: [{ label: "支出合計", amount: -3_200, amountType: "expense" as const }],
+        },
+        {
+          type: "transactionList" as const,
+          title: "支出明細",
+          transactions: [
+            {
+              id: "transaction-a",
+              date: "2026-06-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: -3_200,
+              amountType: "expense" as const,
+            },
+          ],
+        },
+        {
+          type: "action" as const,
+          title: "月の詳細",
+          description: "6月の収支ページを確認できます",
+          action: { label: "詳細を見る", href: "/cf/2026-06" },
+        },
+      ],
+    },
+  ],
+};
+
 describe("ChatShell", () => {
   it("opens, focuses the input, and restores focus after Escape", async () => {
     render(
@@ -67,5 +108,48 @@ describe("ChatShell", () => {
 
     expect(localStorageSpy).not.toHaveBeenCalled();
     localStorageSpy.mockRestore();
+  });
+
+  it("renders validated structured cards and their CTA", () => {
+    render(
+      <ChatProvider initialMessages={[structuredMessage]} initialOpen>
+        <ChatShell />
+      </ChatProvider>,
+    );
+
+    expect(screen.getByText("6月10日の支出です。")).toBeTruthy();
+    expect(screen.getByText("6月10日の支出")).toBeTruthy();
+    expect(screen.getByText("支出明細")).toBeTruthy();
+    expect(screen.getByText("店舗 A")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /詳細を見る/ }).getAttribute("href")).toBe(
+      "/cf/2026-06",
+    );
+  });
+
+  it("ignores unvalidated or unrelated tool output", () => {
+    render(
+      <ChatProvider
+        initialMessages={[
+          {
+            id: "assistant-raw-tool",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-searchTransactions",
+                toolCallId: "search-a",
+                state: "output-available",
+                input: {},
+                output: { transactions: [{ description: "表示しない明細" }] },
+              },
+            ],
+          },
+        ]}
+        initialOpen
+      >
+        <ChatShell />
+      </ChatProvider>,
+    );
+
+    expect(screen.queryByText("表示しない明細")).toBeNull();
   });
 });

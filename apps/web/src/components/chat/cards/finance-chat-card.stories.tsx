@@ -98,6 +98,17 @@ export const Action: Story = {
   },
 };
 
+export const Empty: Story = {
+  args: {
+    card: {
+      type: "empty",
+      title: "支出が見つかりません",
+      description: "期間や条件を変えて、もう一度お試しください。",
+      prompts: ["今月の支出を見たい", "先月の支出を見たい"],
+    },
+  },
+};
+
 export const AllCards: Story = {
   args: { card: summary },
   render: () => (
@@ -107,6 +118,7 @@ export const AllCards: Story = {
       <FinanceChatCard {...CategoryBreakdown.args} />
       <FinanceChatCard {...Insight.args} />
       <FinanceChatCard {...Action.args} />
+      <FinanceChatCard {...Empty.args} />
     </div>
   ),
 };
