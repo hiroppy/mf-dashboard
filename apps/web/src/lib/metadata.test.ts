@@ -2,23 +2,37 @@ import { describe, expect, it } from "vitest";
 import { createMetadataBase } from "./metadata";
 
 describe("createMetadataBase", () => {
-  it("uses the public demo URL when deployment variables are unavailable", () => {
-    expect(createMetadataBase({}).href).toBe("https://mf-dashboard-demo.vercel.app/");
+  it("uses the public demo URL for demo builds", () => {
+    expect(createMetadataBase({ DEMO_MODE: "true", NODE_ENV: "production" }).href).toBe(
+      "https://mf-dashboard-demo.vercel.app/",
+    );
   });
 
   it("prefers the explicitly configured site URL", () => {
     expect(
-      createMetadataBase({
-        NEXT_PUBLIC_SITE_URL: "https://dashboard.example.com/base/",
-        VERCEL_PROJECT_PRODUCTION_URL: "production.example.com",
-        VERCEL_URL: "preview.example.com",
-      }).href,
+      createMetadataBase({ NEXT_PUBLIC_SITE_URL: "https://dashboard.example.com/base/" }).href,
     ).toBe("https://dashboard.example.com/base/");
+  });
+
+  it("uses the configured self-hosted dashboard URL", () => {
+    expect(createMetadataBase({ DASHBOARD_URL: "https://self-hosted.example.com" }).href).toBe(
+      "https://self-hosted.example.com/",
+    );
   });
 
   it("adds HTTPS to Vercel hostnames", () => {
     expect(createMetadataBase({ VERCEL_URL: "preview.example.com" }).href).toBe(
       "https://preview.example.com/",
+    );
+  });
+
+  it("uses localhost during local development", () => {
+    expect(createMetadataBase({ NODE_ENV: "development" }).href).toBe("http://localhost:3000/");
+  });
+
+  it("requires the dashboard URL for self-hosted production", () => {
+    expect(() => createMetadataBase({ NODE_ENV: "production" })).toThrow(
+      "DASHBOARD_URL is required for production metadata",
     );
   });
 });

@@ -98,11 +98,11 @@ openssl rand -hex 32
 | `.env`のキー                                 | 必須 | 内容                                                                     |
 | -------------------------------------------- | ---- | ------------------------------------------------------------------------ |
 | `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する`/api/refresh/`用Bearerトークン                    |
+| `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL           |
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                   |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                              |
-| `DASHBOARD_URL`                              | 任意 | 通知へ記載するダッシュボードのURL                                        |
 | `HOST_UID` / `HOST_GID`                      | 任意 | Linuxで`./data`へ書き込むユーザーのUIDとGID。既定値は`1000:1000`         |
 | `AUTH_STATE_PATH`                            | 任意 | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない |
 
