@@ -2,7 +2,15 @@
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { extractGroupIdFromPath } from "../../lib/url";
 
 interface ChatContextValue {
@@ -34,6 +42,7 @@ export function ChatProvider({
 }: ChatProviderProps) {
   const [isOpen, setIsOpen] = useState(initialOpen);
   const [draft, setDraft] = useState("");
+  const isInFlightRef = useRef(false);
   const pathname = usePathname();
   const explicitGroupId = pathname ? extractGroupIdFromPath(pathname) : null;
   const groupId = explicitGroupId ?? currentGroupId;
@@ -49,8 +58,13 @@ export function ChatProvider({
     setDraft("");
   }, [groupId]);
 
+  useEffect(() => {
+    if (status === "ready" || status === "error") isInFlightRef.current = false;
+  }, [status]);
+
   const addUserMessage = (text: string) => {
-    if (isSubmitting) return;
+    if (isInFlightRef.current || isSubmitting) return;
+    isInFlightRef.current = true;
     void sendMessage({ text }, { body: { groupId } });
   };
 

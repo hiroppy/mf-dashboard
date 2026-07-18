@@ -22,6 +22,21 @@ function ChatSender() {
   return <button onClick={() => addUserMessage("家計を見直したい")}>送信</button>;
 }
 
+function DoubleChatSender() {
+  const { addUserMessage } = useFinanceChat();
+
+  return (
+    <button
+      onClick={() => {
+        addUserMessage("最初の質問");
+        addUserMessage("重複する質問");
+      }}
+    >
+      連続送信
+    </button>
+  );
+}
+
 function DraftEditor() {
   const { draft, setDraft } = useFinanceChat();
 
@@ -56,6 +71,23 @@ describe("ChatProvider", () => {
     );
     expect(mocks.useChat).toHaveBeenCalledWith(
       expect.objectContaining({ id: "finance-chat:group-b" }),
+    );
+  });
+
+  it("blocks duplicate submissions in the same tick", () => {
+    mocks.usePathname.mockReturnValue("/group-b/cf");
+
+    render(
+      <ChatProvider>
+        <DoubleChatSender />
+      </ChatProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "連続送信" }));
+
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      { text: "最初の質問" },
+      { body: { groupId: "group-b" } },
     );
   });
 
