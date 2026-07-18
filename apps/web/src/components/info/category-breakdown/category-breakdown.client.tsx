@@ -112,44 +112,42 @@ export function CategoryBreakdownClient({
             ))}
           </div>
         )}
-        <div className="mt-4 pt-4 border-t flex justify-end items-center">
-          <div className="flex items-center gap-3">
-            <AmountDisplay amount={total} type={type} size="lg" weight="bold" />
-            {totalDelta !== null && totalDelta !== 0 && (
-              <span className="flex items-center gap-0.5 text-sm">
-                {totalDelta > 0 ? (
-                  <TrendingUp
-                    className={cn(
-                      "h-3 w-3",
-                      getAmountColorClass({
-                        value: totalDelta,
-                        type: "balance",
-                        inverse: type === "expense",
-                      }),
-                    )}
-                  />
-                ) : (
-                  <TrendingDown
-                    className={cn(
-                      "h-3 w-3",
-                      getAmountColorClass({
-                        value: totalDelta,
-                        type: "balance",
-                        inverse: type === "expense",
-                      }),
-                    )}
-                  />
-                )}
-                <AmountDisplay
-                  amount={totalDelta}
-                  type="balance"
-                  inverse={type === "expense"}
-                  size="sm"
+        {totalDelta !== null && totalDelta !== 0 && (
+          <div className="mt-4 flex items-center justify-end gap-2 border-t pt-4 text-sm">
+            <span className="text-muted-foreground">前月比</span>
+            <span className="flex items-center gap-0.5">
+              {totalDelta > 0 ? (
+                <TrendingUp
+                  className={cn(
+                    "h-3 w-3",
+                    getAmountColorClass({
+                      value: totalDelta,
+                      type: "balance",
+                      inverse: type === "expense",
+                    }),
+                  )}
                 />
-              </span>
-            )}
+              ) : (
+                <TrendingDown
+                  className={cn(
+                    "h-3 w-3",
+                    getAmountColorClass({
+                      value: totalDelta,
+                      type: "balance",
+                      inverse: type === "expense",
+                    }),
+                  )}
+                />
+              )}
+              <AmountDisplay
+                amount={totalDelta}
+                type="balance"
+                inverse={type === "expense"}
+                size="sm"
+              />
+            </span>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

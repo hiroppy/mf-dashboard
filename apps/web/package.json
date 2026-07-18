@@ -27,6 +27,7 @@
     "@mf-dashboard/db": "workspace:*",
     "@mf-dashboard/meta": "workspace:*",
     "@nivo/sankey": "0.99.0",
+    "@streamdown/cjk": "1.0.3",
     "ai": "7.0.30",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
@@ -37,6 +38,7 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "recharts": "3.8.1",
+    "streamdown": "2.5.0",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {

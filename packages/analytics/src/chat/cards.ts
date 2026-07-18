@@ -109,6 +109,37 @@ export const categoryBreakdownCardSchema = z
   })
   .extend(linkableCardSchema.shape);
 
+const chartSeriesSchema = z.object({
+  name: z.string().min(1),
+  amountType: amountTypeSchema,
+});
+
+export const chartCardSchema = z
+  .object({
+    type: z.literal("chart"),
+    title: z.string().min(1),
+    chartType: z.enum(["line", "bar", "pie"]),
+    series: z.array(chartSeriesSchema).min(1).max(3),
+    data: z
+      .array(
+        z.object({
+          label: z.string().min(1),
+          values: z.array(finiteAmountSchema).min(1).max(3),
+        }),
+      )
+      .min(1)
+      .max(24),
+  })
+  .extend(linkableCardSchema.shape)
+  .superRefine((card, context) => {
+    if (card.chartType === "pie" && card.series.length !== 1) {
+      context.addIssue({ code: "custom", message: "Pie charts support exactly one series" });
+    }
+    if (card.data.some((point) => point.values.length !== card.series.length)) {
+      context.addIssue({ code: "custom", message: "Each data point must match the series count" });
+    }
+  });
+
 export const insightCardSchema = z
   .object({
     type: z.literal("insight"),
@@ -140,6 +171,7 @@ export const financeChatCardSchema = z.discriminatedUnion("type", [
   summaryCardSchema,
   transactionListCardSchema,
   categoryBreakdownCardSchema,
+  chartCardSchema,
   insightCardSchema,
   actionCardSchema,
   emptyCardSchema,
@@ -177,6 +209,7 @@ export type FinanceChatCard = z.infer<typeof financeChatCardSchema>;
 export type SummaryCard = z.infer<typeof summaryCardSchema>;
 export type TransactionListCard = z.infer<typeof transactionListCardSchema>;
 export type CategoryBreakdownCard = z.infer<typeof categoryBreakdownCardSchema>;
+export type ChartCard = z.infer<typeof chartCardSchema>;
 export type InsightCard = z.infer<typeof insightCardSchema>;
 export type ActionCard = z.infer<typeof actionCardSchema>;
 export type EmptyCard = z.infer<typeof emptyCardSchema>;

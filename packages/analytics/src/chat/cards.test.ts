@@ -78,6 +78,19 @@ describe("financeChatCardSchema", () => {
         title: "カテゴリ別支出",
         categories: [{ name: "食費", amount: -1200, amountType: "expense", percentage: 50 }],
       },
+      {
+        type: "chart",
+        title: "収支推移",
+        chartType: "line",
+        series: [
+          { name: "収入", amountType: "income" },
+          { name: "支出", amountType: "expense" },
+        ],
+        data: [
+          { label: "6月", values: [300000, 200000] },
+          { label: "7月", values: [320000, 190000] },
+        ],
+      },
       { type: "insight", title: "支出傾向", description: "前月より減少しています" },
       {
         type: "action",
@@ -133,6 +146,18 @@ describe("financeChatCardSchema", () => {
         title: "支出傾向",
         description: "支出が減少しました",
         amount: 1000,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects chart data that does not match its series", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "収支推移",
+        chartType: "line",
+        series: [{ name: "収入", amountType: "income" }],
+        data: [{ label: "7月", values: [300000, 200000] }],
       }).success,
     ).toBe(false);
   });

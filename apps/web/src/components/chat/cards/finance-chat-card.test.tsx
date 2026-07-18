@@ -29,6 +29,13 @@ describe("FinanceChatCard", () => {
       title: "カテゴリ内訳",
       categories: [{ name: "食費", amount: -1000, amountType: "expense", percentage: 50 }],
     },
+    {
+      type: "chart",
+      title: "収支推移",
+      chartType: "bar",
+      series: [{ name: "支出", amountType: "expense" }],
+      data: [{ label: "7月", values: [219894] }],
+    },
     { type: "insight", title: "インサイト", description: "前月より改善しました" },
     {
       type: "action",

@@ -2,6 +2,7 @@ import {
   isFinanceChatHrefSafe,
   type ActionCard as ActionCardData,
   type CategoryBreakdownCard as CategoryBreakdownCardData,
+  type ChartCard as ChartCardData,
   type EmptyCard as EmptyCardData,
   type FinanceChatCard as FinanceChatCardData,
   type InsightCard as InsightCardData,
@@ -15,6 +16,7 @@ import type { ReactNode } from "react";
 import { cn } from "../../../lib/utils";
 import { AmountDisplay } from "../../ui/amount-display";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
+import { FinanceChatChart } from "./finance-chat-chart";
 
 interface FinanceChatCardProps {
   card: FinanceChatCardData;
@@ -126,7 +128,7 @@ function CategoryBreakdownCard({ card }: { card: CategoryBreakdownCardData }) {
       <CardHeader>
         <CardTitle icon={ChartPie}>{card.title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col items-start gap-4">
         {card.categories.map((category) => (
           <div key={category.name} className="space-y-1.5">
             <div className="flex items-center justify-between gap-4 text-sm">
@@ -146,6 +148,19 @@ function CategoryBreakdownCard({ card }: { card: CategoryBreakdownCardData }) {
             </div>
           </div>
         ))}
+      </CardContent>
+    </CardShell>
+  );
+}
+
+function ChartCard({ card }: { card: ChartCardData }) {
+  return (
+    <CardShell href={card.href}>
+      <CardHeader>
+        <CardTitle icon={ChartPie}>{card.title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <FinanceChatChart card={card} />
       </CardContent>
     </CardShell>
   );
@@ -219,6 +234,8 @@ export function FinanceChatCard({ card, onPromptSelect }: FinanceChatCardProps) 
       return <TransactionListCard card={card} />;
     case "categoryBreakdown":
       return <CategoryBreakdownCard card={card} />;
+    case "chart":
+      return <ChartCard card={card} />;
     case "insight":
       return <InsightCard card={card} />;
     case "action":

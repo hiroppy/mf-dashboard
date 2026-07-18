@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   jwtVerify: vi.fn<AnyMock>(),
   remoteJwks: vi.fn<AnyMock>(),
   safeValidateUIMessages: vi.fn<AnyMock>(),
+  smoothStream: vi.fn<AnyMock>(),
   stepCountIs: vi.fn<AnyMock>(),
   streamText: vi.fn<AnyMock>(),
   toUIMessageStreamResponse: vi.fn<AnyMock>(),
@@ -46,6 +47,7 @@ vi.mock("ai", () => ({
   getToolName: mocks.getToolName,
   isToolUIPart: mocks.isToolUIPart,
   safeValidateUIMessages: mocks.safeValidateUIMessages,
+  smoothStream: mocks.smoothStream,
   stepCountIs: mocks.stepCountIs,
   streamText: mocks.streamText,
 }));
@@ -94,6 +96,7 @@ describe("POST /api/chat", () => {
     mocks.getToolName.mockImplementation((part) => part.type.replace(/^tool-/, ""));
     mocks.createFinanceChatTools.mockReturnValue(tools);
     mocks.convertToModelMessages.mockResolvedValue(modelMessages);
+    mocks.smoothStream.mockReturnValue("smooth-transform");
     mocks.stepCountIs.mockReturnValue("finite-stop-condition");
     mocks.toUIMessageStreamResponse.mockReturnValue(
       new Response('data: {"type":"tool-output-available"}\n\n', {
@@ -147,10 +150,16 @@ describe("POST /api/chat", () => {
     );
     expect(systemPrompt).toContain("月次状況には、対象月の収支を取得し、summaryとinsight");
     expect(systemPrompt).toContain("summary、categoryBreakdown、transactionList");
-    expect(systemPrompt).toContain("手残りと貯蓄率がどれだけ改善するか");
+    expect(systemPrompt).toContain("カードは原則2枚以内");
+    expect(systemPrompt).toContain("transactionListは、ユーザーが取引、明細");
+    expect(systemPrompt).toContain("比較・推移・構成比を文章や数値だけより明確に");
+    expect(systemPrompt).toContain("必要な指標が一括で得られるgetFinancialMetricsを優先");
+    expect(systemPrompt).toContain("互いに依存しないツールは同じステップで並列");
     expect(systemPrompt).toContain("最新の総資産を取得し、summary");
     expect(systemPrompt).toContain("emptyだけを提示");
     expect(systemPrompt).toContain("手残り、貯蓄率、予備資金、負債、資産の集中度");
+    expect(systemPrompt).toContain("カードだけでユーザーの質問に答えられるよう");
+    expect(systemPrompt).toContain("summaryは主要な数値、insightは数値の再掲ではなく解釈");
     expect(systemPrompt).toMatch(/現在日付は\d{4}-\d{2}-\d{2}（Asia\/Tokyo）/);
   });
 

@@ -19,10 +19,9 @@ export async function FixedVariableBreakdown({ month, groupId }: FixedVariableBr
       <CardHeader>
         <CardTitle icon={SlidersHorizontal}>固定費 vs 変動費</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Bar visualization */}
+      <CardContent className="space-y-4">
         <div className="space-y-2">
-          <div className="flex h-8 rounded-lg overflow-hidden">
+          <div className="flex h-3 overflow-hidden rounded-full bg-muted">
             {fixedPct > 0 && <div className="bg-expense-fixed" style={{ width: `${fixedPct}%` }} />}
             {variablePct > 0 && (
               <div className="bg-expense-variable" style={{ width: `${variablePct}%` }} />
@@ -30,67 +29,32 @@ export async function FixedVariableBreakdown({ month, groupId }: FixedVariableBr
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Fixed expenses */}
-          <div>
-            <div className="font-medium text-sm mb-2 flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-expense-fixed" />
-              <div className="flex items-center justify-between w-full">
-                <span>固定費</span>
-                <AmountDisplay
-                  amount={fixed.total}
-                  size="sm"
-                  percentage={fixedPct}
-                  percentageDecimals={0}
-                />
-              </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-background p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <span className="size-2.5 rounded-sm bg-expense-fixed" />
+              <span>固定費</span>
             </div>
-            {fixed.categories.length > 0 ? (
-              <ul className="space-y-1">
-                {fixed.categories.map((item) => (
-                  <li key={item.category} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{item.category}</span>
-                    <AmountDisplay amount={item.amount} size="sm" />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">データなし</p>
-            )}
+            <AmountDisplay
+              amount={fixed.total}
+              size="sm"
+              weight="semibold"
+              percentage={fixedPct}
+              percentageDecimals={0}
+            />
           </div>
-
-          {/* Variable expenses */}
-          <div>
-            <div className="font-medium text-sm mb-2 flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-expense-variable" />
-              <div className="flex items-center justify-between w-full">
-                <span>変動費</span>
-                <AmountDisplay
-                  amount={variable.total}
-                  size="sm"
-                  percentage={variablePct}
-                  percentageDecimals={0}
-                />
-              </div>
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-background p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <span className="size-2.5 rounded-sm bg-expense-variable" />
+              <span>変動費</span>
             </div>
-
-            {variable.categories.length > 0 ? (
-              <ul className="space-y-1">
-                {variable.categories.slice(0, 10).map((item) => (
-                  <li key={item.category} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{item.category}</span>
-                    <AmountDisplay amount={item.amount} size="sm" />
-                  </li>
-                ))}
-                {variable.categories.length > 10 && (
-                  <li className="text-sm text-muted-foreground">
-                    他 {variable.categories.length - 10} カテゴリ
-                  </li>
-                )}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">データなし</p>
-            )}
+            <AmountDisplay
+              amount={variable.total}
+              size="sm"
+              weight="semibold"
+              percentage={variablePct}
+              percentageDecimals={0}
+            />
           </div>
         </div>
       </CardContent>

@@ -7,7 +7,7 @@ import { Pagination } from "../../ui/pagination";
 import { useDateFilter } from "../date-filter-context";
 import { TransactionDesktopView } from "./transaction-desktop-view";
 import { TransactionFilters } from "./transaction-filters";
-import { TransactionKpiSummary } from "./transaction-kpi-summary";
+import { shouldShowTransactionKpiTotals, TransactionKpiSummary } from "./transaction-kpi-summary";
 import { TransactionMobileView } from "./transaction-mobile-view";
 import type { Transaction } from "./types";
 import { useTransactionFiltering } from "./use-transaction-filtering";
@@ -85,6 +85,14 @@ export function TransactionTableClient({
     selectedDate,
     pageSize,
   });
+  const showKpiTotals = shouldShowTransactionKpiTotals({
+    isMonthView,
+    selectedDate,
+    searchText,
+    selectedCategories,
+    selectedTypes,
+    selectedAccounts,
+  });
 
   return (
     <Card ref={scrollTargetRef} className="scroll-mt-20">
@@ -99,7 +107,7 @@ export function TransactionTableClient({
         <CardTitle icon={ListOrdered}>詳細一覧</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <TransactionKpiSummary kpi={kpi} />
+        <TransactionKpiSummary kpi={kpi} showTotals={showKpiTotals} />
 
         <TransactionFilters
           searchText={searchText}
