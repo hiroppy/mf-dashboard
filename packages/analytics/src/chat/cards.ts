@@ -141,7 +141,33 @@ export const financeChatCardSchema = z.discriminatedUnion("type", [
   emptyCardSchema,
 ]);
 
-export const financeChatCardsSchema = z.array(financeChatCardSchema).min(1).max(6);
+export const financeChatCardsSchema = z
+  .array(financeChatCardSchema)
+  .min(1)
+  .max(6)
+  .superRefine((cards, context) => {
+    const hasEmptyCard = cards.some((card) => card.type === "empty");
+
+    if (hasEmptyCard && (cards.length !== 1 || cards[0]?.type !== "empty")) {
+      context.addIssue({
+        code: "custom",
+        message: "An empty response must contain exactly one empty card",
+      });
+      return;
+    }
+
+    const hasAction = cards.some((card) => {
+      if ("href" in card && card.href !== undefined) return true;
+      return "action" in card && card.action !== undefined;
+    });
+
+    if (!hasEmptyCard && !hasAction) {
+      context.addIssue({
+        code: "custom",
+        message: "A non-empty response must contain at least one CTA",
+      });
+    }
+  });
 
 export type FinanceChatCard = z.infer<typeof financeChatCardSchema>;
 export type SummaryCard = z.infer<typeof summaryCardSchema>;

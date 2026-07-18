@@ -1,10 +1,12 @@
 import { createHmac } from "node:crypto";
+import { financeChatCardsSchema, type FinanceChatCard } from "@mf-dashboard/analytics/chat/cards";
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
 import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import {
   consumeStream,
   convertToModelMessages,
+  getToolName,
   isToolUIPart,
   safeValidateUIMessages,
   stepCountIs,
@@ -60,8 +62,25 @@ function getMessageText(message: UIMessage): string {
     .join("");
 }
 
-function signAssistantMessage(groupId: string, text: string): string {
-  return createHmac("sha256", process.env.AI_API_KEY!).update(`${groupId}\0${text}`).digest("hex");
+function getPresentationCards(message: UIMessage): FinanceChatCard[] {
+  return message.parts.flatMap((part) => {
+    if (
+      !isToolUIPart(part) ||
+      getToolName(part) !== "presentFinanceCards" ||
+      part.state !== "output-available"
+    ) {
+      return [];
+    }
+
+    const result = financeChatCardsSchema.safeParse(part.output);
+    return result.success ? result.data : [];
+  });
+}
+
+function signAssistantMessage(groupId: string, text: string, cards: FinanceChatCard[]): string {
+  return createHmac("sha256", process.env.AI_API_KEY!)
+    .update(`${groupId}\0${text}\0${JSON.stringify(cards)}`)
+    .digest("hex");
 }
 
 function hasValidAssistantSignature(message: UIMessage, groupId: string): boolean {
@@ -71,7 +90,8 @@ function hasValidAssistantSignature(message: UIMessage, groupId: string): boolea
     typeof metadata === "object" &&
     metadata !== null &&
     SIGNATURE_METADATA_KEY in metadata &&
-    metadata[SIGNATURE_METADATA_KEY] === signAssistantMessage(groupId, getMessageText(message))
+    metadata[SIGNATURE_METADATA_KEY] ===
+      signAssistantMessage(groupId, getMessageText(message), getPresentationCards(message))
   );
 }
 
@@ -82,12 +102,23 @@ function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMess
         message.role === "user" ||
         (message.role === "assistant" && hasValidAssistantSignature(message, groupId)),
     )
-    .map((message) => ({
-      ...message,
-      parts: message.parts.filter((part) =>
-        message.role === "assistant" ? part.type === "text" : !isToolUIPart(part),
-      ),
-    }))
+    .map((message) => {
+      if (message.role !== "assistant") {
+        return { ...message, parts: message.parts.filter((part) => !isToolUIPart(part)) };
+      }
+
+      const cards = getPresentationCards(message);
+      const parts = message.parts.filter((part) => part.type === "text");
+
+      if (cards.length > 0) {
+        parts.push({
+          type: "text",
+          text: `\n\n直前の回答で表示したカード: ${JSON.stringify(cards)}`,
+        });
+      }
+
+      return { ...message, parts };
+    })
     .filter((message) => message.parts.length > 0);
 }
 
@@ -162,6 +193,7 @@ export async function POST(request: Request): Promise<Response> {
   const tools = createFinanceChatTools(db, group.id);
   const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
   let assistantText = "";
+  let assistantCards: FinanceChatCard[] = [];
   const result = streamText({
     abortSignal: request.signal,
     model,
@@ -169,6 +201,10 @@ export async function POST(request: Request): Promise<Response> {
     messages: await convertToModelMessages(modelInputMessages, { tools }),
     onChunk: ({ chunk }) => {
       if (chunk.type === "text-delta") assistantText += chunk.text;
+      if (chunk.type === "tool-result" && chunk.toolName === "presentFinanceCards") {
+        const parsedCards = financeChatCardsSchema.safeParse(chunk.output);
+        if (parsedCards.success) assistantCards.push(...parsedCards.data);
+      }
     },
     tools,
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
@@ -178,7 +214,9 @@ export async function POST(request: Request): Promise<Response> {
     consumeSseStream: consumeStream,
     messageMetadata: ({ part }) =>
       part.type === "finish"
-        ? { [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText) }
+        ? {
+            [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText, assistantCards),
+          }
         : undefined,
     originalMessages: validation.data,
     onError: () => "回答の生成中にエラーが発生しました。",

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentGroup: vi.fn<AnyMock>(),
   getDb: vi.fn<AnyMock>(),
   getModel: vi.fn<AnyMock>(),
+  getToolName: vi.fn<AnyMock>(),
   isToolUIPart: vi.fn<AnyMock>(),
   isDatabaseAvailable: vi.fn<AnyMock>(),
   isLLMEnabled: vi.fn<AnyMock>(),
@@ -39,6 +40,7 @@ vi.mock("@mf-dashboard/db", () => ({
 vi.mock("ai", () => ({
   consumeStream: mocks.consumeStream,
   convertToModelMessages: mocks.convertToModelMessages,
+  getToolName: mocks.getToolName,
   isToolUIPart: mocks.isToolUIPart,
   safeValidateUIMessages: mocks.safeValidateUIMessages,
   stepCountIs: mocks.stepCountIs,
@@ -79,6 +81,7 @@ describe("POST /api/chat", () => {
     mocks.isToolUIPart.mockImplementation(
       (part) => part.type === "dynamic-tool" || part.type.startsWith("tool-"),
     );
+    mocks.getToolName.mockImplementation((part) => part.type.replace(/^tool-/, ""));
     mocks.createFinanceChatTools.mockReturnValue(tools);
     mocks.convertToModelMessages.mockResolvedValue(modelMessages);
     mocks.stepCountIs.mockReturnValue("finite-stop-condition");
@@ -294,10 +297,21 @@ describe("POST /api/chat", () => {
     );
   });
 
-  it("keeps signed assistant text in model history without tool outputs", async () => {
+  it("keeps signed assistant text and presentation context without raw data tool outputs", async () => {
     await POST(request({ groupId: "group-b", messages }));
     const streamOptions = mocks.streamText.mock.calls[0]![0];
     streamOptions.onChunk({ chunk: { type: "text-delta", text: "支出を見直しましょう。" } });
+    const cards = [
+      {
+        type: "action" as const,
+        title: "詳細を確認",
+        description: "収支ページで確認できます",
+        action: { label: "収支を見る", href: "/group-b/cf/2026-07" },
+      },
+    ];
+    streamOptions.onChunk({
+      chunk: { type: "tool-result", toolName: "presentFinanceCards", output: cards },
+    });
     const responseOptions = mocks.toUIMessageStreamResponse.mock.calls[0]![0];
     const metadata = responseOptions.messageMetadata({ part: { type: "finish" } });
     const signedAssistantMessage: UIMessage = {
@@ -312,6 +326,13 @@ describe("POST /api/chat", () => {
           state: "output-available",
           input: { query: "食費" },
           output: { transactions: [{ amount: 1_000 }] },
+        },
+        {
+          type: "tool-presentFinanceCards",
+          toolCallId: "tool-call-b",
+          state: "output-available",
+          input: { cards },
+          output: cards,
         },
       ],
     };
@@ -330,10 +351,35 @@ describe("POST /api/chat", () => {
         messages[0],
         {
           ...signedAssistantMessage,
-          parts: [{ type: "text", text: "支出を見直しましょう。" }],
+          parts: [
+            { type: "text", text: "支出を見直しましょう。" },
+            {
+              type: "text",
+              text: `\n\n直前の回答で表示したカード: ${JSON.stringify(cards)}`,
+            },
+          ],
         },
         followUpMessages[2],
       ],
+      { tools },
+    );
+
+    const tamperedMessages = structuredClone(followUpMessages);
+    const presentationPart = tamperedMessages[1]!.parts[2];
+    if (presentationPart?.type === "tool-presentFinanceCards") {
+      presentationPart.output = [
+        {
+          ...cards[0],
+          action: { ...cards[0]!.action, href: "/group-a/cf/2026-07" },
+        },
+      ];
+    }
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: tamperedMessages });
+
+    await POST(request({ groupId: "group-b", messages: tamperedMessages }));
+
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [tamperedMessages[0], tamperedMessages[2]],
       { tools },
     );
   });

@@ -17,7 +17,7 @@ export function createFinanceChatTools(db: Db, groupId: string) {
   return {
     searchTransactions: createTransactionSearchTool(db, groupId),
     getFinanceDashboardRoute: createFinanceNavigationTool(groupId),
-    presentFinanceCards: createFinancePresentationTool(),
+    presentFinanceCards: createFinancePresentationTool(groupId),
     ...createFinancialTools(db, groupId),
     ...createAnalysisTools(db, groupId),
   };

@@ -1,14 +1,36 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { financeChatCardsSchema } from "./cards";
+import { buildFinanceChatHref, financeChatCardsSchema, type FinanceChatCard } from "./cards";
 
-export const financePresentationInputSchema = z.object({ cards: financeChatCardsSchema });
+function getCardHrefs(cards: FinanceChatCard[]): string[] {
+  return cards.flatMap((card) => {
+    if ("href" in card && card.href !== undefined) return [card.href];
+    if ("action" in card && card.action !== undefined) return [card.action.href];
+    return [];
+  });
+}
 
-export function createFinancePresentationTool() {
+export function createFinancePresentationInputSchema(groupId: string) {
+  const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
+
+  return z.object({ cards: financeChatCardsSchema }).superRefine(({ cards }, context) => {
+    for (const href of getCardHrefs(cards)) {
+      if (href !== groupHref && !href.startsWith(`${groupHref}/`)) {
+        context.addIssue({
+          code: "custom",
+          message: "CTA routes must belong to the current group",
+          path: ["cards"],
+        });
+      }
+    }
+  });
+}
+
+export function createFinancePresentationTool(groupId: string) {
   return tool({
     description:
       "取得済みの家計データを検証済みの画面カードとして提示する。必要なデータ取得後、ユーザーへの回答ごとに1回だけ呼び出す。データがない場合は推測せずemptyカードを使う",
-    inputSchema: financePresentationInputSchema,
+    inputSchema: createFinancePresentationInputSchema(groupId),
     execute: async ({ cards }) => cards,
   });
 }
