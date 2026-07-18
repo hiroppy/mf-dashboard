@@ -315,6 +315,8 @@ describe("searchTransactions", () => {
 
     expect(result).toEqual([
       expect.objectContaining({
+        accountId: targetAccountId,
+        accountName: "Bank A",
         amount: 6000,
         type: "expense",
         category: "支出",
@@ -323,6 +325,7 @@ describe("searchTransactions", () => {
         isExcludedFromCalculation: false,
       }),
     ]);
+    expect(result.every(({ accountId }) => accountId === targetAccountId)).toBe(true);
   });
 
   it("通常明細と重複する対象groupへの振替支出を除外する", async () => {

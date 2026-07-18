@@ -102,6 +102,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     transferTargetAccountId: number;
   };
   interface TransferLookups {
+    accountNamesById: Map<number, string>;
     groupsByAccountId: Map<number, Set<string>>;
     normalTransactionKeys: Set<string>;
   }
@@ -124,18 +125,51 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
         ]),
       ),
     ];
+    const accountNamesById = new Map<number, string>();
     const groupsByAccountId = new Map<number, Set<string>>();
     const normalTransactionKeys = new Set<string>();
 
     if (transferAccountIds.length === 0) {
-      return { groupsByAccountId, normalTransactionKeys };
+      return { accountNamesById, groupsByAccountId, normalTransactionKeys };
     }
 
-    const groupAccounts = await db
-      .select({ accountId: schema.groupAccounts.accountId, groupId: schema.groupAccounts.groupId })
-      .from(schema.groupAccounts)
-      .where(inArray(schema.groupAccounts.accountId, transferAccountIds))
-      .all();
+    const dates = [...new Set(transfers.map((transaction) => transaction.date))];
+    const amounts = [...new Set(transfers.map((transaction) => transaction.amount))];
+    const [groupAccounts, transferAccounts, normalTransactions] = await Promise.all([
+      db
+        .select({
+          accountId: schema.groupAccounts.accountId,
+          groupId: schema.groupAccounts.groupId,
+        })
+        .from(schema.groupAccounts)
+        .where(inArray(schema.groupAccounts.accountId, transferAccountIds))
+        .all(),
+      db
+        .select({ id: schema.accounts.id, name: schema.accounts.name })
+        .from(schema.accounts)
+        .where(inArray(schema.accounts.id, transferAccountIds))
+        .all(),
+      db
+        .select({
+          accountId: schema.transactions.accountId,
+          date: schema.transactions.date,
+          amount: schema.transactions.amount,
+        })
+        .from(schema.transactions)
+        .where(
+          and(
+            inArray(schema.transactions.accountId, transferAccountIds),
+            inArray(schema.transactions.date, dates),
+            inArray(schema.transactions.amount, amounts),
+            sql`${schema.transactions.type} IN ('income', 'expense')`,
+          ),
+        )
+        .all(),
+    ]);
+
+    for (const account of transferAccounts) {
+      accountNamesById.set(account.id, account.name);
+    }
 
     for (const { accountId, groupId } of groupAccounts) {
       if (groupId === "0") continue;
@@ -144,25 +178,6 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       groupsByAccountId.set(accountId, groups);
     }
 
-    const dates = [...new Set(transfers.map((transaction) => transaction.date))];
-    const amounts = [...new Set(transfers.map((transaction) => transaction.amount))];
-    const normalTransactions = await db
-      .select({
-        accountId: schema.transactions.accountId,
-        date: schema.transactions.date,
-        amount: schema.transactions.amount,
-      })
-      .from(schema.transactions)
-      .where(
-        and(
-          inArray(schema.transactions.accountId, transferAccountIds),
-          inArray(schema.transactions.date, dates),
-          inArray(schema.transactions.amount, amounts),
-          sql`${schema.transactions.type} IN ('income', 'expense')`,
-        ),
-      )
-      .all();
-
     for (const transaction of normalTransactions) {
       if (transaction.accountId === null) continue;
       normalTransactionKeys.add(
@@ -170,7 +185,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       );
     }
 
-    return { groupsByAccountId, normalTransactionKeys };
+    return { accountNamesById, groupsByAccountId, normalTransactionKeys };
   };
 
   const transformTransaction = (
@@ -218,6 +233,10 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
       seenTransfers.add(transferKey);
       return {
         ...transaction,
+        accountId: transaction.transferTargetAccountId,
+        accountName:
+          lookups.accountNamesById.get(transaction.transferTargetAccountId) ??
+          transaction.transferTarget,
         type: "expense",
         category: "支出",
         subCategory: "振替出金",
