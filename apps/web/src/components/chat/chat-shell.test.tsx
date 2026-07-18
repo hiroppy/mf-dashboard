@@ -324,7 +324,7 @@ describe("ChatShell", () => {
 
     const { rerender } = render(<ChatShell />);
 
-    expect(screen.queryByText("6月10日の支出です。")).toBeNull();
+    expect(screen.getByText("6月10日の支出です。")).toBeTruthy();
     expect(screen.queryByText("支出合計")).toBeNull();
 
     chatState.isSubmitting = false;

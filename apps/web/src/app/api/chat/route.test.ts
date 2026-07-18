@@ -74,6 +74,21 @@ function request(body: unknown): Request {
   });
 }
 
+async function runTextTransform(transform: AnyMock, chunks: unknown[]) {
+  const stream = transform({ stopStream: vi.fn<() => void>(), tools });
+  const reader = stream.readable.getReader();
+  const writer = stream.writable.getWriter();
+  const readPromise = (async () => {
+    while (!(await reader.read()).done) {
+      // Drain output so writes cannot block on stream backpressure.
+    }
+  })();
+
+  for (const chunk of chunks) await writer.write(chunk);
+  await writer.close();
+  await readPromise;
+}
+
 describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -369,7 +384,15 @@ describe("POST /api/chat", () => {
   it("keeps signed assistant text and presentation context without raw data tool outputs", async () => {
     await POST(request({ groupId: "group-b", messages }));
     const streamOptions = mocks.streamText.mock.calls[0]![0];
-    streamOptions.onChunk({ chunk: { type: "text-delta", text: "支出を見直しましょう。" } });
+    await runTextTransform(streamOptions.experimental_transform[0], [
+      { type: "text-start", id: "text-a" },
+      {
+        type: "text-delta",
+        id: "text-a",
+        text: "[支出](https://attacker.example/anything)を見直しましょう。",
+      },
+      { type: "text-end", id: "text-a" },
+    ]);
     const cards = [
       {
         type: "action" as const,
@@ -456,7 +479,11 @@ describe("POST /api/chat", () => {
   it("does not preserve cards from multiple presentation calls in follow-up context", async () => {
     await POST(request({ groupId: "group-b", messages }));
     const streamOptions = mocks.streamText.mock.calls[0]![0];
-    streamOptions.onChunk({ chunk: { type: "text-delta", text: "確認しました。" } });
+    await runTextTransform(streamOptions.experimental_transform[0], [
+      { type: "text-start", id: "text-a" },
+      { type: "text-delta", id: "text-a", text: "確認しました。" },
+      { type: "text-end", id: "text-a" },
+    ]);
     const cards = [
       {
         type: "action" as const,

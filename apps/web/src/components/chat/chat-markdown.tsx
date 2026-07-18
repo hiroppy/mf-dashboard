@@ -5,37 +5,40 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Streamdown, type Components } from "streamdown";
 
-const components: Components = {
-  a: ({ children, href }) => {
-    const className = "font-medium underline underline-offset-2";
+function createComponents(allowedHrefs: ReadonlySet<string>): Components {
+  return {
+    a: ({ children, href }) => {
+      const className = "font-medium underline underline-offset-2";
 
-    if (href?.startsWith("/") && !href.startsWith("//")) {
-      return (
-        <Link className={className} href={href as Route}>
-          {children}
-        </Link>
-      );
-    }
+      if (href && allowedHrefs.has(href)) {
+        return (
+          <Link className={className} href={href as Route}>
+            {children}
+          </Link>
+        );
+      }
 
-    return (
-      <a className={className} href={href} target="_blank" rel="noopener noreferrer">
-        {children}
-      </a>
-    );
-  },
-  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-};
+      return <span>{children}</span>;
+    },
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  };
+}
 
 interface ChatMarkdownProps {
   children: string;
   isAnimating?: boolean;
+  allowedHrefs?: readonly string[];
 }
 
-export function ChatMarkdown({ children, isAnimating = false }: ChatMarkdownProps) {
+export function ChatMarkdown({
+  children,
+  isAnimating = false,
+  allowedHrefs = [],
+}: ChatMarkdownProps) {
   return (
     <Streamdown
       animated
-      components={components}
+      components={createComponents(new Set(allowedHrefs))}
       isAnimating={isAnimating}
       mode={isAnimating ? "streaming" : "static"}
       plugins={{ cjk }}

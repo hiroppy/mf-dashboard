@@ -20,6 +20,7 @@ describe("next config", () => {
 
     expect(config.output).toBe("export");
     expect(config.pageExtensions).toEqual(["tsx"]);
+    expect(config.env?.NEXT_PUBLIC_STATIC_DEMO_BUILD).toBe("true");
   });
 
   it("keeps TypeScript route handlers available for demo development", async () => {
@@ -27,6 +28,7 @@ describe("next config", () => {
 
     expect(config.output).toBe("standalone");
     expect(config.pageExtensions).toEqual(["tsx", "ts"]);
+    expect(config.env?.NEXT_PUBLIC_STATIC_DEMO_BUILD).toBe("false");
   });
 
   it("keeps TypeScript route handlers available for runtime server builds", async () => {

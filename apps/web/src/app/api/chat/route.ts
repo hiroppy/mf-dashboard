@@ -248,12 +248,16 @@ export async function POST(request: Request): Promise<Response> {
   const presentationOutputs: unknown[] = [];
   const result = streamText({
     abortSignal: request.signal,
-    experimental_transform: [createFinanceChatLinkSanitizer(group.id), smoothStream()],
+    experimental_transform: [
+      createFinanceChatLinkSanitizer(group.id, (text) => {
+        assistantText += text;
+      }),
+      smoothStream(),
+    ],
     model,
     system: getSystemPrompt(),
     messages: await convertToModelMessages(modelInputMessages, { tools }),
     onChunk: ({ chunk }) => {
-      if (chunk.type === "text-delta") assistantText += chunk.text;
       if (chunk.type === "tool-result" && chunk.toolName === "presentFinanceCards") {
         presentationOutputs.push(chunk.output);
       }

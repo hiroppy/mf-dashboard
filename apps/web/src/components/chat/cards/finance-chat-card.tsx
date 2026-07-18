@@ -130,7 +130,7 @@ function CategoryBreakdownCard({ card }: { card: CategoryBreakdownCardData }) {
       </CardHeader>
       <CardContent className="flex flex-col items-start gap-4">
         {card.categories.map((category) => (
-          <div key={category.name} className="space-y-1.5">
+          <div key={category.name} className="w-full min-w-0 space-y-1.5">
             <div className="flex items-center justify-between gap-4 text-sm">
               <span>{category.name}</span>
               <div className="flex items-center gap-2">

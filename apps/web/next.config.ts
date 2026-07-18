@@ -17,6 +17,9 @@ export default function createNextConfig(phase: string): NextConfig {
     output: isStaticDemoBuild ? "export" : "standalone",
     outputFileTracingRoot: join(import.meta.dirname, "../.."),
     pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
+    env: {
+      NEXT_PUBLIC_STATIC_DEMO_BUILD: isStaticDemoBuild ? "true" : "false",
+    },
     typedRoutes: true,
     images: {
       unoptimized: true,

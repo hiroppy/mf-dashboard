@@ -5,7 +5,7 @@ import { ChatMarkdown } from "./chat-markdown";
 describe("ChatMarkdown", () => {
   it("renders Markdown structure and safe dashboard links", () => {
     render(
-      <ChatMarkdown>{`支出は以下の通りです：
+      <ChatMarkdown allowedHrefs={["/group-a/cf/2026-06"]}>{`支出は以下の通りです：
 
 1. **家賃**: ¥75,000
 2. **税金**: ¥15,000
@@ -20,13 +20,32 @@ describe("ChatMarkdown", () => {
     );
   });
 
-  it("renders external links", () => {
+  it("renders unverified external links as plain text", () => {
     render(<ChatMarkdown>{"[外部リンク](https://example.com/)"}</ChatMarkdown>);
 
-    const link = screen.getByRole("link", { name: "外部リンク" });
-    expect(link.getAttribute("href")).toBe("https://example.com/");
-    expect(link.getAttribute("target")).toBe("_blank");
-    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(screen.queryByRole("link", { name: "外部リンク" })).toBeNull();
+    expect(screen.getByText("外部リンク")).toBeTruthy();
+  });
+
+  it.each([
+    "www.example.com",
+    "user@example.com",
+    "[外部リンク][external]\n\n[external]: https://example.com/",
+  ])("renders GFM and reference links as plain text: %s", (markdown) => {
+    render(<ChatMarkdown>{markdown}</ChatMarkdown>);
+
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("renders an unverified internal route as plain text", () => {
+    render(
+      <ChatMarkdown allowedHrefs={["/group-a/cf/2026-06"]}>
+        {"[別グループ](/group-b/cf/2026-06)"}
+      </ChatMarkdown>,
+    );
+
+    expect(screen.queryByRole("link", { name: "別グループ" })).toBeNull();
+    expect(screen.getByText("別グループ")).toBeTruthy();
   });
 
   it("renders strong emphasis next to Japanese text", () => {

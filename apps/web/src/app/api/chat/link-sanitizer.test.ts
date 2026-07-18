@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { sanitizeFinanceChatLinks, splitCompleteFinanceChatText } from "./link-sanitizer";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createFinanceChatLinkSanitizer,
+  sanitizeFinanceChatLinks,
+  splitCompleteFinanceChatText,
+} from "./link-sanitizer";
 
 describe("sanitizeFinanceChatLinks", () => {
   it("keeps routes returned by the navigation tool", () => {
@@ -34,6 +38,15 @@ describe("sanitizeFinanceChatLinks", () => {
       ),
     ).toBe("詳細を見る");
   });
+
+  it("does not redirect an unmatched destination to the only verified route", () => {
+    expect(
+      sanitizeFinanceChatLinks(
+        "[詳細を見る](https://attacker.example/anything)",
+        new Set(["/group-a/cf/2026-07"]),
+      ),
+    ).toBe("詳細を見る");
+  });
 });
 
 describe("splitCompleteFinanceChatText", () => {
@@ -56,5 +69,41 @@ describe("splitCompleteFinanceChatText", () => {
       complete: "## サマリー\n",
       pending: "次の行",
     });
+  });
+});
+
+describe("createFinanceChatLinkSanitizer", () => {
+  it("flushes sanitized buffered text before an error chunk", async () => {
+    const onSanitizedText = vi.fn<(text: string) => void>();
+    const transform = createFinanceChatLinkSanitizer(
+      "group-a",
+      onSanitizedText,
+    )({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: unknown[] = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({ type: "text-delta", id: "text-a", text: "生成途中" });
+    await writer.write({ type: "error", error: new Error("provider failed") });
+    await writer.close();
+    await readPromise;
+
+    expect(onSanitizedText).toHaveBeenCalledWith("生成途中");
+    expect(chunks).toEqual([
+      { type: "text-start", id: "text-a" },
+      { type: "text-delta", id: "text-a", text: "生成途中" },
+      { type: "error", error: expect.any(Error) },
+    ]);
   });
 });

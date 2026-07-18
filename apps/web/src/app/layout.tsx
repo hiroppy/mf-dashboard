@@ -87,7 +87,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </div>
       </SidebarProvider>
     );
-    if (!isLLMEnabled()) {
+    if (!isLLMEnabled() || process.env.NEXT_PUBLIC_STATIC_DEMO_BUILD === "true") {
       content = dashboard;
     } else {
       const currentGroup = await getCurrentGroup();

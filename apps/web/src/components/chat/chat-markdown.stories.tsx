@@ -18,6 +18,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {
+    allowedHrefs: ["/group-a/cf/2026-06"],
     children: `先月の高い出費は以下の通りです：
 
 1. **家賃**: ¥75,000
@@ -27,9 +28,9 @@ export const Default: Story = {
   },
 };
 
-export const ExternalLink: Story = {
+export const BlockedExternalLink: Story = {
   args: {
-    children: "外部サイトの[リンク](https://example.com/)も表示します。",
+    children: "未検証の外部サイトは[リンク](https://example.com/)にしません。",
   },
 };
 

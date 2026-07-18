@@ -20,7 +20,7 @@ function resolveAllowedHref(destination: string, allowedHrefs: Set<string>): str
     return undefined;
   }
 
-  return allowedHrefs.size === 1 ? allowedHrefs.values().next().value : undefined;
+  return undefined;
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
@@ -54,12 +54,32 @@ export function splitCompleteFinanceChatText(text: string): {
 
 export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
   groupId: string,
+  onSanitizedText?: (text: string) => void,
 ): StreamTextTransform<TOOLS> {
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
 
   return () => {
     const allowedHrefs = new Set<string>();
     const pendingTextById = new Map<string, string>();
+
+    const enqueueSanitizedText = (
+      controller: TransformStreamDefaultController,
+      id: string,
+      text: string,
+    ) => {
+      const sanitizedText = sanitizeFinanceChatLinks(text, allowedHrefs);
+      if (!sanitizedText) return;
+
+      onSanitizedText?.(sanitizedText);
+      controller.enqueue({ type: "text-delta", id, text: sanitizedText });
+    };
+
+    const flushPendingText = (controller: TransformStreamDefaultController) => {
+      for (const [id, text] of pendingTextById) {
+        enqueueSanitizedText(controller, id, text);
+      }
+      pendingTextById.clear();
+    };
 
     return new TransformStream({
       transform(chunk, controller) {
@@ -89,11 +109,7 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
           pendingTextById.set(chunk.id, pending);
 
           if (complete) {
-            controller.enqueue({
-              type: "text-delta",
-              id: chunk.id,
-              text: sanitizeFinanceChatLinks(complete, allowedHrefs),
-            });
+            enqueueSanitizedText(controller, chunk.id, complete);
           }
           return;
         }
@@ -101,13 +117,13 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
         if (chunk.type === "text-end") {
           const text = pendingTextById.get(chunk.id);
           if (text !== undefined) {
-            controller.enqueue({
-              type: "text-delta",
-              id: chunk.id,
-              text: sanitizeFinanceChatLinks(text, allowedHrefs),
-            });
+            enqueueSanitizedText(controller, chunk.id, text);
             pendingTextById.delete(chunk.id);
           }
+        }
+
+        if (chunk.type === "error" || chunk.type === "abort" || chunk.type === "finish") {
+          flushPendingText(controller);
         }
 
         controller.enqueue(chunk);

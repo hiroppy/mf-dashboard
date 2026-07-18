@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  financeChatHrefSchema,
   financeChatCardsSchema,
   type FinanceChatCard as FinanceChatCardData,
 } from "@mf-dashboard/analytics/chat/cards";
@@ -57,6 +58,27 @@ function getFinanceCards(message: UIMessage): FinanceChatCardData[] {
 
   const result = financeChatCardsSchema.safeParse(presentationOutputs[0]);
   return result.success ? result.data : [];
+}
+
+function getAllowedFinanceHrefs(message: UIMessage): string[] {
+  if (message.role !== "assistant") return [];
+
+  return message.parts.flatMap((part) => {
+    if (
+      !isToolUIPart(part) ||
+      getToolName(part) !== "getFinanceDashboardRoute" ||
+      part.state !== "output-available"
+    ) {
+      return [];
+    }
+
+    const result = financeChatHrefSchema.safeParse(
+      typeof part.output === "object" && part.output !== null && "href" in part.output
+        ? part.output.href
+        : undefined,
+    );
+    return result.success ? [result.data] : [];
+  });
 }
 
 export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }: ChatShellProps) {
@@ -244,9 +266,10 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                     message.role === "assistant" &&
                     messageIndex === messages.length - 1;
                   const cards = isStreamingMessage ? [] : getFinanceCards(message);
+                  const allowedHrefs = getAllowedFinanceHrefs(message);
                   const showText =
                     Boolean(text) &&
-                    (message.role === "user" || (!isStreamingMessage && cards.length === 0));
+                    (message.role === "user" || isStreamingMessage || cards.length === 0);
 
                   if (!showText && cards.length === 0) return null;
 
@@ -269,7 +292,12 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                             )}
                           >
                             {message.role === "assistant" ? (
-                              <ChatMarkdown isAnimating={isStreamingMessage}>{text}</ChatMarkdown>
+                              <ChatMarkdown
+                                allowedHrefs={allowedHrefs}
+                                isAnimating={isStreamingMessage}
+                              >
+                                {text}
+                              </ChatMarkdown>
                             ) : (
                               text
                             )}
