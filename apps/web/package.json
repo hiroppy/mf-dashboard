@@ -3,8 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
+    "dev": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
     "build": "next build",
     "build:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next build",
     "start": "next start",
