@@ -132,6 +132,13 @@ export const chartCardSchema = z
   })
   .extend(linkableCardSchema.shape)
   .superRefine((card, context) => {
+    if (new Set(card.series.map((series) => series.name)).size !== card.series.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Chart series names must be unique",
+        path: ["series"],
+      });
+    }
     if (card.chartType === "pie" && card.series.length !== 1) {
       context.addIssue({ code: "custom", message: "Pie charts support exactly one series" });
     }

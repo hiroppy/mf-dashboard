@@ -171,6 +171,21 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate chart series names", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "年度別の支出比較",
+        chartType: "line",
+        series: [
+          { name: "支出", amountType: "expense" },
+          { name: "支出", amountType: "expense" },
+        ],
+        data: [{ label: "7月", values: [200000, 180000] }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects negative pie chart values", () => {
     expect(
       financeChatCardSchema.safeParse({

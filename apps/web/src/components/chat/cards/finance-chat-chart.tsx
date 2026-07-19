@@ -97,7 +97,13 @@ export function getFinanceChartValueColor(
 export function formatFinanceChartAxisValue(value: number, maximumAbsoluteValue: number): string {
   if (maximumAbsoluteValue < 10_000) return `${Math.round(value).toLocaleString("ja-JP")}円`;
   if (maximumAbsoluteValue < 100_000) return `${Math.round(value / 1000)}千円`;
-  return `${Math.round(value / 10_000)}万円`;
+  if (maximumAbsoluteValue < 100_000_000) return `${Math.round(value / 10_000)}万円`;
+  if (maximumAbsoluteValue < 1_000_000_000_000) {
+    return `${(value / 100_000_000).toLocaleString("ja-JP", { maximumFractionDigits: 1 })}億円`;
+  }
+  return `${(value / 1_000_000_000_000).toLocaleString("ja-JP", {
+    maximumFractionDigits: 1,
+  })}兆円`;
 }
 
 export function FinanceChatChart({ card }: FinanceChatChartProps) {

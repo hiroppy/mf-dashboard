@@ -43,6 +43,17 @@ async function fulfillChatStream(route: Route) {
     { type: "text-end", id: "text-a" },
     {
       type: "tool-input-available",
+      toolCallId: "navigate-a",
+      toolName: "getFinanceDashboardRoute",
+      input: { page: "cashFlow", month: "2026-06" },
+    },
+    {
+      type: "tool-output-available",
+      toolCallId: "navigate-a",
+      output: { href: "/cf/2026-06" },
+    },
+    {
+      type: "tool-input-available",
       toolCallId: "present-a",
       toolName: "presentFinanceCards",
       input: { cards },

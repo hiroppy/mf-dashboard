@@ -16,6 +16,8 @@ describe("formatFinanceChartAxisValue", () => {
   it("uses compact units for larger values", () => {
     expect(formatFinanceChartAxisValue(40_000, 50_000)).toBe("40千円");
     expect(formatFinanceChartAxisValue(400_000, 500_000)).toBe("40万円");
+    expect(formatFinanceChartAxisValue(-150_000_000, 150_000_000)).toBe("-1.5億円");
+    expect(formatFinanceChartAxisValue(1_200_000_000_000, 1_200_000_000_000)).toBe("1.2兆円");
   });
 });
 
