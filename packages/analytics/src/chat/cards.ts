@@ -149,6 +149,9 @@ export const chartCardSchema = z
     if (card.chartType === "pie" && card.series.length !== 1) {
       context.addIssue({ code: "custom", message: "Pie charts support exactly one series" });
     }
+    if (card.chartType === "pie" && card.data.length > 5) {
+      context.addIssue({ code: "custom", message: "Pie charts support at most five data points" });
+    }
     if (
       card.chartType === "pie" &&
       card.data.some((point) => point.values.some((value) => value < 0))

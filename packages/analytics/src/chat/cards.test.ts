@@ -213,6 +213,23 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects pie charts with more categories than the color palette", () => {
+    const card = {
+      type: "chart" as const,
+      title: "支出内訳",
+      chartType: "pie" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+    };
+    const data = (length: number) =>
+      Array.from({ length }, (_, index) => ({
+        label: `カテゴリ${index + 1}`,
+        values: [index + 1],
+      }));
+
+    expect(financeChatCardSchema.safeParse({ ...card, data: data(5) }).success).toBe(true);
+    expect(financeChatCardSchema.safeParse({ ...card, data: data(6) }).success).toBe(false);
+  });
+
   it("rejects pie chart data whose values are all zero", () => {
     expect(
       financeChatCardSchema.safeParse({

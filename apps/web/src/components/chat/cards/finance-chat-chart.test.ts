@@ -19,6 +19,14 @@ describe("formatFinanceChartAxisValue", () => {
     expect(formatFinanceChartAxisValue(-150_000_000, 150_000_000)).toBe("-1.5億円");
     expect(formatFinanceChartAxisValue(1_200_000_000_000, 1_200_000_000_000)).toBe("1.2兆円");
   });
+
+  it("switches units when a rounded tick reaches the next boundary", () => {
+    expect(formatFinanceChartAxisValue(99_999_999, 99_999_999)).toBe("1億円");
+    expect(formatFinanceChartAxisValue(100_000_000, 99_999_999)).toBe("1億円");
+    expect(formatFinanceChartAxisValue(-100_000_000, 99_999_999)).toBe("-1億円");
+    expect(formatFinanceChartAxisValue(999_999_999_999, 999_999_999_999)).toBe("1兆円");
+    expect(formatFinanceChartAxisValue(1_000_000_000_000, 999_999_999_999)).toBe("1兆円");
+  });
 });
 
 describe("getFinanceChartSeriesColor", () => {

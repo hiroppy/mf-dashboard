@@ -158,6 +158,7 @@ describe("POST /api/chat", () => {
     expect(systemPrompt).toContain("カードは原則2枚以内");
     expect(systemPrompt).toContain("transactionListは、ユーザーが取引、明細");
     expect(systemPrompt).toContain("比較・推移・構成比を文章や数値だけより明確に");
+    expect(systemPrompt).toContain("pieのdataは最大5件");
     expect(systemPrompt).toContain("必要な指標が一括で得られるgetFinancialMetricsを優先");
     expect(systemPrompt).toContain("互いに依存しないツールは同じステップで並列");
     expect(systemPrompt).toContain("最新の総資産を取得し、summary");
@@ -165,6 +166,9 @@ describe("POST /api/chat", () => {
     expect(systemPrompt).toContain("手残り、貯蓄率、予備資金、負債、資産の集中度");
     expect(systemPrompt).toContain("カードだけでユーザーの質問に答えられるよう");
     expect(systemPrompt).toContain("summaryは主要な数値、insightは数値の再掲ではなく解釈");
+    expect(systemPrompt).toContain(
+      "amount、amountLabel、amountTypeは3項目すべてを指定するか、すべて省略",
+    );
     expect(systemPrompt).toMatch(/現在日付は\d{4}-\d{2}-\d{2}（Asia\/Tokyo）/);
   });
 
