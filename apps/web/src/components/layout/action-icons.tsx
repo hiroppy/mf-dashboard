@@ -1,7 +1,7 @@
 "use client";
 
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import { Home, Code2, HelpCircle, RefreshCw } from "lucide-react";
+import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDateTime } from "../../lib/format";
@@ -49,7 +49,6 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
     return (
       <div className="border-t p-4 flex items-center gap-1 lg:hidden">
         <HelpButton iconSize={iconSize} />
-        <GitHubButton iconSize={iconSize} />
       </div>
     );
   }
@@ -59,7 +58,6 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
       {notifications}
       <RefreshButton iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
-      <GitHubButton iconSize={iconSize} className="hidden lg:block" />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
   );
@@ -195,7 +193,15 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
                 </li>
               </ul>
             </div>
-            <div className="pt-2 border-t">
+            <div className="pt-2 border-t flex flex-col items-start gap-2">
+              <a
+                href="https://github.com/hiroppy/mf-dashboard"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline"
+              >
+                GitHub リポジトリ
+              </a>
               <a
                 href="https://github.com/hiroppy/mf-dashboard/issues"
                 target="_blank"
@@ -209,18 +215,6 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
         </DialogDescription>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function GitHubButton({ iconSize, className }: { iconSize: string; className?: string }) {
-  return (
-    <IconButton
-      icon={<Code2 className={iconSize} />}
-      href="https://github.com/hiroppy/mf-dashboard"
-      ariaLabel="GitHub"
-      className={className}
-      isExternal
-    />
   );
 }
 
