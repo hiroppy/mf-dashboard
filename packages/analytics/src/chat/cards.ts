@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const MAX_PIE_CATEGORIES = 5;
+
 const routeSegmentSchema = z
   .string()
   .min(1)
@@ -149,8 +151,11 @@ export const chartCardSchema = z
     if (card.chartType === "pie" && card.series.length !== 1) {
       context.addIssue({ code: "custom", message: "Pie charts support exactly one series" });
     }
-    if (card.chartType === "pie" && card.data.length > 5) {
-      context.addIssue({ code: "custom", message: "Pie charts support at most five data points" });
+    if (card.chartType === "pie" && card.data.length > MAX_PIE_CATEGORIES) {
+      context.addIssue({
+        code: "custom",
+        message: `Pie charts support at most ${MAX_PIE_CATEGORIES} data points`,
+      });
     }
     if (
       card.chartType === "pie" &&

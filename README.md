@@ -17,7 +17,7 @@ git clone https://github.com/hiroppy/mf-dashboard.git
 cd mf-dashboard
 corepack enable pnpm
 pnpm install
-pnpm dev:demo
+pnpm dev
 ```
 
 起動後、ターミナルに表示されるURLをブラウザで開く。この手順では実際のMoney Forward MEアカウントへ接続しない。

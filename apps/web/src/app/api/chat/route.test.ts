@@ -197,6 +197,53 @@ describe("POST /api/chat", () => {
     });
   });
 
+  it("rejects request bodies larger than the chat limit", async () => {
+    const response = await POST(
+      request({
+        messages: [
+          { id: "oversized", role: "user", parts: [{ type: "text", text: "a".repeat(70_000) }] },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "REQUEST_TOO_LARGE", message: "チャット履歴が大きすぎます。" },
+    });
+    expect(mocks.safeValidateUIMessages).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["empty history", []],
+    [
+      "assistant-final history",
+      [{ id: "assistant", role: "assistant", parts: [{ type: "text", text: "回答" }] }],
+    ],
+    ["blank final prompt", [{ id: "blank", role: "user", parts: [{ type: "text", text: "   " }] }]],
+    [
+      "too many messages",
+      Array.from({ length: 21 }, (_, index) => ({
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        parts: [{ type: "text", text: "本文" }],
+      })),
+    ],
+    [
+      "oversized message text",
+      [{ id: "long", role: "user", parts: [{ type: "text", text: "a".repeat(8_001) }] }],
+    ],
+  ])("rejects %s before model execution", async (_name, invalidMessages) => {
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: invalidMessages });
+
+    const response = await POST(request({ messages }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "INVALID_MESSAGES", message: "有効なチャットメッセージが必要です。" },
+    });
+    expect(mocks.streamText).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid group IDs", async () => {
     const response = await POST(request({ groupId: 42, messages }));
 

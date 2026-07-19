@@ -266,7 +266,7 @@ pnpm --filter @mf-dashboard/db build:demo
 DB_PATH=../../data/demo.db pnpm --filter @mf-dashboard/web dev
 ```
 
-`pnpm dev:demo`は静的な公開デモ用でAPI routeを含まないため、家計AIチャットの確認には使用しない。
+`pnpm build:demo`で生成する静的な公開デモにはAPI routeが含まれないため、家計AIチャットの確認には使用しない。
 
 Docker Composeで設定を反映する場合は、webイメージを再ビルドして起動する。
 

@@ -133,7 +133,7 @@ pnpm --filter @mf-dashboard/db studio
 pnpm --filter @mf-dashboard/db build:demo
 ```
 
-Run the web app with demo data using `pnpm --filter @mf-dashboard/web dev:demo`.
+Run the web app with demo data using `pnpm --filter @mf-dashboard/web dev`.
 
 ### Crawler
 

@@ -165,8 +165,10 @@ describe("FinanceChatCard", () => {
       />,
     );
 
-    const legend = screen.getByRole("list", { name: "支出内訳の凡例" });
-    expect(legend.textContent).toContain("食費");
-    expect(legend.textContent).toContain("日用品");
+    const figure = screen.getByRole("figure", { name: "支出内訳" });
+    const legend = figure.querySelector('ul[aria-hidden="true"]');
+    expect(legend?.textContent).toContain("食費");
+    expect(legend?.textContent).toContain("日用品");
+    expect(screen.getByRole("list").textContent).toContain("食費: 3,000円");
   });
 });

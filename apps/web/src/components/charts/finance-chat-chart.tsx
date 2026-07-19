@@ -18,9 +18,9 @@ import {
   YAxis,
   type DotItemDotProps,
 } from "recharts";
-import { getChartColorArray, semanticColors } from "../../../lib/colors";
-import { formatCurrency } from "../../../lib/format";
-import { chartTooltipStyle } from "../../charts/chart-tooltip";
+import { getChartColorArray, semanticColors } from "../../lib/colors";
+import { formatCurrency } from "../../lib/format";
+import { chartTooltipStyle } from "./chart-tooltip";
 
 interface FinanceChatChartProps {
   card: ChartCard;
@@ -255,7 +255,7 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
       </ResponsiveContainer>
       {card.chartType === "pie" && (
         <ul
-          aria-label={`${card.title}の凡例`}
+          aria-hidden="true"
           className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
         >
           {card.data.map((point, index) => (
