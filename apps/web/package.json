@@ -14,8 +14,9 @@
     "test:unit": "vitest run --project unit",
     "test:storybook": "vitest run --project storybook",
     "test:watch": "vitest",
+    "pretest:e2e": "playwright install chromium webkit",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:ui": "pnpm pretest:e2e && playwright test --ui",
     "typecheck": "next typegen && tsc --noEmit",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"

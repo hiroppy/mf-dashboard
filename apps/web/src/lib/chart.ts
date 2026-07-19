@@ -1,5 +1,7 @@
 export type Period = "1m" | "3m" | "6m" | "1y" | "all";
 
+export const CHART_INITIAL_DIMENSION = { width: 1, height: 1 };
+
 export const CHART_PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: "1m", label: "1ヶ月" },
   { value: "3m", label: "3ヶ月" },
