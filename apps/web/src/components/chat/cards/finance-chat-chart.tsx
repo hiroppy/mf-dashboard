@@ -226,6 +226,23 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
       <ResponsiveContainer width="100%" height={220}>
         {chart}
       </ResponsiveContainer>
+      {card.chartType === "pie" && (
+        <ul
+          aria-label={`${card.title}の凡例`}
+          className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+        >
+          {card.data.map((point, index) => (
+            <li key={point.label} className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: chartColors[index] }}
+              />
+              <span>{point.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <ul className="sr-only">
         {card.data.map((point) => (
           <li key={point.label}>

@@ -31,6 +31,22 @@ export const Bar: Story = {
   args: { card: { ...meta.args.card, chartType: "bar" } },
 };
 
+export const Pie: Story = {
+  args: {
+    card: {
+      type: "chart",
+      title: "支出内訳",
+      chartType: "pie",
+      series: [{ name: "支出", amountType: "expense" }],
+      data: [
+        { label: "食費", values: [120000] },
+        { label: "日用品", values: [60000] },
+        { label: "交通費", values: [30000] },
+      ],
+    },
+  },
+};
+
 export const MixedBalanceLine: Story = {
   args: {
     card: {

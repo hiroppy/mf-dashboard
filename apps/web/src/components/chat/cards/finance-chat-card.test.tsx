@@ -129,7 +129,7 @@ describe("FinanceChatCard", () => {
 
     render(<FinanceChatCard card={card} />);
     expect(screen.queryByRole("link")).toBeNull();
-    expect(screen.getByText("開く")).not.toBeNull();
+    expect(screen.getByText("開く").classList.contains("text-muted-foreground")).toBe(true);
   });
 
   it("does not create a link for an unverified safe finance route", () => {
@@ -146,6 +146,27 @@ describe("FinanceChatCard", () => {
     );
 
     expect(screen.queryByRole("link")).toBeNull();
-    expect(screen.getByText("開く")).not.toBeNull();
+    expect(screen.getByText("開く").classList.contains("text-muted-foreground")).toBe(true);
+  });
+
+  it("renders a visible legend for pie chart categories", () => {
+    render(
+      <FinanceChatCard
+        card={{
+          type: "chart",
+          title: "支出内訳",
+          chartType: "pie",
+          series: [{ name: "支出", amountType: "expense" }],
+          data: [
+            { label: "食費", values: [3000] },
+            { label: "日用品", values: [2000] },
+          ],
+        }}
+      />,
+    );
+
+    const legend = screen.getByRole("list", { name: "支出内訳の凡例" });
+    expect(legend.textContent).toContain("食費");
+    expect(legend.textContent).toContain("日用品");
   });
 });

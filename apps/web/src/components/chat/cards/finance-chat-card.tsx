@@ -68,21 +68,22 @@ function CardAction({
   action: { label: string; href: string };
   allowedHrefs: ReadonlySet<string>;
 }) {
-  const content = (
-    <span className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
-      {action.label}
-      <ArrowRight aria-hidden="true" className="size-4" />
-    </span>
-  );
+  const isLinkable = isFinanceChatHrefSafe(action.href) && allowedHrefs.has(action.href);
+
+  if (!isLinkable) {
+    return <span className="text-sm text-muted-foreground">{action.label}</span>;
+  }
 
   return (
-    <SafeLink
-      href={action.href}
-      allowedHrefs={allowedHrefs}
+    <Link
+      href={action.href as Route}
       className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {content}
-    </SafeLink>
+      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+        {action.label}
+        <ArrowRight aria-hidden="true" className="size-4" />
+      </span>
+    </Link>
   );
 }
 
