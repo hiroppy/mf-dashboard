@@ -18,7 +18,8 @@ AI_PROVIDER=openai AI_MODEL=<provider-model-id> AI_API_KEY=<provider-api-key> \
 
 `src/evals/finance-chat-cases.ts` に質問、許容する tool 戦略と必須引数、許可する data tool、期待カード順を追加する。共通 scorer は次を検証する。
 
-- 必須 tool と month、date、category、transaction type などの引数
+- 必須 data tool と month、date、category、transaction type などの引数
+- CTA に対応する navigation tool の page、month と呼び出し順
 - 許可していない tool や同一 tool/input による重複取得
 - `presentFinanceCards` が 1 回だけ成功し、カード schema と期待順を満たすこと
 - empty 以外の CTA が、presentation より前の step で完了した `getFinanceDashboardRoute` の返却値であること

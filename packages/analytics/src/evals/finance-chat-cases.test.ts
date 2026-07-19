@@ -23,6 +23,7 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
       expect(evaluationCase.prompt).not.toHaveLength(0);
       expect(evaluationCase.toolStrategies.length).toBeGreaterThan(0);
       expect(evaluationCase.allowedDataTools.length).toBeGreaterThan(0);
+      expect(evaluationCase.navigationInput).toHaveProperty("page");
       expect(evaluationCase.expectedCardTypes.length).toBeGreaterThan(0);
     }
   });
@@ -38,5 +39,9 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
       },
       { name: "getMonthlyCategoryTotals", input: { month: "2026-08" } },
     ]);
+    expect(cases.find(({ id }) => id === "category-expense")?.navigationInput).toEqual({
+      page: "cashFlow",
+      month: "2026-08",
+    });
   });
 });

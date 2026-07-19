@@ -158,8 +158,19 @@ export function evaluateFinanceChatTrace(
     const presentationStep = trace.steps.findIndex(({ toolCalls }) =>
       toolCalls.some(({ toolName }) => toolName === PRESENTATION_TOOL),
     );
+    const priorSteps = trace.steps.slice(0, presentationStep);
+    const priorToolCalls = priorSteps.flatMap(({ toolCalls }) => toolCalls);
+    if (
+      !matchesToolExpectation(priorToolCalls, {
+        name: NAVIGATION_TOOL,
+        input: evaluationCase.navigationInput,
+      })
+    ) {
+      violations.push("ナビゲーションツールの引数または呼び出し順が期待値を満たさない");
+    }
+
     const navigationHrefs = getNavigationHrefs(
-      trace.steps.slice(0, presentationStep).flatMap(({ toolResults }) => toolResults),
+      priorSteps.flatMap(({ toolResults }) => toolResults),
     );
     const unverifiedHrefs = getCardHrefs(cards).filter((href) => !navigationHrefs.has(href));
     if (unverifiedHrefs.length > 0) {

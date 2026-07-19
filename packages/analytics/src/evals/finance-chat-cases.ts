@@ -6,6 +6,7 @@ export interface FinanceChatEvaluationCase {
   prompt: string;
   toolStrategies: readonly (readonly FinanceChatToolExpectation[])[];
   allowedDataTools: readonly string[];
+  navigationInput: Readonly<Record<string, unknown>>;
   expectedCardTypes: readonly FinanceChatCard["type"][];
 }
 
@@ -26,6 +27,7 @@ export function createFinanceChatEvaluationCases(
       prompt: "今月どう？",
       toolStrategies: [[{ name: "getFinancialMetrics" }], [{ name: "getLatestMonthlySummary" }]],
       allowedDataTools: ["getFinancialMetrics", "getLatestMonthlySummary"],
+      navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "insight"],
     },
     {
@@ -38,6 +40,7 @@ export function createFinanceChatEvaluationCases(
         ],
       ],
       allowedDataTools: ["searchTransactions", "getMonthlyCategoryTotals"],
+      navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "categoryBreakdown", "transactionList"],
     },
     {
@@ -45,6 +48,7 @@ export function createFinanceChatEvaluationCases(
       prompt: "今月10日の支出を見たい",
       toolStrategies: [[{ name: "searchTransactions", input: { date: day, type: "expense" } }]],
       allowedDataTools: ["searchTransactions"],
+      navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "transactionList", "action"],
     },
     {
@@ -52,6 +56,7 @@ export function createFinanceChatEvaluationCases(
       prompt: "総資産は？",
       toolStrategies: [[{ name: "getLatestTotalAssets" }]],
       allowedDataTools: ["getLatestTotalAssets"],
+      navigationInput: { page: "balanceSheet" },
       expectedCardTypes: ["summary"],
     },
     {
@@ -59,6 +64,7 @@ export function createFinanceChatEvaluationCases(
       prompt: "削れそうな支出ある？",
       toolStrategies: [[{ name: "getFinancialMetrics" }]],
       allowedDataTools: ["getFinancialMetrics"],
+      navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["insight"],
     },
   ];

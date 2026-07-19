@@ -10,6 +10,7 @@ const evaluationCase: FinanceChatEvaluationCase = {
   prompt: "今月どう？",
   toolStrategies: [[{ name: "getFinancialMetrics" }], [{ name: "getLatestMonthlySummary" }]],
   allowedDataTools: ["getFinancialMetrics", "getLatestMonthlySummary"],
+  navigationInput: { page: "cashFlow", month: "2026-07" },
   expectedCardTypes: ["summary", "insight"],
 };
 const href = "/group-a/cf/2026-07";
@@ -155,6 +156,7 @@ describe("evaluateFinanceChatTrace", () => {
       prompt: "2030年1月の支出は？",
       toolStrategies: [[{ name: "searchTransactions", input: { month: "2030-01" } }]],
       allowedDataTools: ["searchTransactions"],
+      navigationInput: { page: "cashFlow", month: "2030-01" },
       expectedCardTypes: ["empty"],
     };
     const emptyCards = [
@@ -231,6 +233,7 @@ describe("evaluateFinanceChatTrace", () => {
         ],
       ],
       allowedDataTools: ["searchTransactions"],
+      navigationInput: { page: "cashFlow", month: "2026-07" },
       expectedCardTypes: ["summary", "insight"],
     };
     const base = createTrace();
@@ -267,7 +270,30 @@ describe("evaluateFinanceChatTrace", () => {
       ],
     });
 
-    expect(result.violations).toContain(`ナビゲーションツール未検証の CTA: ${href}, ${href}`);
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        "ナビゲーションツールの引数または呼び出し順が期待値を満たさない",
+        `ナビゲーションツール未検証の CTA: ${href}, ${href}`,
+      ]),
+    );
+  });
+
+  it("rejects navigation to the wrong page even when its returned href is used", () => {
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      steps: [
+        base.steps[0]!,
+        {
+          toolCalls: [{ toolName: "getFinanceDashboardRoute", input: { page: "dashboard" } }],
+          toolResults: [{ toolName: "getFinanceDashboardRoute", output: { href } }],
+        },
+        base.steps[2]!,
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "ナビゲーションツールの引数または呼び出し順が期待値を満たさない",
+    );
   });
 
   it("rejects overlapping data retrieval through a tool outside the case strategy", () => {
