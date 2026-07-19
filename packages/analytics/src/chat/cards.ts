@@ -141,6 +141,12 @@ export const chartCardSchema = z
     ) {
       context.addIssue({ code: "custom", message: "Pie chart values must be non-negative" });
     }
+    if (
+      card.chartType === "pie" &&
+      !card.data.some((point) => point.values.some((value) => value > 0))
+    ) {
+      context.addIssue({ code: "custom", message: "Pie charts require a positive value" });
+    }
     if (card.data.some((point) => point.values.length !== card.series.length)) {
       context.addIssue({ code: "custom", message: "Each data point must match the series count" });
     }

@@ -31,6 +31,29 @@ function seriesKey(index: number): string {
   return SERIES_KEYS[index] ?? `value${index}`;
 }
 
+interface FinanceChartLineVariant {
+  dataKey: string;
+  stroke: string;
+}
+
+export function getFinanceChartLineVariants(
+  amountType: ChartCard["series"][number]["amountType"],
+  values: readonly number[],
+  dataKey: string,
+): FinanceChartLineVariant[] {
+  const hasNegativeValue = values.some((value) => value < 0);
+  const hasNonNegativeValue = values.some((value) => value >= 0);
+
+  if (amountType !== "balance" || !hasNegativeValue || !hasNonNegativeValue) {
+    return [{ dataKey, stroke: getFinanceChartSeriesColor(amountType, values) }];
+  }
+
+  return [
+    { dataKey: `${dataKey}Positive`, stroke: semanticColors.balancePositive },
+    { dataKey: `${dataKey}Negative`, stroke: semanticColors.balanceNegative },
+  ];
+}
+
 export function getFinanceChartSeriesColor(
   amountType: ChartCard["series"][number]["amountType"],
   values: readonly number[],
@@ -61,7 +84,16 @@ export function formatFinanceChartAxisValue(value: number, maximumAbsoluteValue:
 export function FinanceChatChart({ card }: FinanceChatChartProps) {
   const data = card.data.map((point) => ({
     label: point.label,
-    ...Object.fromEntries(point.values.map((value, index) => [seriesKey(index), value])),
+    ...Object.fromEntries(
+      point.values.flatMap((value, index) => {
+        const key = seriesKey(index);
+        return [
+          [key, value],
+          [`${key}Positive`, value >= 0 ? value : null],
+          [`${key}Negative`, value <= 0 ? value : null],
+        ];
+      }),
+    ),
   }));
   const chartColors = getChartColorArray(data.length);
   const maximumAbsoluteValue = Math.max(
@@ -91,19 +123,23 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
     chart = (
       <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
         {common}
-        {card.series.map((series, index) => (
-          <Line
-            key={series.name}
-            type="monotone"
-            dataKey={seriesKey(index)}
-            name={series.name}
-            stroke={getFinanceChartSeriesColor(
-              series.amountType,
-              card.data.map((point) => point.values[index] ?? 0),
-            )}
-            strokeWidth={2}
-          />
-        ))}
+        {card.series.flatMap((series, index) =>
+          getFinanceChartLineVariants(
+            series.amountType,
+            card.data.map((point) => point.values[index] ?? 0),
+            seriesKey(index),
+          ).map((variant, variantIndex) => (
+            <Line
+              key={`${series.name}-${variant.dataKey}`}
+              type="monotone"
+              dataKey={variant.dataKey}
+              name={series.name}
+              stroke={variant.stroke}
+              strokeWidth={2}
+              legendType={variantIndex === 0 ? "line" : "none"}
+            />
+          )),
+        )}
       </LineChart>
     );
   } else if (card.chartType === "bar") {
