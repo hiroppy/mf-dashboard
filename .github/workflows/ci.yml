@@ -30,13 +30,12 @@ jobs:
   docker-build:
     name: Docker build (${{ matrix.app }})
     runs-on: ubuntu-latest
-    env:
-      DASHBOARD_URL: https://dashboard.example.com
     strategy:
       matrix:
         app: [crawler, web]
     steps:
       - uses: actions/checkout@v6.0.3
+      - run: cp .env.example .env
       - run: docker compose build ${{ matrix.app }}
   e2e-web:
     runs-on: ubuntu-latest
