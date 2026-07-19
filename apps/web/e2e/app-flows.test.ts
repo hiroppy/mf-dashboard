@@ -24,6 +24,39 @@ async function navigateFromMenu(page: Page, name: string) {
 }
 
 test.describe("App flows", () => {
+  test("renders primary chart pages without release warnings", async ({ page }) => {
+    const releaseWarnings: string[] = [];
+    const warningPatterns = [
+      "metadataBase property in metadata export is not set",
+      "of chart should be greater than 0",
+      "has either width or height modified, but not the other",
+    ];
+
+    page.on("console", (message) => {
+      if (
+        message.type() === "warning" &&
+        warningPatterns.some((pattern) => message.text().includes(pattern))
+      ) {
+        releaseWarnings.push(message.text());
+      }
+    });
+
+    const chartPages = [
+      { path: "/", heading: "ダッシュボード" },
+      { path: "/cf", heading: "収支" },
+      { path: "/bs", heading: "資産" },
+      { path: "/insights", heading: "インサイト" },
+      { path: "/simulator", heading: "シミュレーター" },
+    ];
+
+    for (const { path, heading } of chartPages) {
+      await page.goto(path);
+      await expectHeading(page, heading);
+    }
+
+    expect(releaseWarnings).toEqual([]);
+  });
+
   test("navigates between primary pages from the sidebar", async ({ page }) => {
     await page.goto("/");
     await expectHeading(page, "ダッシュボード");

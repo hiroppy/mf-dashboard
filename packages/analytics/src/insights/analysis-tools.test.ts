@@ -67,7 +67,12 @@ const { analyzeIncomeStability } = await import("./analyze-income-stability.js")
 
 const mockDb = {} as any;
 const groupId = "test-group";
-const execOpts = { toolCallId: "test", messages: [], abortSignal: undefined as any };
+const execOpts = {
+  toolCallId: "test",
+  messages: [],
+  abortSignal: undefined as any,
+  context: {} as any,
+};
 
 describe("createAnalysisTools", () => {
   it("should return all 5 analysis tools", () => {

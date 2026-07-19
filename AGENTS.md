@@ -1,258 +1,158 @@
-# Agent Development Guidelines
+# mf-dashboard Agent Guide
 
-## Mandatory Rules (MUST)
+Use this file for durable repository conventions, commands, constraints, and completion criteria.
 
-The following rules must always be followed. Code violating these rules will be rejected in review.
+## Repository Overview
 
-### DB Schema
+This repository is a monorepo built with pnpm workspaces and Turborepo.
 
-- [ ] All tables MUST have `createdAt: text("created_at").notNull()`
-- [ ] All tables MUST have `updatedAt: text("updated_at").notNull()`
-- [ ] Foreign keys MUST specify `onDelete` (cascade/set null)
-- [ ] When adding/modifying DB schema, MUST update `docs/architecture/database-schema.md` to reflect current schema structure
+| Path                 | Purpose                                        |
+| -------------------- | ---------------------------------------------- |
+| `.agents/skills`     | Shared repository-specific agent workflows     |
+| `apps/crawler`       | Money Forward scraper                          |
+| `apps/mcp`           | MCP server for supported AI assistants         |
+| `apps/web`           | Next.js dashboard                              |
+| `packages/analytics` | Shared financial analysis and tool definitions |
+| `packages/db`        | Shared database schema and repositories        |
+| `packages/meta`      | Shared category definitions and URLs           |
 
-### Component Creation
+## Working Agreements
 
-- [ ] All components under `components/` MUST have `*.stories.tsx`
-- [ ] Chart-related: separate into `charts/` (pure UI) and `info/` (data fetching)
-- [ ] `info/` components: Server Component (data fetching) + `.client.tsx` ONLY if interactivity is required
+- Use pnpm. Do not use npm or yarn.
+- Treat `AGENTS.md` and `.agents/skills` as the canonical shared agent guidance. `CLAUDE.md` and `.claude/skills` are compatibility symlinks for Claude.
+- Do not run `pnpm build` during development. Build the Next.js app only when the user explicitly requests it.
+- Keep changes scoped to the request and preserve unrelated work in the worktree.
+- Import directly from source files. Do not create barrel files (`index.ts` files that re-export modules).
+- Put debug scripts in the package's `debug/` directory. Do not create temporary `debug-*.ts` or `test-*.ts` files under `src/`.
 
-### Testing
+## Mandatory Engineering Rules
 
-- [ ] New logic MUST have unit tests
-- [ ] After writing Storybook, verify with `test:storybook`
+### Database Schema
 
-### Code Structure
+- Every table must include `createdAt: text("created_at").notNull()`.
+- Every table must include `updatedAt: text("updated_at").notNull()`.
+- Every foreign key must specify `onDelete` (`cascade` or `set null`).
+- When adding or modifying schema, update `docs/architecture/database-schema.md` to match the current structure.
 
-- [ ] Do NOT create barrel files (`index.ts` for re-exports)
-- [ ] Import directly from the source file
+### Components
 
-### Docker Cleanup (Orchestrator)
+- Every component under `components/` must have a corresponding `*.stories.tsx` file.
+- Keep chart UI and data fetching separate: pure UI belongs in `charts/`; data-fetching components belong in `info/`.
+- An `info/` component must be a Server Component that fetches data. Add a `.client.tsx` component only when interactivity requires it.
 
-- [ ] When an orchestrator or LLM agent starts Docker Compose for validation, it MUST run `docker compose down --remove-orphans` before finishing, including after failures
-- [ ] Do NOT pass `--volumes` to cleanup commands unless the user explicitly authorizes deleting persistent data
-- [ ] One-off validation containers MUST be started with `docker run --rm` or explicitly removed after use
+### Personal Information
 
-### Logging (Crawler)
+Never include personally identifiable information in tests, Storybook stories, comments, or documentation.
 
-For the crawler (`apps/crawler`), use the following log functions appropriately:
+- Do not use real names or nicknames. Use anonymous labels such as `User A`, `User B`, `Group A`, or `Test User`.
+- Do not use real addresses, phone numbers, email addresses, account numbers, or card numbers.
+- Use placeholder email addresses such as `user-a@example.com`.
+- Do not include personal names in code comments.
+- Never use `data/moneyforward.db` as a source for test or Storybook data because it contains personal information. Use `data/demo.db` instead.
 
-- [ ] Use `info()` for important information that should be visible in CI environments (GitHub Actions)
-- [ ] Use `log()` for detailed logs during local development (hidden in CI environments)
-- [ ] Use `debug()` for debug information (visible when `DEBUG=true`)
+### Monetary Colors
 
-**Log Level Guidelines:**
+Use only the semantic classes defined in `apps/web/src/app/globals.css`. Do not define custom colors for monetary values.
 
-| Function  | Local | CI Env | Purpose                                        |
-| --------- | ----- | ------ | ---------------------------------------------- |
-| `info()`  | ✅    | ✅     | Important progress info, must be tracked in CI |
-| `log()`   | ✅    | ❌     | Detailed debug info, local development only    |
-| `debug()` | ⚙️    | ❌     | Debug mode only (enabled with `DEBUG=true`)    |
-| `warn()`  | ✅    | ✅     | Warnings                                       |
-| `error()` | ✅    | ✅     | Errors                                         |
+| Meaning                                     | Class                   |
+| ------------------------------------------- | ----------------------- |
+| Actual income                               | `text-income`           |
+| Actual expense                              | `text-expense`          |
+| Positive difference, evaluation, or balance | `text-balance-positive` |
+| Negative difference, evaluation, or balance | `text-balance-negative` |
 
-(⚙️ = Enabled with `DEBUG=true`)
+Decision rule: if money actually moved, use `text-income` or `text-expense`. For comparisons, changes, balances, and unrealized gains or losses, use `text-balance-positive` or `text-balance-negative`.
 
-**Example:**
+- Liability balances use `text-balance-negative`.
+- All text colors must meet the WCAG 2.1 minimum contrast ratio of 4.5:1 against a white background.
+- When changing colors in `globals.css`, run `pnpm --filter @mf-dashboard/web test:storybook` to verify accessibility compliance.
 
-```typescript
-import { info, log, warn } from "./logger.js";
+### Crawler Logging
 
-// Important information that should be visible in CI
-info("Refreshing accounts...");
-info(`[${elapsed}s] Remaining: ${updatingCount}`);
+Use the logger functions according to their intended visibility:
 
-// Detailed logs for local development (hidden in CI)
-log("Navigating to accounts page...");
-log(`Found ${count} rows in the table`);
+| Function  | Local             | CI  | Purpose                                       |
+| --------- | ----------------- | --- | --------------------------------------------- |
+| `info()`  | Yes               | Yes | Important progress that must be visible in CI |
+| `log()`   | Yes               | No  | Detailed local-development information        |
+| `debug()` | With `DEBUG=true` | No  | Debug-only information                        |
+| `warn()`  | Yes               | Yes | Warnings                                      |
+| `error()` | Yes               | Yes | Errors                                        |
 
-// Warnings (always visible)
-warn("Max wait time exceeded");
-```
+Import these functions from `./logger.js`.
 
-### Personal Information (Strictly Prohibited)
+### Docker Cleanup
 
-**NEVER include personally identifiable information (PII) in test data, Storybook, comments, or documentation.**
+- If an orchestrator or LLM agent starts Docker Compose for validation, it must run `docker compose down --remove-orphans` before finishing, including after failures.
+- Do not pass `--volumes` unless the user explicitly authorizes deletion of persistent data.
+- Start one-off validation containers with `docker run --rm`, or explicitly remove them afterward.
 
-- [ ] Do NOT use real names or nicknames → Use "User A", "User B", "Group A", etc.
-- [ ] Do NOT use real addresses, phone numbers, or email addresses
-- [ ] Do NOT use real account numbers or card numbers
-- [ ] Do NOT include personal names in code comments
+## QA and Test Design
 
-**Use anonymous placeholders:**
+- For QA, use the `ISO/IEC 25010:2023` quality model as a reference. Select the quality characteristics relevant to the change and its risks, then define verification points and acceptance criteria. Do not apply every quality characteristic uniformly.
+- Select appropriate ISTQB test techniques based on the specification, risks, and quality characteristics under test. Techniques include equivalence partitioning, boundary value analysis, decision table testing, state transition testing, statement testing, branch testing, exploratory testing, checklist-based testing, and error guessing.
+- In QA plans and PR descriptions, document the selected quality characteristics, test techniques, primary test conditions, and any significant risks left out of scope. Do not apply techniques as a box-checking exercise; be able to explain why each technique was selected and what coverage it is expected to provide.
 
-| NG                     | OK                 |
-| ---------------------- | ------------------ |
-| Real person's account  | User B's account   |
-| Named group            | Group A            |
-| Real name              | Test User          |
-| real-email@example.com | user-a@example.com |
+## Validation and Completion
 
-### Semantic Colors (Strictly Enforced)
+- Add unit tests for new logic.
+- After adding or changing Storybook stories, run `pnpm --filter @mf-dashboard/web test:storybook`.
+- Run checks relevant to the files changed. Before finishing, confirm the requested behavior, review the diff for regressions, and report which checks ran and any that were not run.
 
-Always use these classes for monetary values. Custom color definitions are prohibited.
-See `apps/web/src/app/globals.css` for CSS variable definitions.
-
-| Purpose          | Class                   |
-| ---------------- | ----------------------- |
-| Income amount    | `text-income`           |
-| Expense amount   | `text-expense`          |
-| Positive balance | `text-balance-positive` |
-| Negative balance | `text-balance-negative` |
-
-**Usage Guidelines:**
-
-- `text-income` / `text-expense` — Actual amounts (income, expenses)
-- `text-balance-positive` / `text-balance-negative` — Differences or evaluations (balance, unrealized gains/losses)
-
-**Decision Tree:**
-
-"Did money actually move?"
-
-- **Yes** → `text-income` / `text-expense`
-- **No (comparison/evaluation/change)** → `text-balance-positive` / `text-balance-negative`
-
-**Specific Use Cases:**
-
-| Use Case                     | Correct Class           | Reason                          |
-| ---------------------------- | ----------------------- | ------------------------------- |
-| Food expense ¥5,000          | `text-expense`          | Actual expense                  |
-| Salary ¥300,000              | `text-income`           | Actual income                   |
-| Day-over-day +¥10,000        | `text-balance-positive` | Comparison difference           |
-| Day-over-day -¥5,000         | `text-balance-negative` | Comparison difference           |
-| Unrealized gain +¥50,000     | `text-balance-positive` | Valuation gain/loss             |
-| Unrealized loss -¥30,000     | `text-balance-negative` | Valuation gain/loss             |
-| Monthly balance +¥20,000     | `text-balance-positive` | Income minus expense difference |
-| Monthly balance -¥10,000     | `text-balance-negative` | Income minus expense difference |
-| Liability balance ¥1,000,000 | `text-balance-negative` | Negative item on balance sheet  |
-| Asset change +¥100,000       | `text-balance-positive` | Period-over-period change       |
-
-**Common Mistakes:**
-
-```tsx
-// ❌ Wrong: Using text-income/expense for asset changes
-<span className={value > 0 ? "text-income" : "text-expense"}>
-  {formatCurrency(value)}
-</span>
-
-// ✅ Correct: Using text-balance-* for differences/changes
-<span className={value > 0 ? "text-balance-positive" : "text-balance-negative"}>
-  {formatCurrency(value)}
-</span>
-```
-
-**Example:**
-
-```tsx
-// Expense amount → text-expense
-<span className="text-expense">{formatCurrency(expense)}</span>
-
-// Negative balance → text-balance-negative
-<span className={balance >= 0 ? "text-balance-positive" : "text-balance-negative"}>
-  {formatCurrency(balance)}
-</span>
-
-// Unrealized gains/losses → text-balance-positive / text-balance-negative
-<span className={gain >= 0 ? "text-balance-positive" : "text-balance-negative"}>
-  {formatCurrency(gain)}
-</span>
-```
-
-### Color Changes
-
-- [ ] When modifying colors in `globals.css`, MUST run `test:storybook` to verify a11y compliance
-- [ ] All text colors MUST meet WCAG 2.1 minimum contrast ratio of 4.5:1 against white background
-
----
-
-## Project Structure
-
-Monorepo using pnpm workspaces + Turborepo.
-
-- `apps/crawler` — Money Forward scraper
-- `apps/mcp` — MCP server (Claude Desktop / Claude Code 連携)
-- `apps/web` — Next.js dashboard
-- `packages/analytics` — Financial analysis & tool definitions (shared)
-- `packages/db` — Database schema & repositories (shared)
-- `packages/meta` — Category definitions & URLs (shared)
-
-## Development Guidelines
-
-### Package Manager
-
-- **Use pnpm** (do not use npm or yarn)
-- Add dependencies: `pnpm --filter <package> add <dep>`
-- Install all: `pnpm install`
-
-### Building
-
-- **Do not run `pnpm build` during development**
-- Only build Next.js app when explicitly requested by the user
-- Type checking: `pnpm turbo typecheck`
-
-### Linting & Formatting
-
-- Lint: `pnpm lint` (runs oxlint with type-aware checking)
-- Unused code check: `pnpm knip`
-- Format: `pnpm format`
-- Format check: `pnpm format:check`
-
-### Running the Crawler
-
-- Run: `pnpm --filter @mf-dashboard/crawler start`
-- Development/Debug: `pnpm --filter @mf-dashboard/crawler dev:scrape`
-- **When an LLM agent runs scraping, use `dev:scrape`**
-- If `data/auth-state.json` exists, it will be used automatically
-
-#### Scraping Mode (Auto-detected)
-
-Scraping mode is automatically determined by database existence:
-
-- **DB exists** (`data/moneyforward.db`): `month` mode (fetches current month only)
-- **DB does not exist**: `history` mode (fetches past 13 months)
-
-**To re-fetch historical data**, delete the database:
+### Validation Commands
+
+| Check               | Command                                          |
+| ------------------- | ------------------------------------------------ |
+| All tests           | `pnpm test`                                      |
+| Type checking       | `pnpm turbo typecheck`                           |
+| Lint                | `pnpm lint`                                      |
+| Unused code         | `pnpm knip`                                      |
+| Format              | `pnpm format`                                    |
+| Format check        | `pnpm format:check`                              |
+| Web unit tests      | `pnpm --filter @mf-dashboard/web test:unit`      |
+| Web Storybook tests | `pnpm --filter @mf-dashboard/web test:storybook` |
+| Web E2E tests       | `pnpm --filter @mf-dashboard/web test:e2e`       |
+| Storybook           | `pnpm --filter @mf-dashboard/web storybook`      |
+
+## Common Commands
+
+### Dependencies
 
 ```bash
-rm data/moneyforward.db
-pnpm --filter @mf-dashboard/crawler start
-```
-
-**For testing**: Use `SCRAPE_MODE=history` or `SCRAPE_MODE=month` to force a specific mode
-
-**To clean up groups deleted from MoneyForward**: Use `CLEANUP_GROUPS=true` to delete groups from DB that no longer exist in MoneyForward. By default, groups are only upserted and never deleted.
-
-```bash
-CLEANUP_GROUPS=true pnpm --filter @mf-dashboard/crawler start
+pnpm install
+pnpm --filter <package> add <dependency>
 ```
 
 ### Database
 
-- SQLite database is located at `data/moneyforward.db`
-- Generate migration: `pnpm --filter @mf-dashboard/db exec drizzle-kit generate`
-- Apply migration: `pnpm --filter @mf-dashboard/db exec drizzle-kit migrate`
-- Database Studio: `pnpm --filter @mf-dashboard/db studio`
+The SQLite database is stored at `data/moneyforward.db`.
 
-### Test & Storybook Data
+```bash
+pnpm --filter @mf-dashboard/db exec drizzle-kit generate
+pnpm --filter @mf-dashboard/db exec drizzle-kit migrate
+pnpm --filter @mf-dashboard/db studio
+pnpm --filter @mf-dashboard/db build:demo
+```
 
-- When creating dummy data for tests or Storybook, **do not reference** `data/moneyforward.db` (contains personal information)
-- `data/demo.db` can be generated with `pnpm --filter @mf-dashboard/db build:demo` and used as reference
-- Run web app with demo data: `pnpm --filter @mf-dashboard/web dev:demo`
+Run the web app with demo data using `pnpm --filter @mf-dashboard/web dev`.
 
-### Testing
+### Crawler
 
-- Run all tests: `pnpm test`
-- Web unit tests: `pnpm --filter @mf-dashboard/web test:unit`
-- Web Storybook tests: `pnpm --filter @mf-dashboard/web test:storybook`
-- Web E2E tests: `pnpm --filter @mf-dashboard/web test:e2e`
-- Storybook: `pnpm --filter @mf-dashboard/web storybook`
+```bash
+pnpm --filter @mf-dashboard/crawler start
+pnpm --filter @mf-dashboard/crawler dev:scrape
+```
 
-### Debugging
+- When an LLM agent runs scraping, use `dev:scrape`.
+- If `data/auth-state.json` exists, it is used automatically.
+- Save crawler screenshots in `apps/crawler/debug/`.
+- To log in with saved auth state, use `loginWithAuthState` from `apps/crawler/src/auth/login.ts`.
 
-- Place debug scripts in the `debug/` directory under each `apps/` or `packages/` package
-- Do not create temporary files like `debug-*.ts` or `test-*.ts` inside `src/`
+Scraping mode is inferred from database existence:
 
-#### Crawler-specific
+- If `data/moneyforward.db` exists, `month` mode fetches the current month only.
+- If it does not exist, `history` mode fetches the past 13 months.
+- For testing, set `SCRAPE_MODE=history` or `SCRAPE_MODE=month` to override detection.
+- To remove groups no longer present in Money Forward, run with `CLEANUP_GROUPS=true`. Otherwise, groups are only upserted and never deleted.
 
-- Save screenshots in the `apps/crawler/debug/` directory
-- To login with saved auth state, use `loginWithAuthState` from `apps/crawler/src/auth/login.ts`
+To re-fetch historical data, delete `data/moneyforward.db`, then start the crawler. Confirm the database is the intended target before deleting it.

@@ -14,6 +14,12 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
 import { createBrowserContext } from "./browser/context.js";
+import { categorizeCashFlowMonth } from "./category-decision/categorize-cash-flow.js";
+import { loadCategoryDecisionConfig } from "./category-decision/config.js";
+import type {
+  CategoryDecisionUsage,
+  NormalizedCategoryDecisionConfig,
+} from "./category-decision/types.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
@@ -46,6 +52,12 @@ export interface CrawlerRuntime {
   browser: Browser;
   context: BrowserContext;
   page: Page;
+  categoryDecision: CategoryDecisionRuntime;
+}
+
+export interface CategoryDecisionRuntime {
+  config: NormalizedCategoryDecisionConfig | null;
+  usage: CategoryDecisionUsage;
 }
 
 export function runLoadPhase(): CrawlerConfig {
@@ -103,6 +115,7 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
   phase("Setup");
   info("Initializing database");
   const db = await initDb();
+  const categoryDecision = await loadCategoryDecisionRuntime();
 
   let browser: Browser | null = null;
   try {
@@ -119,6 +132,7 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
       browser,
       context,
       page,
+      categoryDecision,
     };
   } catch (err) {
     if (browser) {
@@ -126,6 +140,20 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
     }
     throw err;
   }
+}
+
+async function loadCategoryDecisionRuntime(): Promise<CategoryDecisionRuntime> {
+  const result = await loadCategoryDecisionConfig(undefined, warn);
+  if (result.enabled) {
+    info("Category decision: enabled (data/category-rules.json found)");
+  } else {
+    info("Category decision: disabled (data/category-rules.json not found or invalid)");
+  }
+
+  return {
+    config: result.config,
+    usage: { llmCallsUsed: 0 },
+  };
 }
 
 export async function runAuthPhase(page: Page, context: BrowserContext): Promise<void> {
@@ -154,13 +182,33 @@ export async function runScrapePhase(
   return scrapeResult;
 }
 
-export async function runSavePhase(db: Db, scrapeResult: ScrapeResult): Promise<void> {
+export async function runSavePhase(
+  db: Db,
+  page: Page,
+  scrapeResult: ScrapeResult,
+  categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
+): Promise<void> {
   phase("Save");
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
 
   if (noGroupData) {
     info(`Saving full data for ${noGroupData.group.name}`);
-    const scrapedData = buildScrapedData(scrapeResult.globalData, noGroupData);
+    let globalData = scrapeResult.globalData;
+    if (categoryDecision.config) {
+      await switchGroup(page, NO_GROUP_ID);
+      globalData = {
+        ...globalData,
+        cashFlow: await categorizeCashFlowMonth({
+          page,
+          db,
+          cashFlow: globalData.cashFlow,
+          config: categoryDecision.config,
+          usage: categoryDecision.usage,
+        }),
+      };
+    }
+
+    const scrapedData = buildScrapedData(globalData, noGroupData);
     debug("Scraped data:", JSON.stringify(scrapedData, null, 2));
     await saveScrapedData(db, scrapedData);
   } else {
@@ -216,6 +264,7 @@ export async function runCashFlowHistoryPhase(
   db: Db,
   page: Page,
   config: Pick<CrawlerConfig, "isHistoryMode">,
+  categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
 ): Promise<void> {
   phase("Cash Flow History");
 
@@ -243,7 +292,21 @@ export async function runCashFlowHistoryPhase(
   const historyResults = await scrapeCashFlowHistory(page, monthsToFetch);
 
   for (const { month, data: monthData } of historyResults) {
-    const savedCount = await saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
+    const categorizedMonthData = categoryDecision.config
+      ? await categorizeCashFlowMonth({
+          page,
+          db,
+          cashFlow: monthData,
+          config: categoryDecision.config,
+          usage: categoryDecision.usage,
+        })
+      : monthData;
+    const savedCount = await saveTransactionsForMonth(
+      db,
+      month,
+      categorizedMonthData.items,
+      accountIdMap,
+    );
     log(`  ${month}: saved ${savedCount} transactions`);
   }
 }

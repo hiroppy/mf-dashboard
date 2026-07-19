@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { formatCurrency } from "../../lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { chartTooltipStyle } from "./chart-tooltip";
@@ -36,7 +37,11 @@ export function LineChart({ title, icon, data, lines, xAxisKey, height = 300 }: 
         <CardTitle icon={icon ?? TrendingUp}>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={height}>
+        <ResponsiveContainer
+          width="100%"
+          height={height}
+          initialDimension={CHART_INITIAL_DIMENSION}
+        >
           <RechartsLineChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey={xAxisKey} tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />

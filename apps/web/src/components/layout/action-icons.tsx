@@ -190,7 +190,7 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
                 <li>
                   <span className="font-medium text-foreground">MCP 連携</span>
                   <span className="block ml-5 mt-1">
-                    Chat GPT や Claude Desktop から家計・資産・投資データを自然言語で照会できます。
+                    ChatGPT、Codex、Claudeから家計・資産・投資データを自然言語で照会できます。
                   </span>
                 </li>
               </ul>
