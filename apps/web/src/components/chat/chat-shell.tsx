@@ -25,7 +25,7 @@ import { ChatMarkdown } from "./chat-markdown";
 import { useFinanceChat } from "./chat-provider";
 
 const PANEL_ID = "finance-ai-chat-panel";
-const DEFAULT_PANEL_WIDTH = 384;
+const DEFAULT_PANEL_WIDTH = 640;
 const MIN_PANEL_WIDTH = 320;
 const MAX_PANEL_WIDTH = 720;
 const PANEL_RESIZE_STEP = 24;
@@ -281,7 +281,12 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                         message.role === "user" ? "justify-end" : "justify-start",
                       )}
                     >
-                      <div className="max-w-[85%] space-y-3">
+                      <div
+                        className={cn(
+                          "space-y-3",
+                          message.role === "user" ? "max-w-[85%]" : "w-full",
+                        )}
+                      >
                         {showText && (
                           <div
                             className={cn(

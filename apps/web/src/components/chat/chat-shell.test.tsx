@@ -58,6 +58,18 @@ const structuredMessage = {
 };
 
 describe("ChatShell", () => {
+  it("uses a wide default panel for structured cards", () => {
+    render(
+      <ChatProvider initialOpen>
+        <ChatShell />
+      </ChatProvider>,
+    );
+
+    expect(screen.getByLabelText("家計AIチャット").getAttribute("style")).toContain(
+      "--chat-panel-width: 640px",
+    );
+  });
+
   it("shows an accessible configuration hint when chat fails", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
@@ -311,6 +323,7 @@ describe("ChatShell", () => {
     expect(screen.getByText("6月10日の支出")).toBeTruthy();
     expect(screen.getByText("支出明細")).toBeTruthy();
     expect(screen.getByText("店舗 A")).toBeTruthy();
+    expect(screen.getByText("6月10日の支出").closest(".w-full")).not.toBeNull();
     expect(screen.getByRole("link", { name: /詳細を見る/ }).getAttribute("href")).toBe(
       "/cf/2026-06",
     );
