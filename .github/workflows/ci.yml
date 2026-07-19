@@ -21,6 +21,7 @@ jobs:
       - run: pnpm knip
       - run: pnpm typecheck --affected
       - run: pnpm test --affected
+      - run: pnpm test:mutation
   build-demo:
     runs-on: ubuntu-latest
     steps:
