@@ -78,6 +78,19 @@ describe("financeChatCardSchema", () => {
         title: "カテゴリ別支出",
         categories: [{ name: "食費", amount: -1200, amountType: "expense", percentage: 50 }],
       },
+      {
+        type: "chart",
+        title: "収支推移",
+        chartType: "line",
+        series: [
+          { name: "収入", amountType: "income" },
+          { name: "支出", amountType: "expense" },
+        ],
+        data: [
+          { label: "6月", values: [300000, 200000] },
+          { label: "7月", values: [320000, 190000] },
+        ],
+      },
       { type: "insight", title: "支出傾向", description: "前月より減少しています" },
       {
         type: "action",
@@ -133,6 +146,101 @@ describe("financeChatCardSchema", () => {
         title: "支出傾向",
         description: "支出が減少しました",
         amount: 1000,
+      }).success,
+    ).toBe(false);
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "insight",
+        title: "削減候補",
+        description: "食費を前月と比較しました",
+        amount: 1000,
+        amountType: "balance",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects chart data that does not match its series", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "収支推移",
+        chartType: "line",
+        series: [{ name: "収入", amountType: "income" }],
+        data: [{ label: "7月", values: [300000, 200000] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate chart series names", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "年度別の支出比較",
+        chartType: "line",
+        series: [
+          { name: "支出", amountType: "expense" },
+          { name: "支出", amountType: "expense" },
+        ],
+        data: [{ label: "7月", values: [200000, 180000] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate chart data labels", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "支出内訳",
+        chartType: "pie",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [
+          { label: "その他", values: [3000] },
+          { label: "その他", values: [2000] },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects negative pie chart values", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "支出内訳",
+        chartType: "pie",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [{ label: "食費", values: [-3000] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects pie charts with more categories than the color palette", () => {
+    const card = {
+      type: "chart" as const,
+      title: "支出内訳",
+      chartType: "pie" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+    };
+    const data = (length: number) =>
+      Array.from({ length }, (_, index) => ({
+        label: `カテゴリ${index + 1}`,
+        values: [index + 1],
+      }));
+
+    expect(financeChatCardSchema.safeParse({ ...card, data: data(5) }).success).toBe(true);
+    expect(financeChatCardSchema.safeParse({ ...card, data: data(6) }).success).toBe(false);
+  });
+
+  it("rejects pie chart data whose values are all zero", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "支出内訳",
+        chartType: "pie",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [
+          { label: "食費", values: [0] },
+          { label: "日用品", values: [0] },
+        ],
       }).success,
     ).toBe(false);
   });

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
-    "dev:e2e": "DB_PATH=../../data/demo.db next dev",
+    "dev:e2e": "DB_PATH=../../data/demo.db AI_PROVIDER=openai AI_MODEL=e2e-mock AI_API_KEY=e2e-mock-key next dev",
     "build": "next build",
     "build:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next build",
     "start": "next start",
@@ -27,16 +27,17 @@
     "@mf-dashboard/db": "workspace:*",
     "@mf-dashboard/meta": "workspace:*",
     "@nivo/sankey": "0.99.0",
+    "@streamdown/cjk": "1.0.3",
     "ai": "7.0.30",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
-    "jose": "^6.2.3",
     "lucide-react": "1.20.0",
     "next": "16.2.9",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "recharts": "3.8.1",
+    "streamdown": "2.5.0",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {

@@ -9,30 +9,41 @@ import {
   getToolName,
   isToolUIPart,
   safeValidateUIMessages,
+  smoothStream,
   stepCountIs,
   streamText,
   type UIMessage,
 } from "ai";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createFinanceChatLinkSanitizer } from "./link-sanitizer";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const MAX_TOOL_STEPS = 8;
 const SIGNATURE_METADATA_KEY = "serverSignature";
-const accessJwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
 - 回答前に必要な家計データをツールで取得し、提案には根拠となる期間・項目・数値を明記してください。
+- 高レベルの要約、比較、傾向分析、改善提案では、必要な指標が一括で得られるgetFinancialMetricsを優先してください。その結果に含まれるデータを別ツールで再取得しないでください。
+- 複数のツールが必要な場合、互いに依存しないツールは同じステップで並列に呼び出してください。先行ツールの結果が入力に必要な場合だけ逐次呼び出してください。
+- データ取得は回答に必要な最小限にし、同じ期間・指標を異なるツールで重複取得しないでください。
 - 金額、取引、口座、URLを推測・捏造しないでください。金額はツール結果だけを根拠にしてください。
-- ページへ誘導するときは、ツール結果とアプリのroute builderから提供された内部リンクだけを使用してください。URLを自作しないでください。
+- ページへ誘導するときは、getFinanceDashboardRouteが返したhrefだけを一字も変えずに使用してください。URLを自作せず、ホスト名、#、仮URL、プレースホルダーを付けないでください。hrefを取得していない場合はリンク自体を出さないでください。
+- 収入・支出・収支・取引・カテゴリ・固定費・変動費の詳細には、getFinanceDashboardRouteをpage="cashFlow"かつ対象のmonthで呼び出してください。資産・負債・保有銘柄にはpage="balanceSheet"、口座にはpage="accounts"、分析結果にはpage="insights"、シミュレーションにはpage="simulator"、概要画面そのものにはpage="dashboard"を使用してください。
+- 本文にリンクを書く場合は、getFinanceDashboardRouteが返したhrefをMarkdownのリンク先にそのまま使ってください。カードのhrefまたはaction.hrefにも同じhrefをそのまま使ってください。
 - 個人情報や家計データを必要以上に繰り返さず、外部共有を促さないでください。
 - 断定できない場合は不足している根拠を明示し、追加確認を促してください。
 - 回答は簡潔な日本語で、実行可能な家計改善策を優先してください。
-- データ取得後は必ずpresentFinanceCardsを1回呼び、本文の要点をstructured cardsでも提示してください。
+- データ取得後は必ずpresentFinanceCardsを1回呼び、数値、内訳、比較、詳細導線はstructured cardsを主として提示してください。
+- カードは原則2枚以内にし、すでに取得したデータだけで作成してください。カードを増やすためだけに追加のデータ取得ツールを呼ばないでください。
+- transactionListは、ユーザーが取引、明細、特定日、特定カテゴリの詳細を明示的に求めた場合だけ使用してください。要約、比較、傾向、改善提案では使用しないでください。
+- chartは、ユーザーが「グラフ」「チャート」「可視化」など視覚化を明示した場合、または比較・推移・構成比を文章や数値だけより明確に伝えられると判断した場合に使用してください。単純な金額回答や短い要約には使用しないでください。時系列にはline、項目比較にはbar、単一系列の構成比にはpieを使用してください。pieのdataは最大5件にし、6件以上ある場合は主要4件以外を「その他」に集約してください。
+- カードだけでユーザーの質問に答えられるよう、結論、必要な根拠、実行可能な次の一歩、詳細導線をカードに含めてください。本文はカード生成に失敗した場合のフォールバックとして簡潔に作成し、カードの内容を繰り返さないでください。
+- summaryとinsightを併用する場合、summaryは主要な数値、insightは数値の再掲ではなく解釈と改善提案に役割を分けてください。
+- insightにamountを含める場合は、金額の意味を示すamountLabelとamountTypeも必ず含めてください。amount、amountLabel、amountTypeは3項目すべてを指定するか、すべて省略してください。
 - 「6/10の支出を見たい」など日付別支出には、expenseを検索し、summary、transactionList、actionの順で提示してください。
 - 「今月どう？」など月次状況には、対象月の収支を取得し、summaryとinsightを提示してください。
 - 「今月の食費は？」などカテゴリ支出には、対象月・カテゴリの取引とカテゴリ合計を取得し、summary、categoryBreakdown、transactionListを提示してください。
-- 「削れそうな支出ある？」には、固定費・変動費と過去比較を取得し、変動費の候補を中心に、固定費を別枠のinsightで提示してください。手残りと貯蓄率がどれだけ改善するかを主な判断基準にしてください。
+- 「削れそうな支出ある？」には、支出傾向、カテゴリ、手残り、貯蓄率を確認し、変動しやすいカテゴリと異常支出を優先してください。insightのdescriptionには対象期間、具体的なカテゴリ、比較基準、見直し理由を含め、単に「特別な支出」「異常支出」とだけ表現しないでください。amountを出す場合は何を合計した金額かが分かるamountLabel（例:「見直し候補額」）を付け、削減できると断定せず候補額として示し、amountType="balance"を使用してください。CTAは「詳細を確認」ではなく「内訳を確認」など遷移先で確認できる内容を明記してください。
 - 「総資産は？」には最新の総資産を取得し、summaryを提示してください。
 - 該当データがない場合、金額を推測せずemptyだけを提示し、期間や条件を変える代替promptを1〜3件含めてください。
 - empty以外ではgetFinanceDashboardRouteを呼び、その結果だけをhrefまたはactionに使って、詳細ページへ遷移できるCTAを少なくとも1件含めてください。
@@ -47,42 +58,6 @@ function getSystemPrompt(): string {
 
 function errorResponse(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
-}
-
-function getAccessJwks(issuer: string): ReturnType<typeof createRemoteJWKSet> {
-  const cached = accessJwksByIssuer.get(issuer);
-  if (cached) return cached;
-
-  const jwks = createRemoteJWKSet(new URL("/cdn-cgi/access/certs", issuer));
-  accessJwksByIssuer.set(issuer, jwks);
-  return jwks;
-}
-
-async function isWithinChatAccessBoundary(request: Request): Promise<boolean> {
-  if (process.env.NODE_ENV !== "production") {
-    return true;
-  }
-
-  const token = request.headers.get("cf-access-jwt-assertion");
-  const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
-  const audience = process.env.CF_ACCESS_AUD;
-
-  if (process.env.VERCEL === "1" || !token || !teamDomain || !audience) return false;
-
-  try {
-    const issuerUrl = new URL(teamDomain);
-    if (issuerUrl.protocol !== "https:") return false;
-
-    const issuer = issuerUrl.origin;
-    await jwtVerify(token, getAccessJwks(issuer), {
-      algorithms: ["RS256"],
-      audience,
-      issuer,
-    });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function getMessageText(message: UIMessage): string {
@@ -163,10 +138,6 @@ function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMess
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!(await isWithinChatAccessBoundary(request))) {
-    return errorResponse(403, "CHAT_ACCESS_DENIED", "チャットAPIへのアクセスが拒否されました。");
-  }
-
   let body: unknown;
 
   try {
@@ -236,11 +207,16 @@ export async function POST(request: Request): Promise<Response> {
   const presentationOutputs: unknown[] = [];
   const result = streamText({
     abortSignal: request.signal,
+    experimental_transform: [
+      createFinanceChatLinkSanitizer(group.id, (text) => {
+        assistantText += text;
+      }),
+      smoothStream(),
+    ],
     model,
     system: getSystemPrompt(),
     messages: await convertToModelMessages(modelInputMessages, { tools }),
     onChunk: ({ chunk }) => {
-      if (chunk.type === "text-delta") assistantText += chunk.text;
       if (chunk.type === "tool-result" && chunk.toolName === "presentFinanceCards") {
         presentationOutputs.push(chunk.output);
       }

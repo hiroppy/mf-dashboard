@@ -2,6 +2,7 @@ import {
   isFinanceChatHrefSafe,
   type ActionCard as ActionCardData,
   type CategoryBreakdownCard as CategoryBreakdownCardData,
+  type ChartCard as ChartCardData,
   type EmptyCard as EmptyCardData,
   type FinanceChatCard as FinanceChatCardData,
   type InsightCard as InsightCardData,
@@ -15,19 +16,27 @@ import type { ReactNode } from "react";
 import { cn } from "../../../lib/utils";
 import { AmountDisplay } from "../../ui/amount-display";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
+import { FinanceChatChart } from "./finance-chat-chart";
 
 interface FinanceChatCardProps {
+  allowedHrefs?: readonly string[];
   card: FinanceChatCardData;
   onPromptSelect?: (prompt: string) => void;
 }
 
 interface CardShellProps {
+  allowedHrefs: ReadonlySet<string>;
   children: ReactNode;
   href?: string;
 }
 
-function SafeLink({ href, className, children }: CardShellProps & { className?: string }) {
-  if (!href || !isFinanceChatHrefSafe(href)) return children;
+function SafeLink({
+  allowedHrefs,
+  href,
+  className,
+  children,
+}: CardShellProps & { className?: string }) {
+  if (!href || !isFinanceChatHrefSafe(href) || !allowedHrefs.has(href)) return children;
 
   return (
     <Link href={href as Route} className={className}>
@@ -36,12 +45,13 @@ function SafeLink({ href, className, children }: CardShellProps & { className?: 
   );
 }
 
-function CardShell({ href, children }: CardShellProps) {
-  const isLinkable = href ? isFinanceChatHrefSafe(href) : false;
+function CardShell({ allowedHrefs, href, children }: CardShellProps) {
+  const isLinkable = href ? isFinanceChatHrefSafe(href) && allowedHrefs.has(href) : false;
 
   return (
     <SafeLink
       href={href}
+      allowedHrefs={allowedHrefs}
       className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Card className={cn("overflow-hidden", isLinkable && "transition-colors hover:bg-muted/50")}>
@@ -51,27 +61,41 @@ function CardShell({ href, children }: CardShellProps) {
   );
 }
 
-function CardAction({ action }: { action: { label: string; href: string } }) {
-  const content = (
-    <span className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
-      {action.label}
-      <ArrowRight aria-hidden="true" className="size-4" />
-    </span>
-  );
+function CardAction({
+  action,
+  allowedHrefs,
+}: {
+  action: { label: string; href: string };
+  allowedHrefs: ReadonlySet<string>;
+}) {
+  const isLinkable = isFinanceChatHrefSafe(action.href) && allowedHrefs.has(action.href);
+
+  if (!isLinkable) {
+    return <span className="text-sm text-muted-foreground">{action.label}</span>;
+  }
 
   return (
-    <SafeLink
-      href={action.href}
+    <Link
+      href={action.href as Route}
       className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {content}
-    </SafeLink>
+      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+        {action.label}
+        <ArrowRight aria-hidden="true" className="size-4" />
+      </span>
+    </Link>
   );
 }
 
-function SummaryCard({ card }: { card: SummaryCardData }) {
+function SummaryCard({
+  card,
+  allowedHrefs,
+}: {
+  card: SummaryCardData;
+  allowedHrefs: ReadonlySet<string>;
+}) {
   return (
-    <CardShell href={card.href}>
+    <CardShell href={card.href} allowedHrefs={allowedHrefs}>
       <CardHeader>
         <CardTitle icon={WalletCards}>{card.title}</CardTitle>
         {card.description && <CardDescription>{card.description}</CardDescription>}
@@ -88,9 +112,15 @@ function SummaryCard({ card }: { card: SummaryCardData }) {
   );
 }
 
-function TransactionListCard({ card }: { card: TransactionListCardData }) {
+function TransactionListCard({
+  card,
+  allowedHrefs,
+}: {
+  card: TransactionListCardData;
+  allowedHrefs: ReadonlySet<string>;
+}) {
   return (
-    <CardShell href={card.href}>
+    <CardShell href={card.href} allowedHrefs={allowedHrefs}>
       <CardHeader>
         <CardTitle icon={ReceiptText}>{card.title}</CardTitle>
       </CardHeader>
@@ -120,15 +150,21 @@ function TransactionListCard({ card }: { card: TransactionListCardData }) {
   );
 }
 
-function CategoryBreakdownCard({ card }: { card: CategoryBreakdownCardData }) {
+function CategoryBreakdownCard({
+  card,
+  allowedHrefs,
+}: {
+  card: CategoryBreakdownCardData;
+  allowedHrefs: ReadonlySet<string>;
+}) {
   return (
-    <CardShell href={card.href}>
+    <CardShell href={card.href} allowedHrefs={allowedHrefs}>
       <CardHeader>
         <CardTitle icon={ChartPie}>{card.title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col items-start gap-4">
         {card.categories.map((category) => (
-          <div key={category.name} className="space-y-1.5">
+          <div key={category.name} className="w-full min-w-0 space-y-1.5">
             <div className="flex items-center justify-between gap-4 text-sm">
               <span>{category.name}</span>
               <div className="flex items-center gap-2">
@@ -151,32 +187,66 @@ function CategoryBreakdownCard({ card }: { card: CategoryBreakdownCardData }) {
   );
 }
 
-function InsightCard({ card }: { card: InsightCardData }) {
+function ChartCard({
+  card,
+  allowedHrefs,
+}: {
+  card: ChartCardData;
+  allowedHrefs: ReadonlySet<string>;
+}) {
   return (
-    <CardShell>
+    <CardShell href={card.href} allowedHrefs={allowedHrefs}>
       <CardHeader>
-        <CardTitle icon={Lightbulb}>{card.title}</CardTitle>
-        <CardDescription>{card.description}</CardDescription>
+        <CardTitle icon={ChartPie}>{card.title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {card.amount !== undefined && card.amountType && (
-          <AmountDisplay amount={card.amount} type={card.amountType} size="xl" weight="bold" />
-        )}
-        {card.action && <CardAction action={card.action} />}
+      <CardContent>
+        <FinanceChatChart card={card} />
       </CardContent>
     </CardShell>
   );
 }
 
-function ActionCard({ card }: { card: ActionCardData }) {
+function InsightCard({
+  card,
+  allowedHrefs,
+}: {
+  card: InsightCardData;
+  allowedHrefs: ReadonlySet<string>;
+}) {
   return (
-    <CardShell>
+    <CardShell allowedHrefs={allowedHrefs}>
+      <CardHeader>
+        <CardTitle icon={Lightbulb}>{card.title}</CardTitle>
+        <CardDescription>{card.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-end justify-between gap-4">
+        {card.amount !== undefined && card.amountType && (
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm text-muted-foreground">{card.amountLabel}</p>
+            <AmountDisplay amount={card.amount} type={card.amountType} size="xl" weight="bold" />
+          </div>
+        )}
+        {card.action && <CardAction action={card.action} allowedHrefs={allowedHrefs} />}
+      </CardContent>
+    </CardShell>
+  );
+}
+
+function ActionCard({
+  card,
+  allowedHrefs,
+}: {
+  card: ActionCardData;
+  allowedHrefs: ReadonlySet<string>;
+}) {
+  return (
+    <CardShell allowedHrefs={allowedHrefs}>
       <CardHeader>
         <CardTitle icon={ArrowRight}>{card.title}</CardTitle>
         <CardDescription>{card.description}</CardDescription>
       </CardHeader>
       <CardContent>
-        <CardAction action={card.action} />
+        <CardAction action={card.action} allowedHrefs={allowedHrefs} />
       </CardContent>
     </CardShell>
   );
@@ -184,13 +254,15 @@ function ActionCard({ card }: { card: ActionCardData }) {
 
 function EmptyCard({
   card,
+  allowedHrefs,
   onPromptSelect,
 }: {
   card: EmptyCardData;
+  allowedHrefs: ReadonlySet<string>;
   onPromptSelect?: (prompt: string) => void;
 }) {
   return (
-    <CardShell>
+    <CardShell allowedHrefs={allowedHrefs}>
       <CardHeader>
         <CardTitle icon={Inbox}>{card.title}</CardTitle>
         <CardDescription>{card.description}</CardDescription>
@@ -211,19 +283,25 @@ function EmptyCard({
   );
 }
 
-export function FinanceChatCard({ card, onPromptSelect }: FinanceChatCardProps) {
+export function FinanceChatCard({ allowedHrefs = [], card, onPromptSelect }: FinanceChatCardProps) {
+  const allowedHrefSet = new Set(allowedHrefs);
+
   switch (card.type) {
     case "summary":
-      return <SummaryCard card={card} />;
+      return <SummaryCard card={card} allowedHrefs={allowedHrefSet} />;
     case "transactionList":
-      return <TransactionListCard card={card} />;
+      return <TransactionListCard card={card} allowedHrefs={allowedHrefSet} />;
     case "categoryBreakdown":
-      return <CategoryBreakdownCard card={card} />;
+      return <CategoryBreakdownCard card={card} allowedHrefs={allowedHrefSet} />;
+    case "chart":
+      return <ChartCard card={card} allowedHrefs={allowedHrefSet} />;
     case "insight":
-      return <InsightCard card={card} />;
+      return <InsightCard card={card} allowedHrefs={allowedHrefSet} />;
     case "action":
-      return <ActionCard card={card} />;
+      return <ActionCard card={card} allowedHrefs={allowedHrefSet} />;
     case "empty":
-      return <EmptyCard card={card} onPromptSelect={onPromptSelect} />;
+      return (
+        <EmptyCard card={card} allowedHrefs={allowedHrefSet} onPromptSelect={onPromptSelect} />
+      );
   }
 }

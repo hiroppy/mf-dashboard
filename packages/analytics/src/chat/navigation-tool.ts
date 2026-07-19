@@ -2,25 +2,19 @@ import { tool } from "ai";
 import { z } from "zod";
 import { buildFinanceChatHref } from "./cards";
 
-const navigationInputSchema = z.discriminatedUnion("page", [
-  z.object({ page: z.literal("dashboard") }),
-  z.object({
-    page: z.literal("cashFlow"),
-    month: z
-      .string()
-      .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-      .optional(),
-  }),
-  z.object({ page: z.literal("balanceSheet") }),
-  z.object({ page: z.literal("accounts") }),
-  z.object({ page: z.literal("insights") }),
-  z.object({ page: z.literal("simulator") }),
-]);
+const navigationInputSchema = z.object({
+  page: z.enum(["dashboard", "cashFlow", "balanceSheet", "accounts", "insights", "simulator"]),
+  month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+    .optional()
+    .describe("cashFlowページの対象月 (YYYY-MM形式)"),
+});
 
 export function createFinanceNavigationTool(groupId: string) {
   return tool({
     description:
-      "回答カードのCTAに使う現在グループ内の安全なダッシュボードURLを取得する。presentFinanceCardsへhrefを渡す前に呼び出す",
+      "回答本文とカードのCTAに使う現在グループ内のURLを取得する。収支・収入・支出・取引・カテゴリはcashFlow、資産・負債・保有銘柄はbalanceSheet、口座はaccounts、分析はinsights、シミュレーションはsimulator、概要画面はdashboardを指定する。返されたhrefは変更せずに使う",
     inputSchema: navigationInputSchema,
     execute: async (route) => {
       switch (route.page) {

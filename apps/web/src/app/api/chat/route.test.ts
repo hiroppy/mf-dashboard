@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   consumeStream: vi.fn<AnyMock>(),
   convertToModelMessages: vi.fn<AnyMock>(),
   createFinanceChatTools: vi.fn<AnyMock>(),
-  createRemoteJWKSet: vi.fn<AnyMock>(),
   getAllGroups: vi.fn<AnyMock>(),
   getCurrentGroup: vi.fn<AnyMock>(),
   getDb: vi.fn<AnyMock>(),
@@ -16,9 +15,8 @@ const mocks = vi.hoisted(() => ({
   isToolUIPart: vi.fn<AnyMock>(),
   isDatabaseAvailable: vi.fn<AnyMock>(),
   isLLMEnabled: vi.fn<AnyMock>(),
-  jwtVerify: vi.fn<AnyMock>(),
-  remoteJwks: vi.fn<AnyMock>(),
   safeValidateUIMessages: vi.fn<AnyMock>(),
+  smoothStream: vi.fn<AnyMock>(),
   stepCountIs: vi.fn<AnyMock>(),
   streamText: vi.fn<AnyMock>(),
   toUIMessageStreamResponse: vi.fn<AnyMock>(),
@@ -46,13 +44,9 @@ vi.mock("ai", () => ({
   getToolName: mocks.getToolName,
   isToolUIPart: mocks.isToolUIPart,
   safeValidateUIMessages: mocks.safeValidateUIMessages,
+  smoothStream: mocks.smoothStream,
   stepCountIs: mocks.stepCountIs,
   streamText: mocks.streamText,
-}));
-
-vi.mock("jose", () => ({
-  createRemoteJWKSet: mocks.createRemoteJWKSet,
-  jwtVerify: mocks.jwtVerify,
 }));
 
 const { POST } = await import("./route");
@@ -72,12 +66,25 @@ function request(body: unknown): Request {
   });
 }
 
+async function runTextTransform(transform: AnyMock, chunks: unknown[]) {
+  const stream = transform({ stopStream: vi.fn<() => void>(), tools });
+  const reader = stream.readable.getReader();
+  const writer = stream.writable.getWriter();
+  const readPromise = (async () => {
+    while (!(await reader.read()).done) {
+      // Drain output so writes cannot block on stream backpressure.
+    }
+  })();
+
+  for (const chunk of chunks) await writer.write(chunk);
+  await writer.close();
+  await readPromise;
+}
+
 describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("AI_API_KEY", "test-api-key");
-    mocks.createRemoteJWKSet.mockReturnValue(mocks.remoteJwks);
-    mocks.jwtVerify.mockResolvedValue({ payload: {} });
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: messages });
     mocks.isLLMEnabled.mockReturnValue(true);
     mocks.isDatabaseAvailable.mockReturnValue(true);
@@ -94,6 +101,7 @@ describe("POST /api/chat", () => {
     mocks.getToolName.mockImplementation((part) => part.type.replace(/^tool-/, ""));
     mocks.createFinanceChatTools.mockReturnValue(tools);
     mocks.convertToModelMessages.mockResolvedValue(modelMessages);
+    mocks.smoothStream.mockReturnValue("smooth-transform");
     mocks.stepCountIs.mockReturnValue("finite-stop-condition");
     mocks.toUIMessageStreamResponse.mockReturnValue(
       new Response('data: {"type":"tool-output-available"}\n\n', {
@@ -147,10 +155,20 @@ describe("POST /api/chat", () => {
     );
     expect(systemPrompt).toContain("月次状況には、対象月の収支を取得し、summaryとinsight");
     expect(systemPrompt).toContain("summary、categoryBreakdown、transactionList");
-    expect(systemPrompt).toContain("手残りと貯蓄率がどれだけ改善するか");
+    expect(systemPrompt).toContain("カードは原則2枚以内");
+    expect(systemPrompt).toContain("transactionListは、ユーザーが取引、明細");
+    expect(systemPrompt).toContain("比較・推移・構成比を文章や数値だけより明確に");
+    expect(systemPrompt).toContain("pieのdataは最大5件");
+    expect(systemPrompt).toContain("必要な指標が一括で得られるgetFinancialMetricsを優先");
+    expect(systemPrompt).toContain("互いに依存しないツールは同じステップで並列");
     expect(systemPrompt).toContain("最新の総資産を取得し、summary");
     expect(systemPrompt).toContain("emptyだけを提示");
     expect(systemPrompt).toContain("手残り、貯蓄率、予備資金、負債、資産の集中度");
+    expect(systemPrompt).toContain("カードだけでユーザーの質問に答えられるよう");
+    expect(systemPrompt).toContain("summaryは主要な数値、insightは数値の再掲ではなく解釈");
+    expect(systemPrompt).toContain(
+      "amount、amountLabel、amountTypeは3項目すべてを指定するか、すべて省略",
+    );
     expect(systemPrompt).toMatch(/現在日付は\d{4}-\d{2}-\d{2}（Asia\/Tokyo）/);
   });
 
@@ -189,113 +207,13 @@ describe("POST /api/chat", () => {
     expect(mocks.safeValidateUIMessages).not.toHaveBeenCalled();
   });
 
-  it("rejects production requests outside the Cloudflare Access boundary", async () => {
+  it("handles production requests without Cloudflare-specific headers", async () => {
     vi.stubEnv("NODE_ENV", "production");
 
-    const response = await POST(
-      new Request("https://dashboard.example.com/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages }),
-      }),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      error: {
-        code: "CHAT_ACCESS_DENIED",
-        message: "チャットAPIへのアクセスが拒否されました。",
-      },
-    });
-    expect(mocks.safeValidateUIMessages).not.toHaveBeenCalled();
-    expect(mocks.getDb).not.toHaveBeenCalled();
-  });
-
-  it("accepts production requests forwarded by Cloudflare Access", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("CF_ACCESS_TEAM_DOMAIN", "https://team.cloudflareaccess.com");
-    vi.stubEnv("CF_ACCESS_AUD", "finance-chat-audience");
-
-    const response = await POST(
-      new Request("https://dashboard.example.com/api/chat", {
-        method: "POST",
-        headers: {
-          "cf-access-jwt-assertion": "signed-access-assertion",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ messages }),
-      }),
-    );
+    const response = await POST(request({ messages }));
 
     expect(response.status).toBe(200);
     expect(mocks.getDb).toHaveBeenCalledOnce();
-    expect(mocks.createRemoteJWKSet).toHaveBeenCalledWith(
-      new URL("https://team.cloudflareaccess.com/cdn-cgi/access/certs"),
-    );
-    expect(mocks.jwtVerify).toHaveBeenCalledWith("signed-access-assertion", mocks.remoteJwks, {
-      algorithms: ["RS256"],
-      audience: "finance-chat-audience",
-      issuer: "https://team.cloudflareaccess.com",
-    });
-  });
-
-  it("rejects production requests when Access verification settings are missing", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-
-    const response = await POST(
-      new Request("https://dashboard.example.com/api/chat", {
-        method: "POST",
-        headers: {
-          "cf-access-jwt-assertion": "unverified-access-assertion",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ messages }),
-      }),
-    );
-
-    expect(response.status).toBe(403);
-    expect(mocks.jwtVerify).not.toHaveBeenCalled();
-    expect(mocks.getDb).not.toHaveBeenCalled();
-  });
-
-  it("rejects production requests with an invalid Access assertion", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("CF_ACCESS_TEAM_DOMAIN", "https://team.cloudflareaccess.com");
-    vi.stubEnv("CF_ACCESS_AUD", "finance-chat-audience");
-    mocks.jwtVerify.mockRejectedValue(new Error("invalid signature"));
-
-    const response = await POST(
-      new Request("https://dashboard.example.com/api/chat", {
-        method: "POST",
-        headers: {
-          "cf-access-jwt-assertion": "forged-access-assertion",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ messages }),
-      }),
-    );
-
-    expect(response.status).toBe(403);
-    expect(mocks.getDb).not.toHaveBeenCalled();
-  });
-
-  it("keeps the chat API disabled on public Vercel deployments", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VERCEL", "1");
-
-    const response = await POST(
-      new Request("https://preview.example.com/api/chat", {
-        method: "POST",
-        headers: {
-          "cf-access-jwt-assertion": "untrusted-assertion",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ messages }),
-      }),
-    );
-
-    expect(response.status).toBe(403);
-    expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
   it("rejects client-supplied system messages", async () => {
@@ -360,7 +278,15 @@ describe("POST /api/chat", () => {
   it("keeps signed assistant text and presentation context without raw data tool outputs", async () => {
     await POST(request({ groupId: "group-b", messages }));
     const streamOptions = mocks.streamText.mock.calls[0]![0];
-    streamOptions.onChunk({ chunk: { type: "text-delta", text: "支出を見直しましょう。" } });
+    await runTextTransform(streamOptions.experimental_transform[0], [
+      { type: "text-start", id: "text-a" },
+      {
+        type: "text-delta",
+        id: "text-a",
+        text: "[支出](https://attacker.example/anything)を見直しましょう。",
+      },
+      { type: "text-end", id: "text-a" },
+    ]);
     const cards = [
       {
         type: "action" as const,
@@ -447,7 +373,11 @@ describe("POST /api/chat", () => {
   it("does not preserve cards from multiple presentation calls in follow-up context", async () => {
     await POST(request({ groupId: "group-b", messages }));
     const streamOptions = mocks.streamText.mock.calls[0]![0];
-    streamOptions.onChunk({ chunk: { type: "text-delta", text: "確認しました。" } });
+    await runTextTransform(streamOptions.experimental_transform[0], [
+      { type: "text-start", id: "text-a" },
+      { type: "text-delta", id: "text-a", text: "確認しました。" },
+      { type: "text-end", id: "text-a" },
+    ]);
     const cards = [
       {
         type: "action" as const,

@@ -1,3 +1,4 @@
+import { isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
@@ -10,6 +11,7 @@ import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
+import { parseChatSuggestedPrompts } from "../lib/chat-config";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
 
 function createMetadataBase() {
@@ -85,14 +87,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </div>
       </SidebarProvider>
     );
-    if (process.env.DEMO_MODE === "true") {
+    if (!isLLMEnabled() || process.env.NEXT_PUBLIC_STATIC_DEMO_BUILD === "true") {
       content = dashboard;
     } else {
       const currentGroup = await getCurrentGroup();
       content = (
         <ChatProvider currentGroupId={currentGroup?.id ?? null}>
           {dashboard}
-          <ChatShell />
+          <ChatShell suggestedPrompts={parseChatSuggestedPrompts(process.env.AI_CHAT_PRESETS)} />
         </ChatProvider>
       );
     }
