@@ -323,10 +323,48 @@ describe("ChatShell", () => {
     expect(screen.getByText("6月10日の支出")).toBeTruthy();
     expect(screen.getByText("支出明細")).toBeTruthy();
     expect(screen.getByText("店舗 A")).toBeTruthy();
-    expect(screen.getByText("6月10日の支出").closest(".w-full")).not.toBeNull();
+    const card = screen.getByText("6月10日の支出").closest(".rounded-xl");
+    expect(card?.parentElement?.classList.contains("max-w-[85%]")).toBe(true);
     expect(screen.getByRole("link", { name: /詳細を見る/ }).getAttribute("href")).toBe(
       "/cf/2026-06",
     );
+  });
+
+  it("uses the full message width only for chart responses", () => {
+    const chartMessage = {
+      id: "assistant-chart",
+      role: "assistant" as const,
+      parts: [
+        {
+          type: "tool-presentFinanceCards" as const,
+          toolCallId: "present-chart",
+          state: "output-available" as const,
+          input: { cards: [] },
+          output: [
+            {
+              type: "chart" as const,
+              title: "保有資産の金額比率",
+              chartType: "pie" as const,
+              series: [{ name: "金額", amountType: "balance" as const }],
+              data: [
+                { label: "資産 A", values: [300_000] },
+                { label: "資産 B", values: [200_000] },
+              ],
+              href: "/bs",
+            },
+          ],
+        },
+      ],
+    };
+
+    render(
+      <ChatProvider initialMessages={[chartMessage]} initialOpen>
+        <ChatShell />
+      </ChatProvider>,
+    );
+
+    const card = screen.getByText("保有資産の金額比率").closest(".rounded-xl");
+    expect(card?.parentElement?.classList.contains("w-full")).toBe(true);
   });
 
   it("waits until streaming finishes before rendering cards for the latest response", () => {

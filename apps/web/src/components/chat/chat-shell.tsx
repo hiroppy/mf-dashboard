@@ -266,6 +266,8 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                     message.role === "assistant" &&
                     messageIndex === messages.length - 1;
                   const cards = isStreamingMessage ? [] : getFinanceCards(message);
+                  const hasChart = cards.some((card) => card.type === "chart");
+                  const useWideLayout = message.role === "assistant" && hasChart;
                   const allowedHrefs = getAllowedFinanceHrefs(message);
                   const showText =
                     Boolean(text) &&
@@ -281,12 +283,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                         message.role === "user" ? "justify-end" : "justify-start",
                       )}
                     >
-                      <div
-                        className={cn(
-                          "space-y-3",
-                          message.role === "user" ? "max-w-[85%]" : "w-full",
-                        )}
-                      >
+                      <div className={cn("space-y-3", useWideLayout ? "w-full" : "max-w-[85%]")}>
                         {showText && (
                           <div
                             className={cn(
