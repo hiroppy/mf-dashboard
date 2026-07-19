@@ -186,6 +186,21 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate chart data labels", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "支出内訳",
+        chartType: "pie",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [
+          { label: "その他", values: [3000] },
+          { label: "その他", values: [2000] },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects negative pie chart values", () => {
     expect(
       financeChatCardSchema.safeParse({

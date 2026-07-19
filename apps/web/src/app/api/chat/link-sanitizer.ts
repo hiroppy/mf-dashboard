@@ -23,6 +23,15 @@ function resolveAllowedHref(destination: string, allowedHrefs: Set<string>): str
   return undefined;
 }
 
+function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
+  const match = /^(.*?)([.,!?;:]+)$/.exec(url);
+  const destination = match?.[1] ?? url;
+  const trailingPunctuation = match?.[2] ?? "";
+  const href = resolveAllowedHref(destination, allowedHrefs);
+
+  return href ? `${href}${trailingPunctuation}` : trailingPunctuation;
+}
+
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
   const withoutInvalidMarkdownLinks = text.replace(
     /(?<!!)\[([^\]]+)]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g,
@@ -34,7 +43,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 
   return withoutInvalidMarkdownLinks.replace(
     /(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/g,
-    (url) => resolveAllowedHref(url, allowedHrefs) ?? "",
+    (url) => sanitizeBareUrl(url, allowedHrefs),
   );
 }
 

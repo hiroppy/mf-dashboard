@@ -139,6 +139,13 @@ export const chartCardSchema = z
         path: ["series"],
       });
     }
+    if (new Set(card.data.map((point) => point.label)).size !== card.data.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Chart data labels must be unique",
+        path: ["data"],
+      });
+    }
     if (card.chartType === "pie" && card.series.length !== 1) {
       context.addIssue({ code: "custom", message: "Pie charts support exactly one series" });
     }

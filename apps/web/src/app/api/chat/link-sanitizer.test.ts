@@ -51,6 +51,18 @@ describe("sanitizeFinanceChatLinks", () => {
   it("preserves Japanese text immediately following a bare URL", () => {
     expect(sanitizeFinanceChatLinks("https://attacker.exampleです。", new Set())).toBe("です。");
   });
+
+  it.each([".", ","])(
+    "preserves trailing punctuation after an allowed bare URL: %s",
+    (punctuation) => {
+      expect(
+        sanitizeFinanceChatLinks(
+          `https://example.com/group-a/cf/2026-07${punctuation}`,
+          new Set(["/group-a/cf/2026-07"]),
+        ),
+      ).toBe(`/group-a/cf/2026-07${punctuation}`);
+    },
+  );
 });
 
 describe("splitCompleteFinanceChatText", () => {
