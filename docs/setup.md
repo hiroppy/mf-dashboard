@@ -101,7 +101,6 @@ openssl rand -hex 32
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                   |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須         |
-| `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD`    | 任意 | 本番の家計AIチャットでAccess JWTを検証。チャット利用時は両方必須         |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                              |
 | `DASHBOARD_URL`                              | 任意 | 通知へ記載するダッシュボードのURL                                        |
@@ -253,15 +252,11 @@ terraform -chdir=terraform output -raw tunnel_id
 AI_PROVIDER=openai
 AI_MODEL=<provider-model-id>
 AI_API_KEY=<provider-api-key>
-CF_ACCESS_TEAM_DOMAIN=https://<team-name>.cloudflareaccess.com
-CF_ACCESS_AUD=<access-application-aud>
 ```
 
 - `AI_PROVIDER`: `openai`、`anthropic`、`google`のいずれか
 - `AI_MODEL`: 選択したプロバイダーで利用可能なモデルID
 - `AI_API_KEY`: 選択したプロバイダーのAPIキー。ブラウザーへは公開せず、`.env`だけに保存する
-- `CF_ACCESS_TEAM_DOMAIN`: Zero TrustのTeam domain。`https://`を含める
-- `CF_ACCESS_AUD`: Cloudflare AccessアプリケーションのAUDタグ
 
 ローカルでデモデータを使って確認する場合は、リポジトリルートで次を実行する。
 
@@ -282,7 +277,7 @@ docker compose up -d web
 
 起動後、ダッシュボード右下の「家計AIチャットを開く」ボタンを選び、質問を入力して送信する。回答には根拠となる家計データと、該当画面へ移動するリンクが表示される。該当データがない場合は金額を推測せず、条件を変える候補を表示する。
 
-チャットの質問と、回答に必要な家計データは設定したAIプロバイダーへ送信される。会話はブラウザーのストレージへ保存されないが、AIプロバイダー側のデータ取扱方針を確認し、送信を許可できる場合だけ有効にする。本番環境ではCloudflare Accessの署名、issuer、audienceを検証できたリクエストだけを許可する。`CF_ACCESS_TEAM_DOMAIN`または`CF_ACCESS_AUD`が未設定の場合は拒否する。
+チャットの質問と、回答に必要な家計データは設定したAIプロバイダーへ送信される。会話はブラウザーのストレージへ保存されないが、AIプロバイダー側のデータ取扱方針を確認し、送信を許可できる場合だけ有効にする。本番環境では、Cloudflare Accessで認証された利用者だけがダッシュボードへアクセスできる構成を維持する。
 
 回答生成に失敗した場合はチャット内にエラーが表示される。まず3つのAI環境変数、APIキーの権限・利用上限、モデルIDを確認する。家計データが未取得の場合はcrawlerを実行してから再度質問する。
 

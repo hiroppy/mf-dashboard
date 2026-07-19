@@ -14,14 +14,12 @@ import {
   streamText,
   type UIMessage,
 } from "ai";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createFinanceChatLinkSanitizer } from "./link-sanitizer";
 
 export const maxDuration = 60;
 
 const MAX_TOOL_STEPS = 8;
 const SIGNATURE_METADATA_KEY = "serverSignature";
-const accessJwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
 - 回答前に必要な家計データをツールで取得し、提案には根拠となる期間・項目・数値を明記してください。
@@ -59,42 +57,6 @@ function getSystemPrompt(): string {
 
 function errorResponse(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
-}
-
-function getAccessJwks(issuer: string): ReturnType<typeof createRemoteJWKSet> {
-  const cached = accessJwksByIssuer.get(issuer);
-  if (cached) return cached;
-
-  const jwks = createRemoteJWKSet(new URL("/cdn-cgi/access/certs", issuer));
-  accessJwksByIssuer.set(issuer, jwks);
-  return jwks;
-}
-
-async function isWithinChatAccessBoundary(request: Request): Promise<boolean> {
-  if (process.env.NODE_ENV !== "production") {
-    return true;
-  }
-
-  const token = request.headers.get("cf-access-jwt-assertion");
-  const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
-  const audience = process.env.CF_ACCESS_AUD;
-
-  if (process.env.VERCEL === "1" || !token || !teamDomain || !audience) return false;
-
-  try {
-    const issuerUrl = new URL(teamDomain);
-    if (issuerUrl.protocol !== "https:") return false;
-
-    const issuer = issuerUrl.origin;
-    await jwtVerify(token, getAccessJwks(issuer), {
-      algorithms: ["RS256"],
-      audience,
-      issuer,
-    });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function getMessageText(message: UIMessage): string {
@@ -175,10 +137,6 @@ function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMess
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!(await isWithinChatAccessBoundary(request))) {
-    return errorResponse(403, "CHAT_ACCESS_DENIED", "チャットAPIへのアクセスが拒否されました。");
-  }
-
   let body: unknown;
 
   try {
