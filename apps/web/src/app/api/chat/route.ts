@@ -19,6 +19,10 @@ import { createFinanceChatLinkSanitizer } from "./link-sanitizer";
 export const maxDuration = 60;
 
 const MAX_TOOL_STEPS = 8;
+const MAX_REQUEST_BYTES = 64 * 1024;
+const MAX_MESSAGES = 20;
+const MAX_MESSAGE_TEXT_LENGTH = 8_000;
+const MAX_CONVERSATION_TEXT_LENGTH = 32_000;
 const SIGNATURE_METADATA_KEY = "serverSignature";
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
@@ -137,11 +141,38 @@ function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMess
     .filter((message) => message.parts.length > 0);
 }
 
+function hasValidConversationBounds(messages: UIMessage[]): boolean {
+  if (messages.length === 0 || messages.length > MAX_MESSAGES) return false;
+
+  let conversationTextLength = 0;
+  for (const message of messages) {
+    const textLength = getMessageText(message).length;
+    if (textLength > MAX_MESSAGE_TEXT_LENGTH) return false;
+    conversationTextLength += textLength;
+  }
+
+  const latestMessage = messages.at(-1);
+  return (
+    conversationTextLength <= MAX_CONVERSATION_TEXT_LENGTH &&
+    latestMessage?.role === "user" &&
+    getMessageText(latestMessage).trim().length > 0
+  );
+}
+
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
 
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
+    return errorResponse(413, "REQUEST_TOO_LARGE", "チャット履歴が大きすぎます。");
+  }
+
   try {
-    body = await request.json();
+    const requestText = await request.text();
+    if (new TextEncoder().encode(requestText).byteLength > MAX_REQUEST_BYTES) {
+      return errorResponse(413, "REQUEST_TOO_LARGE", "チャット履歴が大きすぎます。");
+    }
+    body = JSON.parse(requestText);
   } catch {
     return errorResponse(400, "INVALID_REQUEST", "JSON形式のリクエストが必要です。");
   }
@@ -166,6 +197,10 @@ export async function POST(request: Request): Promise<Response> {
 
   if (validation.data.some((message) => message.role === "system")) {
     return errorResponse(400, "SYSTEM_MESSAGE_NOT_ALLOWED", "systemメッセージは指定できません。");
+  }
+
+  if (!hasValidConversationBounds(validation.data)) {
+    return errorResponse(400, "INVALID_MESSAGES", "有効なチャットメッセージが必要です。");
   }
 
   if (!isLLMEnabled()) {

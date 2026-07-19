@@ -163,4 +163,28 @@ describe("ChatProvider", () => {
       expect((screen.getByRole("textbox", { name: "下書き" }) as HTMLInputElement).value).toBe(""),
     );
   });
+
+  it("allows a new submission after changing groups during an in-flight request", () => {
+    mocks.usePathname.mockReturnValue("/group-a/cf");
+    const { rerender } = render(
+      <ChatProvider>
+        <ChatSender />
+      </ChatProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    mocks.usePathname.mockReturnValue("/group-b/cf");
+    rerender(
+      <ChatProvider>
+        <ChatSender />
+      </ChatProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.sendMessage).toHaveBeenLastCalledWith(
+      { text: "家計を見直したい" },
+      { body: { groupId: "group-b" } },
+    );
+  });
 });

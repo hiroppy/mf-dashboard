@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { semanticColors } from "../../../lib/colors";
+import { semanticColors } from "../../lib/colors";
 import {
   formatFinanceChartAxisValue,
   getFinanceChartLineStyle,

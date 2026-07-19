@@ -362,6 +362,40 @@ describe("searchTransactions", () => {
     ]);
   });
 
+  it("計算対象外の通常明細で対象groupへの振替支出を除外しない", async () => {
+    const targetAccountId = await createTestAccount("Bank A");
+    const sourceAccountId = await createExternalAccount("External Bank");
+
+    await createTransaction({
+      accountId: sourceAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "transfer",
+      transferTargetAccountId: targetAccountId,
+    });
+    await createTransaction({
+      accountId: targetAccountId,
+      date: "2025-06-06",
+      amount: 6000,
+      type: "expense",
+      isExcludedFromCalculation: true,
+    });
+
+    const result = await searchTransactions(
+      { groupId: TEST_GROUP_ID, type: "expense", includeExcluded: false },
+      db,
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        accountId: targetAccountId,
+        amount: 6000,
+        type: "expense",
+        mfId: "boundary-transfer-1",
+      }),
+    ]);
+  });
+
   it("同額の通常収入があっても対象groupへの振替支出を保持する", async () => {
     const targetAccountId = await createTestAccount("Bank A");
     const sourceAccountId = await createExternalAccount("External Bank");

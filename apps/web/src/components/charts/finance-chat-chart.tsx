@@ -18,9 +18,9 @@ import {
   YAxis,
   type DotItemDotProps,
 } from "recharts";
-import { getChartColorArray, semanticColors } from "../../../lib/colors";
-import { formatCurrency } from "../../../lib/format";
-import { chartTooltipStyle } from "../../charts/chart-tooltip";
+import { getChartColorArray, semanticColors } from "../../lib/colors";
+import { formatCurrency } from "../../lib/format";
+import { chartTooltipStyle } from "./chart-tooltip";
 
 interface FinanceChatChartProps {
   card: ChartCard;

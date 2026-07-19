@@ -55,6 +55,7 @@ export function ChatProvider({
   const open = useCallback(() => setIsOpen(true), []);
 
   useEffect(() => {
+    isInFlightRef.current = false;
     setDraft("");
   }, [groupId]);
 

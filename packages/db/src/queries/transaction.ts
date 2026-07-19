@@ -188,6 +188,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
           date: schema.transactions.date,
           amount: schema.transactions.amount,
           type: schema.transactions.type,
+          isExcludedFromCalculation: schema.transactions.isExcludedFromCalculation,
         })
         .from(schema.transactions)
         .where(
@@ -215,7 +216,8 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
     for (const transaction of normalTransactions) {
       if (
         transaction.accountId === null ||
-        (transaction.type !== "income" && transaction.type !== "expense")
+        (transaction.type !== "income" && transaction.type !== "expense") ||
+        (options.includeExcluded === false && transaction.isExcludedFromCalculation)
       ) {
         continue;
       }

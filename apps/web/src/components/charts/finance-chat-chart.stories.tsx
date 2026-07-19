@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { FinanceChatChart } from "./finance-chat-chart";
 
 const meta = {
-  title: "Chat/FinanceChatChart",
+  title: "Charts/FinanceChatChart",
   component: FinanceChatChart,
   args: {
     card: {

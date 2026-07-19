@@ -14,9 +14,9 @@ import type { Route } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "../../../lib/utils";
+import { FinanceChatChart } from "../../charts/finance-chat-chart";
 import { AmountDisplay } from "../../ui/amount-display";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
-import { FinanceChatChart } from "./finance-chat-chart";
 
 interface FinanceChatCardProps {
   allowedHrefs?: readonly string[];
