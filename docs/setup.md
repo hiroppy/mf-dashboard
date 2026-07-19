@@ -281,6 +281,20 @@ docker compose up -d web
 
 回答生成に失敗した場合はチャット内にエラーが表示される。まず3つのAI環境変数、APIキーの権限・利用上限、モデルIDを確認する。家計データが未取得の場合はcrawlerを実行してから再度質問する。
 
+#### 家計AIチャットの応答評価
+
+設定したモデルが代表的な質問へ期待どおりに回答するかは、デモデータだけを使う評価コマンドで確認できる。
+
+```sh
+pnpm --filter @mf-dashboard/db build:demo
+AI_PROVIDER=openai AI_MODEL=<provider-model-id> AI_API_KEY=<provider-api-key> \
+  pnpm --filter @mf-dashboard/web eval:chat
+```
+
+各ケースについて、使用したツール、提示したカード種別、違反内容を1行のJSONで出力する。全ケースが期待値を満たすと終了コード`0`、1件以上失敗すると終了コード`1`になる。特定ケースだけを調べる場合は、たとえば`pnpm --filter @mf-dashboard/web eval:chat -- --case=monthly-summary`を実行する。
+
+評価ケースは`apps/web/src/evals/finance-chat-cases.ts`へ追加する。質問ごとに、取得必須のデータツールと順序を含む期待カード種別を宣言する。全ケースには、カードschema、`presentFinanceCards`が1回だけであること、データの重複取得がないこと、empty以外のCTAが`getFinanceDashboardRoute`の結果と一致することが共通で検査される。評価は実際のAI APIを呼び出すため、モデル変更時やprompt変更時に実行し、出力や利用料金がプロバイダーごとに変わり得る点に注意する。
+
 従来のMCPサーバーとAIクライアント側のMCPセットアップは廃止済み。家計データの照会にはWebアプリ内の家計AIチャットを使用する。
 
 ### 未分類取引のカテゴリ決定

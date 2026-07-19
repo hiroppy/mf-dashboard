@@ -18,7 +18,7 @@ import { createFinanceChatLinkSanitizer } from "./link-sanitizer";
 
 export const maxDuration = 60;
 
-const MAX_TOOL_STEPS = 8;
+export const FINANCE_CHAT_MAX_TOOL_STEPS = 8;
 const SIGNATURE_METADATA_KEY = "serverSignature";
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
@@ -49,7 +49,7 @@ const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタン�
 - empty以外ではgetFinanceDashboardRouteを呼び、その結果だけをhrefまたはactionに使って、詳細ページへ遷移できるCTAを少なくとも1件含めてください。
 - 投資余力を扱う場合は、手残り、貯蓄率、予備資金、負債、資産の集中度をすべて確認し、不足する観点があれば結論を保留してください。`;
 
-function getSystemPrompt(): string {
+export function getFinanceChatSystemPrompt(): string {
   const currentDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
     new Date(),
   );
@@ -214,7 +214,7 @@ export async function POST(request: Request): Promise<Response> {
       smoothStream(),
     ],
     model,
-    system: getSystemPrompt(),
+    system: getFinanceChatSystemPrompt(),
     messages: await convertToModelMessages(modelInputMessages, { tools }),
     onChunk: ({ chunk }) => {
       if (chunk.type === "tool-result" && chunk.toolName === "presentFinanceCards") {
@@ -222,7 +222,7 @@ export async function POST(request: Request): Promise<Response> {
       }
     },
     tools,
-    stopWhen: stepCountIs(MAX_TOOL_STEPS),
+    stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
   });
 
   return result.toUIMessageStreamResponse({
