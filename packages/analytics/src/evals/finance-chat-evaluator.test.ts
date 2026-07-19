@@ -13,6 +13,20 @@ const evaluationCase: FinanceChatEvaluationCase = {
   navigationInput: { page: "cashFlow", month: "2026-07" },
   expectedCardTypes: ["summary", "insight"],
 };
+const categoryEvaluationCase: FinanceChatEvaluationCase = {
+  ...evaluationCase,
+  id: "category-expense",
+  prompt: "今月の食費は？",
+  toolStrategies: [
+    [
+      {
+        name: "searchTransactions",
+        input: { month: "2026-07", category: "食費", type: "expense" },
+      },
+    ],
+  ],
+  allowedDataTools: ["searchTransactions"],
+};
 const href = "/group-a/cf/2026-07";
 const cards = [
   {
@@ -35,20 +49,34 @@ function createTrace(
   return {
     steps: [
       {
-        toolCalls: [{ toolName: "getLatestMonthlySummary", input: {} }],
+        toolCalls: [{ toolCallId: "data", toolName: "getLatestMonthlySummary", input: {} }],
         toolResults: [
-          { toolName: "getLatestMonthlySummary", output: { income: 300_000, expense: 250_000 } },
+          {
+            toolCallId: "data",
+            toolName: "getLatestMonthlySummary",
+            output: { income: 300_000, expense: 250_000 },
+          },
         ],
       },
       {
         toolCalls: [
-          { toolName: "getFinanceDashboardRoute", input: { page: "cashFlow", month: "2026-07" } },
+          {
+            toolCallId: "navigation",
+            toolName: "getFinanceDashboardRoute",
+            input: { page: "cashFlow", month: "2026-07" },
+          },
         ],
-        toolResults: [{ toolName: "getFinanceDashboardRoute", output: { href } }],
+        toolResults: [
+          { toolCallId: "navigation", toolName: "getFinanceDashboardRoute", output: { href } },
+        ],
       },
       {
-        toolCalls: [{ toolName: "presentFinanceCards", input: { cards } }],
-        toolResults: [{ toolName: "presentFinanceCards", output: cards }],
+        toolCalls: [
+          { toolCallId: "presentation", toolName: "presentFinanceCards", input: { cards } },
+        ],
+        toolResults: [
+          { toolCallId: "presentation", toolName: "presentFinanceCards", output: cards },
+        ],
       },
     ],
     ...overrides,
@@ -107,12 +135,32 @@ describe("evaluateFinanceChatTrace", () => {
         steps: [
           createTrace().steps[0]!,
           {
-            toolCalls: [{ toolName: "getFinanceDashboardRoute", input: {} }],
-            toolResults: [{ toolName: "getFinanceDashboardRoute", output: { href: "/group-a" } }],
+            toolCalls: [
+              { toolCallId: "navigation", toolName: "getFinanceDashboardRoute", input: {} },
+            ],
+            toolResults: [
+              {
+                toolCallId: "navigation",
+                toolName: "getFinanceDashboardRoute",
+                output: { href: "/group-a" },
+              },
+            ],
           },
           {
-            toolCalls: [{ toolName: "presentFinanceCards", input: { cards: reversedCards } }],
-            toolResults: [{ toolName: "presentFinanceCards", output: reversedCards }],
+            toolCalls: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                input: { cards: reversedCards },
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                output: reversedCards,
+              },
+            ],
           },
         ],
       }),
@@ -140,8 +188,20 @@ describe("evaluateFinanceChatTrace", () => {
         steps: [
           ...createTrace().steps.slice(0, 2),
           {
-            toolCalls: [{ toolName: "presentFinanceCards", input: { cards: tooManyCards } }],
-            toolResults: [{ toolName: "presentFinanceCards", output: tooManyCards }],
+            toolCalls: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                input: { cards: tooManyCards },
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                output: tooManyCards,
+              },
+            ],
           },
         ],
       }),
@@ -171,12 +231,22 @@ describe("evaluateFinanceChatTrace", () => {
     const result = evaluateFinanceChatTrace(emptyCase, {
       steps: [
         {
-          toolCalls: [{ toolName: "searchTransactions", input: { month: "2030-01" } }],
-          toolResults: [{ toolName: "searchTransactions", output: [] }],
+          toolCalls: [
+            { toolCallId: "data", toolName: "searchTransactions", input: { month: "2030-01" } },
+          ],
+          toolResults: [{ toolCallId: "data", toolName: "searchTransactions", output: [] }],
         },
         {
-          toolCalls: [{ toolName: "presentFinanceCards", input: { cards: emptyCards } }],
-          toolResults: [{ toolName: "presentFinanceCards", output: emptyCards }],
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: emptyCards },
+            },
+          ],
+          toolResults: [
+            { toolCallId: "presentation", toolName: "presentFinanceCards", output: emptyCards },
+          ],
         },
       ],
     });
@@ -191,7 +261,9 @@ describe("evaluateFinanceChatTrace", () => {
       createTrace({
         steps: [
           {
-            toolCalls: [{ toolName: "unknownTool", input: {}, invalid: true }],
+            toolCalls: [
+              { toolCallId: "invalid", toolName: "unknownTool", input: {}, invalid: true },
+            ],
             toolResults: [],
           },
           ...base.steps,
@@ -209,8 +281,14 @@ describe("evaluateFinanceChatTrace", () => {
       createTrace({
         steps: [
           {
-            toolCalls: [{ toolName: "getFinancialMetrics", input: {} }],
-            toolResults: [{ toolName: "getFinancialMetrics", output: { savingsRate: 20 } }],
+            toolCalls: [{ toolCallId: "metrics", toolName: "getFinancialMetrics", input: {} }],
+            toolResults: [
+              {
+                toolCallId: "metrics",
+                toolName: "getFinancialMetrics",
+                output: { savingsRate: 20 },
+              },
+            ],
           },
           ...base.steps.slice(1),
         ],
@@ -221,33 +299,19 @@ describe("evaluateFinanceChatTrace", () => {
   });
 
   it("rejects a required tool with inputs for the wrong intent", () => {
-    const categoryCase: FinanceChatEvaluationCase = {
-      id: "category-expense",
-      prompt: "今月の食費は？",
-      toolStrategies: [
-        [
-          {
-            name: "searchTransactions",
-            input: { month: "2026-07", category: "食費", type: "expense" },
-          },
-        ],
-      ],
-      allowedDataTools: ["searchTransactions"],
-      navigationInput: { page: "cashFlow", month: "2026-07" },
-      expectedCardTypes: ["summary", "insight"],
-    };
     const base = createTrace();
 
-    const result = evaluateFinanceChatTrace(categoryCase, {
+    const result = evaluateFinanceChatTrace(categoryEvaluationCase, {
       steps: [
         {
           toolCalls: [
             {
+              toolCallId: "wrong-data",
               toolName: "searchTransactions",
               input: { month: "2026-06", category: "交通費", type: "income" },
             },
           ],
-          toolResults: [{ toolName: "searchTransactions", output: [] }],
+          toolResults: [{ toolCallId: "wrong-data", toolName: "searchTransactions", output: [] }],
         },
         ...base.steps.slice(1),
       ],
@@ -284,8 +348,20 @@ describe("evaluateFinanceChatTrace", () => {
       steps: [
         base.steps[0]!,
         {
-          toolCalls: [{ toolName: "getFinanceDashboardRoute", input: { page: "dashboard" } }],
-          toolResults: [{ toolName: "getFinanceDashboardRoute", output: { href } }],
+          toolCalls: [
+            {
+              toolCallId: "wrong-navigation",
+              toolName: "getFinanceDashboardRoute",
+              input: { page: "dashboard" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "wrong-navigation",
+              toolName: "getFinanceDashboardRoute",
+              output: { href },
+            },
+          ],
         },
         base.steps[2]!,
       ],
@@ -302,13 +378,147 @@ describe("evaluateFinanceChatTrace", () => {
       steps: [
         base.steps[0]!,
         {
-          toolCalls: [{ toolName: "getLatestTotalAssets", input: {} }],
-          toolResults: [{ toolName: "getLatestTotalAssets", output: 5_000_000 }],
+          toolCalls: [{ toolCallId: "assets", toolName: "getLatestTotalAssets", input: {} }],
+          toolResults: [
+            { toolCallId: "assets", toolName: "getLatestTotalAssets", output: 5_000_000 },
+          ],
         },
         ...base.steps.slice(1),
       ],
     });
 
     expect(result.violations).toContain("許可されていないデータ取得: getLatestTotalAssets");
+  });
+
+  it("rejects data calls without a matching result before presentation", () => {
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      steps: [{ ...base.steps[0]!, toolResults: [] }, ...base.steps.slice(1)],
+    });
+
+    expect(result.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
+  });
+
+  it("rejects data completed in the presentation step", () => {
+    const base = createTrace();
+    const dataStep = base.steps[0]!;
+    const presentationStep = base.steps[2]!;
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      steps: [
+        base.steps[1]!,
+        {
+          toolCalls: [...dataStep.toolCalls, ...presentationStep.toolCalls],
+          toolResults: [...dataStep.toolResults, ...presentationStep.toolResults],
+        },
+      ],
+    });
+
+    expect(result.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
+  });
+
+  it("correlates the expected navigation call and result by toolCallId", () => {
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      steps: [
+        base.steps[0]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "expected-navigation",
+              toolName: "getFinanceDashboardRoute",
+              input: { page: "cashFlow", month: "2026-07" },
+            },
+            {
+              toolCallId: "wrong-navigation",
+              toolName: "getFinanceDashboardRoute",
+              input: { page: "dashboard" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "wrong-navigation",
+              toolName: "getFinanceDashboardRoute",
+              output: { href },
+            },
+          ],
+        },
+        base.steps[2]!,
+      ],
+    });
+
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        "ナビゲーションツールの引数または呼び出し順が期待値を満たさない",
+        `ナビゲーションツール未検証の CTA: ${href}, ${href}`,
+      ]),
+    );
+  });
+
+  it("canonicalizes input keys when detecting duplicate data calls", () => {
+    const base = createTrace();
+    const firstInput = { month: "2026-07", category: "食費", type: "expense" };
+    const secondInput = { type: "expense", category: "食費", month: "2026-07" };
+    const result = evaluateFinanceChatTrace(categoryEvaluationCase, {
+      steps: [
+        {
+          toolCalls: [
+            { toolCallId: "first", toolName: "searchTransactions", input: firstInput },
+            { toolCallId: "second", toolName: "searchTransactions", input: secondInput },
+          ],
+          toolResults: [
+            { toolCallId: "first", toolName: "searchTransactions", output: [] },
+            { toolCallId: "second", toolName: "searchTransactions", output: [] },
+          ],
+        },
+        ...base.steps.slice(1),
+      ],
+    });
+
+    expect(result.violations).toContain("同一データの重複取得: searchTransactions");
+  });
+
+  it("rejects extra filters and additional calls with unapproved inputs", () => {
+    const base = createTrace();
+    const extraFilter = evaluateFinanceChatTrace(categoryEvaluationCase, {
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "extra-filter",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense", limit: 1 },
+            },
+          ],
+          toolResults: [{ toolCallId: "extra-filter", toolName: "searchTransactions", output: [] }],
+        },
+        ...base.steps.slice(1),
+      ],
+    });
+    const additionalCall = evaluateFinanceChatTrace(categoryEvaluationCase, {
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "expected",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense" },
+            },
+            {
+              toolCallId: "unapproved",
+              toolName: "searchTransactions",
+              input: { month: "2026-06", category: "交通費", type: "expense" },
+            },
+          ],
+          toolResults: [
+            { toolCallId: "expected", toolName: "searchTransactions", output: [] },
+            { toolCallId: "unapproved", toolName: "searchTransactions", output: [] },
+          ],
+        },
+        ...base.steps.slice(1),
+      ],
+    });
+
+    expect(extraFilter.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
+    expect(additionalCall.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
   });
 });
