@@ -30,13 +30,20 @@ interface CardShellProps {
   href?: string;
 }
 
+function isHrefAllowed(
+  href: string | undefined,
+  allowedHrefs: ReadonlySet<string>,
+): href is string {
+  return href !== undefined && isFinanceChatHrefSafe(href) && allowedHrefs.has(href);
+}
+
 function SafeLink({
   allowedHrefs,
   href,
   className,
   children,
 }: CardShellProps & { className?: string }) {
-  if (!href || !isFinanceChatHrefSafe(href) || !allowedHrefs.has(href)) return children;
+  if (!isHrefAllowed(href, allowedHrefs)) return children;
 
   return (
     <Link href={href as Route} className={className}>
@@ -46,7 +53,7 @@ function SafeLink({
 }
 
 function CardShell({ allowedHrefs, href, children }: CardShellProps) {
-  const isLinkable = href ? isFinanceChatHrefSafe(href) && allowedHrefs.has(href) : false;
+  const isLinkable = isHrefAllowed(href, allowedHrefs);
 
   return (
     <SafeLink
@@ -68,7 +75,7 @@ function CardAction({
   action: { label: string; href: string };
   allowedHrefs: ReadonlySet<string>;
 }) {
-  const isLinkable = isFinanceChatHrefSafe(action.href) && allowedHrefs.has(action.href);
+  const isLinkable = isHrefAllowed(action.href, allowedHrefs);
 
   if (!isLinkable) {
     return <span className="text-sm text-muted-foreground">{action.label}</span>;

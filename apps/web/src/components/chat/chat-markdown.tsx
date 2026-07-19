@@ -3,7 +3,10 @@
 import { cjk } from "@streamdown/cjk";
 import type { Route } from "next";
 import Link from "next/link";
+import { useMemo } from "react";
 import { Streamdown, type Components } from "streamdown";
+
+const EMPTY_ALLOWED_HREFS: readonly string[] = [];
 
 function createComponents(allowedHrefs: ReadonlySet<string>): Components {
   return {
@@ -34,12 +37,14 @@ interface ChatMarkdownProps {
 export function ChatMarkdown({
   children,
   isAnimating = false,
-  allowedHrefs = [],
+  allowedHrefs = EMPTY_ALLOWED_HREFS,
 }: ChatMarkdownProps) {
+  const components = useMemo(() => createComponents(new Set(allowedHrefs)), [allowedHrefs]);
+
   return (
     <Streamdown
       animated
-      components={createComponents(new Set(allowedHrefs))}
+      components={components}
       isAnimating={isAnimating}
       mode={isAnimating ? "streaming" : "static"}
       plugins={{ cjk }}

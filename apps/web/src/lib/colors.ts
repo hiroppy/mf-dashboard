@@ -1,3 +1,4 @@
+import { MAX_PIE_CATEGORIES } from "@mf-dashboard/analytics/chat/cards";
 import type { CategoryName } from "@mf-dashboard/meta/categories";
 
 const CATEGORY_VAR_MAP: Record<CategoryName, string> = {
@@ -48,7 +49,7 @@ export function getChartColorArray(count: number): string[] {
     "--color-chart-3",
     "--color-chart-4",
     "--color-chart-5",
-  ];
+  ].slice(0, MAX_PIE_CATEGORIES);
   return Array.from({ length: count }, (_, i) => `var(${vars[i % vars.length]})`);
 }
 
