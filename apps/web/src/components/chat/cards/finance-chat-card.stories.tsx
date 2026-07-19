@@ -82,6 +82,7 @@ export const Insight: Story = {
       title: "支出が減少しました",
       description: "前月と比べて食費が12,000円減っています。",
       amount: 12000,
+      amountLabel: "前月からの削減額",
       amountType: "balance",
       action: { label: "内訳を見る", href: "/cf/2026-07" },
     },

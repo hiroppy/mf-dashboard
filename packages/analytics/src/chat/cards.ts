@@ -152,12 +152,18 @@ export const insightCardSchema = z
     title: z.string().min(1),
     description: z.string().min(1),
     amount: finiteAmountSchema.optional(),
+    amountLabel: z.string().min(1).optional(),
     amountType: amountTypeSchema.optional(),
     action: actionSchema.optional(),
   })
-  .refine((card) => (card.amount === undefined) === (card.amountType === undefined), {
-    message: "Insight amount and amountType must be provided together",
-  });
+  .refine(
+    (card) =>
+      (card.amount === undefined) === (card.amountType === undefined) &&
+      (card.amount === undefined) === (card.amountLabel === undefined),
+    {
+      message: "Insight amount, amountLabel, and amountType must be provided together",
+    },
+  );
 
 export const actionCardSchema = z.object({
   type: z.literal("action"),

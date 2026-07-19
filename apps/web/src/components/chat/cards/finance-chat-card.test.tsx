@@ -96,6 +96,29 @@ describe("FinanceChatCard", () => {
     expect(screen.getByRole("link").getAttribute("href")).toBe("/group-a/cf/2026-07");
   });
 
+  it("labels an insight amount and aligns it with the action", () => {
+    render(
+      <FinanceChatCard
+        allowedHrefs={["/group-a/cf/2026-07"]}
+        card={{
+          type: "insight",
+          title: "削減可能な支出の提案",
+          description: "今月の特別な支出を、過去3か月の平均と比較しています。",
+          amount: 199057,
+          amountLabel: "見直し候補額",
+          amountType: "balance",
+          action: { label: "内訳を確認", href: "/group-a/cf/2026-07" },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("見直し候補額")).not.toBeNull();
+    expect(screen.getByText("199,057円").classList.contains("text-balance-positive")).toBe(true);
+    expect(screen.getByRole("link", { name: /内訳を確認/ }).getAttribute("href")).toBe(
+      "/group-a/cf/2026-07",
+    );
+  });
+
   it("does not create a link for an unsafe runtime action", () => {
     const card = {
       type: "action",

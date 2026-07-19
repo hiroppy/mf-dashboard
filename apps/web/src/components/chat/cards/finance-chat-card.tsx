@@ -218,9 +218,12 @@ function InsightCard({
         <CardTitle icon={Lightbulb}>{card.title}</CardTitle>
         <CardDescription>{card.description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-wrap items-end justify-between gap-4">
         {card.amount !== undefined && card.amountType && (
-          <AmountDisplay amount={card.amount} type={card.amountType} size="xl" weight="bold" />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm text-muted-foreground">{card.amountLabel}</p>
+            <AmountDisplay amount={card.amount} type={card.amountType} size="xl" weight="bold" />
+          </div>
         )}
         {card.action && <CardAction action={card.action} allowedHrefs={allowedHrefs} />}
       </CardContent>

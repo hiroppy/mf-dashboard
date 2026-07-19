@@ -148,6 +148,15 @@ describe("financeChatCardSchema", () => {
         amount: 1000,
       }).success,
     ).toBe(false);
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "insight",
+        title: "削減候補",
+        description: "食費を前月と比較しました",
+        amount: 1000,
+        amountType: "balance",
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects chart data that does not match its series", () => {
