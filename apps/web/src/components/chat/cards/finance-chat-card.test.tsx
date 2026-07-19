@@ -58,6 +58,7 @@ describe("FinanceChatCard", () => {
     const onPromptSelect = vi.fn<(prompt: string) => void>();
     render(
       <FinanceChatCard
+        allowedHrefs={["/group-a/cf/2026-07"]}
         card={{
           type: "empty",
           title: "見つかりません",
@@ -75,6 +76,7 @@ describe("FinanceChatCard", () => {
   it("uses semantic monetary colors and an allowed internal link", () => {
     render(
       <FinanceChatCard
+        allowedHrefs={["/group-a/cf/2026-07"]}
         card={{
           type: "summary",
           title: "収支",
@@ -103,6 +105,23 @@ describe("FinanceChatCard", () => {
     } as FinanceChatCardData;
 
     render(<FinanceChatCard card={card} />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("開く")).not.toBeNull();
+  });
+
+  it("does not create a link for an unverified safe finance route", () => {
+    render(
+      <FinanceChatCard
+        allowedHrefs={["/group-a/cf/2026-07"]}
+        card={{
+          type: "action",
+          title: "別グループ",
+          description: "未検証の遷移先",
+          action: { label: "開く", href: "/group-b/cf/2026-07" },
+        }}
+      />,
+    );
+
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText("開く")).not.toBeNull();
   });

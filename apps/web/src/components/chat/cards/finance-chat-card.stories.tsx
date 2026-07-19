@@ -5,6 +5,7 @@ import { FinanceChatCard } from "./finance-chat-card";
 const meta = {
   title: "Chat/FinanceChatCard",
   component: FinanceChatCard,
+  args: { allowedHrefs: ["/cf/2026-07", "/bs"] },
   tags: ["autodocs"],
   decorators: [
     (Story) => (
@@ -113,7 +114,7 @@ export const AllCards: Story = {
   args: { card: summary },
   render: () => (
     <div className="space-y-4">
-      <FinanceChatCard card={summary} />
+      <FinanceChatCard allowedHrefs={["/cf/2026-07", "/bs"]} card={summary} />
       <FinanceChatCard {...TransactionList.args} />
       <FinanceChatCard {...CategoryBreakdown.args} />
       <FinanceChatCard {...Insight.args} />

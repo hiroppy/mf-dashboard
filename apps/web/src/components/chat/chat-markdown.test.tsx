@@ -48,6 +48,13 @@ describe("ChatMarkdown", () => {
     expect(screen.getByText("別グループ")).toBeTruthy();
   });
 
+  it("does not request Markdown images", () => {
+    render(<ChatMarkdown>{"![追跡画像](https://tracker.example/pixel)"}</ChatMarkdown>);
+
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.getByText("追跡画像")).toBeTruthy();
+  });
+
   it("renders strong emphasis next to Japanese text", () => {
     render(<ChatMarkdown>最も高い支出は**¥75,000**です。</ChatMarkdown>);
 

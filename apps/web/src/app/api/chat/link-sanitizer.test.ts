@@ -47,6 +47,10 @@ describe("sanitizeFinanceChatLinks", () => {
       ),
     ).toBe("詳細を見る");
   });
+
+  it("preserves Japanese text immediately following a bare URL", () => {
+    expect(sanitizeFinanceChatLinks("https://attacker.exampleです。", new Set())).toBe("です。");
+  });
 });
 
 describe("splitCompleteFinanceChatText", () => {

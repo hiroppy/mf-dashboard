@@ -15,6 +15,13 @@ const structuredMessage = {
   parts: [
     { type: "text" as const, text: "6月10日の支出です。" },
     {
+      type: "tool-getFinanceDashboardRoute" as const,
+      toolCallId: "navigate-a",
+      state: "output-available" as const,
+      input: { page: "cashFlow", month: "2026-06" },
+      output: { href: "/cf/2026-06" },
+    },
+    {
       type: "tool-presentFinanceCards" as const,
       toolCallId: "present-a",
       state: "output-available" as const,

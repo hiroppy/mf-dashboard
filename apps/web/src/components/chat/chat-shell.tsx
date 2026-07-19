@@ -306,6 +306,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                         {cards.map((card, index) => (
                           <FinanceChatCard
                             key={`${card.type}-${card.title}-${index}`}
+                            allowedHrefs={allowedHrefs}
                             card={card}
                             onPromptSelect={addUserMessage}
                           />

@@ -31,10 +31,21 @@ function seriesKey(index: number): string {
   return SERIES_KEYS[index] ?? `value${index}`;
 }
 
-function seriesColor(amountType: ChartCard["series"][number]["amountType"]): string {
+export function getFinanceChartSeriesColor(
+  amountType: ChartCard["series"][number]["amountType"],
+  values: readonly number[],
+): string {
   if (amountType === "income") return semanticColors.income;
   if (amountType === "expense") return semanticColors.expense;
-  return semanticColors.balancePositive;
+  return values.some((value) => value < 0)
+    ? semanticColors.balanceNegative
+    : semanticColors.balancePositive;
+}
+
+export function formatFinanceChartAxisValue(value: number, maximumAbsoluteValue: number): string {
+  if (maximumAbsoluteValue < 10_000) return `${Math.round(value).toLocaleString("ja-JP")}円`;
+  if (maximumAbsoluteValue < 100_000) return `${Math.round(value / 1000)}千円`;
+  return `${Math.round(value / 10_000)}万円`;
 }
 
 export function FinanceChatChart({ card }: FinanceChatChartProps) {
@@ -43,6 +54,9 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
     ...Object.fromEntries(point.values.map((value, index) => [seriesKey(index), value])),
   }));
   const chartColors = getChartColorArray(data.length);
+  const maximumAbsoluteValue = Math.max(
+    ...card.data.flatMap((point) => point.values.map((value) => Math.abs(value))),
+  );
   const common = (
     <>
       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -52,7 +66,7 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
         tick={{ fontSize: 11 }}
         tickLine={false}
         axisLine={false}
-        tickFormatter={(value) => `${Math.round(value / 10000)}万`}
+        tickFormatter={(value) => formatFinanceChartAxisValue(Number(value), maximumAbsoluteValue)}
       />
       <Tooltip
         formatter={(value) => formatCurrency(Number(value))}
@@ -73,7 +87,10 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
             type="monotone"
             dataKey={seriesKey(index)}
             name={series.name}
-            stroke={seriesColor(series.amountType)}
+            stroke={getFinanceChartSeriesColor(
+              series.amountType,
+              card.data.map((point) => point.values[index] ?? 0),
+            )}
             strokeWidth={2}
           />
         ))}
@@ -88,7 +105,10 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
             key={series.name}
             dataKey={seriesKey(index)}
             name={series.name}
-            fill={seriesColor(series.amountType)}
+            fill={getFinanceChartSeriesColor(
+              series.amountType,
+              card.data.map((point) => point.values[index] ?? 0),
+            )}
             radius={[3, 3, 0, 0]}
           />
         ))}

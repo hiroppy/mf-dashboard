@@ -20,6 +20,7 @@ function createComponents(allowedHrefs: ReadonlySet<string>): Components {
 
       return <span>{children}</span>;
     },
+    img: ({ alt }) => <span>{alt}</span>,
     strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   };
 }

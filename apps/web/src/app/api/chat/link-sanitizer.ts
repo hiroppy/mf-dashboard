@@ -32,9 +32,10 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     },
   );
 
-  return withoutInvalidMarkdownLinks.replace(/(?:https?:\/\/|\/\/)[^\s<>)]+/g, (url) => {
-    return resolveAllowedHref(url, allowedHrefs) ?? "";
-  });
+  return withoutInvalidMarkdownLinks.replace(
+    /(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/g,
+    (url) => resolveAllowedHref(url, allowedHrefs) ?? "",
+  );
 }
 
 export function splitCompleteFinanceChatText(text: string): {

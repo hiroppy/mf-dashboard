@@ -161,4 +161,16 @@ describe("financeChatCardSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("rejects negative pie chart values", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "chart",
+        title: "支出内訳",
+        chartType: "pie",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [{ label: "食費", values: [-3000] }],
+      }).success,
+    ).toBe(false);
+  });
 });
