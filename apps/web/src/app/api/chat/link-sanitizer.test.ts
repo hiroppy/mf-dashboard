@@ -74,6 +74,20 @@ describe("splitCompleteFinanceChatText", () => {
       pending: "次の行",
     });
   });
+
+  it("does not split at punctuation inside a Markdown link", () => {
+    expect(splitCompleteFinanceChatText("[詳細。](/group-b/cf/2026-07)")).toEqual({
+      complete: "",
+      pending: "[詳細。](/group-b/cf/2026-07)",
+    });
+  });
+
+  it("releases text after a complete Markdown link boundary", () => {
+    expect(splitCompleteFinanceChatText("[詳細。](/group-a/cf/2026-07)です。続き")).toEqual({
+      complete: "[詳細。](/group-a/cf/2026-07)です。",
+      pending: "続き",
+    });
+  });
 });
 
 describe("createFinanceChatLinkSanitizer", () => {

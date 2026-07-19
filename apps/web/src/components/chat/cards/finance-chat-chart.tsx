@@ -42,6 +42,16 @@ export function getFinanceChartSeriesColor(
     : semanticColors.balancePositive;
 }
 
+export function getFinanceChartValueColor(
+  amountType: ChartCard["series"][number]["amountType"],
+  value: number,
+): string {
+  if (amountType === "balance") {
+    return value < 0 ? semanticColors.balanceNegative : semanticColors.balancePositive;
+  }
+  return getFinanceChartSeriesColor(amountType, [value]);
+}
+
 export function formatFinanceChartAxisValue(value: number, maximumAbsoluteValue: number): string {
   if (maximumAbsoluteValue < 10_000) return `${Math.round(value).toLocaleString("ja-JP")}円`;
   if (maximumAbsoluteValue < 100_000) return `${Math.round(value / 1000)}千円`;
@@ -110,7 +120,15 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
               card.data.map((point) => point.values[index] ?? 0),
             )}
             radius={[3, 3, 0, 0]}
-          />
+          >
+            {series.amountType === "balance" &&
+              card.data.map((point) => (
+                <Cell
+                  key={`${series.name}-${point.label}`}
+                  fill={getFinanceChartValueColor(series.amountType, point.values[index] ?? 0)}
+                />
+              ))}
+          </Bar>
         ))}
       </BarChart>
     );

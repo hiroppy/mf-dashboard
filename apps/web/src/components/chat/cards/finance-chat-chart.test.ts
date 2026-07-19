@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { semanticColors } from "../../../lib/colors";
-import { formatFinanceChartAxisValue, getFinanceChartSeriesColor } from "./finance-chat-chart";
+import {
+  formatFinanceChartAxisValue,
+  getFinanceChartSeriesColor,
+  getFinanceChartValueColor,
+} from "./finance-chat-chart";
 
 describe("formatFinanceChartAxisValue", () => {
   it("keeps small yen values meaningful", () => {
@@ -18,5 +22,10 @@ describe("getFinanceChartSeriesColor", () => {
     expect(getFinanceChartSeriesColor("balance", [-1000, -2000])).toBe(
       semanticColors.balanceNegative,
     );
+  });
+
+  it("selects a semantic balance color for each mixed-sign bar value", () => {
+    expect(getFinanceChartValueColor("balance", 1000)).toBe(semanticColors.balancePositive);
+    expect(getFinanceChartValueColor("balance", -1000)).toBe(semanticColors.balanceNegative);
   });
 });

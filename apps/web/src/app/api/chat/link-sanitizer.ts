@@ -42,8 +42,39 @@ export function splitCompleteFinanceChatText(text: string): {
   complete: string;
   pending: string;
 } {
-  const boundaries = ["\n", "。", "！", "？"];
-  const lastBoundary = Math.max(...boundaries.map((boundary) => text.lastIndexOf(boundary)));
+  const boundaries = new Set(["\n", "。", "！", "？"]);
+  let labelStart = -1;
+  let destinationDepth = 0;
+  let lastBoundary = -1;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const escaped = index > 0 && text[index - 1] === "\\";
+
+    if (!escaped && destinationDepth > 0) {
+      if (character === "(") destinationDepth += 1;
+      if (character === ")") destinationDepth -= 1;
+      continue;
+    }
+
+    if (!escaped && labelStart >= 0) {
+      if (character === "]") {
+        if (text[index + 1] === "(") {
+          destinationDepth = 1;
+          index += 1;
+        }
+        labelStart = -1;
+      }
+      continue;
+    }
+
+    if (!escaped && character === "[") {
+      labelStart = index;
+      continue;
+    }
+
+    if (character && boundaries.has(character)) lastBoundary = index;
+  }
 
   if (lastBoundary < 0) return { complete: "", pending: text };
 
