@@ -1,16 +1,17 @@
-import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
-import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { closeDb, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
-import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/app/api/chat/route";
-import { FINANCE_CHAT_EVALUATION_CASES } from "../src/evals/finance-chat-cases";
+import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/chat/prompt";
+import { createFinanceChatTools } from "../src/chat/tools";
+import { getModel, isLLMEnabled } from "../src/config";
+import { createFinanceChatEvaluationCases } from "../src/evals/finance-chat-cases";
 import { evaluateFinanceChatTrace } from "../src/evals/finance-chat-evaluator";
 
-function getSelectedCases() {
+function getSelectedCases(evaluationDate: Date) {
+  const evaluationCases = createFinanceChatEvaluationCases(evaluationDate);
   const caseId = process.argv.find((argument) => argument.startsWith("--case="))?.split("=")[1];
-  if (!caseId) return FINANCE_CHAT_EVALUATION_CASES;
+  if (!caseId) return evaluationCases;
 
-  const selected = FINANCE_CHAT_EVALUATION_CASES.filter(({ id }) => id === caseId);
+  const selected = evaluationCases.filter(({ id }) => id === caseId);
   if (selected.length === 0) throw new Error(`Unknown case: ${caseId}`);
   return selected;
 }
@@ -29,7 +30,8 @@ async function main() {
   const group = await getCurrentGroup(db);
   if (!group) throw new Error("demo.db に current group がありません。");
 
-  const selectedCases = getSelectedCases();
+  const evaluationDate = new Date();
+  const selectedCases = getSelectedCases(evaluationDate);
   const tools = createFinanceChatTools(db, group.id);
   const model = getModel();
   let failed = 0;
@@ -37,15 +39,12 @@ async function main() {
   for (const evaluationCase of selectedCases) {
     const response = await generateText({
       model,
-      system: getFinanceChatSystemPrompt(),
+      system: getFinanceChatSystemPrompt(evaluationDate),
       prompt: evaluationCase.prompt,
       tools,
       stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
     });
-    const result = evaluateFinanceChatTrace(evaluationCase, {
-      toolCalls: response.toolCalls,
-      toolResults: response.toolResults,
-    });
+    const result = evaluateFinanceChatTrace(evaluationCase, { steps: response.steps });
 
     if (!result.passed) failed += 1;
     console.log(

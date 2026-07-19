@@ -1,5 +1,5 @@
-import { financeChatCardsSchema, type FinanceChatCard } from "@mf-dashboard/analytics/chat/cards";
-import type { FinanceChatEvaluationCase } from "./finance-chat-cases";
+import { financeChatCardsSchema, type FinanceChatCard } from "../chat/cards";
+import type { FinanceChatEvaluationCase, FinanceChatToolExpectation } from "./finance-chat-cases";
 
 const NAVIGATION_TOOL = "getFinanceDashboardRoute";
 const PRESENTATION_TOOL = "presentFinanceCards";
@@ -16,6 +16,10 @@ interface FinanceChatToolResult {
 }
 
 export interface FinanceChatEvaluationTrace {
+  steps: readonly FinanceChatEvaluationStep[];
+}
+
+interface FinanceChatEvaluationStep {
   toolCalls: readonly FinanceChatToolCall[];
   toolResults: readonly FinanceChatToolResult[];
 }
@@ -62,32 +66,67 @@ function findDuplicateDataCalls(toolCalls: readonly FinanceChatToolCall[]): stri
   return [...duplicates];
 }
 
+function matchesExpectedInput(
+  input: unknown,
+  expected: Readonly<Record<string, unknown>>,
+): boolean {
+  if (typeof input !== "object" || input === null) return false;
+  return Object.entries(expected).every(([key, value]) => Reflect.get(input, key) === value);
+}
+
+function matchesToolExpectation(
+  toolCalls: readonly FinanceChatToolCall[],
+  expectation: FinanceChatToolExpectation,
+): boolean {
+  return toolCalls.some(
+    ({ toolName, input }) =>
+      toolName === expectation.name &&
+      (expectation.input === undefined || matchesExpectedInput(input, expectation.input)),
+  );
+}
+
+function isDataTool(toolName: string): boolean {
+  return toolName !== NAVIGATION_TOOL && toolName !== PRESENTATION_TOOL;
+}
+
 export function evaluateFinanceChatTrace(
   evaluationCase: FinanceChatEvaluationCase,
   trace: FinanceChatEvaluationTrace,
 ): FinanceChatEvaluationResult {
   const violations: string[] = [];
-  const toolNames = trace.toolCalls.map(({ toolName }) => toolName);
+  const toolCalls = trace.steps.flatMap(({ toolCalls }) => toolCalls);
+  const toolResults = trace.steps.flatMap(({ toolResults }) => toolResults);
+  const toolNames = toolCalls.map(({ toolName }) => toolName);
 
-  for (const requiredTool of evaluationCase.requiredTools) {
-    if (!toolNames.includes(requiredTool)) violations.push(`必須ツール未使用: ${requiredTool}`);
+  const matchedStrategy = evaluationCase.toolStrategies.some(
+    (strategy) =>
+      strategy.every((expectation) => matchesToolExpectation(toolCalls, expectation)) &&
+      toolCalls
+        .filter(({ toolName }) => isDataTool(toolName))
+        .every(({ toolName }) => strategy.some(({ name }) => name === toolName)),
+  );
+  if (!matchedStrategy) {
+    violations.push("必須ツールまたは引数が期待する戦略を満たさない");
   }
 
-  if (trace.toolCalls.some(({ invalid }) => invalid)) {
+  if (toolCalls.some(({ invalid }) => invalid)) {
     violations.push("不正なツール呼び出しが含まれる");
   }
 
-  const duplicateDataCalls = findDuplicateDataCalls(trace.toolCalls);
+  const duplicateDataCalls = findDuplicateDataCalls(toolCalls);
   if (duplicateDataCalls.length > 0) {
     violations.push(`同一データの重複取得: ${duplicateDataCalls.join(", ")}`);
   }
 
-  const presentationCalls = trace.toolCalls.filter(
-    ({ toolName }) => toolName === PRESENTATION_TOOL,
+  const unexpectedDataTools = toolNames.filter(
+    (toolName) => isDataTool(toolName) && !evaluationCase.allowedDataTools.includes(toolName),
   );
-  const presentationResults = trace.toolResults.filter(
-    ({ toolName }) => toolName === PRESENTATION_TOOL,
-  );
+  if (unexpectedDataTools.length > 0) {
+    violations.push(`許可されていないデータ取得: ${[...new Set(unexpectedDataTools)].join(", ")}`);
+  }
+
+  const presentationCalls = toolCalls.filter(({ toolName }) => toolName === PRESENTATION_TOOL);
+  const presentationResults = toolResults.filter(({ toolName }) => toolName === PRESENTATION_TOOL);
 
   if (presentationCalls.length !== 1) {
     violations.push(`presentFinanceCards 呼び出し回数: ${presentationCalls.length}（期待値: 1）`);
@@ -116,7 +155,12 @@ export function evaluateFinanceChatTrace(
       violations.push(`${NAVIGATION_TOOL} が呼び出されていない`);
     }
 
-    const navigationHrefs = getNavigationHrefs(trace.toolResults);
+    const presentationStep = trace.steps.findIndex(({ toolCalls }) =>
+      toolCalls.some(({ toolName }) => toolName === PRESENTATION_TOOL),
+    );
+    const navigationHrefs = getNavigationHrefs(
+      trace.steps.slice(0, presentationStep).flatMap(({ toolResults }) => toolResults),
+    );
     const unverifiedHrefs = getCardHrefs(cards).filter((href) => !navigationHrefs.has(href));
     if (unverifiedHrefs.length > 0) {
       violations.push(`ナビゲーションツール未検証の CTA: ${unverifiedHrefs.join(", ")}`);
