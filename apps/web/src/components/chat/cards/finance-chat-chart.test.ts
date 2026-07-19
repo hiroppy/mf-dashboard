@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { semanticColors } from "../../../lib/colors";
 import {
   formatFinanceChartAxisValue,
-  getFinanceChartLineVariants,
+  getFinanceChartLineStyle,
   getFinanceChartSeriesColor,
   getFinanceChartValueColor,
 } from "./finance-chat-chart";
@@ -30,16 +30,20 @@ describe("getFinanceChartSeriesColor", () => {
     expect(getFinanceChartValueColor("balance", -1000)).toBe(semanticColors.balanceNegative);
   });
 
-  it("splits a mixed-sign balance line into positive and negative semantic series", () => {
-    expect(getFinanceChartLineVariants("balance", [-1000, 2000], "value0")).toEqual([
-      { dataKey: "value0Positive", stroke: semanticColors.balancePositive },
-      { dataKey: "value0Negative", stroke: semanticColors.balanceNegative },
-    ]);
+  it("colors a continuous mixed-sign line on each side of zero", () => {
+    expect(getFinanceChartLineStyle("balance", [-1000, 1000], "balance-gradient")).toEqual({
+      stroke: "url(#balance-gradient)",
+      gradient: { id: "balance-gradient", zeroOffset: 50 },
+    });
+    expect(getFinanceChartLineStyle("balance", [-1000, 3000], "balance-gradient")).toEqual({
+      stroke: "url(#balance-gradient)",
+      gradient: { id: "balance-gradient", zeroOffset: 25 },
+    });
   });
 
   it("keeps a single line for a balance series with one sign", () => {
-    expect(getFinanceChartLineVariants("balance", [0, 2000], "value0")).toEqual([
-      { dataKey: "value0", stroke: semanticColors.balancePositive },
-    ]);
+    expect(getFinanceChartLineStyle("balance", [0, 2000], "balance-gradient")).toEqual({
+      stroke: semanticColors.balancePositive,
+    });
   });
 });

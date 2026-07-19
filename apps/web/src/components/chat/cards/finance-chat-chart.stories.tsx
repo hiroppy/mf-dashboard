@@ -30,3 +30,19 @@ export const Line: Story = {};
 export const Bar: Story = {
   args: { card: { ...meta.args.card, chartType: "bar" } },
 };
+
+export const MixedBalanceLine: Story = {
+  args: {
+    card: {
+      type: "chart",
+      title: "月別の収支差額",
+      chartType: "line",
+      series: [{ name: "収支差額", amountType: "balance" }],
+      data: [
+        { label: "5月", values: [-100000] },
+        { label: "6月", values: [0] },
+        { label: "7月", values: [200000] },
+      ],
+    },
+  },
+};

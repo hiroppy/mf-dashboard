@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChartCard } from "@mf-dashboard/analytics/chat/cards";
-import type { ReactElement } from "react";
+import { useId, type ReactElement } from "react";
 import {
   Bar,
   BarChart,
@@ -16,6 +16,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type DotItemDotProps,
 } from "recharts";
 import { getChartColorArray, semanticColors } from "../../../lib/colors";
 import { formatCurrency } from "../../../lib/format";
@@ -31,27 +32,36 @@ function seriesKey(index: number): string {
   return SERIES_KEYS[index] ?? `value${index}`;
 }
 
-interface FinanceChartLineVariant {
-  dataKey: string;
+interface FinanceChartLineStyle {
   stroke: string;
+  gradient?: {
+    id: string;
+    zeroOffset: number;
+  };
 }
 
-export function getFinanceChartLineVariants(
+export function getFinanceChartLineStyle(
   amountType: ChartCard["series"][number]["amountType"],
   values: readonly number[],
-  dataKey: string,
-): FinanceChartLineVariant[] {
+  gradientId: string,
+): FinanceChartLineStyle {
   const hasNegativeValue = values.some((value) => value < 0);
   const hasNonNegativeValue = values.some((value) => value >= 0);
 
   if (amountType !== "balance" || !hasNegativeValue || !hasNonNegativeValue) {
-    return [{ dataKey, stroke: getFinanceChartSeriesColor(amountType, values) }];
+    return { stroke: getFinanceChartSeriesColor(amountType, values) };
   }
 
-  return [
-    { dataKey: `${dataKey}Positive`, stroke: semanticColors.balancePositive },
-    { dataKey: `${dataKey}Negative`, stroke: semanticColors.balanceNegative },
-  ];
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+
+  return {
+    stroke: `url(#${gradientId})`,
+    gradient: {
+      id: gradientId,
+      zeroOffset: (-minimum / (maximum - minimum)) * 100,
+    },
+  };
 }
 
 export function getFinanceChartSeriesColor(
@@ -82,18 +92,10 @@ export function formatFinanceChartAxisValue(value: number, maximumAbsoluteValue:
 }
 
 export function FinanceChatChart({ card }: FinanceChatChartProps) {
+  const chartId = useId().replaceAll(":", "");
   const data = card.data.map((point) => ({
     label: point.label,
-    ...Object.fromEntries(
-      point.values.flatMap((value, index) => {
-        const key = seriesKey(index);
-        return [
-          [key, value],
-          [`${key}Positive`, value >= 0 ? value : null],
-          [`${key}Negative`, value <= 0 ? value : null],
-        ];
-      }),
-    ),
+    ...Object.fromEntries(point.values.map((value, index) => [seriesKey(index), value])),
   }));
   const chartColors = getChartColorArray(data.length);
   const maximumAbsoluteValue = Math.max(
@@ -120,26 +122,61 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
   let chart: ReactElement;
 
   if (card.chartType === "line") {
+    const lineStyles = card.series.map((series, index) =>
+      getFinanceChartLineStyle(
+        series.amountType,
+        card.data.map((point) => point.values[index] ?? 0),
+        `${chartId}-balance-${index}`,
+      ),
+    );
     chart = (
       <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+        <defs>
+          {lineStyles.map((style) =>
+            style.gradient ? (
+              <linearGradient
+                key={style.gradient.id}
+                id={style.gradient.id}
+                x1="0"
+                y1="100%"
+                x2="0"
+                y2="0%"
+              >
+                <stop offset="0%" stopColor={semanticColors.balanceNegative} />
+                <stop
+                  offset={`${style.gradient.zeroOffset}%`}
+                  stopColor={semanticColors.balanceNegative}
+                />
+                <stop
+                  offset={`${style.gradient.zeroOffset}%`}
+                  stopColor={semanticColors.balancePositive}
+                />
+                <stop offset="100%" stopColor={semanticColors.balancePositive} />
+              </linearGradient>
+            ) : null,
+          )}
+        </defs>
         {common}
-        {card.series.flatMap((series, index) =>
-          getFinanceChartLineVariants(
-            series.amountType,
-            card.data.map((point) => point.values[index] ?? 0),
-            seriesKey(index),
-          ).map((variant, variantIndex) => (
+        {card.series.map((series, index) => {
+          const renderDot = ({ cx, cy, value }: DotItemDotProps) => {
+            if (cx === undefined || cy === undefined) return null;
+            const color = getFinanceChartValueColor(series.amountType, Number(value));
+            return <circle cx={cx} cy={cy} r={3} fill={color} stroke={color} />;
+          };
+
+          return (
             <Line
-              key={`${series.name}-${variant.dataKey}`}
+              key={series.name}
               type="monotone"
-              dataKey={variant.dataKey}
+              dataKey={seriesKey(index)}
               name={series.name}
-              stroke={variant.stroke}
+              stroke={lineStyles[index]?.stroke}
               strokeWidth={2}
-              legendType={variantIndex === 0 ? "line" : "none"}
+              dot={renderDot}
+              activeDot={false}
             />
-          )),
-        )}
+          );
+        })}
       </LineChart>
     );
   } else if (card.chartType === "bar") {
