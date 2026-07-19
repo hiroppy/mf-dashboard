@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import { PieChart as PieChartIcon } from "lucide-react";
 import { PieChart as RechartsPieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getCategoryColor, getChartColorArray } from "../../lib/colors";
 import { formatCurrency } from "../../lib/format";
 import { AmountDisplay } from "../ui/amount-display";
@@ -38,7 +39,11 @@ export function PieChart({
         <CardTitle icon={icon ?? PieChartIcon}>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={height}>
+        <ResponsiveContainer
+          width="100%"
+          height={height}
+          initialDimension={CHART_INITIAL_DIMENSION}
+        >
           <RechartsPieChart>
             <Pie
               data={data}

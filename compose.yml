@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: docker/web/Dockerfile
       args:
+        DASHBOARD_URL: ${DASHBOARD_URL:?Set DASHBOARD_URL to the public dashboard URL}
         NEXT_PUBLIC_SIMULATOR_CURRENT_AGE: ${NEXT_PUBLIC_SIMULATOR_CURRENT_AGE:-}
         NEXT_PUBLIC_SIMULATOR_INITIAL_AMOUNT: ${NEXT_PUBLIC_SIMULATOR_INITIAL_AMOUNT:-}
         NEXT_PUBLIC_SIMULATOR_MONTHLY_CONTRIBUTION: ${NEXT_PUBLIC_SIMULATOR_MONTHLY_CONTRIBUTION:-}
@@ -26,6 +27,7 @@ services:
       AI_MODEL: ${AI_MODEL:-}
       AI_PROVIDER: ${AI_PROVIDER:-}
       CRAWLER_URL: http://crawler:8766
+      DASHBOARD_URL: ${DASHBOARD_URL:?Set DASHBOARD_URL to the public dashboard URL}
       REFRESH_TOKEN: ${REFRESH_TOKEN:-}
       TZ: Asia/Tokyo
     volumes:

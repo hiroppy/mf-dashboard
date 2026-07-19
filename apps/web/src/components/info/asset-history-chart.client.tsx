@@ -11,7 +11,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { CHART_PERIOD_OPTIONS, filterDataByPeriod, type Period } from "../../lib/chart";
+import {
+  CHART_INITIAL_DIMENSION,
+  CHART_PERIOD_OPTIONS,
+  filterDataByPeriod,
+  type Period,
+} from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { formatCurrency } from "../../lib/format";
 import { cn } from "../../lib/utils";
@@ -159,7 +164,11 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={height}>
+        <ResponsiveContainer
+          width="100%"
+          height={height}
+          initialDimension={CHART_INITIAL_DIMENSION}
+        >
           <RechartsLineChart
             data={filteredData}
             margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
