@@ -30,6 +30,7 @@ const MIN_PANEL_WIDTH = 320;
 const MAX_PANEL_WIDTH = 720;
 const PANEL_RESIZE_STEP = 24;
 const INPUT_FOCUS_DELAY_MS = 250;
+const AUTO_FOLLOW_THRESHOLD_PX = 48;
 interface ChatShellProps {
   suggestedPrompts?: readonly string[];
 }
@@ -88,6 +89,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
+  const shouldFollowLatestRef = useRef(true);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
 
   const closeChat = useCallback(() => {
@@ -110,20 +112,37 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
   }, [closeChat, isOpen]);
 
   useEffect(() => {
+    if (isOpen) shouldFollowLatestRef.current = true;
+  }, [isOpen]);
+
+  useEffect(() => {
     const messageLog = messagesRef.current;
     if (!isOpen || !messageLog) return;
 
     const followLatestMessage = () => {
+      if (!shouldFollowLatestRef.current) return;
       messageLog.scrollTop = messageLog.scrollHeight;
     };
-    followLatestMessage();
+    const updateAutoFollow = () => {
+      const distanceFromBottom =
+        messageLog.scrollHeight - messageLog.scrollTop - messageLog.clientHeight;
+      shouldFollowLatestRef.current = distanceFromBottom <= AUTO_FOLLOW_THRESHOLD_PX;
+    };
 
-    if (!isSubmitting) return;
+    followLatestMessage();
+    messageLog.addEventListener("scroll", updateAutoFollow, { passive: true });
+
+    if (!isSubmitting) {
+      return () => messageLog.removeEventListener("scroll", updateAutoFollow);
+    }
 
     const observer = new MutationObserver(followLatestMessage);
     observer.observe(messageLog, { childList: true, characterData: true, subtree: true });
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      messageLog.removeEventListener("scroll", updateAutoFollow);
+    };
   }, [isOpen, isSubmitting, messages]);
 
   useEffect(() => {
@@ -142,6 +161,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
 
     if (!message || isSubmitting) return;
 
+    shouldFollowLatestRef.current = true;
     addUserMessage(message);
     setDraft("");
   };
@@ -310,7 +330,10 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                             key={`${card.type}-${card.title}-${index}`}
                             allowedHrefs={allowedHrefs}
                             card={card}
-                            onPromptSelect={addUserMessage}
+                            onPromptSelect={(prompt) => {
+                              shouldFollowLatestRef.current = true;
+                              addUserMessage(prompt);
+                            }}
                           />
                         ))}
                       </div>
@@ -346,7 +369,10 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                       key={prompt}
                       type="button"
                       className="rounded-full border bg-background px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => addUserMessage(prompt)}
+                      onClick={() => {
+                        shouldFollowLatestRef.current = true;
+                        addUserMessage(prompt);
+                      }}
                     >
                       {prompt}
                     </button>

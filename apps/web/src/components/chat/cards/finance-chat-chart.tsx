@@ -27,9 +27,18 @@ interface FinanceChatChartProps {
 }
 
 const SERIES_KEYS = ["value0", "value1", "value2"] as const;
+const SERIES_PRESENTATIONS = [
+  { fillOpacity: 1, legendType: "circle", strokeDasharray: undefined },
+  { fillOpacity: 0.72, legendType: "square", strokeDasharray: "8 4" },
+  { fillOpacity: 0.48, legendType: "diamond", strokeDasharray: "2 3" },
+] as const;
 
 function seriesKey(index: number): string {
   return SERIES_KEYS[index] ?? `value${index}`;
+}
+
+export function getFinanceChartSeriesPresentation(index: number) {
+  return SERIES_PRESENTATIONS[index % SERIES_PRESENTATIONS.length] ?? SERIES_PRESENTATIONS[0];
 }
 
 interface FinanceChartLineStyle {
@@ -158,6 +167,7 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
         </defs>
         {common}
         {card.series.map((series, index) => {
+          const presentation = getFinanceChartSeriesPresentation(index);
           const renderDot = ({ cx, cy, value }: DotItemDotProps) => {
             if (cx === undefined || cy === undefined) return null;
             const color = getFinanceChartValueColor(series.amountType, Number(value));
@@ -172,6 +182,8 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
               name={series.name}
               stroke={lineStyles[index]?.stroke}
               strokeWidth={2}
+              strokeDasharray={presentation.strokeDasharray}
+              legendType={presentation.legendType}
               dot={renderDot}
               activeDot={false}
             />
@@ -183,26 +195,31 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
     chart = (
       <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
         {common}
-        {card.series.map((series, index) => (
-          <Bar
-            key={series.name}
-            dataKey={seriesKey(index)}
-            name={series.name}
-            fill={getFinanceChartSeriesColor(
-              series.amountType,
-              card.data.map((point) => point.values[index] ?? 0),
-            )}
-            radius={[3, 3, 0, 0]}
-          >
-            {series.amountType === "balance" &&
-              card.data.map((point) => (
-                <Cell
-                  key={`${series.name}-${point.label}`}
-                  fill={getFinanceChartValueColor(series.amountType, point.values[index] ?? 0)}
-                />
-              ))}
-          </Bar>
-        ))}
+        {card.series.map((series, index) => {
+          const presentation = getFinanceChartSeriesPresentation(index);
+          return (
+            <Bar
+              key={series.name}
+              dataKey={seriesKey(index)}
+              name={series.name}
+              fill={getFinanceChartSeriesColor(
+                series.amountType,
+                card.data.map((point) => point.values[index] ?? 0),
+              )}
+              fillOpacity={presentation.fillOpacity}
+              legendType={presentation.legendType}
+              radius={[3, 3, 0, 0]}
+            >
+              {series.amountType === "balance" &&
+                card.data.map((point) => (
+                  <Cell
+                    key={`${series.name}-${point.label}`}
+                    fill={getFinanceChartValueColor(series.amountType, point.values[index] ?? 0)}
+                  />
+                ))}
+            </Bar>
+          );
+        })}
       </BarChart>
     );
   } else {

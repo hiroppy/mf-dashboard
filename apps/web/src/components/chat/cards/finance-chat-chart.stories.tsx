@@ -31,6 +31,25 @@ export const Bar: Story = {
   args: { card: { ...meta.args.card, chartType: "bar" } },
 };
 
+export const SameTypeSeries: Story = {
+  args: {
+    card: {
+      type: "chart",
+      title: "年度別の支出比較",
+      chartType: "line",
+      series: [
+        { name: "今年", amountType: "expense" },
+        { name: "前年", amountType: "expense" },
+      ],
+      data: [
+        { label: "5月", values: [210000, 190000] },
+        { label: "6月", values: [220000, 230000] },
+        { label: "7月", values: [200000, 215000] },
+      ],
+    },
+  },
+};
+
 export const Pie: Story = {
   args: {
     card: {

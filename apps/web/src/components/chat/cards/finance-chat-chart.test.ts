@@ -4,6 +4,7 @@ import {
   formatFinanceChartAxisValue,
   getFinanceChartLineStyle,
   getFinanceChartSeriesColor,
+  getFinanceChartSeriesPresentation,
   getFinanceChartValueColor,
 } from "./finance-chat-chart";
 
@@ -44,6 +45,24 @@ describe("getFinanceChartSeriesColor", () => {
   it("keeps a single line for a balance series with one sign", () => {
     expect(getFinanceChartLineStyle("balance", [0, 2000], "balance-gradient")).toEqual({
       stroke: semanticColors.balancePositive,
+    });
+  });
+
+  it("assigns distinct marks and legend symbols to adjacent series", () => {
+    expect(getFinanceChartSeriesPresentation(0)).toEqual({
+      fillOpacity: 1,
+      legendType: "circle",
+      strokeDasharray: undefined,
+    });
+    expect(getFinanceChartSeriesPresentation(1)).toEqual({
+      fillOpacity: 0.72,
+      legendType: "square",
+      strokeDasharray: "8 4",
+    });
+    expect(getFinanceChartSeriesPresentation(2)).toEqual({
+      fillOpacity: 0.48,
+      legendType: "diamond",
+      strokeDasharray: "2 3",
     });
   });
 });

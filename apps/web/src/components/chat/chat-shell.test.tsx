@@ -113,16 +113,24 @@ describe("ChatShell", () => {
     expect(screen.getByRole("status", { name: "家計データを分析中" })).toBeTruthy();
   });
 
-  it("contains scroll chaining and follows the latest message", () => {
+  it("follows streaming updates only while the user remains near the bottom", () => {
     const scrollHeightDescriptor = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       "scrollHeight",
+    );
+    const clientHeightDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientHeight",
     );
     Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
       configurable: true,
       value: 480,
     });
-    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    const chatState: ReturnType<typeof chatProvider.useFinanceChat> = {
       addUserMessage: vi.fn<(text: string) => void>(),
       close: vi.fn<() => void>(),
       draft: "",
@@ -137,18 +145,46 @@ describe("ChatShell", () => {
       ],
       open: vi.fn<() => void>(),
       setDraft: vi.fn<(draft: string) => void>(),
-    });
+    };
+    vi.spyOn(chatProvider, "useFinanceChat").mockImplementation(() => chatState);
 
-    render(<ChatShell />);
+    const { rerender } = render(<ChatShell />);
 
     const messageLog = screen.getByRole("log");
     expect(messageLog.classList.contains("overscroll-contain")).toBe(true);
+    expect(messageLog.scrollTop).toBe(480);
+
+    messageLog.scrollTop = 100;
+    fireEvent.scroll(messageLog);
+    chatState.messages = [
+      {
+        ...chatState.messages[0],
+        parts: [{ type: "text", text: "最新の回答を更新" }],
+      },
+    ];
+    rerender(<ChatShell />);
+    expect(messageLog.scrollTop).toBe(100);
+
+    messageLog.scrollTop = 250;
+    fireEvent.scroll(messageLog);
+    chatState.messages = [
+      {
+        ...chatState.messages[0],
+        parts: [{ type: "text", text: "最下部付近でさらに更新" }],
+      },
+    ];
+    rerender(<ChatShell />);
     expect(messageLog.scrollTop).toBe(480);
 
     if (scrollHeightDescriptor) {
       Object.defineProperty(HTMLElement.prototype, "scrollHeight", scrollHeightDescriptor);
     } else {
       delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+    }
+    if (clientHeightDescriptor) {
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", clientHeightDescriptor);
+    } else {
+      delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
     }
   });
 
