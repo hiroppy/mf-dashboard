@@ -37,28 +37,39 @@ codex debug app-server send-message-v2 \
 5. `turn/completed` の status が `completed`
 6. app-server が exit code 0 で終了
 
-このコマンドは個人データや `data/moneyforward.db` を参照しないため、そのまま再検証できる。
+今回のイベント列にはツール呼び出しや `data/moneyforward.db` へのアクセスはなかった。
+個人データへアクセスしないことも検証する場合は、認証だけを設定した隔離済みの
+`CODEX_HOME` と、対象データを含まない clean な cwd で再実行する。
 
 ## 接続方式
 
 app-server は JSON-RPC 2.0 と同じメッセージ構造を使うが、wire format では
 `jsonrpc: "2.0"` を省略する。
 
-| transport   | 用途                                                      | このリポジトリでの評価                                           |
-| ----------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
-| stdio       | app-server を子プロセスとして起動するローカルクライアント | 最小構成として推奨                                               |
-| WebSocket   | 別プロセスまたは別ホストから接続する rich client          | experimental/unsupported。localhost または SSH tunnel に限定する |
-| Unix socket | 同一ホスト上のプロセス間接続                              | 複数クライアントや daemon 化が必要な場合の候補                   |
+| transport   | 用途                                                      | このリポジトリでの評価                                     |
+| ----------- | --------------------------------------------------------- | ---------------------------------------------------------- |
+| stdio       | app-server を子プロセスとして起動するローカルクライアント | 最小構成として推奨                                         |
+| WebSocket   | 別プロセスまたは別ホストから接続する rich client          | experimental/unsupported。公開範囲ごとの認証と暗号化が必要 |
+| Unix socket | 同一ホスト上のプロセス間接続                              | 複数クライアントや daemon 化が必要な場合の候補             |
 
 クライアントは接続ごとに一度だけ `initialize` を送り、その応答後に `initialized`
 notification を送る。その後で `thread/start` と `turn/start` を呼び、
-`turn/completed` まで notification を読み続ける必要がある。
+`turn/completed` まで notification を読み続ける必要がある。approval や permission
+などの server-initiated request も処理して応答しなければ、ターンを継続できない。
+
+WebSocket の公開境界は次のように分ける。
+
+- localhost: `ws://127.0.0.1:PORT` に bind し、同一ホストからだけ接続する
+- SSH tunnel: app-server は loopback に bind したままにし、SSH tunnel で暗号化する。
+  `--ws-auth capability-token --ws-token-file /absolute/path` も設定する
+- 公開到達可能な接続: app-server を直接公開しない。loopback に bind して TLS 終端 proxy
+  の内側へ置き、client は `wss://` で接続する。app-server 側にも `--ws-auth` を設定する
 
 型定義は使用中の CLI と同じバージョンから生成する。
 
 ```sh
-codex app-server generate-ts --out ./schemas
-codex app-server generate-json-schema --out ./schemas
+codex app-server generate-ts --experimental --out ./schemas
+codex app-server generate-json-schema --experimental --out ./schemas
 ```
 
 生成物は CLI バージョン固有である。リポジトリへクライアントを実装する場合は、CLI
@@ -76,17 +87,18 @@ app-server を使う価値があるのは、会話履歴、承認 UI、ツール
 - Codex CLI のインストールと、ChatGPT ログインまたは trusted automation 用の
   `CODEX_ACCESS_TOKEN` が必要
 - app-server のクライアント認証と、Codex が上流 API に接続するための認証は別物
-- stdio 以外で非 localhost に公開する場合は、TLS と WebSocket 認証が必要
+- WebSocket は loopback に限定し、接続境界に応じて SSH または TLS と `--ws-auth` を使う
 - experimental API を使う場合は `initialize` で明示的に opt-in する必要がある
 - notification にはコマンド出力、ファイル変更、ローカルパスなどが含まれ得るため、
   ブラウザへの転送とログ保存では allowlist と秘匿化が必要
 - app-server は開発・デバッグ用途が主で、予告なく変わる可能性がある
 
-現時点では app-server 自体の動作を確認できたため、採用可否を妨げる技術的な blocker はない。
-一方、定型実行だけが目的なら SDK の方が安定性と保守性に優れる。
+今回の単一 stdio CLI 検証の範囲では技術的な blocker を確認しなかった。本番 client
+統合、長時間負荷、WebSocket の実動作は未検証である。定型実行だけが目的なら SDK の方が
+安定性と保守性に優れる。
 
 ## 参考資料
 
-- [Codex App Server](https://learn.chatgpt.com/docs/app-server.md)
-- [Codex CLI developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli#cli-codex-app-server)
+- [Codex App Server](https://learn.chatgpt.com/docs/app-server)
+- [Codex CLI developer commands](https://learn.chatgpt.com/docs/developer-commands)
 - [openai/codex app-server source](https://github.com/openai/codex/tree/main/codex-rs/app-server)
