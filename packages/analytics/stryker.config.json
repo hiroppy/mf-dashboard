@@ -4,10 +4,10 @@
   "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/config.ts", "!src/types.ts"],
   "packageManager": "pnpm",
   "plugins": ["@stryker-mutator/vitest-runner"],
-  "reporters": ["clear-text", "progress"],
+  "reporters": ["clear-text", "progress", "html", "json"],
   "testRunner": "vitest",
   "thresholds": {
-    "high": 50,
+    "high": 80,
     "low": 45,
     "break": 45
   },

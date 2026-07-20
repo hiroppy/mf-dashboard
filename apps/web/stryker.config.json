@@ -20,10 +20,10 @@
   ],
   "packageManager": "pnpm",
   "plugins": ["@stryker-mutator/vitest-runner"],
-  "reporters": ["clear-text", "progress"],
+  "reporters": ["clear-text", "progress", "html", "json"],
   "testRunner": "vitest",
   "thresholds": {
-    "high": 60,
+    "high": 80,
     "low": 55,
     "break": 55
   },
