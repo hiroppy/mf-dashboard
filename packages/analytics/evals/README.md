@@ -22,6 +22,10 @@ AI_PROVIDER=openai AI_MODEL=<provider-model-id> AI_API_KEY=<provider-api-key> \
 - CTA に対応する navigation tool の page、month と呼び出し順
 - 許可していない tool や同一 tool/input による重複取得
 - `presentFinanceCards` が 1 回だけ成功し、カード schema と期待順を満たすこと
+- カードの金額、カテゴリ、明細が presentation 前に完了した data tool の結果に根拠付けられること
+- 最終回答テキストの金額・割合が取得結果またはカードと矛盾しないこと
 - empty 以外の CTA が、presentation より前の step で完了した `getFinanceDashboardRoute` の返却値であること
+
+demo データは対象月の月末まで生成されるため、評価時の system prompt とケース日付も同じ月の JST 月末に固定する。
 
 評価は実際の AI API を呼び出すため、provider ごとの出力差と利用料金が発生する。

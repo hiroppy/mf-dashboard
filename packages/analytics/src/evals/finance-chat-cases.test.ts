@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createFinanceChatEvaluationCases,
   FINANCE_CHAT_EVALUATION_CASES,
+  getFinanceChatEvaluationDate,
 } from "./finance-chat-cases";
 
 describe("FINANCE_CHAT_EVALUATION_CASES", () => {
@@ -43,5 +44,13 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
       page: "cashFlow",
       month: "2026-08",
     });
+  });
+
+  it("pins evaluation to the JST month end covered by demo data", () => {
+    const middleOfMonth = new Date("2026-07-05T00:00:00.000Z");
+
+    expect(getFinanceChatEvaluationDate(middleOfMonth).toISOString()).toBe(
+      "2026-07-31T03:00:00.000Z",
+    );
   });
 });

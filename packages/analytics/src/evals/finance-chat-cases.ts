@@ -1,4 +1,4 @@
-import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
+import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import type { FinanceChatCard } from "../chat/cards";
 
 export interface FinanceChatEvaluationCase {
@@ -13,6 +13,12 @@ export interface FinanceChatEvaluationCase {
 export interface FinanceChatToolExpectation {
   name: string;
   input?: Readonly<Record<string, unknown>>;
+}
+
+export function getFinanceChatEvaluationDate(date: Date = new Date()): Date {
+  const { year, month } = getJstDateParts(date);
+  // Noon avoids crossing the JST date boundary when represented as a UTC instant.
+  return new Date(Date.UTC(year, month, 0, 3));
 }
 
 export function createFinanceChatEvaluationCases(

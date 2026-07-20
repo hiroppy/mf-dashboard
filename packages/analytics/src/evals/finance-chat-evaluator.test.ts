@@ -47,6 +47,7 @@ function createTrace(
   overrides: Partial<FinanceChatEvaluationTrace> = {},
 ): FinanceChatEvaluationTrace {
   return {
+    text: "今月の収支は50,000円です。",
     steps: [
       {
         toolCalls: [{ toolCallId: "data", toolName: "getLatestMonthlySummary", input: {} }],
@@ -229,6 +230,7 @@ describe("evaluateFinanceChatTrace", () => {
     ];
 
     const result = evaluateFinanceChatTrace(emptyCase, {
+      text: "対象期間のデータはありません。",
       steps: [
         {
           toolCalls: [
@@ -286,7 +288,7 @@ describe("evaluateFinanceChatTrace", () => {
               {
                 toolCallId: "metrics",
                 toolName: "getFinancialMetrics",
-                output: { savingsRate: 20 },
+                output: { savingsRate: 20, balance: 50_000 },
               },
             ],
           },
@@ -520,5 +522,127 @@ describe("evaluateFinanceChatTrace", () => {
 
     expect(extraFilter.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
     expect(additionalCall.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
+  });
+
+  it("rejects card amounts that are not grounded in correlated data results", () => {
+    const ungroundedCards = cards.map((card) =>
+      card.type === "summary"
+        ? { ...card, metrics: [{ ...card.metrics[0]!, amount: 9_000_000 }] }
+        : card,
+    );
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      text: "今月の収支です。",
+      steps: [
+        base.steps[0]!,
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: ungroundedCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: ungroundedCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
+
+  it("rejects transaction details and categories absent from data results", () => {
+    const transactionCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      expectedCardTypes: ["transactionList"],
+    };
+    const transactionCards = [
+      {
+        type: "transactionList" as const,
+        title: "明細",
+        transactions: [
+          {
+            id: "invented",
+            date: "2026-07-10",
+            description: "架空の支出",
+            category: "食費",
+            amount: 1_000,
+            amountType: "expense" as const,
+          },
+        ],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(transactionCase, {
+      text: "明細を表示します。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              output: [
+                {
+                  id: "actual",
+                  date: "2026-07-10",
+                  description: "食品店",
+                  category: "食費",
+                  amount: 1_000,
+                },
+              ],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: transactionCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: transactionCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
+
+  it("rejects ungrounded financial claims in the final assistant text", () => {
+    const result = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "今月の収支は9,000,000円です。" }),
+    );
+
+    expect(result.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
   });
 });

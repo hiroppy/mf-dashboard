@@ -3,7 +3,10 @@ import { generateText, stepCountIs } from "ai";
 import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
-import { createFinanceChatEvaluationCases } from "../src/evals/finance-chat-cases";
+import {
+  createFinanceChatEvaluationCases,
+  getFinanceChatEvaluationDate,
+} from "../src/evals/finance-chat-cases";
 import { evaluateFinanceChatTrace } from "../src/evals/finance-chat-evaluator";
 
 function getSelectedCases(evaluationDate: Date) {
@@ -30,7 +33,7 @@ async function main() {
   const group = await getCurrentGroup(db);
   if (!group) throw new Error("demo.db に current group がありません。");
 
-  const evaluationDate = new Date();
+  const evaluationDate = getFinanceChatEvaluationDate();
   const selectedCases = getSelectedCases(evaluationDate);
   const tools = createFinanceChatTools(db, group.id);
   const model = getModel();
@@ -44,7 +47,10 @@ async function main() {
       tools,
       stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
     });
-    const result = evaluateFinanceChatTrace(evaluationCase, { steps: response.steps });
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      steps: response.steps,
+      text: response.text,
+    });
 
     if (!result.passed) failed += 1;
     console.log(
