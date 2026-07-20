@@ -48,7 +48,8 @@ describe("ActionIcons", () => {
     const issuesLink = screen.getByRole("link", { name: "バグ報告・機能要望" });
 
     expect(repositoryLink.getAttribute("href")).toBe("https://github.com/hiroppy/mf-dashboard");
-    expect(repositoryLink.nextElementSibling).toBe(issuesLink);
+    expect(repositoryLink.querySelector("svg")).not.toBeNull();
+    expect(repositoryLink.parentElement?.nextElementSibling?.contains(issuesLink)).toBe(true);
   });
 
   it("does not render a link to the removed daily update workflow", () => {

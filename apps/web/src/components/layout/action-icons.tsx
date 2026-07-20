@@ -155,7 +155,19 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
         <IconButton icon={<HelpCircle className={iconSize} />} ariaLabel="ヘルプ" />
       </DialogTrigger>
       <DialogContent>
-        <DialogTitle>MoneyForward Me Dashboard について</DialogTitle>
+        <div className="flex items-center justify-between gap-4">
+          <DialogTitle>MoneyForward Me Dashboard について</DialogTitle>
+          <IconButton
+            icon={
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.3c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z" />
+              </svg>
+            }
+            href="https://github.com/hiroppy/mf-dashboard"
+            ariaLabel="GitHub リポジトリ"
+            isExternal
+          />
+        </div>
         <DialogDescription asChild>
           <div className="mt-2 text-sm text-muted-foreground space-y-4">
             <p>MoneyForward Me を自動化・可視化するダッシュボードです。</p>
@@ -193,15 +205,7 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
                 </li>
               </ul>
             </div>
-            <div className="pt-2 border-t flex flex-col items-start gap-2">
-              <a
-                href="https://github.com/hiroppy/mf-dashboard"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary hover:underline"
-              >
-                GitHub リポジトリ
-              </a>
+            <div className="pt-2 border-t">
               <a
                 href="https://github.com/hiroppy/mf-dashboard/issues"
                 target="_blank"
