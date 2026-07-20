@@ -8,10 +8,13 @@ const config: KnipConfig = {
   }),
   workspaces: {
     "apps/crawler": {
-      ignore: ["src/hooks/helpers.ts"],
+      ignore: ["src/hooks/helpers.ts", "vitest.mutation.config.ts"],
     },
     "apps/mcp": {
       ignoreDependencies: ["@libsql/client"],
+    },
+    "apps/web": {
+      ignore: ["vitest.mutation.config.ts"],
     },
   },
 };

@@ -33,6 +33,8 @@ minimumReleaseAgeExclude:
   - "@ai-sdk/gateway@4.0.22"
 
 catalog:
+  "@stryker-mutator/core": 9.6.1
+  "@stryker-mutator/vitest-runner": 9.6.1
   "@libsql/client": 0.17.4
   "@types/node": 25.9.3
   "@vitest/browser-playwright": 4.1.9

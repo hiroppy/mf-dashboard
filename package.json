@@ -12,7 +12,7 @@
     "db:clean": "rm -f data/moneyforward.db data/moneyforward.db-wal data/moneyforward.db-shm",
     "db:dev": "pnpm --filter @mf-dashboard/crawler dev:scrape",
     "test": "turbo test",
-    "test:mutation": "pnpm --filter @mf-dashboard/date-utils test:mutation",
+    "test:mutation": "turbo test:mutation",
     "test:e2e:web": "turbo test:e2e --filter=@mf-dashboard/web",
     "test:e2e:crawler": "turbo test:e2e --filter=@mf-dashboard/crawler",
     "test:e2e:real": "pnpm --filter @mf-dashboard/db-e2e test",
