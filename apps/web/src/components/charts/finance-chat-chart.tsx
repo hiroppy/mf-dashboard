@@ -273,7 +273,10 @@ export function FinanceChatChart({ card }: FinanceChatChartProps) {
       <ul className="sr-only">
         {card.data.map((point) => (
           <li key={point.label}>
-            {point.label}: {point.values.map((value) => formatCurrency(value)).join("、")}
+            {point.label}:{" "}
+            {point.values
+              .map((value, index) => `${card.series[index]?.name}: ${formatCurrency(value)}`)
+              .join("、")}
           </li>
         ))}
       </ul>
