@@ -1,11 +1,18 @@
 import type { Db } from "@mf-dashboard/db";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createAnalysisTools } from "../insights/analysis-tools.js";
 import { createFinancialTools } from "../insights/tools.js";
 import { createChatTools, createFinanceChatTools } from "./tools.js";
 
 const db = {} as Db;
 const groupId = "test-group";
+const execOptions = {
+  toolCallId: "test",
+  messages: [],
+  abortSignal: undefined as never,
+  context: {} as never,
+};
 
 describe("createChatTools", () => {
   it("combines every financial and analysis tool", () => {
@@ -47,5 +54,27 @@ describe("createChatTools", () => {
         analyzeIncomeStability: expect.any(Object),
       }),
     );
+  });
+
+  it("allows presentation CTAs only after the navigation tool returns the route", async () => {
+    const tools = createChatTools(db, groupId);
+    const presentationSchema = tools.presentFinanceCards.inputSchema as z.ZodType;
+    const input = {
+      cards: [
+        {
+          type: "action",
+          title: "詳細を確認",
+          description: "収支ページで確認できます",
+          action: { label: "収支を見る", href: `/${groupId}/cf/2026-07` },
+        },
+      ],
+    };
+
+    expect(presentationSchema.safeParse(input).success).toBe(false);
+    await tools.getFinanceDashboardRoute.execute?.(
+      { page: "cashFlow", month: "2026-07" },
+      execOptions,
+    );
+    expect(presentationSchema.safeParse(input).success).toBe(true);
   });
 });

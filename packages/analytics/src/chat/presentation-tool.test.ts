@@ -72,4 +72,22 @@ describe("createFinancePresentationTool", () => {
       }).success,
     ).toBe(true);
   });
+
+  it("requires CTA routes to come from the navigation tool when an allowlist is provided", () => {
+    const allowedHrefs = new Set(["/group-a/cf/2026-07"]);
+    const schema = createFinancePresentationInputSchema("group-a", allowedHrefs);
+    const card = {
+      type: "action" as const,
+      title: "詳細を確認",
+      description: "収支ページで確認できます",
+      action: { label: "収支を見る", href: "/group-a/cf/2026-07" },
+    };
+
+    expect(schema.safeParse({ cards: [card] }).success).toBe(true);
+    expect(
+      schema.safeParse({
+        cards: [{ ...card, action: { ...card.action, href: "/group-a/insights" } }],
+      }).success,
+    ).toBe(false);
+  });
 });

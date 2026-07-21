@@ -55,4 +55,12 @@ describe("createTransactionSearchTool", () => {
     );
     expect(schema.safeParse({ startDate: "2026-07-01", endDate: "2026-07-31" }).success).toBe(true);
   });
+
+  it("最小金額が最大金額より大きい範囲を拒否する", () => {
+    const tool = createTransactionSearchTool(db, "group-a");
+    const schema = tool.inputSchema as z.ZodType;
+
+    expect(schema.safeParse({ minAmount: 2_000, maxAmount: 1_000 }).success).toBe(false);
+    expect(schema.safeParse({ minAmount: 1_000, maxAmount: 1_000 }).success).toBe(true);
+  });
 });

@@ -6,10 +6,12 @@ import { createFinancePresentationTool } from "./presentation-tool";
 import { createTransactionSearchTool } from "./transaction-search-tool";
 
 export function createFinanceChatTools(db: Db, groupId: string) {
+  const allowedHrefs = new Set<string>();
+
   return {
     searchTransactions: createTransactionSearchTool(db, groupId),
-    getFinanceDashboardRoute: createFinanceNavigationTool(groupId),
-    presentFinanceCards: createFinancePresentationTool(groupId),
+    getFinanceDashboardRoute: createFinanceNavigationTool(groupId, allowedHrefs),
+    presentFinanceCards: createFinancePresentationTool(groupId, allowedHrefs),
     ...createFinancialTools(db, groupId),
     ...createAnalysisTools(db, groupId),
   };
