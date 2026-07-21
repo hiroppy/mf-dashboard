@@ -468,4 +468,63 @@ describe("assertFinanceChatOutput", () => {
 
     expect(result.reason).toContain("本文の未根拠金額: 5683100");
   });
+
+  it("accepts comparisons grounded by exact expected chart values", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "前月より10,000円増えました。",
+        cards: [
+          {
+            type: "chart",
+            title: "支出推移",
+            chartType: "line",
+            series: [{ name: "支出", amountType: "expense" }],
+            data: [
+              { label: "2026-06", values: [209_894] },
+              { label: "2026-07", values: [219_894] },
+            ],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["chart"],
+          expectedChartValues: [209_894, 219_894],
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it("rejects comparisons backed by unexpected chart values", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "前月より10,000円増えました。",
+        cards: [
+          {
+            type: "chart",
+            title: "支出推移",
+            chartType: "line",
+            series: [{ name: "支出", amountType: "expense" }],
+            data: [
+              { label: "2026-06", values: [1] },
+              { label: "2026-07", values: [10_001] },
+            ],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["chart"],
+          expectedChartValues: [209_894, 219_894],
+        },
+      },
+    );
+
+    expect(result.reason).toContain("chart values が fixture と一致しません");
+    expect(result.reason).toContain("根拠のない期間比較");
+  });
 });

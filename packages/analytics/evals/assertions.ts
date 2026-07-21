@@ -13,6 +13,7 @@ interface AssertionContext {
     expectedFacts?: Array<string | number>;
     expectedMetrics?: MetricExpectation[];
     allowedMetricAmounts?: number[];
+    expectedChartValues?: number[];
     expectedCategories?: Array<MetricExpectation & { percentage: number }>;
     expectedTransactions?: string[];
     expectedTransactionTotal?: number;
@@ -128,11 +129,13 @@ function getTextClaimFailures(
   text: string,
   cards: FinanceChatCard[],
   expectedPeriods: string[],
+  comparisonAmounts: number[],
   location = "本文",
 ): string[] {
   const metrics = getMetrics(cards);
   const currencyFailures = parseCurrencyClaims(text).filter(({ amount, index }) => {
     const label = getNearbyLabel(text, index);
+    if (comparisonAmounts.includes(amount)) return false;
     if (!label) return !metrics.some((metric) => metric.amount === amount);
     const amountType = getAmountTypeForLabel(label);
     return !metrics.some(
@@ -180,7 +183,8 @@ function getTextClaimFailures(
   const invertedBalance =
     (text.includes("赤字") && balanceMetric && balanceMetric.amount >= 0) ||
     (text.includes("黒字") && balanceMetric && balanceMetric.amount < 0);
-  const unsupportedComparison = /(?:前月|先月|前年).{0,24}(?:増|減|上回|下回)/.test(text);
+  const comparisonClaim = /(?:前月|先月|前年).{0,24}(?:増|減|上回|下回)/.test(text);
+  const unsupportedComparison = comparisonClaim && comparisonAmounts.length === 0;
 
   return [
     currencyFailures.length > 0
@@ -288,6 +292,22 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
   const transactionsMatch =
     expectedTransactions.length === 0 || collectionsMatch(transactionKeys, expectedTransactions);
   const transactionTotal = transactions.reduce((total, { amount }) => total + amount, 0);
+  const chartValues = result.cards.flatMap((card) =>
+    card.type === "chart" ? card.data.flatMap(({ values }) => values) : [],
+  );
+  const expectedChartValues = config.expectedChartValues ?? [];
+  const chartValuesMatch =
+    expectedChartValues.length === 0 ||
+    collectionsMatch(chartValues.map(String), expectedChartValues.map(String));
+  const comparisonAmounts =
+    chartValuesMatch && expectedChartValues.length > 0
+      ? [
+          ...expectedChartValues,
+          ...expectedChartValues.flatMap((left) =>
+            expectedChartValues.map((right) => Math.abs(left - right)),
+          ),
+        ]
+      : [];
   const forbiddenPhrases = (config.forbiddenPhrases ?? []).filter((phrase) =>
     visibleOutput.includes(normalize(phrase)),
   );
@@ -316,6 +336,7 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
       : undefined,
     !categoriesMatch ? "カテゴリ collection が fixture と一致しません" : undefined,
     !transactionsMatch ? "取引明細 collection が fixture と一致しません" : undefined,
+    !chartValuesMatch ? "chart values が fixture と一致しません" : undefined,
     config.expectedTransactionTotal !== undefined &&
     transactionTotal !== config.expectedTransactionTotal
       ? `取引明細合計不一致: ${transactionTotal}（期待: ${config.expectedTransactionTotal}）`
@@ -327,11 +348,17 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
     missingRoute ? `期待 route 不足: ${missingRoute}` : undefined,
     unexpectedRoutes.length > 0 ? `未根拠 route: ${unexpectedRoutes.join(", ")}` : undefined,
     result.text.trim() === "" && result.cards.length === 0 ? "最終回答が空です" : undefined,
-    ...getTextClaimFailures(result.text, result.cards, config.expectedPeriods ?? []),
+    ...getTextClaimFailures(
+      result.text,
+      result.cards,
+      config.expectedPeriods ?? [],
+      comparisonAmounts,
+    ),
     ...getTextClaimFailures(
       getCardProse(result.cards),
       result.cards,
       config.expectedPeriods ?? [],
+      comparisonAmounts,
       "card prose",
     ),
   ].filter((failure): failure is string => failure !== undefined);
