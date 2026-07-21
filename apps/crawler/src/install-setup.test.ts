@@ -10,13 +10,14 @@ type RootPackageJson = {
 };
 
 describe("root install setup", () => {
-  test("installs Playwright browsers for the crawler after root install", () => {
+  test("allows CI to skip the Playwright browser install", () => {
     const packageJson = JSON.parse(
       readFileSync(path.join(repositoryRoot, "package.json"), "utf8"),
     ) as RootPackageJson;
 
     expect(packageJson.scripts).toMatchObject({
-      postinstall: "pnpm --filter @mf-dashboard/crawler exec playwright install",
+      postinstall:
+        '[ -n "$SKIP_PLAYWRIGHT_BROWSER_INSTALL" ] || pnpm --filter @mf-dashboard/crawler exec playwright install',
     });
   });
 });
