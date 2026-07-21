@@ -263,7 +263,15 @@ describe("generateWithCodexExec", () => {
   test("rejects invalid timeout configuration before creating a process", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "invalid";
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "CODEX_EXEC_TIMEOUT_MS must be a positive number",
+      "CODEX_EXEC_TIMEOUT_MS must be an integer from 1 to 2147483647",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects timeout values above the Node timer limit", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "2147483648";
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "CODEX_EXEC_TIMEOUT_MS must be an integer from 1 to 2147483647",
     );
     expect(spawnMock).not.toHaveBeenCalled();
   });

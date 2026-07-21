@@ -47,6 +47,7 @@ interface IsolatedEnvironment {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_TOOL_CALLS = 20;
+const MAX_TIMEOUT_MS = 2_147_483_647;
 const SHUTDOWN_GRACE_MS = 500;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
@@ -100,8 +101,8 @@ function getTimeoutMs(): number {
   if (!value) return DEFAULT_TIMEOUT_MS;
 
   const timeout = Number(value);
-  if (!Number.isFinite(timeout) || timeout <= 0) {
-    throw new Error("CODEX_EXEC_TIMEOUT_MS must be a positive number");
+  if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > MAX_TIMEOUT_MS) {
+    throw new Error(`CODEX_EXEC_TIMEOUT_MS must be an integer from 1 to ${MAX_TIMEOUT_MS}`);
   }
   return timeout;
 }
