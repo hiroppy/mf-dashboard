@@ -12,13 +12,14 @@ interface AssertionContext {
     expectedAnyFacts?: Array<string | number>;
     expectedFacts?: Array<string | number>;
     expectedMetrics?: MetricExpectation[];
-    allowedMetricAmounts?: number[];
+    allowedMetrics?: MetricExpectation[];
     expectedChartValues?: number[];
     expectedCategories?: Array<MetricExpectation & { percentage: number }>;
     expectedTransactions?: string[];
     expectedTransactionTotal?: number;
     expectedRoute?: string;
     expectedPeriods?: string[];
+    requiredPatterns?: string[];
     forbiddenPhrases?: string[];
   };
 }
@@ -125,6 +126,37 @@ function getAmountTypeForLabel(label: string): MetricExpectation["amountType"] {
   return "balance";
 }
 
+function getUnsupportedPeriods(text: string, expectedPeriods: string[]): string[] {
+  if (expectedPeriods.length === 0) return [];
+  const claims = [
+    ...[...text.matchAll(/20\d{2}-\d{2}-\d{2}/g)].map((match) => match[0]),
+    ...[...text.matchAll(/(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/g)].map(
+      (match) =>
+        `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`,
+    ),
+    ...[...text.matchAll(/20\d{2}-(?:0[1-9]|1[0-2])(?!-\d{2})/g)].map((match) => match[0]),
+    ...[...text.matchAll(/(20\d{2})年\s*(\d{1,2})月(?!\s*\d{1,2}日)/g)].map(
+      (match) => `${match[1]}-${String(Number(match[2])).padStart(2, "0")}`,
+    ),
+    ...[...text.matchAll(/(20\d{2})年(?!\s*\d{1,2}月)/g)].map((match) => match[1]!),
+    ...[...text.matchAll(/(?<!年)(?<!\d)(\d{1,2})月(?!\s*\d{1,2}日)/g)].map((match) =>
+      String(Number(match[1])),
+    ),
+  ];
+  return claims.filter((claim) => {
+    if (/^\d{1,2}$/.test(claim)) {
+      return !expectedPeriods.some((period) => Number(period.slice(5, 7)) === Number(claim));
+    }
+    if (/^\d{4}-\d{2}$/.test(claim)) {
+      return !expectedPeriods.some((period) => period.startsWith(claim));
+    }
+    if (/^\d{4}$/.test(claim)) {
+      return !expectedPeriods.some((period) => period.startsWith(claim));
+    }
+    return !expectedPeriods.includes(claim);
+  });
+}
+
 function getTextClaimFailures(
   text: string,
   cards: FinanceChatCard[],
@@ -133,7 +165,24 @@ function getTextClaimFailures(
   location = "本文",
 ): string[] {
   const metrics = getMetrics(cards);
+  const coordinatedAmounts = [
+    ...text.matchAll(/(収入|支出)と(収入|支出)はそれぞれ[^\d]*(\d[\d,]*)円と(\d[\d,]*)円/g),
+  ]
+    .flatMap((match) => [
+      { label: match[1]!, amount: Number(match[3]!.replaceAll(",", "")) },
+      { label: match[2]!, amount: Number(match[4]!.replaceAll(",", "")) },
+    ])
+    .filter(({ label, amount }) =>
+      metrics.some(
+        (metric) =>
+          metric.amount === amount &&
+          metric.amountType === getAmountTypeForLabel(label) &&
+          normalize(metric.label).includes(normalize(label)),
+      ),
+    )
+    .map(({ amount }) => amount);
   const currencyFailures = parseCurrencyClaims(text).filter(({ amount, index }) => {
+    if (coordinatedAmounts.includes(amount)) return false;
     const label = getNearbyLabel(text, index);
     if (comparisonAmounts.includes(amount)) return false;
     if (!label) return !metrics.some((metric) => metric.amount === amount);
@@ -147,31 +196,36 @@ function getTextClaimFailures(
   });
 
   const percentages = cards.flatMap((card) =>
-    card.type === "categoryBreakdown" ? card.categories.map(({ percentage }) => percentage) : [],
+    card.type === "categoryBreakdown"
+      ? card.categories.map(({ name, percentage }) => ({ label: name, percentage }))
+      : [],
   );
   const income = metrics.find(({ amountType }) => amountType === "income")?.amount;
   const balance = metrics.find(
     ({ amountType, label }) => amountType === "balance" && /収支|差額/.test(label),
   )?.amount;
-  if (income && balance !== undefined) percentages.push((balance / income) * 100);
+  if (income && balance !== undefined) {
+    percentages.push({ label: "貯蓄率", percentage: (balance / income) * 100 });
+  }
   const percentageFailures = [...text.matchAll(/(-?[\d,]+(?:\.\d+)?)\s*[%％]/g)]
-    .map((match) => Number(match[1]!.replaceAll(",", "")))
-    .filter((claim) => !percentages.some((percentage) => Math.abs(percentage - claim) < 0.05));
+    .map((match) => ({
+      percentage: Number(match[1]!.replaceAll(",", "")),
+      label: text
+        .slice(Math.max(0, match.index - 12), match.index)
+        .match(/貯蓄率|[\p{Script=Han}・]+/gu)
+        ?.at(-1),
+    }))
+    .filter(
+      (claim) =>
+        !percentages.some(
+          (source) =>
+            Math.abs(source.percentage - claim.percentage) < 0.05 &&
+            (!claim.label || normalize(source.label).includes(normalize(claim.label))),
+        ),
+    )
+    .map(({ percentage }) => percentage);
 
-  const factText = expectedPeriods.join(" ");
-  const supportedPeriods = new Set(
-    [...factText.matchAll(/20\d{2}-(\d{2})|20\d{2}年\s*(\d{1,2})月/g)].map((match) =>
-      String(Number(match[1] ?? match[2])),
-    ),
-  );
-  const unsupportedPeriods = [
-    ...[...text.matchAll(/(20\d{2})年(?:\s*(\d{1,2})月)?/g)].map((match) =>
-      match[2] ? `${match[1]}-${String(Number(match[2])).padStart(2, "0")}` : String(match[1]),
-    ),
-    ...[...text.matchAll(/(?<!年)(?<!\d)(\d{1,2})月/g)]
-      .map((match) => String(Number(match[1])))
-      .filter((month) => !supportedPeriods.has(month)),
-  ].filter((period) => !normalize(factText).includes(normalize(period)));
+  const unsupportedPeriods = getUnsupportedPeriods(text, expectedPeriods);
 
   const routes = getRoutes(cards);
   const links = [
@@ -182,7 +236,13 @@ function getTextClaimFailures(
   const balanceMetric = metrics.find(({ label }) => /収支|差額/.test(label));
   const invertedBalance =
     (text.includes("赤字") && balanceMetric && balanceMetric.amount >= 0) ||
-    (text.includes("黒字") && balanceMetric && balanceMetric.amount < 0);
+    (text.includes("黒字") && balanceMetric && balanceMetric.amount < 0) ||
+    (balanceMetric &&
+      balanceMetric.amount >= 0 &&
+      /収支.{0,8}マイナス|支出.{0,12}収入.{0,8}上回/.test(text)) ||
+    (balanceMetric &&
+      balanceMetric.amount < 0 &&
+      /収支.{0,8}プラス|収入.{0,12}支出.{0,8}上回/.test(text));
   const comparisonClaim = /(?:前月|先月|前年).{0,24}(?:増|減|上回|下回)/.test(text);
   const unsupportedComparison = comparisonClaim && comparisonAmounts.length === 0;
 
@@ -206,7 +266,11 @@ function getTextClaimFailures(
 
 function getCardProse(cards: FinanceChatCard[]): string {
   return cards
-    .flatMap((card) => [card.title, "description" in card ? card.description : undefined])
+    .flatMap((card) => [
+      card.title,
+      "description" in card ? card.description : undefined,
+      "action" in card ? card.action?.label : undefined,
+    ])
     .filter((value): value is string => typeof value === "string")
     .join("。 ");
 }
@@ -264,11 +328,13 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
         (metric) => !expectedMetrics.some((expected) => metricMatches(metric, expected)),
       )
     : [];
-  const allowedMetricAmounts = config.allowedMetricAmounts ?? [];
+  const allowedMetrics = config.allowedMetrics ?? [];
   let disallowedMetrics: MetricExpectation[] = [];
-  if (allowedMetricAmounts.length > 0) {
-    disallowedMetrics = metrics.filter((metric) => !allowedMetricAmounts.includes(metric.amount));
-  } else if (config.allowedMetricAmounts !== undefined && expectedMetrics.length === 0) {
+  if (allowedMetrics.length > 0) {
+    disallowedMetrics = metrics.filter(
+      (metric) => !allowedMetrics.some((allowed) => metricMatches(metric, allowed)),
+    );
+  } else if (config.allowedMetrics !== undefined && expectedMetrics.length === 0) {
     disallowedMetrics = metrics;
   }
   const categories = result.cards.flatMap((card) =>
@@ -308,6 +374,15 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
           ),
         ]
       : [];
+  const detailAmounts =
+    categoriesMatch && transactionsMatch
+      ? [...categories.map(({ amount }) => amount), ...transactions.map(({ amount }) => amount)]
+      : [];
+  const trustedAmounts = [...comparisonAmounts, ...detailAmounts];
+  const cardProse = getCardProse(result.cards);
+  const missingPatterns = (config.requiredPatterns ?? []).filter(
+    (pattern) => !new RegExp(pattern, "u").test(cardProse),
+  );
   const forbiddenPhrases = (config.forbiddenPhrases ?? []).filter((phrase) =>
     visibleOutput.includes(normalize(phrase)),
   );
@@ -337,6 +412,9 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
     !categoriesMatch ? "カテゴリ collection が fixture と一致しません" : undefined,
     !transactionsMatch ? "取引明細 collection が fixture と一致しません" : undefined,
     !chartValuesMatch ? "chart values が fixture と一致しません" : undefined,
+    missingPatterns.length > 0
+      ? `card prose の必須 pattern 不足: ${missingPatterns.join(", ")}`
+      : undefined,
     config.expectedTransactionTotal !== undefined &&
     transactionTotal !== config.expectedTransactionTotal
       ? `取引明細合計不一致: ${transactionTotal}（期待: ${config.expectedTransactionTotal}）`
@@ -352,13 +430,13 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
       result.text,
       result.cards,
       config.expectedPeriods ?? [],
-      comparisonAmounts,
+      trustedAmounts,
     ),
     ...getTextClaimFailures(
-      getCardProse(result.cards),
+      cardProse,
       result.cards,
       config.expectedPeriods ?? [],
-      comparisonAmounts,
+      trustedAmounts,
       "card prose",
     ),
   ].filter((failure): failure is string => failure !== undefined);

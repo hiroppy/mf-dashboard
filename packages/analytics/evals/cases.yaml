@@ -112,7 +112,13 @@
         expectedFacts: ["2026-07"]
         expectedPeriods: ["2026-07"]
         expectedAnyFacts: [食費, 衣服・美容, 日用品]
-        allowedMetricAmounts: [41837, 19475, 11198]
+        allowedMetrics:
+          - { label: 見直し候補, amount: 41837, amountType: balance }
+          - { label: 見直し候補, amount: 19475, amountType: balance }
+          - { label: 見直し候補, amount: 11198, amountType: balance }
+        requiredPatterns:
+          - (前月|先月|前年|平均|通常|他カテゴリ)
+          - (ため|ので|理由|高い|多い|増加|上回)
         expectedCardTypes: [insight]
         expectedRoute: /cf/2026-07
         forbiddenPhrases: [必ず削減できます, データを取得できません, わかりません]
