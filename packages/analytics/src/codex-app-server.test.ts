@@ -1,5 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
@@ -11,16 +14,22 @@ vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 const { generateWithCodexAppServer } = await import("./codex-app-server.js");
 
 const originalEnv = { ...process.env };
+const temporaryDirectories: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   process.env = { ...originalEnv };
   vi.clearAllMocks();
+  await Promise.all(
+    temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+  );
 });
 
 function createFakeAppServer(
   toolCallCount = 1,
   instructionSources: string[] = [],
   exitDuringTurnStart = false,
+  mcpServers: Array<Record<string, unknown>> = [],
+  requestInteractiveInput = false,
 ) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -56,12 +65,22 @@ function createFakeAppServer(
               cwd: (message.params as Record<string, unknown>).cwd,
             },
           });
+        } else if (message.method === "mcpServerStatus/list") {
+          respond({ id: message.id, result: { data: mcpServers } });
         } else if (message.method === "turn/start") {
           if (exitDuringTurnStart) {
             child.emit("close", 1);
             continue;
           }
           respond({ id: message.id, result: { turn: { id: "turn-test" } } });
+          if (requestInteractiveInput) {
+            respond({
+              id: 98,
+              method: "item/tool/requestUserInput",
+              params: { questions: [] },
+            });
+            continue;
+          }
           respond({
             id: 99,
             method: "item/tool/call",
@@ -180,6 +199,16 @@ describe("generateWithCodexAppServer", () => {
     expect(fake.kill).toHaveBeenCalledOnce();
   });
 
+  test("fails closed when app-server reports inherited MCP servers", async () => {
+    const fake = createFakeAppServer(1, [], false, [{ name: "inherited-server" }]);
+    spawnMock.mockReturnValue(fake.child);
+
+    await expect(
+      generateWithCodexAppServer({ system: "System", prompt: "Prompt" }),
+    ).rejects.toThrow("codex app-server loaded unexpected MCP servers");
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
   test("stops the process when the dynamic tool limit is exceeded", async () => {
     const fake = createFakeAppServer(2);
     spawnMock.mockReturnValue(fake.child);
@@ -272,5 +301,47 @@ describe("generateWithCodexAppServer", () => {
       generateWithCodexAppServer({ system: "System", prompt: "Prompt" }),
     ).rejects.toThrow("codex app-server exited before completion (code 1)");
     expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("rejects interactive input requests with a schema-valid response", async () => {
+    const fake = createFakeAppServer(1, [], false, [], true);
+    spawnMock.mockReturnValue(fake.child);
+
+    await expect(
+      generateWithCodexAppServer({ system: "System", prompt: "Prompt" }),
+    ).rejects.toThrow("codex app-server requested unsupported interactive input");
+    expect(fake.messages).toContainEqual({ id: 98, result: { answers: {} } });
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("persists credentials refreshed in the isolated Codex home", async () => {
+    const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
+    temporaryDirectories.push(sourceCodexHome);
+    const sourceAuthPath = join(sourceCodexHome, "auth.json");
+    await writeFile(sourceAuthPath, '{"token":"initial"}');
+    process.env.CODEX_HOME = sourceCodexHome;
+
+    const fake = createFakeAppServer();
+    spawnMock.mockReturnValue(fake.child);
+    let finishTool: (() => void) | undefined;
+    const execute = vi.fn<() => Promise<string>>(
+      () =>
+        new Promise<string>((resolve) => {
+          finishTool = () => resolve("tool-result");
+        }),
+    );
+    const generation = generateWithCodexAppServer({
+      system: "System",
+      prompt: "Prompt",
+      tools: { lookupValue: { inputSchema: z.object({}), execute } },
+    });
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    const isolatedCodexHome = spawnMock.mock.calls[0]?.[2]?.env?.CODEX_HOME;
+    if (typeof isolatedCodexHome !== "string") throw new Error("missing isolated CODEX_HOME");
+    await writeFile(join(isolatedCodexHome, "auth.json"), '{"token":"refreshed"}');
+    finishTool?.();
+
+    await generation;
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
   });
 });

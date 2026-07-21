@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -51,9 +51,12 @@ export interface CodexGenerationResult<T> {
 }
 
 interface IsolatedEnvironment {
+  authPath?: string;
   codexHome: string;
   cwd: string;
+  initialAuth?: Buffer;
   root: string;
+  sourceAuthPath?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -128,9 +131,12 @@ async function createIsolatedEnvironment(): Promise<IsolatedEnvironment> {
 
   const sourceCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
   try {
+    const sourceAuthPath = join(sourceCodexHome, "auth.json");
     const authPath = join(codexHome, "auth.json");
-    await copyFile(join(sourceCodexHome, "auth.json"), authPath);
+    const initialAuth = await readFile(sourceAuthPath);
+    await copyFile(sourceAuthPath, authPath);
     await chmod(authPath, 0o600);
+    return { authPath, codexHome, cwd, initialAuth, root, sourceAuthPath };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       await rm(root, { recursive: true, force: true });
@@ -139,6 +145,21 @@ async function createIsolatedEnvironment(): Promise<IsolatedEnvironment> {
   }
 
   return { codexHome, cwd, root };
+}
+
+async function persistRefreshedCredentials(environment: IsolatedEnvironment): Promise<void> {
+  const { authPath, initialAuth, sourceAuthPath } = environment;
+  if (!authPath || !initialAuth || !sourceAuthPath) return;
+
+  const [isolatedAuth, currentAuth] = await Promise.all([
+    readFile(authPath),
+    readFile(sourceAuthPath),
+  ]);
+  if (isolatedAuth.equals(initialAuth) || !currentAuth.equals(initialAuth)) return;
+
+  JSON.parse(isolatedAuth.toString("utf8"));
+  await copyFile(authPath, sourceAuthPath);
+  await chmod(sourceAuthPath, 0o600);
 }
 
 function serializeToolResult(value: unknown): string {
@@ -251,6 +272,13 @@ class CodexAppServerConnection {
       if (typeof model !== "string" || !model) {
         throw new Error("codex app-server did not return a model");
       }
+      const mcpStatus = await this.request("mcpServerStatus/list", {
+        threadId: thread.id,
+        detail: "toolsAndAuthOnly",
+      });
+      if (!Array.isArray(mcpStatus.data) || mcpStatus.data.length > 0) {
+        throw new Error("codex app-server loaded unexpected MCP servers");
+      }
 
       const completion = new Promise<Record<string, unknown>>((resolve, reject) => {
         this.turnCompletion = { resolve, reject };
@@ -332,6 +360,13 @@ class CodexAppServerConnection {
   }
 
   private async handleServerRequest(request: AppServerRequest): Promise<void> {
+    if (request.method === "item/tool/requestUserInput") {
+      this.send({ id: request.id, result: { answers: {} } });
+      this.rejectAll(new Error("codex app-server requested unsupported interactive input"));
+      this.stop();
+      return;
+    }
+
     if (request.method !== "item/tool/call") {
       this.send({ id: request.id, result: { decision: "decline" } });
       return;
@@ -442,6 +477,7 @@ export async function generateWithCodexAppServer<T>(
       environment,
     ).generate(options);
   } finally {
+    await persistRefreshedCredentials(environment);
     await rm(environment.root, { recursive: true, force: true });
   }
 }
