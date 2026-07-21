@@ -154,7 +154,7 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
       <DialogTrigger className={className}>
         <IconButton icon={<HelpCircle className={iconSize} />} ariaLabel="ヘルプ" />
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between gap-4">
           <DialogTitle>MoneyForward Me Dashboard について</DialogTitle>
           <IconButton
@@ -192,9 +192,15 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
                   <span className="block ml-5 mt-1">前日との差分を Slack へ自動投稿できます。</span>
                 </li>
                 <li>
+                  <span className="font-medium text-foreground">未分類取引の自動分類</span>
+                  <span className="block ml-5 mt-1">
+                    固定ルールと任意の LLM 推論で、未分類の取引を自動分類できます。
+                  </span>
+                </li>
+                <li>
                   <span className="font-medium text-foreground">カスタム処理（Hooks）</span>
                   <span className="block ml-5 mt-1">
-                    スクレイピング時に独自のスクリプトを実行可能。例：特定の取引のカテゴリを自動設定。
+                    スクレイピング時に独自のスクリプトを実行できます。
                   </span>
                 </li>
                 <li>
