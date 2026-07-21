@@ -266,7 +266,6 @@ async function runCodexProcess(
 ): Promise<{ stderrHead: string; stdout: string }> {
   signal.throwIfAborted();
   let stderrHead = "";
-  let stderrTail = "";
   let stdout = "";
   await new Promise<void>((resolve, reject) => {
     const child = spawn("codex", args, {
@@ -304,16 +303,13 @@ async function runCodexProcess(
     child.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       stderrHead = `${stderrHead}${text}`.slice(0, 4_000);
-      stderrTail = `${stderrTail}${text}`.slice(-8_000);
     });
     child.stdin.on("error", stopProcess);
     child.on("error", stopProcess);
     child.on("close", (code) => {
       if (stopError) finish(stopError);
       else if (code === 0) finish();
-      else {
-        finish(new Error(`codex exited with code ${code}${stderrTail ? `: ${stderrTail}` : ""}`));
-      }
+      else finish(new Error(`codex exited with code ${code}`));
     });
     child.stdin.end(input);
   });

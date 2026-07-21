@@ -30,6 +30,7 @@ function createFakeCodex(
     ignoreKill?: boolean;
     mcpServers?: unknown[];
     output?: string;
+    stderr?: string;
   } = {},
 ) {
   const stdout = new PassThrough();
@@ -61,7 +62,7 @@ function createFakeCodex(
       if (options.exitCode === undefined || options.exitCode === 0) {
         await writeFile(args[outputIndex + 1]!, options.output ?? '{"value":"ok"}');
       }
-      stderr.write("model: codex-test-model\n");
+      stderr.write(options.stderr ?? "model: codex-test-model\n");
       queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
       callback();
     },
@@ -214,12 +215,13 @@ describe("generateWithCodexExec", () => {
 
   test("reports non-zero Codex exits", async () => {
     const mcp = createFakeCodex();
-    const fake = createFakeCodex({ exitCode: 2 });
+    const fake = createFakeCodex({ exitCode: 2, stderr: "sensitive tool data" });
     spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
 
-    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "codex exited with code 2",
+    const error = await generateWithCodexExec({ system: "System.", prompt: "Prompt." }).catch(
+      (error: unknown) => error,
     );
+    expect(error).toEqual(new Error("codex exited with code 2"));
     expect(fake.kill).not.toHaveBeenCalled();
   });
 
