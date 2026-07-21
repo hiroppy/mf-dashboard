@@ -35,7 +35,8 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: ["7/10", 6587]
+        expectedFacts: [6587]
+        expectedAnyFacts: ["2026-07-10", "7/10", 7月10日]
         expectedCardTypes: [summary, transactionList, action]
         expectedRoute: /cf/2026-07
         forbiddenPhrases: [データを取得できません, わかりません]

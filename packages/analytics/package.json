@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "mockdate": "^3.0.5",
     "promptfoo": "^0.121.19",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -289,6 +289,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.3
+      mockdate:
+        specifier: ^3.0.5
+        version: 3.0.5
       promptfoo:
         specifier: ^0.121.19
         version: 0.121.19(@aws-sdk/credential-provider-node@3.972.70)(@smithy/signature-v4@5.6.6)(@types/better-sqlite3@7.6.13)(@types/json-schema@7.0.15)(@types/node@25.9.3)(better-sqlite3@12.6.2)(pg@8.22.0)(playwright-core@1.61.0)(socks@2.8.9)
@@ -6600,6 +6603,9 @@ packages:
 
   mkdirp-classic@0.5.3:
     resolution: {integrity: sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A==}
+
+  mockdate@3.0.5:
+    resolution: {integrity: sha512-iniQP4rj1FhBdBYS/+eQv7j1tadJ9lJtdzgOpvsOHng/GbcDh2Fhdeq+ZRldrPYdXvCyfFUmFeEwEGXZB5I/AQ==}
 
   module-alias@2.3.3:
     resolution: {integrity: sha512-vN8YITf48QuzKHiWGGFRnf+kM8xcFtUZ5Ba9FeiVkzwp1RS09nIwX7Ac7wWa5gfvyDhwF5Cy/7/21hqG0rqgUQ==}
@@ -14475,6 +14481,8 @@ snapshots:
 
   mkdirp-classic@0.5.3:
     optional: true
+
+  mockdate@3.0.5: {}
 
   module-alias@2.3.3: {}
 

@@ -1,5 +1,6 @@
 import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
+import MockDate from "mockdate";
 import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
@@ -38,15 +39,20 @@ const defaultDependencies: ProviderDependencies = {
 };
 
 export function toEvaluationOutput(response: ChatResponse) {
-  const cards = response.steps.flatMap(({ toolResults }) =>
+  const presentations = response.steps.flatMap(({ toolResults }) =>
     toolResults.flatMap(({ toolName, output }) =>
-      toolName === "presentFinanceCards" && Array.isArray(output) ? output : [],
+      toolName === "presentFinanceCards" && Array.isArray(output) ? [output] : [],
     ),
   );
+  if (presentations.length !== 1) {
+    throw new Error(
+      `presentFinanceCards の成功結果は1件必要です（実際: ${presentations.length}件）。`,
+    );
+  }
 
   return {
     text: response.text,
-    cards,
+    cards: presentations[0],
   };
 }
 
@@ -88,13 +94,19 @@ export default class FinanceChatProvider {
       const group = await this.dependencies.getCurrentGroup(db);
       if (!group) throw new Error("demo.db に current group がありません。");
 
-      const response = await this.dependencies.generate({
-        model: this.dependencies.getModel(),
-        system: getFinanceChatSystemPrompt(evaluationDate),
-        prompt,
-        tools: createFinanceChatTools(db, group.id),
-        stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
-      });
+      MockDate.set(evaluationDate);
+      let response: ChatResponse;
+      try {
+        response = await this.dependencies.generate({
+          model: this.dependencies.getModel(),
+          system: getFinanceChatSystemPrompt(evaluationDate),
+          prompt,
+          tools: createFinanceChatTools(db, group.id),
+          stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
+        });
+      } finally {
+        MockDate.reset();
+      }
 
       return { output: JSON.stringify(toEvaluationOutput(response)) };
     } catch (error) {

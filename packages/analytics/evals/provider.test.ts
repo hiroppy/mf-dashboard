@@ -3,17 +3,22 @@ import FinanceChatProvider, { toEvaluationOutput } from "./provider";
 
 describe("FinanceChatProvider", () => {
   it("returns final text and presentation cards as JSON", async () => {
-    const generate = vi.fn<(options: unknown) => Promise<unknown>>().mockResolvedValue({
-      text: "今月の結果です。",
-      steps: [
-        {
-          toolResults: [
-            { toolName: "getLatestMonthlySummary", output: { income: 1 } },
-            { toolName: "presentFinanceCards", output: [{ type: "summary", amount: 1 }] },
+    const generate = vi
+      .fn<(options: unknown) => Promise<unknown>>()
+      .mockImplementation(async () => {
+        expect(new Date().toISOString()).toBe("2026-07-31T03:00:00.000Z");
+        return {
+          text: "今月の結果です。",
+          steps: [
+            {
+              toolResults: [
+                { toolName: "getLatestMonthlySummary", output: { income: 1 } },
+                { toolName: "presentFinanceCards", output: [{ type: "summary", amount: 1 }] },
+              ],
+            },
           ],
-        },
-      ],
-    });
+        };
+      });
     const provider = new FinanceChatProvider({}, {
       generate,
       getCurrentGroup: vi.fn<() => Promise<{ id: string }>>().mockResolvedValue({ id: "demo" }),
@@ -32,6 +37,7 @@ describe("FinanceChatProvider", () => {
       cards: [{ type: "summary", amount: 1 }],
     });
     expect(generate).toHaveBeenCalledOnce();
+    expect(new Date().toISOString()).not.toBe("2026-07-31T03:00:00.000Z");
   });
 
   it("returns a clear error when provider settings are missing", async () => {
@@ -58,12 +64,26 @@ describe("FinanceChatProvider", () => {
 });
 
 describe("toEvaluationOutput", () => {
-  it("ignores non-presentation tool results", () => {
-    expect(
+  it("requires exactly one presentation result", () => {
+    expect(() =>
       toEvaluationOutput({
         text: "回答",
         steps: [{ toolResults: [{ toolName: "searchTransactions", output: [{ amount: 1 }] }] }],
       }),
-    ).toEqual({ text: "回答", cards: [] });
+    ).toThrow("実際: 0件");
+
+    expect(() =>
+      toEvaluationOutput({
+        text: "回答",
+        steps: [
+          {
+            toolResults: [
+              { toolName: "presentFinanceCards", output: [{ type: "summary" }] },
+              { toolName: "presentFinanceCards", output: [{ type: "insight" }] },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("実際: 2件");
   });
 });
