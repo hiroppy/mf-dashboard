@@ -11,6 +11,7 @@ vi.mock("ai", () => ({
 }));
 
 vi.mock("./config.js", () => ({
+  getAIBackend: vi.fn<() => "ai-sdk">(() => "ai-sdk"),
   getModel: vi.fn<() => string>(() => "mock-model"),
   isLLMEnabled: vi.fn<() => boolean>(),
 }));
@@ -57,13 +58,15 @@ describe("generateCategoryDecisionWithLLM", () => {
 
   test("候補カテゴリID一覧から選ばせるpromptでLLM決定を返す", async () => {
     vi.mocked(generateText).mockResolvedValue({
+      text: "",
       output: {
         largeCategoryId: "13",
         middleCategoryId: "77",
         confidence: 0.78,
         reason: "subscription service",
       },
-    } as Awaited<ReturnType<typeof generateText>>);
+      steps: [],
+    } as unknown as Awaited<ReturnType<typeof generateText>>);
 
     const result = await generateCategoryDecisionWithLLM({ transaction, candidates });
 

@@ -14,6 +14,7 @@ vi.mock("ai", () => ({
 }));
 
 vi.mock("../config.js", () => ({
+  getAIBackend: vi.fn<AnyMock>(() => "ai-sdk"),
   getModel: vi.fn<AnyMock>(() => "mock-model"),
 }));
 

@@ -79,6 +79,22 @@ codex app-server generate-json-schema --experimental --out ./schemas
 
 ## mf-dashboard で利用する場合
 
+analytics package では `AI_BACKEND` によって AI SDK と app-server を選択できる。
+
+| `AI_BACKEND`       | 実行経路                                                   |
+| ------------------ | ---------------------------------------------------------- |
+| `ai-sdk`（既定値） | `AI_PROVIDER`、`AI_MODEL`、`AI_API_KEY` で AI SDK を利用   |
+| `codex-app-server` | ログイン済み Codex CLI を子プロセスとして stdio 経由で利用 |
+
+app-server 経路は接続ごとに ephemeral thread を作成し、read-only sandbox と
+`approvalPolicy: "never"` を指定する。既存の Zod output schema は `outputSchema`、
+AI SDK tool 定義は experimental な `dynamicTools` に変換し、tool の実行結果だけを
+app-server へ返す。insights と未分類取引の categorization は同じ生成境界を使うため、
+AI SDK の既存経路を変更せず切り替えられる。
+
+`CODEX_APP_SERVER_TIMEOUT_MS` は接続全体の timeout で、既定値は 120 秒。
+成功、失敗、timeout のいずれでも子プロセスの stdin を閉じて終了させる。
+
 app-server を使う価値があるのは、会話履歴、承認 UI、ツール実行、ストリーミングイベントを
 ダッシュボードへ統合する場合である。その場合は Next.js のリクエスト処理から都度起動せず、
 認証済みのローカル backend プロセスが app-server を管理し、Web アプリには必要なイベントだけを

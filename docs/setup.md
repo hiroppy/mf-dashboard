@@ -286,7 +286,28 @@ cp data/category-rules.example.json data/category-rules.json
 
 #### LLMによる推論
 
-固定ルールに一致しなかった取引だけをLLMで推論する場合は、`llm.enabled`を`true`へ変更し、`.env`に`AI_PROVIDER`、`AI_MODEL`、`AI_API_KEY`を設定する。
+固定ルールに一致しなかった取引だけをLLMで推論する場合は、`llm.enabled`を`true`へ変更する。
+LLM の実行経路は `.env` の `AI_BACKEND` で選択する。
+
+AI SDK（既定値）を使う場合:
+
+```env
+AI_BACKEND=ai-sdk
+AI_PROVIDER=openai
+AI_MODEL=gpt-4o-mini
+AI_API_KEY=your-api-key
+```
+
+ローカルの Codex app-server を使う場合:
+
+```env
+AI_BACKEND=codex-app-server
+AI_MODEL=gpt-5.4
+CODEX_APP_SERVER_TIMEOUT_MS=120000
+```
+
+app-server 経路には Codex CLI のインストールと事前ログインが必要で、`AI_MODEL` は省略時に
+Codex の既定モデルを使う。`CODEX_APP_SERVER_TIMEOUT_MS` の既定値は 120000 ミリ秒。
 
 - Money Forward MEから取得した候補カテゴリの中から選択し、カテゴリIDは生成しない
 - 1回の実行件数は`llm.maxPerRun`で制限する。既定値は`5`
