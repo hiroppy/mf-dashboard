@@ -3,22 +3,30 @@ import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { lockMock, mkdirMock, mkdtempMock, openMock, readFileMock, rmMock, spawnMock } = vi.hoisted(
-  () => ({
-    lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
-    mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
-    mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
-    openMock: vi.fn<typeof import("node:fs/promises").open>(),
-    readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
-    rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
-    spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
-  }),
-);
+const {
+  lockMock,
+  mkdirMock,
+  mkdtempMock,
+  openMock,
+  readFileMock,
+  rmMock,
+  spawnMock,
+  writeFileMock,
+} = vi.hoisted(() => ({
+  lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
+  mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
+  mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
+  openMock: vi.fn<typeof import("node:fs/promises").open>(),
+  readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+  rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
+  spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
+  writeFileMock: vi.fn<typeof import("node:fs/promises").writeFile>(),
+}));
 
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -28,6 +36,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   openMock.mockImplementation(original.open);
   readFileMock.mockImplementation(original.readFile);
   rmMock.mockImplementation(original.rm);
+  writeFileMock.mockImplementation(original.writeFile);
   return {
     ...original,
     mkdir: mkdirMock,
@@ -35,6 +44,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     open: openMock,
     readFile: readFileMock,
     rm: rmMock,
+    writeFile: writeFileMock,
   };
 });
 
@@ -335,15 +345,11 @@ describe("generateWithCodexExec", () => {
     expect(isAbsolute(spawnMock.mock.calls[3]?.[2]?.env?.HOME ?? "")).toBe(true);
   });
 
-  test("normalizes relative temporary-directory variables for the child", async () => {
-    const originalMkdtemp = mkdtempMock.getMockImplementation()!;
-    const parentTmp = tmpdir();
-    process.env.TMPDIR = ".relative-tmpdir";
-    process.env.TMP = ".relative-tmp";
-    process.env.TEMP = ".relative-temp";
-    mkdtempMock.mockImplementationOnce(() =>
-      originalMkdtemp(join(parentTmp, "mf-dashboard-codex-env-")),
-    );
+  test("isolates child temporary-directory variables under the request root", async () => {
+    const callerTemp = tmpdir();
+    process.env.TMPDIR = callerTemp;
+    process.env.TMP = callerTemp;
+    process.env.TEMP = callerTemp;
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     mockCodexRun(mcp, fake);
@@ -351,9 +357,49 @@ describe("generateWithCodexExec", () => {
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
     const childEnv = spawnMock.mock.calls[3]?.[2]?.env;
-    expect(childEnv?.TMPDIR).toBe(resolve(".relative-tmpdir"));
-    expect(childEnv?.TMP).toBe(resolve(".relative-tmp"));
-    expect(childEnv?.TEMP).toBe(resolve(".relative-temp"));
+    const isolatedRoot = childEnv?.HOME as string;
+    expect(childEnv?.TMPDIR).toBe(join(isolatedRoot, "tmp"));
+    expect(childEnv?.TMP).toBe(join(isolatedRoot, "tmp"));
+    expect(childEnv?.TEMP).toBe(join(isolatedRoot, "tmp"));
+  });
+
+  test("waits for isolated credential cleanup when auth copying is aborted", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "50";
+    const originalWriteFile = writeFileMock.getMockImplementation()!;
+    const originalRm = rmMock.getMockImplementation()!;
+    let releaseCleanup!: () => void;
+    writeFileMock.mockImplementation(async (path, data, options) => {
+      await originalWriteFile(path, data, options);
+      if (typeof path !== "string" || !path.endsWith("codex-home/auth.json")) return;
+      const signal =
+        typeof options === "object" && options !== null && "signal" in options
+          ? options.signal
+          : undefined;
+      await new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    rmMock.mockImplementation((path, options) => {
+      if (String(path).includes("mf-dashboard-codex-") && !String(path).includes("-test-")) {
+        return new Promise<void>((resolve) => (releaseCleanup = resolve));
+      }
+      return originalRm(path, options);
+    });
+
+    let settled = false;
+    const outcome = generateWithCodexExec({ system: "System.", prompt: "Prompt." })
+      .catch((error: unknown) => error)
+      .finally(() => {
+        settled = true;
+      });
+    await vi.waitFor(() => expect(releaseCleanup).toBeTypeOf("function"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+
+    releaseCleanup();
+    await expect(outcome).resolves.toEqual(new Error("codex exec timed out after 50ms"));
+    writeFileMock.mockImplementation(originalWriteFile);
+    rmMock.mockImplementation(originalRm);
   });
 
   test("bounds a stalled final-output open by the request deadline", async () => {

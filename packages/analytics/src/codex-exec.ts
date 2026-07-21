@@ -43,6 +43,7 @@ interface IsolatedEnvironment {
   root: string;
   schemaPath: string;
   sourceAuthPath: string;
+  tempDir: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -59,7 +60,6 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
-const TEMP_ENV_KEYS = new Set(["TEMP", "TMP", "TMPDIR"]);
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -140,13 +140,18 @@ function getMaxToolCalls(value: number | undefined): number {
   return maxToolCalls;
 }
 
-function getCodexEnv(): NodeJS.ProcessEnv {
-  return Object.fromEntries(
-    ALLOWED_ENV_KEYS.flatMap((key) => {
-      const value = process.env[key];
-      return value === undefined ? [] : [[key, TEMP_ENV_KEYS.has(key) ? resolve(value) : value]];
-    }),
-  );
+function getCodexEnv(tempDir: string): NodeJS.ProcessEnv {
+  return {
+    ...Object.fromEntries(
+      ALLOWED_ENV_KEYS.flatMap((key) => {
+        const value = process.env[key];
+        return value === undefined ? [] : [[key, value]];
+      }),
+    ),
+    TEMP: tempDir,
+    TMP: tempDir,
+    TMPDIR: tempDir,
+  };
 }
 
 function getSourceAuthPath(): string {
@@ -253,9 +258,11 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
     const authHome = join(root, "codex-home");
     const cwd = join(root, "workspace");
+    const tempDir = join(root, "tmp");
     const directoryCreation = Promise.all([
       mkdir(authHome, { mode: 0o700 }),
       mkdir(cwd, { mode: 0o700 }),
+      mkdir(tempDir, { mode: 0o700 }),
     ]);
     try {
       await waitForToolResult(() => directoryCreation, signal);
@@ -274,6 +281,7 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
       outputPath: join(root, "output.txt"),
       root,
       schemaPath: join(root, "output-schema.json"),
+      tempDir,
     };
     const sourceAuthPath = getSourceAuthPath();
     let initialAuth: Buffer;
@@ -292,12 +300,7 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
     return { ...environment, authPath, initialAuth, sourceAuthPath };
   } catch (error) {
-    const removal = rm(root, { recursive: true, force: true });
-    try {
-      await waitForToolResult(() => removal, signal);
-    } catch {
-      void removal.catch(() => undefined);
-    }
+    await removeTemporaryEnvironment(root);
     throw error;
   }
 }
@@ -420,7 +423,11 @@ async function runCodexProcess(
   await new Promise<void>((resolve, reject) => {
     const child = spawn("codex", args, {
       cwd: environment.cwd,
-      env: { ...getCodexEnv(), CODEX_HOME: environment.authHome, HOME: environment.root },
+      env: {
+        ...getCodexEnv(environment.tempDir),
+        CODEX_HOME: environment.authHome,
+        HOME: environment.root,
+      },
       stdio: "pipe",
     });
     let settled = false;
