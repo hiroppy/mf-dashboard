@@ -29,6 +29,13 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
     }
   });
 
+  it("requires current-month summary data for the monthly status case", () => {
+    const monthlySummary = FINANCE_CHAT_EVALUATION_CASES.find(({ id }) => id === "monthly-summary");
+
+    expect(monthlySummary?.toolStrategies).toEqual([[{ name: "getLatestMonthlySummary" }]]);
+    expect(monthlySummary?.allowedDataTools).toEqual(["getLatestMonthlySummary"]);
+  });
+
   it("uses Asia/Tokyo for relative dates across a UTC month boundary", () => {
     const utcMonthEnd = new Date("2026-07-31T15:30:00.000Z");
     const cases = createFinanceChatEvaluationCases(utcMonthEnd);

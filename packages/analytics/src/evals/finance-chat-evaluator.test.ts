@@ -8,8 +8,8 @@ import {
 const evaluationCase: FinanceChatEvaluationCase = {
   id: "monthly-summary",
   prompt: "今月どう？",
-  toolStrategies: [[{ name: "getFinancialMetrics" }], [{ name: "getLatestMonthlySummary" }]],
-  allowedDataTools: ["getFinancialMetrics", "getLatestMonthlySummary"],
+  toolStrategies: [[{ name: "getLatestMonthlySummary" }]],
+  allowedDataTools: ["getLatestMonthlySummary"],
   navigationInput: { page: "cashFlow", month: "2026-07" },
   expectedCardTypes: ["summary", "insight"],
 };
@@ -276,7 +276,7 @@ describe("evaluateFinanceChatTrace", () => {
     expect(result.violations).toContain("不正なツール呼び出しが含まれる");
   });
 
-  it("accepts the prompt-preferred financial metrics strategy", () => {
+  it("rejects financial metrics without current-month cash-flow data", () => {
     const base = createTrace();
     const result = evaluateFinanceChatTrace(
       evaluationCase,
@@ -297,7 +297,7 @@ describe("evaluateFinanceChatTrace", () => {
       }),
     );
 
-    expect(result.passed).toBe(true);
+    expect(result.violations).toContain("必須ツールまたは引数が期待する戦略を満たさない");
   });
 
   it("rejects a required tool with inputs for the wrong intent", () => {
@@ -390,6 +390,71 @@ describe("evaluateFinanceChatTrace", () => {
     });
 
     expect(result.violations).toContain("許可されていないデータ取得: getLatestTotalAssets");
+  });
+
+  it("grounds a scalar total-assets tool result as currency", () => {
+    const assetsCase: FinanceChatEvaluationCase = {
+      id: "total-assets",
+      prompt: "総資産は？",
+      toolStrategies: [[{ name: "getLatestTotalAssets" }]],
+      allowedDataTools: ["getLatestTotalAssets"],
+      navigationInput: { page: "balanceSheet" },
+      expectedCardTypes: ["summary"],
+    };
+    const assetsHref = "/group-a/bs";
+    const assetsCards = [
+      {
+        type: "summary" as const,
+        title: "総資産",
+        metrics: [{ label: "総資産", amount: 5_000_000, amountType: "balance" as const }],
+        href: assetsHref,
+      },
+    ];
+    const result = evaluateFinanceChatTrace(assetsCase, {
+      text: "総資産は5,000,000円です。",
+      steps: [
+        {
+          toolCalls: [{ toolCallId: "assets", toolName: "getLatestTotalAssets", input: {} }],
+          toolResults: [
+            { toolCallId: "assets", toolName: "getLatestTotalAssets", output: 5_000_000 },
+          ],
+        },
+        {
+          toolCalls: [
+            {
+              toolCallId: "navigation",
+              toolName: "getFinanceDashboardRoute",
+              input: { page: "balanceSheet" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "navigation",
+              toolName: "getFinanceDashboardRoute",
+              output: { href: assetsHref },
+            },
+          ],
+        },
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: assetsCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: assetsCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.passed).toBe(true);
   });
 
   it("rejects data calls without a matching result before presentation", () => {
@@ -642,6 +707,261 @@ describe("evaluateFinanceChatTrace", () => {
     );
 
     expect(result.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+  });
+
+  it("rejects ungrounded financial claims in card prose", () => {
+    const proseCards = cards.map((card) =>
+      card.type === "insight" ? { ...card, description: "支出は9,000,000円です。" } : card,
+    );
+    const base = createTrace();
+    const presentation = base.steps[2]!;
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      ...base,
+      steps: [
+        ...base.steps.slice(0, 2),
+        {
+          toolCalls: presentation.toolCalls.map((call) => ({
+            ...call,
+            input: { cards: proseCards },
+          })),
+          toolResults: presentation.toolResults.map((toolResult) => ({
+            ...toolResult,
+            output: proseCards,
+          })),
+        },
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
+
+  it("recognizes yen-prefixed claims without a trailing unit", () => {
+    const result = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "今月の支出は¥9,000,000です。" }),
+    );
+
+    expect(result.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+  });
+
+  it("rejects final text links not returned by the navigation tool", () => {
+    const result = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "[詳細](https://example.com)を確認してください。" }),
+    );
+
+    expect(result.violations).toContain(
+      "ナビゲーションツール未検証の本文リンク: https://example.com",
+    );
+  });
+
+  it("preserves transaction record associations", () => {
+    const transactionCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      expectedCardTypes: ["transactionList"],
+    };
+    const mixedCards = [
+      {
+        type: "transactionList" as const,
+        title: "明細",
+        transactions: [
+          {
+            id: "transaction-a",
+            date: "2026-07-10",
+            description: "店舗 B",
+            category: "食費",
+            amount: 2_000,
+            amountType: "expense" as const,
+          },
+        ],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(transactionCase, {
+      text: "明細を表示します。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              output: [
+                {
+                  id: "transaction-a",
+                  date: "2026-07-10",
+                  description: "店舗 A",
+                  category: "食費",
+                  amount: 1_000,
+                  type: "expense",
+                },
+                {
+                  id: "transaction-b",
+                  date: "2026-07-11",
+                  description: "店舗 B",
+                  category: "食費",
+                  amount: 2_000,
+                  type: "expense",
+                },
+              ],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: mixedCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: mixedCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
+
+  it("preserves category amount and percentage associations", () => {
+    const categoryCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      expectedCardTypes: ["categoryBreakdown"],
+    };
+    const mixedCards = [
+      {
+        type: "categoryBreakdown" as const,
+        title: "カテゴリ別支出",
+        categories: [
+          {
+            name: "食費",
+            amount: 2_000,
+            amountType: "expense" as const,
+            percentage: 66.66666666666666,
+          },
+        ],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(categoryCase, {
+      text: "カテゴリ別支出です。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              output: [
+                { category: "食費", totalAmount: 1_000, type: "expense" },
+                { category: "交通費", totalAmount: 2_000, type: "expense" },
+              ],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: mixedCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: mixedCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
+
+  it("keeps currency and percentage claims separate", () => {
+    const base = createTrace();
+    const dataStep = base.steps[0]!;
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      ...base,
+      text: "今月の支出は20円です。",
+      steps: [
+        {
+          ...dataStep,
+          toolResults: dataStep.toolResults.map((toolResult) => ({
+            ...toolResult,
+            output: { income: 300_000, expense: 250_000, savingsRate: 20 },
+          })),
+        },
+        ...base.steps.slice(1),
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+  });
+
+  it("rejects unsupported arithmetic combinations", () => {
+    const sum = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "今月の合計は550,000円です。" }),
+    );
+    const base = createTrace();
+    const dataStep = base.steps[0]!;
+    const selfDivision = evaluateFinanceChatTrace(evaluationCase, {
+      ...base,
+      text: "達成率は100%です。",
+      steps: [
+        {
+          ...dataStep,
+          toolResults: dataStep.toolResults.map((toolResult) => ({
+            ...toolResult,
+            output: { income: 300_000, expense: 250_000, savingsRate: 20 },
+          })),
+        },
+        ...base.steps.slice(1),
+      ],
+    });
+
+    expect(sum.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+    expect(selfDivision.violations).toContain(
       "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
     );
   });

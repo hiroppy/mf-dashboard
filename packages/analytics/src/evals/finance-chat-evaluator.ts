@@ -131,70 +131,142 @@ function isDataTool(toolName: string): boolean {
   return toolName !== NAVIGATION_TOOL && toolName !== PRESENTATION_TOOL;
 }
 
-interface GroundedValues {
-  numbers: number[];
-  strings: Set<string>;
+type FinancialUnit = "currency" | "percentage";
+
+interface FinancialClaim {
+  value: number;
+  unit: FinancialUnit;
 }
 
-function collectGroundedValues(value: unknown, grounded: GroundedValues): void {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    grounded.numbers.push(value);
-    grounded.strings.add(String(value));
-    return;
+interface GroundedRecord {
+  [key: string]: unknown;
+}
+
+interface GroundedValues {
+  claims: FinancialClaim[];
+  strings: Set<string>;
+  records: GroundedRecord[];
+}
+
+function getFinancialUnit(key: string): FinancialUnit | undefined {
+  const normalized = key.toLowerCase();
+  if (/(?:rate|percentage|percent|pct)$/.test(normalized)) return "percentage";
+  if (
+    /(?:amount|income|expense|balance|assets?|liabilit(?:y|ies)|savings?|investments?|debts?|cash|value|diff|change|avg|gain)$/.test(
+      normalized,
+    )
+  ) {
+    return "currency";
   }
+  return undefined;
+}
+
+function addClaim(grounded: GroundedValues, value: unknown, unit: FinancialUnit | undefined): void {
+  if (unit !== undefined && typeof value === "number" && Number.isFinite(value)) {
+    grounded.claims.push({ value, unit });
+  }
+}
+
+function collectGroundedValues(value: unknown, grounded: GroundedValues, key = ""): void {
   if (typeof value === "string") {
     grounded.strings.add(value);
     return;
   }
   if (Array.isArray(value)) {
-    for (const entry of value) collectGroundedValues(entry, grounded);
+    for (const entry of value) collectGroundedValues(entry, grounded, key);
 
-    const amounts = value.flatMap((entry) => {
+    const amountRecords = value.flatMap((entry) => {
       if (typeof entry !== "object" || entry === null) return [];
-      const amount = Reflect.get(entry, "amount");
-      return typeof amount === "number" && Number.isFinite(amount) ? [amount] : [];
+      const amount = Reflect.get(entry, "amount") ?? Reflect.get(entry, "totalAmount");
+      return typeof amount === "number" && Number.isFinite(amount)
+        ? [{ amount, record: entry as GroundedRecord }]
+        : [];
     });
-    if (amounts.length > 0) grounded.numbers.push(amounts.reduce((sum, amount) => sum + amount, 0));
+    if (amountRecords.length > 0) {
+      const total = amountRecords.reduce((sum, { amount }) => sum + amount, 0);
+      grounded.claims.push({
+        value: total,
+        unit: "currency",
+      });
+      if (total !== 0) {
+        for (const { amount, record } of amountRecords) {
+          const category = record.category ?? record.name;
+          if (typeof category === "string") {
+            const percentage = (amount / total) * 100;
+            grounded.claims.push({ value: percentage, unit: "percentage" });
+            grounded.records.push({
+              ...record,
+              amount,
+              category,
+              percentage,
+            });
+          }
+        }
+      }
+    }
     return;
   }
   if (typeof value === "object" && value !== null) {
-    for (const entry of Object.values(value)) collectGroundedValues(entry, grounded);
+    const record = value as GroundedRecord;
+    grounded.records.push(record);
+    for (const [entryKey, entry] of Object.entries(record)) {
+      collectGroundedValues(entry, grounded, entryKey);
+    }
+
+    const income = record.income ?? record.totalIncome;
+    const expense = record.expense ?? record.totalExpense;
+    if (typeof income === "number" && typeof expense === "number") {
+      grounded.claims.push({ value: income - expense, unit: "currency" });
+    }
+    return;
   }
+
+  addClaim(grounded, value, getFinancialUnit(key));
 }
 
-function isGroundedNumber(claim: number, sourceNumbers: readonly number[]): boolean {
-  const equalsClaim = (value: number) => Math.abs(value - claim) < 0.01;
-  if (sourceNumbers.some(equalsClaim)) return true;
-
-  for (const left of sourceNumbers) {
-    for (const right of sourceNumbers) {
-      if (equalsClaim(left + right) || equalsClaim(left - right)) return true;
-      if (right !== 0 && equalsClaim((left / right) * 100)) return true;
-    }
-  }
-  return false;
+function isGroundedClaim(claim: FinancialClaim, sources: readonly FinancialClaim[]): boolean {
+  return sources.some(
+    (source) =>
+      source.unit === claim.unit &&
+      Math.abs(source.value - claim.value) < (claim.unit === "percentage" ? 0.5 : 0.01),
+  );
 }
 
 function getCardClaims(cards: readonly FinanceChatCard[]): {
-  numbers: number[];
+  claims: FinancialClaim[];
   strings: string[];
 } {
-  const numbers: number[] = [];
+  const claims: FinancialClaim[] = [];
   const strings: string[] = [];
 
   for (const card of cards) {
-    if (card.type === "summary") numbers.push(...card.metrics.map(({ amount }) => amount));
-    if (card.type === "insight" && card.amount !== undefined) numbers.push(card.amount);
-    if (card.type === "chart") numbers.push(...card.data.flatMap(({ values }) => values));
+    if (card.type === "summary") {
+      claims.push(
+        ...card.metrics.map(({ amount }) => ({ value: amount, unit: "currency" as const })),
+      );
+    }
+    if (card.type === "insight" && card.amount !== undefined) {
+      claims.push({ value: card.amount, unit: "currency" });
+    }
+    if (card.type === "chart") {
+      claims.push(
+        ...card.data.flatMap(({ values }) =>
+          values.map((value) => ({ value, unit: "currency" as const })),
+        ),
+      );
+    }
     if (card.type === "categoryBreakdown") {
       for (const category of card.categories) {
-        numbers.push(category.amount, category.percentage);
+        claims.push(
+          { value: category.amount, unit: "currency" },
+          { value: category.percentage, unit: "percentage" },
+        );
         strings.push(category.name);
       }
     }
     if (card.type === "transactionList") {
       for (const transaction of card.transactions) {
-        numbers.push(transaction.amount);
+        claims.push({ value: transaction.amount, unit: "currency" });
         strings.push(
           transaction.id,
           transaction.date,
@@ -205,12 +277,16 @@ function getCardClaims(cards: readonly FinanceChatCard[]): {
     }
   }
 
-  return { numbers, strings };
+  return { claims, strings };
 }
 
-function extractFinancialClaims(text: string): number[] {
-  const claims: number[] = [];
-  const pattern = /(?:¥\s*)?(-?\d[\d,]*(?:\.\d+)?)\s*(兆|億|万|千)?\s*(円|%|％)/g;
+function extractFinancialClaims(text: string): FinancialClaim[] {
+  const claims: FinancialClaim[] = [];
+  const number = "-?\\d[\\d,]*(?:\\.\\d+)?";
+  const pattern = new RegExp(
+    `(?:¥\\s*(${number})\\s*(兆|億|万|千)?(?:\\s*円)?|(${number})\\s*(兆|億|万|千)?\\s*(円|%|％))`,
+    "g",
+  );
   const multipliers: Record<string, number> = {
     兆: 1_000_000_000_000,
     億: 100_000_000,
@@ -219,10 +295,89 @@ function extractFinancialClaims(text: string): number[] {
   };
 
   for (const match of text.matchAll(pattern)) {
-    const value = Number(match[1]?.replaceAll(",", ""));
-    claims.push(value * (multipliers[match[2] ?? ""] ?? 1));
+    const value = Number((match[1] ?? match[3])?.replaceAll(",", ""));
+    const multiplier = multipliers[match[2] ?? match[4] ?? ""] ?? 1;
+    claims.push({
+      value: value * multiplier,
+      unit: match[5] === "%" || match[5] === "％" ? "percentage" : "currency",
+    });
   }
   return claims;
+}
+
+function getCardProse(cards: readonly FinanceChatCard[]): string {
+  return cards
+    .flatMap((card) => {
+      const prose = [card.title, "description" in card ? card.description : undefined];
+      if (card.type === "summary") prose.push(...card.metrics.map(({ label }) => label));
+      if (card.type === "insight") prose.push(card.amountLabel, card.action?.label);
+      if (card.type === "action") prose.push(card.action.label);
+      if (card.type === "empty") prose.push(...card.prompts);
+      if (card.type === "categoryBreakdown") prose.push(...card.categories.map(({ name }) => name));
+      if (card.type === "transactionList") {
+        prose.push(
+          ...card.transactions.flatMap(({ description, category }) => [description, category]),
+        );
+      }
+      if (card.type === "chart") {
+        prose.push(...card.series.map(({ name }) => name), ...card.data.map(({ label }) => label));
+      }
+      return prose;
+    })
+    .filter((value): value is string => value !== undefined)
+    .join("\n");
+}
+
+function recordMatches(record: GroundedRecord, expected: GroundedRecord): boolean {
+  return Object.entries(expected).every(([key, value]) => {
+    const actual = record[key];
+    if (typeof actual === "number" && typeof value === "number") {
+      return Math.abs(actual - value) < (key === "percentage" ? 0.5 : 0.01);
+    }
+    return actual === value;
+  });
+}
+
+function areCardRecordsGrounded(
+  cards: readonly FinanceChatCard[],
+  records: GroundedRecord[],
+): boolean {
+  for (const card of cards) {
+    if (card.type === "transactionList") {
+      for (const transaction of card.transactions) {
+        const { amountType, ...fields } = transaction;
+        if (!records.some((record) => recordMatches(record, { ...fields, type: amountType }))) {
+          return false;
+        }
+      }
+    }
+    if (card.type === "categoryBreakdown") {
+      for (const category of card.categories) {
+        const expected = {
+          category: category.name,
+          amount: category.amount,
+          percentage: category.percentage,
+          type: category.amountType,
+        };
+        const alternate = { ...expected, totalAmount: expected.amount };
+        delete (alternate as Partial<typeof alternate>).amount;
+        if (
+          !records.some(
+            (record) => recordMatches(record, expected) || recordMatches(record, alternate),
+          )
+        ) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+function extractMarkdownHrefs(text: string): string[] {
+  return [...text.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
 }
 
 export function evaluateFinanceChatTrace(
@@ -299,27 +454,35 @@ export function evaluateFinanceChatTrace(
     );
   }
 
-  const grounded: GroundedValues = { numbers: [], strings: new Set() };
+  const grounded: GroundedValues = { claims: [], strings: new Set(), records: [] };
   for (const call of completedPriorDataCalls) {
     const result = priorToolResults.find(
       ({ toolCallId, toolName }) => toolCallId === call.toolCallId && toolName === call.toolName,
     );
-    if (result) collectGroundedValues(result.output, grounded);
+    if (result) collectGroundedValues(result.output, grounded, call.toolName);
   }
   const cardClaims = getCardClaims(cards);
-  const ungroundedCardNumbers = cardClaims.numbers.filter(
-    (claim) => !isGroundedNumber(claim, grounded.numbers),
+  const ungroundedCardClaims = cardClaims.claims.filter(
+    (claim) => !isGroundedClaim(claim, grounded.claims),
   );
   const ungroundedCardStrings = cardClaims.strings.filter((claim) => !grounded.strings.has(claim));
-  if (ungroundedCardNumbers.length > 0 || ungroundedCardStrings.length > 0) {
+  const ungroundedCardProse = extractFinancialClaims(getCardProse(cards)).filter(
+    (claim) => !isGroundedClaim(claim, grounded.claims),
+  );
+  if (
+    ungroundedCardClaims.length > 0 ||
+    ungroundedCardStrings.length > 0 ||
+    ungroundedCardProse.length > 0 ||
+    !areCardRecordsGrounded(cards, grounded.records)
+  ) {
     violations.push("カード内容に取得結果で根拠付けられない金融 claim が含まれる");
   }
 
-  const finalTextSources = [...grounded.numbers, ...cardClaims.numbers];
+  const finalTextSources = [...grounded.claims, ...cardClaims.claims];
   if (trace.text === undefined) {
     violations.push("最終回答テキストが評価 trace に含まれない");
   } else if (
-    extractFinancialClaims(trace.text).some((claim) => !isGroundedNumber(claim, finalTextSources))
+    extractFinancialClaims(trace.text).some((claim) => !isGroundedClaim(claim, finalTextSources))
   ) {
     violations.push("最終回答に取得結果またはカードと一致しない金融 claim が含まれる");
   }
@@ -350,6 +513,12 @@ export function evaluateFinanceChatTrace(
     const unverifiedHrefs = getCardHrefs(cards).filter((href) => !navigationHrefs.has(href));
     if (unverifiedHrefs.length > 0) {
       violations.push(`ナビゲーションツール未検証の CTA: ${unverifiedHrefs.join(", ")}`);
+    }
+    const unverifiedTextHrefs = extractMarkdownHrefs(trace.text ?? "").filter(
+      (href) => !navigationHrefs.has(href),
+    );
+    if (unverifiedTextHrefs.length > 0) {
+      violations.push(`ナビゲーションツール未検証の本文リンク: ${unverifiedTextHrefs.join(", ")}`);
     }
   }
 

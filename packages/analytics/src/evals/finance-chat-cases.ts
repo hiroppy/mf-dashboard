@@ -31,8 +31,8 @@ export function createFinanceChatEvaluationCases(
     {
       id: "monthly-summary",
       prompt: "今月どう？",
-      toolStrategies: [[{ name: "getFinancialMetrics" }], [{ name: "getLatestMonthlySummary" }]],
-      allowedDataTools: ["getFinancialMetrics", "getLatestMonthlySummary"],
+      toolStrategies: [[{ name: "getLatestMonthlySummary" }]],
+      allowedDataTools: ["getLatestMonthlySummary"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "insight"],
     },

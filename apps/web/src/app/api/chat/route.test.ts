@@ -153,7 +153,9 @@ describe("POST /api/chat", () => {
     expect(systemPrompt).toContain(
       "日付別支出には、expenseを検索し、summary、transactionList、action",
     );
-    expect(systemPrompt).toContain("月次状況には、対象月の収支を取得し、summaryとinsight");
+    expect(systemPrompt).toContain(
+      "月次状況には、getLatestMonthlySummaryで対象月の収支を取得し、summaryとinsight",
+    );
     expect(systemPrompt).toContain("summary、categoryBreakdown、transactionList");
     expect(systemPrompt).toContain("カードは原則2枚以内");
     expect(systemPrompt).toContain("transactionListは、ユーザーが取引、明細");
