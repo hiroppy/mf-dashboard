@@ -1,10 +1,10 @@
 # 家計 AI チャット評価
 
-実モデルの tool call とカード出力を、代表的な質問ごとの期待値に照らして評価する。
+`promptfoo` で実際の finance chat を呼び、最終テキストと structured cards が代表的な質問の期待値を満たすかを評価する。
 
 ## 実行
 
-リポジトリルートで demo データを作成し、利用する AI provider の環境変数を設定する。
+リポジトリルートで demo データを生成し、AI provider を設定する。
 
 ```sh
 pnpm --filter @mf-dashboard/db build:demo
@@ -12,20 +12,17 @@ AI_PROVIDER=openai AI_MODEL=<provider-model-id> AI_API_KEY=<provider-api-key> \
   pnpm --filter @mf-dashboard/analytics eval:chat
 ```
 
-各ケースの使用 tool、カード種別、違反内容を JSON Lines で出力する。全ケース成功時は終了コード 0、1 件以上の失敗時は 1 になる。特定ケースだけを実行する場合は `-- --case=monthly-summary` を付ける。
+特定ケースだけを実行する場合は promptfoo の filter を使う。
 
-## ケース追加
+```sh
+pnpm --filter @mf-dashboard/analytics eval:chat --filter-pattern "月次状況"
+```
 
-`src/evals/finance-chat-cases.ts` に質問、許容する tool 戦略と必須引数、許可する data tool、期待カード順を追加する。共通 scorer は次を検証する。
+## 構成
 
-- 必須 data tool と month、date、category、transaction type などの引数
-- CTA に対応する navigation tool の page、month と呼び出し順
-- 許可していない tool や同一 tool/input による重複取得
-- `presentFinanceCards` が 1 回だけ成功し、カード schema と期待順を満たすこと
-- カードの金額、カテゴリ、明細が presentation 前に完了した data tool の結果に根拠付けられること
-- 最終回答テキストの金額・割合が取得結果またはカードと矛盾しないこと
-- empty 以外の CTA が、presentation より前の step で完了した `getFinanceDashboardRoute` の返却値であること
+- `promptfooconfig.yaml`: provider、prompt、共通設定
+- `cases.yaml`: 質問、期待する数値・期間・カテゴリ・カード・route
+- `provider.ts`: 本番と同じ model、system prompt、tools で chat を実行し、最終出力を JSON 化
+- `assertions.ts`: final text／cards に固有な最小限の判定
 
-demo データは対象月の月末まで生成されるため、評価時の system prompt とケース日付も同じ月の JST 月末に固定する。
-
-評価は実際の AI API を呼び出すため、provider ごとの出力差と利用料金が発生する。
+ケース追加時は `cases.yaml` に質問と demo fixture 由来の期待値を追加する。tool call の順序や ID ではなく、ユーザーが見る最終回答を評価対象にする。

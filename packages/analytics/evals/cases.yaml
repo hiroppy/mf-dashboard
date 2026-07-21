@@ -1,0 +1,70 @@
+- description: 月次状況が収入・支出・収支と詳細導線を返す
+  vars:
+    question: 今月どう？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedFacts: ["2026-07", 313235, 219894, 93341]
+        expectedCardTypes: [summary, insight]
+        expectedRoute: /cf/2026-07
+        forbiddenPhrases: [データを取得できません, わかりません]
+
+- description: 食費がカテゴリ合計・明細・詳細導線を返す
+  vars:
+    question: 今月の食費は？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedFacts: ["2026-07", 食費, 41837]
+        expectedCardTypes: [summary, categoryBreakdown, transactionList]
+        expectedRoute: /cf/2026-07
+        forbiddenPhrases: [データを取得できません, わかりません]
+
+- description: 日付別支出が対象日・合計・明細を返す
+  vars:
+    question: 今月10日の支出を見たい
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedFacts: ["7/10", 6587]
+        expectedCardTypes: [summary, transactionList, action]
+        expectedRoute: /cf/2026-07
+        forbiddenPhrases: [データを取得できません, わかりません]
+
+- description: 総資産が fixture の残高と資産導線を返す
+  vars:
+    question: 総資産は？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedFacts: [5683100]
+        expectedCardTypes: [summary]
+        expectedRoute: /bs
+        forbiddenPhrases: [データを取得できません, わかりません]
+
+- description: 支出改善が具体的なカテゴリ・根拠・内訳導線を返す
+  vars:
+    question: 削れそうな支出ある？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedFacts: ["2026-07"]
+        expectedAnyFacts: [食費, 衣服・美容, 日用品]
+        expectedCardTypes: [insight]
+        expectedRoute: /cf/2026-07
+        forbiddenPhrases: [必ず削減できます, データを取得できません, わかりません]

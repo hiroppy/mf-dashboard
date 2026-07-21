@@ -15,7 +15,7 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "eval:chat": "DB_PATH=../../data/demo.db tsx scripts/run-finance-chat-evals.ts",
+    "eval:chat": "DB_PATH=../../data/demo.db promptfoo eval -c evals/promptfooconfig.yaml",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "promptfoo": "^0.121.19",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

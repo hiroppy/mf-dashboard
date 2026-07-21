@@ -1,0 +1,13 @@
+description: mf-dashboard finance chat final response evaluation
+
+providers:
+  - id: file://./provider.ts
+    label: mf-dashboard finance chat
+
+prompts:
+  - "{{question}}"
+
+tests: file://./cases.yaml
+
+evaluateOptions:
+  maxConcurrency: 1
