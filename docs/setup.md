@@ -309,13 +309,14 @@ CODEX_EXEC_TIMEOUT_MS=120000
 Codex 経路には Codex CLI のインストールと ChatGPT subscription による事前ログインが必要:
 
 ```bash
-codex login
+codex login --config 'cli_auth_credentials_store="file"'
 ```
 
 Codex 経路は custom filesystem permissions を strict config で指定し、組み込み tool が読める
 範囲を空の一時 workspace に限定する。`--ignore-user-config` と `--ignore-rules` で設定・rules
-の読込を止めつつ、credential の refresh lifecycle は canonical `CODEX_HOME` で Codex 自身に
-管理させる。
+の読込を止める。canonical `CODEX_HOME` からは file-backed credential だけを予測不能な一時
+`CODEX_HOME` へコピーし、skill・plugin・instruction source は渡さない。Codex が更新した
+credential はアプリ間 lock と atomic rename で canonical `auth.json` へ戻す。
 `AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
 120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で

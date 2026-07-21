@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
@@ -34,12 +35,14 @@ export interface CodexExecResult<T> {
 }
 
 interface IsolatedEnvironment {
+  authPath: string;
   authHome: string;
-  configHome: string;
   cwd: string;
+  initialAuth: Buffer;
   outputPath: string;
   root: string;
   schemaPath: string;
+  sourceAuthPath: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -47,7 +50,7 @@ const DEFAULT_MAX_TOOL_CALLS = 20;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const SHUTDOWN_GRACE_MS = 500;
 const CLEANUP_TIMEOUT_MS = 5_000;
-const MAX_CANONICAL_SKILLS = 1_000;
+const CREDENTIAL_PERSIST_TIMEOUT_MS = 5_000;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -95,6 +98,7 @@ const CODEX_CONFIG = [
   "features.unified_exec=false",
   "features.workspace_dependencies=false",
   'default_permissions="isolated"',
+  'cli_auth_credentials_store="file"',
   "mcp_servers={}",
   'permissions.isolated.filesystem={":workspace_roots"={ "."="read"}}',
   'web_search="disabled"',
@@ -130,6 +134,45 @@ function getCodexEnv(): NodeJS.ProcessEnv {
   );
 }
 
+function getSourceAuthPath(): string {
+  return join(resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")), "auth.json");
+}
+
+async function withCredentialLock<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal,
+  staleAfterMs: number,
+): Promise<T> {
+  const lockPath = `${getSourceAuthPath()}.mf-dashboard.lock`;
+  let lockHandle;
+  while (true) {
+    signal.throwIfAborted();
+    try {
+      lockHandle = await open(lockPath, "wx", 0o600);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const lock = await stat(lockPath).catch(() => undefined);
+      if (lock && Date.now() - lock.mtimeMs > staleAfterMs) {
+        await rm(lockPath, { force: true });
+        continue;
+      }
+      await waitForToolResult(
+        () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
+        signal,
+      );
+    }
+  }
+  try {
+    return await operation();
+  } finally {
+    await lockHandle.close().catch(() => undefined);
+    await rm(lockPath, { force: true }).catch(() =>
+      console.warn("[analytics] Failed to release the Codex credential lock"),
+    );
+  }
+}
+
 async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedEnvironment> {
   signal.throwIfAborted();
   const rootCreation = mkdtemp(join(tmpdir(), "mf-dashboard-codex-"));
@@ -144,10 +187,10 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
   }
   try {
     signal.throwIfAborted();
-    const configHome = join(root, "codex-config");
+    const authHome = join(root, "codex-home");
     const cwd = join(root, "workspace");
     const directoryCreation = Promise.all([
-      mkdir(configHome, { mode: 0o700 }),
+      mkdir(authHome, { mode: 0o700 }),
       mkdir(cwd, { mode: 0o700 }),
     ]);
     try {
@@ -162,15 +205,28 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
 
     const environment = {
-      authHome: resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")),
-      configHome,
+      authHome,
       cwd,
       outputPath: join(root, "output.txt"),
       root,
       schemaPath: join(root, "output-schema.json"),
     };
+    const sourceAuthPath = getSourceAuthPath();
+    let initialAuth: Buffer;
+    try {
+      initialAuth = await readFile(sourceAuthPath, { signal });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(
+          'Codex backend requires file-backed authentication; run codex login --config cli_auth_credentials_store="file"',
+        );
+      }
+      throw error;
+    }
+    const authPath = join(authHome, "auth.json");
+    await writeFile(authPath, initialAuth, { mode: 0o600, signal });
     signal.throwIfAborted();
-    return environment;
+    return { ...environment, authPath, initialAuth, sourceAuthPath };
   } catch (error) {
     const removal = rm(root, { recursive: true, force: true });
     try {
@@ -179,6 +235,38 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
       void removal.catch(() => undefined);
     }
     throw error;
+  }
+}
+
+async function persistRefreshedCredentials(
+  environment: IsolatedEnvironment,
+  signal: AbortSignal,
+): Promise<void> {
+  signal.throwIfAborted();
+  const [isolatedAuth, currentAuth] = await Promise.all([
+    readFile(environment.authPath, { signal }),
+    readFile(environment.sourceAuthPath, { signal }),
+  ]);
+  if (
+    isolatedAuth.equals(environment.initialAuth) ||
+    !currentAuth.equals(environment.initialAuth)
+  ) {
+    return;
+  }
+  try {
+    JSON.parse(isolatedAuth.toString("utf8"));
+  } catch {
+    throw new Error("Codex returned invalid refreshed credentials");
+  }
+  const stagedAuthPath = `${environment.sourceAuthPath}.mf-dashboard-${randomUUID()}.tmp`;
+  try {
+    await writeFile(stagedAuthPath, isolatedAuth, { mode: 0o600, signal });
+    signal.throwIfAborted();
+    const latestAuth = await readFile(environment.sourceAuthPath, { signal });
+    if (!latestAuth.equals(environment.initialAuth)) return;
+    await rename(stagedAuthPath, environment.sourceAuthPath);
+  } finally {
+    await rm(stagedAuthPath, { force: true }).catch(() => undefined);
   }
 }
 
@@ -248,7 +336,6 @@ async function runCodexProcess(
   args: string[],
   signal: AbortSignal,
   input?: string,
-  codexHome = environment.configHome,
 ): Promise<{ stderrHead: string; stdout: string }> {
   signal.throwIfAborted();
   let stderrHead = "";
@@ -256,7 +343,7 @@ async function runCodexProcess(
   await new Promise<void>((resolve, reject) => {
     const child = spawn("codex", args, {
       cwd: environment.cwd,
-      env: { ...getCodexEnv(), CODEX_HOME: codexHome, HOME: environment.root },
+      env: { ...getCodexEnv(), CODEX_HOME: environment.authHome, HOME: environment.root },
       stdio: "pipe",
     });
     let settled = false;
@@ -314,102 +401,11 @@ async function assertNoMcpServers(
   }
 }
 
-async function listCanonicalSkills(authHome: string, signal: AbortSignal): Promise<string[]> {
-  const skillsRoot = join(authHome, "skills");
-  const skills: string[] = [];
-  const visitedDirectories = new Set<string>();
-  const visit = async (directory: string): Promise<void> => {
-    signal.throwIfAborted();
-    let entries;
-    try {
-      entries = await waitForToolResult(() => readdir(directory, { withFileTypes: true }), signal);
-    } catch (error) {
-      signal.throwIfAborted();
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && directory === skillsRoot) return;
-      throw new Error("codex exec could not inspect canonical skills");
-    }
-    let resolvedDirectory: string;
-    try {
-      resolvedDirectory = await waitForToolResult(() => realpath(directory), signal);
-    } catch {
-      signal.throwIfAborted();
-      throw new Error("codex exec could not inspect canonical skills");
-    }
-    if (visitedDirectories.has(resolvedDirectory)) return;
-    visitedDirectories.add(resolvedDirectory);
-    for (const entry of entries) {
-      signal.throwIfAborted();
-      const path = join(directory, entry.name);
-      let isDirectory = entry.isDirectory();
-      let isFile = entry.isFile();
-      if (entry.isSymbolicLink()) {
-        try {
-          const target = await waitForToolResult(() => stat(path), signal);
-          isDirectory = target.isDirectory();
-          isFile = target.isFile();
-        } catch {
-          signal.throwIfAborted();
-          throw new Error("codex exec could not inspect a canonical skill link");
-        }
-      }
-      if (isDirectory) await visit(path);
-      else if (isFile && entry.name === "SKILL.md") skills.push(path);
-      if (skills.length > MAX_CANONICAL_SKILLS) {
-        throw new Error("codex exec found too many canonical skills");
-      }
-    }
-  };
-  await visit(skillsRoot);
-  return skills.sort();
-}
-
-function buildSkillConfig(skillPaths: string[]): string {
-  const entries = skillPaths.map((path) => `{path=${JSON.stringify(path)},enabled=false}`);
-  return `skills.config=[${entries.join(",")}]`;
-}
-
-async function getVerifiedSkillConfig(
-  environment: IsolatedEnvironment,
-  signal: AbortSignal,
-): Promise<string> {
-  const skillPaths = await listCanonicalSkills(environment.authHome, signal);
-  const skillConfig = buildSkillConfig(skillPaths);
-  if (skillPaths.length > 0) {
-    const args = [
-      "debug",
-      "prompt-input",
-      ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
-      "--config",
-      skillConfig,
-      "skill isolation check",
-    ];
-    const { stdout } = await runCodexProcess(
-      environment,
-      args,
-      signal,
-      undefined,
-      environment.authHome,
-    );
-    if (skillPaths.some((path) => stdout.includes(path))) {
-      throw new Error("codex exec loaded canonical skills");
-    }
-  }
-  const verifiedPaths = await listCanonicalSkills(environment.authHome, signal);
-  if (
-    verifiedPaths.length !== skillPaths.length ||
-    verifiedPaths.some((path, i) => path !== skillPaths[i])
-  ) {
-    throw new Error("codex exec canonical skills changed during verification");
-  }
-  return skillConfig;
-}
-
 async function runCodexExec(
   environment: IsolatedEnvironment,
   system: string,
   prompt: string,
   hasSchema: boolean,
-  skillConfig: string,
   signal: AbortSignal,
 ): Promise<{ model: string; text: string }> {
   const args = [
@@ -426,20 +422,12 @@ async function runCodexExec(
     ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
     "--config",
     `developer_instructions=${JSON.stringify(`${system}\n\n${DATA_BOUNDARY}`)}`,
-    "--config",
-    skillConfig,
   ];
   if (hasSchema) args.push("--output-schema", environment.schemaPath);
   if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
   args.push("-");
 
-  const { stderrHead } = await runCodexProcess(
-    environment,
-    args,
-    signal,
-    prompt,
-    environment.authHome,
-  );
+  const { stderrHead } = await runCodexProcess(environment, args, signal, prompt);
 
   const text = (await readFile(environment.outputPath, { encoding: "utf8", signal })).trim();
   signal.throwIfAborted();
@@ -491,13 +479,11 @@ async function generateInIsolation<T>(
       });
     }
     await assertNoMcpServers(environment, controller.signal);
-    const skillConfig = await getVerifiedSkillConfig(environment, controller.signal);
     const result = await runCodexExec(
       environment,
       options.system,
       prompt,
       Boolean(options.schema),
-      skillConfig,
       controller.signal,
     );
     let output: T | undefined;
@@ -518,6 +504,23 @@ async function generateInIsolation<T>(
     generationError = error;
   }
 
+  const persistenceController = new AbortController();
+  const persistenceTimeout = setTimeout(
+    () =>
+      persistenceController.abort(
+        new Error(
+          `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
+        ),
+      ),
+    CREDENTIAL_PERSIST_TIMEOUT_MS,
+  );
+  try {
+    await persistRefreshedCredentials(environment, persistenceController.signal);
+  } catch {
+    console.warn("[analytics] Failed to persist refreshed Codex credentials");
+  } finally {
+    clearTimeout(persistenceTimeout);
+  }
   await removeTemporaryEnvironment(environment.root);
 
   if (generationFailed) throw generationError;
@@ -547,13 +550,10 @@ export async function generateWithCodexExec<T>(
     if (Date.now() >= deadline) {
       throw new Error(`codex exec timed out after ${timeoutMs}ms`);
     }
-    const result = await generateInIsolation(
-      options,
-      toolData,
-      prompt,
-      timeoutMs,
-      controller,
-      deadline,
+    const result = await withCredentialLock(
+      () => generateInIsolation(options, toolData, prompt, timeoutMs, controller, deadline),
+      controller.signal,
+      timeoutMs + CREDENTIAL_PERSIST_TIMEOUT_MS + CLEANUP_TIMEOUT_MS,
     );
     controller.signal.throwIfAborted();
     if (Date.now() >= deadline) {

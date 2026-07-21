@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -59,7 +59,6 @@ function createFakeCodex(
     ignoreKill?: boolean;
     mcpServers?: unknown[];
     output?: string;
-    promptInput?: string;
     stderr?: string;
   } = {},
 ) {
@@ -84,12 +83,6 @@ function createFakeCodex(
       const args = spawnMock.mock.calls.at(-1)?.[1] as string[];
       if (args[0] === "mcp") {
         stdout.write(JSON.stringify(options.mcpServers ?? []));
-        queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
-        callback();
-        return;
-      }
-      if (args[0] === "debug") {
-        stdout.write(options.promptInput ?? "[]");
         queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
         callback();
         return;
@@ -153,7 +146,7 @@ describe("generateWithCodexExec", () => {
     const [command, args, spawnOptions] = spawnMock.mock.calls[1]!;
     expect(command).toBe("codex");
     expect(spawnMock.mock.calls[0]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
-    expect(spawnOptions?.env?.CODEX_HOME).toBe(process.env.CODEX_HOME);
+    expect(spawnOptions?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
     expect(args).toEqual(
       expect.arrayContaining([
         "exec",
@@ -191,63 +184,17 @@ describe("generateWithCodexExec", () => {
     );
   });
 
-  test("disables canonical skills and verifies they are absent from the model prompt", async () => {
-    const skillPath = join(process.env.CODEX_HOME!, "skills", "custom", "SKILL.md");
+  test("does not expose the mutable canonical skill tree to Codex", async () => {
     await mkdirMock(join(process.env.CODEX_HOME!, "skills", "custom"), { recursive: true });
-    await writeFile(skillPath, "# Custom skill");
+    await writeFile(join(process.env.CODEX_HOME!, "skills", "custom", "SKILL.md"), "# Skill");
     const mcp = createFakeCodex();
-    const promptInput = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock
-      .mockReturnValueOnce(mcp.child)
-      .mockReturnValueOnce(promptInput.child)
-      .mockReturnValueOnce(fake.child);
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
 
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
-    const debugArgs = spawnMock.mock.calls[1]?.[1] as string[];
-    const execArgs = spawnMock.mock.calls[2]?.[1] as string[];
-    const skillConfig = `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`;
-    expect(debugArgs).toEqual(expect.arrayContaining(["debug", "prompt-input", skillConfig]));
-    expect(execArgs).toContain(skillConfig);
-  });
-
-  test("disables canonical skills exposed through directory links", async () => {
-    const target = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-skill-target-"));
-    temporaryDirectories.push(target);
-    await writeFile(join(target, "SKILL.md"), "# Linked skill");
-    const skillsDirectory = join(process.env.CODEX_HOME!, "skills");
-    await mkdirMock(skillsDirectory, { recursive: true });
-    const skillDirectory = join(skillsDirectory, "linked");
-    await symlink(target, skillDirectory);
-    const skillPath = join(skillDirectory, "SKILL.md");
-    const mcp = createFakeCodex();
-    const promptInput = createFakeCodex();
-    const fake = createFakeCodex();
-    spawnMock
-      .mockReturnValueOnce(mcp.child)
-      .mockReturnValueOnce(promptInput.child)
-      .mockReturnValueOnce(fake.child);
-
-    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
-
-    expect(spawnMock.mock.calls[2]?.[1]).toContain(
-      `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`,
-    );
-  });
-
-  test("fails closed when a canonical skill remains in the model prompt", async () => {
-    const skillPath = join(process.env.CODEX_HOME!, "skills", "custom", "SKILL.md");
-    await mkdirMock(join(process.env.CODEX_HOME!, "skills", "custom"), { recursive: true });
-    await writeFile(skillPath, "# Custom skill");
-    const mcp = createFakeCodex();
-    const promptInput = createFakeCodex({ promptInput: JSON.stringify([{ content: skillPath }]) });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(promptInput.child);
-
-    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "codex exec loaded canonical skills",
-    );
     expect(spawnMock).toHaveBeenCalledTimes(2);
+    expect(spawnMock.mock.calls[1]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
   });
 
   test("does not execute tools that are absent from the instructions", async () => {
@@ -566,7 +513,8 @@ describe("generateWithCodexExec", () => {
     const fake = createFakeCodex();
     spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
       const codexHome = options?.env?.CODEX_HOME;
-      if (codexHome !== sourceCodexHome) throw new Error("missing canonical CODEX_HOME");
+      if (!codexHome || codexHome === sourceCodexHome)
+        throw new Error("missing isolated CODEX_HOME");
       void writeFile(join(codexHome, "auth.json"), '{"token":"refreshed"}');
       return fake.child;
     });
