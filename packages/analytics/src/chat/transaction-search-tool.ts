@@ -40,7 +40,7 @@ const transactionSearchInputSchema = z
       .nonnegative()
       .max(SEARCH_TRANSACTIONS_MAX_OFFSET)
       .optional()
-      .describe("取得開始位置。省略時は0、最大10000"),
+      .describe(`取得開始位置。省略時は0、最大${SEARCH_TRANSACTIONS_MAX_OFFSET}`),
   })
   .refine(({ startDate, endDate }) => !startDate || !endDate || startDate <= endDate, {
     message: "開始日は終了日以前を指定してください",

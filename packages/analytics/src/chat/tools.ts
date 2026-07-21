@@ -9,10 +9,6 @@ function createChatFinancialTools(db: Db, groupId: string) {
   const tools = createFinancialTools(db, groupId);
 
   return {
-    getAccountsWithAssets: tools.getAccountsWithAssets,
-    getAccountsGroupedByCategory: tools.getAccountsGroupedByCategory,
-    getHoldingsWithLatestValues: tools.getHoldingsWithLatestValues,
-    getHoldingsWithDailyChange: tools.getHoldingsWithDailyChange,
     getMonthlySummaryByMonth: tools.getMonthlySummaryByMonth,
     getMonthlyCategoryTotals: tools.getMonthlyCategoryTotals,
     getExpenseByFixedVariable: tools.getExpenseByFixedVariable,
@@ -24,7 +20,6 @@ function createChatFinancialTools(db: Db, groupId: string) {
     getDailyAssetChange: tools.getDailyAssetChange,
     getCategoryChangesForPeriod: tools.getCategoryChangesForPeriod,
     getFinancialMetrics: tools.getFinancialMetrics,
-    getHoldingsByAccountId: tools.getHoldingsByAccountId,
     getLatestAnalytics: tools.getLatestAnalytics,
   };
 }

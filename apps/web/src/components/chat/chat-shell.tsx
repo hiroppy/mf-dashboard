@@ -31,6 +31,17 @@ const MAX_PANEL_WIDTH = 720;
 const PANEL_RESIZE_STEP = 24;
 const INPUT_FOCUS_DELAY_MS = 250;
 const AUTO_FOLLOW_THRESHOLD_PX = 48;
+const CHAT_ERROR_MESSAGES: Record<string, string> = {
+  REQUEST_TOO_LARGE: "会話が長くなりました。ページを再読み込みして新しい会話を始めてください。",
+  INVALID_MESSAGES: "会話を続けられません。ページを再読み込みして新しい会話を始めてください。",
+  INVALID_GROUP_ID: "選択中のグループを確認して、もう一度お試しください。",
+  GROUP_NOT_FOUND: "選択中のグループが見つかりません。グループを選び直してください。",
+  CURRENT_GROUP_NOT_FOUND: "現在のグループを選択して、もう一度お試しください。",
+  DATABASE_NOT_AVAILABLE: "家計データがまだ利用できません。データ更新後にお試しください。",
+  LLM_NOT_CONFIGURED: "AI_PROVIDER、AI_MODEL、AI_API_KEYの設定を確認してください。",
+};
+const DEFAULT_CHAT_ERROR_MESSAGE =
+  "回答を取得できませんでした。AI設定と接続状況を確認してください。";
 interface ChatShellProps {
   suggestedPrompts?: readonly string[];
 }
@@ -38,6 +49,18 @@ interface ChatShellProps {
 function clampPanelWidth(width: number): number {
   const viewportMaximum = window.innerWidth - 48;
   return Math.min(Math.max(width, MIN_PANEL_WIDTH), Math.min(MAX_PANEL_WIDTH, viewportMaximum));
+}
+
+function getChatErrorMessage(error: Error): string {
+  try {
+    const body = JSON.parse(error.message) as { error?: { code?: unknown } };
+    const code = body.error?.code;
+    return typeof code === "string" && CHAT_ERROR_MESSAGES[code]
+      ? CHAT_ERROR_MESSAGES[code]
+      : DEFAULT_CHAT_ERROR_MESSAGE;
+  } catch {
+    return DEFAULT_CHAT_ERROR_MESSAGE;
+  }
 }
 
 function getFinanceCards(message: UIMessage): FinanceChatCardData[] {
@@ -346,7 +369,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                   role="alert"
                   className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
                 >
-                  回答を取得できませんでした。AI_PROVIDER、AI_MODEL、AI_API_KEYと接続状況を確認してください。
+                  {getChatErrorMessage(error)}
                 </p>
               )}
               {isSubmitting && (

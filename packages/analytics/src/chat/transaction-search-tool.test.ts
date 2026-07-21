@@ -10,7 +10,7 @@ const { searchTransactions } = vi.hoisted(() => ({
 vi.mock("@mf-dashboard/db", () => ({
   searchTransactions,
   SEARCH_TRANSACTIONS_MAX_LIMIT: 100,
-  SEARCH_TRANSACTIONS_MAX_OFFSET: 10_000,
+  SEARCH_TRANSACTIONS_MAX_OFFSET: 900,
 }));
 
 const db = {} as Db;

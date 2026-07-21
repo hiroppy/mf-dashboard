@@ -86,9 +86,29 @@ describe("ChatShell", () => {
     render(<ChatShell />);
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "AI_PROVIDER、AI_MODEL、AI_API_KEYと接続状況を確認してください。",
+      "回答を取得できませんでした。AI設定と接続状況を確認してください。",
     );
     expect(screen.queryByText("secret provider response")).toBeNull();
+  });
+
+  it("shows actionable guidance for a conversation size error", () => {
+    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+      addUserMessage: vi.fn<(text: string) => void>(),
+      close: vi.fn<() => void>(),
+      draft: "",
+      error: new Error(JSON.stringify({ error: { code: "REQUEST_TOO_LARGE" } })),
+      isOpen: true,
+      isSubmitting: false,
+      messages: [],
+      open: vi.fn<() => void>(),
+      setDraft: vi.fn<(draft: string) => void>(),
+    });
+
+    render(<ChatShell />);
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "ページを再読み込みして新しい会話を始めてください。",
+    );
   });
 
   it("blocks another submission while a response is in progress", () => {
