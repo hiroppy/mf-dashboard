@@ -46,7 +46,7 @@ interface IsolatedEnvironment {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_TOOL_CALLS = 20;
-const SHUTDOWN_GRACE_MS = 2_000;
+const SHUTDOWN_GRACE_MS = 500;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "CODEX_ACCESS_TOKEN",
@@ -194,12 +194,14 @@ function waitForToolResult<T>(
 
 async function collectToolData(
   tools: Record<string, CodexTool>,
-  instructions: string,
+  trustedInstructions: string,
   maxToolCalls: number,
   signal: AbortSignal,
 ): Promise<{ data: Record<string, unknown>; toolNames: string[] }> {
   signal.throwIfAborted();
-  const mentionedTools = Object.entries(tools).filter(([name]) => instructions.includes(name));
+  const mentionedTools = Object.entries(tools).filter(([name]) =>
+    trustedInstructions.includes(name),
+  );
   if (mentionedTools.length > maxToolCalls) {
     throw new Error(`Codex exec input exceeds ${maxToolCalls} tool calls`);
   }
@@ -250,10 +252,12 @@ async function runCodexProcess(
     let settled = false;
     let stopError: Error | undefined;
     let forceKill: ReturnType<typeof setTimeout> | undefined;
+    let forceFinish: ReturnType<typeof setTimeout> | undefined;
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(forceKill);
+      clearTimeout(forceFinish);
       signal.removeEventListener("abort", stop);
       if (error) reject(error);
       else resolve();
@@ -262,7 +266,10 @@ async function runCodexProcess(
       if (stopError) return;
       stopError = error;
       child.kill();
-      forceKill = setTimeout(() => child.kill("SIGKILL"), SHUTDOWN_GRACE_MS);
+      forceKill = setTimeout(() => {
+        child.kill("SIGKILL");
+        forceFinish = setTimeout(() => finish(error), SHUTDOWN_GRACE_MS);
+      }, SHUTDOWN_GRACE_MS);
     };
     const stop = () => stopProcess(signal.reason as Error);
     signal.addEventListener("abort", stop, { once: true });
@@ -351,7 +358,7 @@ async function generateInIsolation<T>(
     }
     const { data, toolNames } = await collectToolData(
       options.tools ?? {},
-      `${options.system}\n${options.prompt}`,
+      options.system,
       maxToolCalls,
       controller.signal,
     );

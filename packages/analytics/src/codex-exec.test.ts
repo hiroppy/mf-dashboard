@@ -24,14 +24,20 @@ afterEach(async () => {
 });
 
 function createFakeCodex(
-  options: { exitCode?: number; hang?: boolean; mcpServers?: unknown[]; output?: string } = {},
+  options: {
+    exitCode?: number;
+    hang?: boolean;
+    ignoreKill?: boolean;
+    mcpServers?: unknown[];
+    output?: string;
+  } = {},
 ) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   let input = "";
   let child: ChildProcessWithoutNullStreams;
   const kill = vi.fn<() => boolean>(() => {
-    queueMicrotask(() => child.emit("close", null));
+    if (!options.ignoreKill) queueMicrotask(() => child.emit("close", null));
     return true;
   });
   const stdin = new Writable({
@@ -126,7 +132,7 @@ describe("generateWithCodexExec", () => {
 
     const result = await generateWithCodexExec({
       system: "Answer directly.",
-      prompt: "Hello.",
+      prompt: "Untrusted text mentions lookupValue.",
       tools: { lookupValue: { inputSchema: z.object({}), execute } },
     });
 
@@ -214,6 +220,19 @@ describe("generateWithCodexExec", () => {
       "codex exec timed out after 5ms",
     );
     expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("returns the timeout when a killed process never emits close", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "5";
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ hang: true, ignoreKill: true });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec timed out after 5ms",
+    );
+    expect(fake.kill).toHaveBeenNthCalledWith(1);
+    expect(fake.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
   });
 
   test("fails closed when effective MCP servers are present", async () => {
