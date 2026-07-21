@@ -137,33 +137,39 @@ async function withCredentialLock<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-async function createIsolatedEnvironment(): Promise<IsolatedEnvironment> {
+async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedEnvironment> {
+  signal.throwIfAborted();
   const root = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-"));
-  const codexHome = join(root, "codex-home");
-  const cwd = join(root, "workspace");
-  await Promise.all([mkdir(codexHome, { mode: 0o700 }), mkdir(cwd, { mode: 0o700 })]);
-
-  const environment = {
-    codexHome,
-    cwd,
-    outputPath: join(root, "output.txt"),
-    root,
-    schemaPath: join(root, "output-schema.json"),
-  };
-  const sourceAuthPath = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json");
   try {
+    signal.throwIfAborted();
+    const codexHome = join(root, "codex-home");
+    const cwd = join(root, "workspace");
+    await Promise.all([mkdir(codexHome, { mode: 0o700 }), mkdir(cwd, { mode: 0o700 })]);
+    signal.throwIfAborted();
+
+    const environment = {
+      codexHome,
+      cwd,
+      outputPath: join(root, "output.txt"),
+      root,
+      schemaPath: join(root, "output-schema.json"),
+    };
+    const sourceAuthPath = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json");
     const authPath = join(codexHome, "auth.json");
-    const initialAuth = await readFile(sourceAuthPath);
-    await copyFile(sourceAuthPath, authPath);
-    await chmod(authPath, 0o600);
-    return { ...environment, authPath, initialAuth, sourceAuthPath };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      await rm(root, { recursive: true, force: true });
+    let initialAuth: Buffer;
+    try {
+      initialAuth = await readFile(sourceAuthPath, { signal });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return environment;
       throw error;
     }
+    await writeFile(authPath, initialAuth, { mode: 0o600, signal });
+    signal.throwIfAborted();
+    return { ...environment, authPath, initialAuth, sourceAuthPath };
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
   }
-  return environment;
 }
 
 async function persistRefreshedCredentials(environment: IsolatedEnvironment): Promise<void> {
@@ -361,14 +367,10 @@ async function generateInIsolation<T>(
   options: CodexExecOptions<T>,
   timeoutMs: number,
   maxToolCalls: number,
+  controller: AbortController,
+  deadline: number,
 ): Promise<CodexExecResult<T>> {
-  const environment = await createIsolatedEnvironment();
-  const controller = new AbortController();
-  const deadline = Date.now() + timeoutMs;
-  const timeout = setTimeout(
-    () => controller.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
-    timeoutMs,
-  );
+  const environment = await createIsolatedEnvironment(controller.signal);
 
   try {
     if (options.schema) {
@@ -395,7 +397,6 @@ async function generateInIsolation<T>(
     }
     return { ...result, output, toolNames };
   } finally {
-    clearTimeout(timeout);
     try {
       await persistRefreshedCredentials(environment);
     } catch (error) {
@@ -414,5 +415,17 @@ export async function generateWithCodexExec<T>(
 ): Promise<CodexExecResult<T>> {
   const timeoutMs = getTimeoutMs();
   const maxToolCalls = getMaxToolCalls(options.maxToolCalls);
-  return withCredentialLock(() => generateInIsolation(options, timeoutMs, maxToolCalls));
+  const controller = new AbortController();
+  const deadline = Date.now() + timeoutMs;
+  const timeout = setTimeout(
+    () => controller.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  try {
+    return await withCredentialLock(() =>
+      generateInIsolation(options, timeoutMs, maxToolCalls, controller, deadline),
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
