@@ -7,10 +7,11 @@ import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { mkdirMock, mkdtempMock, readFileMock, spawnMock } = vi.hoisted(() => ({
+const { mkdirMock, mkdtempMock, readFileMock, renameMock, spawnMock } = vi.hoisted(() => ({
   mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
   mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
   readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+  renameMock: vi.fn<typeof import("node:fs/promises").rename>(),
   spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
 }));
 
@@ -20,7 +21,14 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   mkdirMock.mockImplementation(original.mkdir);
   mkdtempMock.mockImplementation(original.mkdtemp);
   readFileMock.mockImplementation(original.readFile);
-  return { ...original, mkdir: mkdirMock, mkdtemp: mkdtempMock, readFile: readFileMock };
+  renameMock.mockImplementation(original.rename);
+  return {
+    ...original,
+    mkdir: mkdirMock,
+    mkdtemp: mkdtempMock,
+    readFile: readFileMock,
+    rename: renameMock,
+  };
 });
 
 const { generateWithCodexExec } = await import("./codex-exec.js");
@@ -528,6 +536,41 @@ describe("generateWithCodexExec", () => {
       }),
     ).rejects.toThrow("Codex credential persistence failed");
     expect(sourceReads).toBe(2);
+  }, 7_000);
+
+  test("holds the credential lock until a timed-out rename settles", async () => {
+    const originalRename = renameMock.getMockImplementation()!;
+    let settleRename!: () => void;
+    renameMock.mockImplementation(() => new Promise<void>((resolve) => (settleRename = resolve)));
+    const firstMcp = createFakeCodex();
+    const firstCodex = createFakeCodex();
+    spawnMock
+      .mockReturnValueOnce(firstMcp.child)
+      .mockImplementationOnce((_command, _args, options) => {
+        const isolatedHome = options?.env?.CODEX_HOME;
+        if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
+        void writeFile(join(isolatedHome, "auth.json"), '{"token":"refreshed"}');
+        return firstCodex.child;
+      });
+
+    await expect(
+      generateWithCodexExec({
+        system: "Return JSON.",
+        prompt: "First.",
+        schema: z.object({ value: z.string() }),
+      }),
+    ).rejects.toThrow("Codex credential persistence failed");
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Second." })).rejects.toThrow(
+      "codex exec timed out after 20ms",
+    );
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+
+    settleRename();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    renameMock.mockImplementation(originalRename);
   }, 7_000);
 
   test("rejects keyring-only authentication before spawning Codex", async () => {

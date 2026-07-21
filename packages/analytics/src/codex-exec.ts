@@ -125,20 +125,29 @@ function getCodexEnv(): NodeJS.ProcessEnv {
   );
 }
 
-async function withCredentialLock<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+type RegisterCredentialMutation = (operation: PromiseLike<unknown>) => void;
+
+async function withCredentialLock<T>(
+  operation: (registerMutation: RegisterCredentialMutation) => Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
   const previous = credentialQueue;
   let release!: () => void;
   const slot = new Promise<void>((resolve) => {
     release = resolve;
   });
   credentialQueue = previous.then(() => slot);
+  let mutationSettlement = Promise.resolve();
+  const registerMutation: RegisterCredentialMutation = (mutation) => {
+    mutationSettlement = Promise.allSettled([mutationSettlement, mutation]).then(() => undefined);
+  };
   let acquired = false;
   try {
     await waitForToolResult(() => previous, signal);
     acquired = true;
-    return await operation();
+    return await operation(registerMutation);
   } finally {
-    if (acquired) release();
+    if (acquired) void mutationSettlement.then(release);
     else void previous.then(release, release);
   }
 }
@@ -211,6 +220,7 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
 async function persistRefreshedCredentials(
   environment: IsolatedEnvironment,
   signal: AbortSignal,
+  registerMutation: RegisterCredentialMutation,
 ): Promise<void> {
   const { authPath, initialAuth, sourceAuthPath } = environment;
   if (!authPath || !initialAuth || !sourceAuthPath) return;
@@ -229,7 +239,9 @@ async function persistRefreshedCredentials(
     signal.throwIfAborted();
     const latestAuth = await readFile(sourceAuthPath, { signal });
     if (!latestAuth.equals(initialAuth)) return;
-    await waitForToolResult(() => rename(stagedAuthPath, sourceAuthPath), signal);
+    const replacement = rename(stagedAuthPath, sourceAuthPath);
+    registerMutation(replacement);
+    await waitForToolResult(() => replacement, signal);
   } finally {
     const removal = rm(stagedAuthPath, { force: true });
     if (signal.aborted) void removal.catch(() => undefined);
@@ -410,6 +422,7 @@ async function generateInIsolation<T>(
   timeoutMs: number,
   controller: AbortController,
   deadline: number,
+  registerMutation: RegisterCredentialMutation,
 ): Promise<CodexExecResult<T>> {
   const environment = await createIsolatedEnvironment(controller.signal);
   let generationResult!: CodexExecResult<T>;
@@ -460,7 +473,7 @@ async function generateInIsolation<T>(
   );
   let persistenceError: unknown;
   try {
-    await persistRefreshedCredentials(environment, persistenceController.signal);
+    await persistRefreshedCredentials(environment, persistenceController.signal, registerMutation);
   } catch (error) {
     persistenceError = error;
     if (generationFailed) {
@@ -508,7 +521,16 @@ export async function generateWithCodexExec<T>(
       throw new Error(`codex exec timed out after ${timeoutMs}ms`);
     }
     const result = await withCredentialLock(
-      () => generateInIsolation(options, toolData, prompt, timeoutMs, controller, deadline),
+      (registerMutation) =>
+        generateInIsolation(
+          options,
+          toolData,
+          prompt,
+          timeoutMs,
+          controller,
+          deadline,
+          registerMutation,
+        ),
       controller.signal,
     );
     controller.signal.throwIfAborted();
