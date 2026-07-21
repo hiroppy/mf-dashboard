@@ -535,7 +535,13 @@ describe("generateWithCodexExec", () => {
 
   test("rejects output whose synchronous validation crosses the deadline", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "100";
-    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(101);
+    const originalLock = lockMock.getMockImplementation()!;
+    lockMock.mockResolvedValue(async () => undefined);
+    vi.spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(101);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     mockCodexRun(mcp, fake);
@@ -547,6 +553,7 @@ describe("generateWithCodexExec", () => {
         schema: z.object({ value: z.string() }),
       }),
     ).rejects.toThrow("codex exec timed out after 100ms");
+    lockMock.mockImplementation(originalLock);
   });
 
   test("times out while creating the isolated environment", async () => {
@@ -574,9 +581,9 @@ describe("generateWithCodexExec", () => {
   });
 
   test("bounds a stalled credential lock release", async () => {
-    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
     const originalLock = lockMock.getMockImplementation()!;
     const originalRm = rmMock.getMockImplementation()!;
+    const originalSetTimeout = globalThis.setTimeout;
     let removedTemporaryAuth = false;
     lockMock.mockResolvedValue(() => new Promise<never>(() => undefined));
     rmMock.mockImplementation((path, options) => {
@@ -585,14 +592,36 @@ describe("generateWithCodexExec", () => {
       }
       return originalRm(path, options);
     });
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      callback: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => originalSetTimeout(callback, delay === 5_000 ? 20 : delay, ...args)) as typeof setTimeout);
+    mockCodexRun(createFakeCodex(), createFakeCodex());
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "codex exec timed out after 20ms",
+      "Codex credential lock release timed out",
     );
-    expect(spawnMock).not.toHaveBeenCalled();
+    expect(spawnMock).toHaveBeenCalled();
     expect(removedTemporaryAuth).toBe(true);
     lockMock.mockImplementation(originalLock);
     rmMock.mockImplementation(originalRm);
+  });
+
+  test("fails closed when credential lock ownership is compromised", async () => {
+    const originalLock = lockMock.getMockImplementation()!;
+    const release = vi.fn<() => Promise<void>>(async () => undefined);
+    lockMock.mockImplementation(async (_file, options) => {
+      setImmediate(() => options?.onCompromised?.(new Error("ownership lost")));
+      return release;
+    });
+    mockCodexRun(createFakeCodex(), createFakeCodex({ hang: true }));
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "Codex credential lock was compromised: ownership lost",
+    );
+    expect(release).toHaveBeenCalledOnce();
+    lockMock.mockImplementation(originalLock);
   });
 
   test("ignores an orphaned legacy empty credential lock", async () => {
@@ -610,20 +639,22 @@ describe("generateWithCodexExec", () => {
     await expect(readFile(lockPath, "utf8")).resolves.toBe("");
   });
 
-  test("releases the auth snapshot lock before spawning Codex", async () => {
+  test("holds the credential lock across Codex token refresh", async () => {
     const originalLock = lockMock.getMockImplementation()!;
-    const releaseSnapshot = vi.fn<() => Promise<void>>(async () => undefined);
-    const releasePersistence = vi.fn<() => Promise<void>>(async () => undefined);
-    lockMock.mockResolvedValueOnce(releaseSnapshot).mockResolvedValueOnce(releasePersistence);
+    const release = vi.fn<() => Promise<void>>(async () => undefined);
+    lockMock.mockResolvedValue(release);
     mockCodexRun(createFakeCodex(), createFakeCodex());
 
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
-    expect(releaseSnapshot).toHaveBeenCalledOnce();
-    expect(releaseSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
-      spawnMock.mock.invocationCallOrder[0]!,
+    expect(release).toHaveBeenCalledOnce();
+    expect(lockMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ retries: 0 }),
     );
-    expect(releasePersistence).toHaveBeenCalledOnce();
+    expect(spawnMock.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      release.mock.invocationCallOrder[0]!,
+    );
     lockMock.mockImplementation(originalLock);
   });
 
