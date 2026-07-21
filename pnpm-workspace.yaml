@@ -3,13 +3,9 @@ packages:
   - packages/*
 
 allowBuilds:
-  "@playwright/browser-chromium": false
-  "@swc/core": true
   better-sqlite3: true
   esbuild: true
   lefthook: true
-  onnxruntime-node: false
-  protobufjs: true
   sharp: true
   workerd: true
 
@@ -35,10 +31,6 @@ minimumReleaseAgeExclude:
   - workerd
   - wrangler
   - "@ai-sdk/gateway@4.0.22"
-
-overrides:
-  "@ai-sdk/gateway@^3.0.0": 3.0.153
-  playwright-core: 1.61.0
 
 catalog:
   "@libsql/client": 0.17.4
