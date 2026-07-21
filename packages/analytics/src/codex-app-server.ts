@@ -8,7 +8,15 @@ import { z } from "zod";
 interface AppServerTool {
   description?: string;
   inputSchema: z.ZodType;
-  execute?: (input: never) => unknown;
+  execute?: (
+    input: never,
+    options: {
+      abortSignal: AbortSignal;
+      context: undefined;
+      messages: [];
+      toolCallId: string;
+    },
+  ) => unknown;
 }
 
 interface AppServerRequest {
@@ -171,7 +179,27 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown tool error";
 }
 
+function waitForToolResult<T>(operation: PromiseLike<T> | T, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(operation).then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 class CodexAppServerConnection {
+  private readonly abortController = new AbortController();
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly maxToolCalls: number;
   private readonly pending = new Map<number, PendingRequest>();
@@ -405,7 +433,15 @@ class CodexAppServerConnection {
     try {
       this.toolNames.push(toolName as string);
       const input = tool.inputSchema.parse(request.params?.arguments);
-      const result = await tool.execute(input as never);
+      const result = await waitForToolResult(
+        tool.execute(input as never, {
+          abortSignal: this.abortController.signal,
+          context: undefined,
+          messages: [],
+          toolCallId: String(request.id),
+        }),
+        this.abortController.signal,
+      );
       this.send({
         id: request.id,
         result: {
@@ -458,6 +494,7 @@ class CodexAppServerConnection {
   private stop(): void {
     if (this.stopped) return;
     this.stopped = true;
+    this.abortController.abort(new Error("codex app-server stopped"));
     this.child.stdin.end();
     this.child.kill();
   }

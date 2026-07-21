@@ -149,7 +149,15 @@ describe("generateWithCodexAppServer", () => {
       toolNames: ["lookupValue"],
       model: "codex-test-model",
     });
-    expect(execute).toHaveBeenCalledWith({});
+    expect(execute).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+        context: undefined,
+        messages: [],
+        toolCallId: "99",
+      }),
+    );
     expect(spawnMock).toHaveBeenCalledWith("codex", ["app-server", "--listen", "stdio://"], {
       cwd: expect.stringContaining("mf-dashboard-codex-"),
       env: expect.objectContaining({
@@ -269,6 +277,39 @@ describe("generateWithCodexAppServer", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(fake.messages).not.toContainEqual(expect.objectContaining({ id: 99 }));
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("aborts an in-flight tool when the connection times out", async () => {
+    process.env.CODEX_APP_SERVER_TIMEOUT_MS = "5";
+    const fake = createFakeAppServer();
+    spawnMock.mockReturnValue(fake.child);
+    let aborted = false;
+    const execute = vi.fn<
+      (input: unknown, options: { abortSignal: AbortSignal }) => Promise<never>
+    >(
+      (_input: unknown, { abortSignal }: { abortSignal: AbortSignal }) =>
+        new Promise<never>((_resolve, reject) => {
+          abortSignal.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(abortSignal.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+
+    await expect(
+      generateWithCodexAppServer({
+        system: "System",
+        prompt: "Call lookupValue.",
+        tools: { lookupValue: { inputSchema: z.object({}), execute } },
+      }),
+    ).rejects.toThrow("codex app-server timed out after 5ms");
+
+    expect(aborted).toBe(true);
     expect(fake.kill).toHaveBeenCalledOnce();
   });
 

@@ -107,7 +107,8 @@ insights の app-server 経路は 20 回の dynamic tool call 上限を持ち、
 app-server 側は 2 倍の有限上限として無制限な反復を防ぐ。
 
 `CODEX_APP_SERVER_TIMEOUT_MS` は接続全体の timeout で、既定値は 120 秒。
-成功、失敗、timeout のいずれでも子プロセスの stdin を閉じて終了させる。
+成功、失敗、timeout のいずれでも子プロセスの stdin を閉じ、実行中の dynamic tool へ
+`AbortSignal` を通知して終了させる。
 `thread/start` が返した実際のモデル名は、生成した analytics report の metadata に保存する。
 
 app-server を使う価値があるのは、会話履歴、承認 UI、ツール実行、ストリーミングイベントを
