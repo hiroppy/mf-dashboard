@@ -87,10 +87,18 @@ analytics package では `AI_BACKEND` によって AI SDK と app-server を選�
 | `codex-app-server` | ログイン済み Codex CLI を子プロセスとして stdio 経由で利用 |
 
 app-server 経路は接続ごとに ephemeral thread を作成し、read-only sandbox と
-`approvalPolicy: "never"` を指定する。既存の Zod output schema は `outputSchema`、
+`approvalPolicy: "never"` を指定する。さらに shell、filesystem、network、apps、plugins、
+MCP、collaboration tool を thread config で無効化し、子プロセスへ渡す環境変数を
+Codex の認証・通信に必要な allowlist に限定する。system prompt は `developerInstructions`、
+取引情報などの untrusted input は turn の user message として分離する。
+既存の Zod output schema は `outputSchema`、
 AI SDK tool 定義は experimental な `dynamicTools` に変換し、tool の実行結果だけを
 app-server へ返す。insights と未分類取引の categorization は同じ生成境界を使うため、
 AI SDK の既存経路を変更せず切り替えられる。
+
+insights の app-server 経路は 20 回の dynamic tool call 上限を持ち、超過時は turn と
+子プロセスを終了する。AI SDK 経路の `stepCountIs(10)` は 1 step で複数 tool を呼び得るため、
+app-server 側は 2 倍の有限上限として無制限な反復を防ぐ。
 
 `CODEX_APP_SERVER_TIMEOUT_MS` は接続全体の timeout で、既定値は 120 秒。
 成功、失敗、timeout のいずれでも子プロセスの stdin を閉じて終了させる。

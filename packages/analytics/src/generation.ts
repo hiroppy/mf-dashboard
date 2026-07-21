@@ -9,6 +9,7 @@ interface GenerateOptions<T> {
   schema?: z.ZodType<T>;
   tools?: ToolSet;
   stopWhen?: Parameters<typeof generateText>[0]["stopWhen"];
+  maxToolCalls?: number;
 }
 
 export interface GenerateResult<T> {
@@ -27,6 +28,7 @@ export async function generateWithConfiguredBackend<T>(
       prompt: options.prompt,
       schema: options.schema,
       tools: options.tools as never,
+      maxToolCalls: options.maxToolCalls,
     });
     return {
       ...result,

@@ -185,6 +185,7 @@ export async function generateInsights(db: Db, groupId: string): Promise<Analyti
   const stage1 = await generateWithConfiguredBackend({
     tools: allTools,
     stopWhen: stepCountIs(10),
+    maxToolCalls: 20,
     system: stage1System,
     prompt: `今日は${today}です。財務データを収集・分析し、詳細な分析メモを作成してください。`,
   });
