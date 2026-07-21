@@ -1,5 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
+const dashboardHeading = "お金の現在地を、ひと目で。";
+
 async function expectHeading(page: Page, name: string | RegExp) {
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 }
@@ -42,7 +44,7 @@ test.describe("App flows", () => {
     });
 
     const chartPages = [
-      { path: "/", heading: "ダッシュボード" },
+      { path: "/", heading: dashboardHeading },
       { path: "/cf", heading: "収支" },
       { path: "/bs", heading: "資産" },
       { path: "/insights", heading: "インサイト" },
@@ -59,7 +61,7 @@ test.describe("App flows", () => {
 
   test("navigates between primary pages from the sidebar", async ({ page }) => {
     await page.goto("/");
-    await expectHeading(page, "ダッシュボード");
+    await expectHeading(page, dashboardHeading);
 
     const destinations = [
       { link: "収支", path: "/cf", heading: "収支" },
@@ -67,7 +69,7 @@ test.describe("App flows", () => {
       { link: "インサイト", path: "/insights", heading: "インサイト" },
       { link: "連携サービス", path: "/accounts", heading: "連携サービス一覧" },
       { link: "シミュレーター", path: "/simulator", heading: "シミュレーター" },
-      { link: "ダッシュボード", path: "/", heading: "ダッシュボード" },
+      { link: "ダッシュボード", path: "/", heading: dashboardHeading },
     ] as const;
 
     for (const { link, path, heading } of destinations) {
