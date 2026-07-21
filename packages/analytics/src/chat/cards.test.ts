@@ -240,6 +240,19 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate category names", () => {
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "categoryBreakdown",
+        title: "支出",
+        categories: [
+          { name: "食費", amount: 100, amountType: "expense", percentage: 40 },
+          { name: "食費", amount: 50, amountType: "expense", percentage: 20 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects duplicate chart data labels", () => {
     expect(
       financeChatCardSchema.safeParse({

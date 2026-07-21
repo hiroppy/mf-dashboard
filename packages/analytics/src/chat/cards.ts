@@ -114,15 +114,25 @@ export const categoryBreakdownCardSchema = z
       .min(1),
   })
   .extend(linkableCardSchema.shape)
-  .refine(
-    (card) =>
-      card.categories.reduce((total, category) => total + category.percentage, 0) <=
-      MAX_CATEGORY_PERCENTAGE_TOTAL,
-    {
-      message: "Category percentages must not total more than 100%",
-      path: ["categories"],
-    },
-  );
+  .superRefine((card, context) => {
+    if (
+      card.categories.reduce((total, category) => total + category.percentage, 0) >
+      MAX_CATEGORY_PERCENTAGE_TOTAL
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Category percentages must not total more than 100%",
+        path: ["categories"],
+      });
+    }
+    if (new Set(card.categories.map((category) => category.name)).size !== card.categories.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Category names must be unique",
+        path: ["categories"],
+      });
+    }
+  });
 
 const chartSeriesSchema = z.object({
   name: z.string().min(1),
