@@ -337,8 +337,8 @@ describe("assertFinanceChatOutput", () => {
       },
     );
 
-    expect(result.reason).toContain("カテゴリ期待値不一致: 食費");
-    expect(result.reason).toContain("fixture にない取引明細");
+    expect(result.reason).toContain("カテゴリ collection が fixture と一致しません");
+    expect(result.reason).toContain("取引明細 collection が fixture と一致しません");
   });
 
   it("validates financial claims and comparisons in card prose", () => {
@@ -364,5 +364,108 @@ describe("assertFinanceChatOutput", () => {
 
     expect(result.reason).toContain("card proseの未根拠金額: 9990000");
     expect(result.reason).toContain("card proseに根拠のない期間比較");
+  });
+
+  it("does not let card prose ground its own period", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "結果です。",
+        cards: [
+          {
+            type: "summary",
+            title: "2020年の収支",
+            metrics: [{ label: "収支", amount: 93_341, amountType: "balance" }],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["summary"],
+          expectedPeriods: ["2026-07"],
+          expectedRoute: "/cf/2026-07",
+        },
+      },
+    );
+
+    expect(result.reason).toContain("card proseの未根拠期間: 2020");
+  });
+
+  it("compares transaction rows as an exact multiset", () => {
+    const transaction = {
+      id: "demo_001265",
+      date: "2026-07-10",
+      description: "成城石井",
+      category: "食費",
+      amount: 3_152,
+      amountType: "expense",
+    };
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "明細です。",
+        cards: [
+          {
+            type: "transactionList",
+            title: "明細",
+            transactions: [transaction, transaction],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["transactionList"],
+          expectedTransactions: ["demo_001265|2026-07-10|成城石井|食費|3152|expense"],
+        },
+      },
+    );
+
+    expect(result.reason).toContain("取引明細 collection が fixture と一致しません");
+  });
+
+  it("rejects unconfigured structured insight amounts", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "見直し候補です。",
+        cards: [
+          {
+            type: "insight",
+            title: "支出改善",
+            description: "食費を確認しましょう",
+            amount: 999_999,
+            amountLabel: "見直し候補額",
+            amountType: "balance",
+            action: { label: "内訳", href: "/demo/cf/2026-07" },
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["insight"],
+          allowedMetricAmounts: [41_837, 19_475, 11_198],
+        },
+      },
+    );
+
+    expect(result.reason).toContain("未根拠 metric: 見直し候補額");
+  });
+
+  it("distinguishes liability claims from total assets", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "負債は5,683,100円です。",
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5_683_100, amountType: "balance" }],
+            href: "/demo/bs",
+          },
+        ],
+      }),
+      { config: { expectedCardTypes: ["summary"] } },
+    );
+
+    expect(result.reason).toContain("本文の未根拠金額: 5683100");
   });
 });

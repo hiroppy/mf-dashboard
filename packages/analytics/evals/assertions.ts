@@ -12,10 +12,12 @@ interface AssertionContext {
     expectedAnyFacts?: Array<string | number>;
     expectedFacts?: Array<string | number>;
     expectedMetrics?: MetricExpectation[];
+    allowedMetricAmounts?: number[];
     expectedCategories?: Array<MetricExpectation & { percentage: number }>;
     expectedTransactions?: string[];
     expectedTransactionTotal?: number;
     expectedRoute?: string;
+    expectedPeriods?: string[];
     forbiddenPhrases?: string[];
   };
 }
@@ -108,7 +110,7 @@ function getNearbyLabel(text: string, index: number): string | undefined {
   const start = Math.max(0, index - 18);
   const context = text.slice(start, index + 18);
   const claimPosition = index - start;
-  return [...context.matchAll(/収入|支出|収支|差額|総資産|食費/g)]
+  return [...context.matchAll(/収入|支出|収支|差額|総資産|負債|借金|債務|食費/g)]
     .sort(
       (left, right) =>
         Math.abs((left.index ?? 0) - claimPosition) - Math.abs((right.index ?? 0) - claimPosition),
@@ -122,7 +124,12 @@ function getAmountTypeForLabel(label: string): MetricExpectation["amountType"] {
   return "balance";
 }
 
-function getTextClaimFailures(text: string, cards: FinanceChatCard[], location = "本文"): string[] {
+function getTextClaimFailures(
+  text: string,
+  cards: FinanceChatCard[],
+  expectedPeriods: string[],
+  location = "本文",
+): string[] {
   const metrics = getMetrics(cards);
   const currencyFailures = parseCurrencyClaims(text).filter(({ amount, index }) => {
     const label = getNearbyLabel(text, index);
@@ -148,9 +155,7 @@ function getTextClaimFailures(text: string, cards: FinanceChatCard[], location =
     .map((match) => Number(match[1]!.replaceAll(",", "")))
     .filter((claim) => !percentages.some((percentage) => Math.abs(percentage - claim) < 0.05));
 
-  const factText = collectFacts(cards)
-    .filter((fact): fact is string => typeof fact === "string")
-    .join(" ");
+  const factText = expectedPeriods.join(" ");
   const supportedPeriods = new Set(
     [...factText.matchAll(/20\d{2}-(\d{2})|20\d{2}年\s*(\d{1,2})月/g)].map((match) =>
       String(Number(match[1] ?? match[2])),
@@ -220,6 +225,14 @@ function getTransactionKey(transaction: {
   ].join("|");
 }
 
+function sorted(values: string[]): string[] {
+  return values.toSorted((left, right) => left.localeCompare(right));
+}
+
+function collectionsMatch(actual: string[], expected: string[]): boolean {
+  return JSON.stringify(sorted(actual)) === JSON.stringify(sorted(expected));
+}
+
 export default function assertFinanceChatOutput(output: string, context: AssertionContext = {}) {
   const result = parseOutput(output);
   if (!result)
@@ -247,26 +260,33 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
         (metric) => !expectedMetrics.some((expected) => metricMatches(metric, expected)),
       )
     : [];
+  const allowedMetricAmounts = config.allowedMetricAmounts ?? [];
+  let disallowedMetrics: MetricExpectation[] = [];
+  if (allowedMetricAmounts.length > 0) {
+    disallowedMetrics = metrics.filter((metric) => !allowedMetricAmounts.includes(metric.amount));
+  } else if (config.allowedMetricAmounts !== undefined && expectedMetrics.length === 0) {
+    disallowedMetrics = metrics;
+  }
   const categories = result.cards.flatMap((card) =>
     card.type === "categoryBreakdown" ? card.categories : [],
   );
-  const invalidCategories = (config.expectedCategories ?? []).filter(
-    (expected) =>
-      !categories.some(
-        (category) =>
-          metricMatches({ label: category.name, ...category }, expected) &&
-          Math.abs(category.percentage - expected.percentage) < 0.05,
-      ),
+  const expectedCategoryKeys = (config.expectedCategories ?? []).map(
+    ({ label, amount, amountType, percentage }) =>
+      `${label}|${amount}|${amountType}|${percentage.toFixed(2)}`,
   );
+  const categoryKeys = categories.map(
+    ({ name, amount, amountType, percentage }) =>
+      `${name}|${amount}|${amountType}|${percentage.toFixed(2)}`,
+  );
+  const categoriesMatch =
+    expectedCategoryKeys.length === 0 || collectionsMatch(categoryKeys, expectedCategoryKeys);
   const transactions = result.cards.flatMap((card) =>
     card.type === "transactionList" ? card.transactions : [],
   );
   const expectedTransactions = config.expectedTransactions ?? [];
-  const invalidTransactions = expectedTransactions.length
-    ? transactions.filter(
-        (transaction) => !expectedTransactions.includes(getTransactionKey(transaction)),
-      )
-    : [];
+  const transactionKeys = transactions.map(getTransactionKey);
+  const transactionsMatch =
+    expectedTransactions.length === 0 || collectionsMatch(transactionKeys, expectedTransactions);
   const transactionTotal = transactions.reduce((total, { amount }) => total + amount, 0);
   const forbiddenPhrases = (config.forbiddenPhrases ?? []).filter((phrase) =>
     visibleOutput.includes(normalize(phrase)),
@@ -291,10 +311,11 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
     unexpectedMetrics.length > 0
       ? `未根拠 metric: ${unexpectedMetrics.map(({ label }) => label).join(", ")}`
       : undefined,
-    invalidCategories.length > 0
-      ? `カテゴリ期待値不一致: ${invalidCategories.map(({ label }) => label).join(", ")}`
+    disallowedMetrics.length > 0
+      ? `未根拠 metric: ${disallowedMetrics.map(({ label }) => label).join(", ")}`
       : undefined,
-    invalidTransactions.length > 0 ? "fixture にない取引明細があります" : undefined,
+    !categoriesMatch ? "カテゴリ collection が fixture と一致しません" : undefined,
+    !transactionsMatch ? "取引明細 collection が fixture と一致しません" : undefined,
     config.expectedTransactionTotal !== undefined &&
     transactionTotal !== config.expectedTransactionTotal
       ? `取引明細合計不一致: ${transactionTotal}（期待: ${config.expectedTransactionTotal}）`
@@ -306,8 +327,13 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
     missingRoute ? `期待 route 不足: ${missingRoute}` : undefined,
     unexpectedRoutes.length > 0 ? `未根拠 route: ${unexpectedRoutes.join(", ")}` : undefined,
     result.text.trim() === "" && result.cards.length === 0 ? "最終回答が空です" : undefined,
-    ...getTextClaimFailures(result.text, result.cards),
-    ...getTextClaimFailures(getCardProse(result.cards), result.cards, "card prose"),
+    ...getTextClaimFailures(result.text, result.cards, config.expectedPeriods ?? []),
+    ...getTextClaimFailures(
+      getCardProse(result.cards),
+      result.cards,
+      config.expectedPeriods ?? [],
+      "card prose",
+    ),
   ].filter((failure): failure is string => failure !== undefined);
 
   return failures.length === 0

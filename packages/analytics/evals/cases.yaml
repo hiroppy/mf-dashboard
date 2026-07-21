@@ -8,6 +8,7 @@
       value: file://./assertions.ts
       config:
         expectedFacts: ["2026-07"]
+        expectedPeriods: ["2026-07"]
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -26,6 +27,7 @@
       value: file://./assertions.ts
       config:
         expectedFacts: ["2026-07", 食費]
+        expectedPeriods: ["2026-07"]
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }
         expectedCategories:
@@ -73,6 +75,7 @@
       config:
         expectedMetrics:
           - { label: 支出, amount: 6587, amountType: expense }
+        expectedPeriods: ["2026-07-10"]
         expectedTransactions:
           - demo_001260|2026-07-10|東京ガス ガス代|水道・光熱費|3435|expense
           - demo_001265|2026-07-10|成城石井|食費|3152|expense
@@ -107,7 +110,9 @@
       value: file://./assertions.ts
       config:
         expectedFacts: ["2026-07"]
+        expectedPeriods: ["2026-07"]
         expectedAnyFacts: [食費, 衣服・美容, 日用品]
+        allowedMetricAmounts: [41837, 19475, 11198]
         expectedCardTypes: [insight]
         expectedRoute: /cf/2026-07
         forbiddenPhrases: [必ず削減できます, データを取得できません, わかりません]
