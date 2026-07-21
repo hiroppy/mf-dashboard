@@ -3,7 +3,7 @@
 ## 結論
 
 `codex app-server` は mf-dashboard の作業ディレクトリで起動でき、stdio
-経由で初期化、スレッド作成、ターン実行、応答のストリーミングまで動作する。
+経由で初期化、スレッド作成、ターン実行、応答受信まで動作する。
 
 ただし、app-server は rich client を作るための experimental なインターフェースであり、
 プロトコルは Codex CLI のバージョンに追従して変わる可能性がある。定型的なジョブや CI
@@ -38,8 +38,9 @@ codex debug app-server send-message-v2 \
 6. app-server が exit code 0 で終了
 
 今回のイベント列にはツール呼び出しや `data/moneyforward.db` へのアクセスはなかった。
-個人データへアクセスしないことも検証する場合は、認証だけを設定した隔離済みの
-`CODEX_HOME` と、対象データを含まない clean な cwd で再実行する。
+個人データへアクセスしないことも検証する場合は、対象データへ到達できない OS または
+container sandbox を使い、認証だけを設定した隔離済みの `CODEX_HOME` と clean な cwd
+（または demo data だけを含む cwd）で再実行する。
 
 ## 接続方式
 
@@ -59,7 +60,8 @@ notification を送る。その後で `thread/start` と `turn/start` を呼び�
 
 WebSocket の公開境界は次のように分ける。
 
-- localhost: `ws://127.0.0.1:PORT` に bind し、同一ホストからだけ接続する
+- localhost: `ws://127.0.0.1:PORT` に bind する。全 local process を信頼できない shared host
+  では `--ws-auth capability-token --ws-token-file /absolute/path` も設定する
 - SSH tunnel: app-server は loopback に bind したままにし、SSH tunnel で暗号化する。
   `--ws-auth capability-token --ws-token-file /absolute/path` も設定する
 - 公開到達可能な接続: app-server を直接公開しない。loopback に bind して TLS 終端 proxy
@@ -84,8 +86,9 @@ app-server を使う価値があるのは、会話履歴、承認 UI、ツール
 
 前提条件と制約は次のとおり。
 
-- Codex CLI のインストールと、ChatGPT ログインまたは trusted automation 用の
-  `CODEX_ACCESS_TOKEN` が必要
+- Codex CLI のインストールと、ChatGPT ログイン、`codex login --with-api-key` で登録した
+  OpenAI API key、または `codex login --with-access-token` で登録した trusted automation 用の
+  `CODEX_ACCESS_TOKEN` のいずれかが必要
 - app-server のクライアント認証と、Codex が上流 API に接続するための認証は別物
 - WebSocket は loopback に限定し、接続境界に応じて SSH または TLS と `--ws-auth` を使う
 - experimental API を使う場合は `initialize` で明示的に opt-in する必要がある
