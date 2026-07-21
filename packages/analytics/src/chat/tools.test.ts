@@ -7,6 +7,14 @@ import { createChatTools, createFinanceChatTools } from "./tools.js";
 
 const db = {} as Db;
 const groupId = "test-group";
+const excludedChatFinancialTools = new Set([
+  "getTransactionsByMonth",
+  "getTransactionsByAccountId",
+  "getMonthlySummaries",
+  "getAvailableMonths",
+  "getAssetHistory",
+  "getAssetHistoryWithCategories",
+]);
 const execOptions = {
   toolCallId: "test",
   messages: [],
@@ -15,17 +23,27 @@ const execOptions = {
 };
 
 describe("createChatTools", () => {
-  it("combines every financial and analysis tool", () => {
+  it("combines bounded financial and analysis tools", () => {
     const financialTools = createFinancialTools(db, groupId);
     const analysisTools = createAnalysisTools(db, groupId);
+    const chatFinancialToolNames = Object.keys(financialTools).filter(
+      (name) => !excludedChatFinancialTools.has(name),
+    );
 
     expect(Object.keys(createChatTools(db, groupId))).toEqual([
       "searchTransactions",
       "getFinanceDashboardRoute",
       "presentFinanceCards",
-      ...Object.keys(financialTools),
+      ...chatFinancialToolNames,
       ...Object.keys(analysisTools),
     ]);
+  });
+
+  it("excludes unbounded raw history tools from interactive chat", () => {
+    const toolNames = new Set(Object.keys(createChatTools(db, groupId)));
+
+    for (const name of excludedChatFinancialTools) expect(toolNames.has(name)).toBe(false);
+    expect(toolNames.has("searchTransactions")).toBe(true);
   });
 
   it("keeps the existing tool factory compatible", () => {
