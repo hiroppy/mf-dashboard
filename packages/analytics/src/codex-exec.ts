@@ -60,6 +60,7 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
+const PATH_ENV_KEYS = new Set(["SSL_CERT_DIR", "SSL_CERT_FILE"]);
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -145,7 +146,7 @@ function getCodexEnv(tempDir: string): NodeJS.ProcessEnv {
     ...Object.fromEntries(
       ALLOWED_ENV_KEYS.flatMap((key) => {
         const value = process.env[key];
-        return value === undefined ? [] : [[key, value]];
+        return value === undefined ? [] : [[key, PATH_ENV_KEYS.has(key) ? resolve(value) : value]];
       }),
     ),
     TEMP: tempDir,
