@@ -197,6 +197,7 @@ async function collectToolData(
   maxToolCalls: number,
   signal: AbortSignal,
 ): Promise<{ data: Record<string, unknown>; toolNames: string[] }> {
+  signal.throwIfAborted();
   const mentionedTools = Object.entries(tools).filter(([name]) => instructions.includes(name));
   if (mentionedTools.length > maxToolCalls) {
     throw new Error(`Codex exec input exceeds ${maxToolCalls} tool calls`);
@@ -224,35 +225,21 @@ async function collectToolData(
   return { data, toolNames };
 }
 
-function buildPrompt(system: string, prompt: string, toolData: Record<string, unknown>): string {
+function buildPrompt(prompt: string, toolData: Record<string, unknown>): string {
   const serializedData = JSON.stringify(toolData);
-  return `<developer_instructions>\n${system}\n\n${DATA_BOUNDARY}\n</developer_instructions>\n\n<user_request>\n${prompt}\n</user_request>\n\n<tool_results>\n${serializedData}\n</tool_results>`;
+  return `<user_request>\n${prompt}\n</user_request>\n\n<tool_results>\n${serializedData}\n</tool_results>`;
 }
 
-async function runCodexExec(
+async function runCodexProcess(
   environment: IsolatedEnvironment,
-  prompt: string,
-  hasSchema: boolean,
+  args: string[],
   signal: AbortSignal,
-): Promise<{ model: string; text: string }> {
-  const args = [
-    "exec",
-    "--ephemeral",
-    "--ignore-user-config",
-    "--ignore-rules",
-    "--sandbox",
-    "read-only",
-    "--skip-git-repo-check",
-    "--output-last-message",
-    environment.outputPath,
-    ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
-  ];
-  if (hasSchema) args.push("--output-schema", environment.schemaPath);
-  if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
-  args.push("-");
-
+  input?: string,
+): Promise<{ stderrHead: string; stdout: string }> {
+  signal.throwIfAborted();
   let stderrHead = "";
   let stderrTail = "";
+  let stdout = "";
   await new Promise<void>((resolve, reject) => {
     const child = spawn("codex", args, {
       cwd: environment.cwd,
@@ -273,7 +260,9 @@ async function runCodexExec(
     };
     const stop = () => finish(signal.reason as Error);
     signal.addEventListener("abort", stop, { once: true });
-    child.stdout.resume();
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
     child.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       stderrHead = `${stderrHead}${text}`.slice(0, 4_000);
@@ -284,13 +273,52 @@ async function runCodexExec(
     child.on("close", (code) => {
       if (code === 0) finish();
       else {
-        finish(
-          new Error(`codex exec exited with code ${code}${stderrTail ? `: ${stderrTail}` : ""}`),
-        );
+        finish(new Error(`codex exited with code ${code}${stderrTail ? `: ${stderrTail}` : ""}`));
       }
     });
-    child.stdin.end(prompt);
+    child.stdin.end(input);
   });
+  return { stderrHead, stdout };
+}
+
+async function assertNoMcpServers(
+  environment: IsolatedEnvironment,
+  signal: AbortSignal,
+): Promise<void> {
+  const args = ["mcp", "list", "--json", ...CODEX_CONFIG.flatMap((config) => ["--config", config])];
+  const { stdout } = await runCodexProcess(environment, args, signal);
+  const servers = JSON.parse(stdout) as unknown;
+  if (!Array.isArray(servers) || servers.length > 0) {
+    throw new Error("codex exec loaded unexpected MCP servers");
+  }
+}
+
+async function runCodexExec(
+  environment: IsolatedEnvironment,
+  system: string,
+  prompt: string,
+  hasSchema: boolean,
+  signal: AbortSignal,
+): Promise<{ model: string; text: string }> {
+  const args = [
+    "exec",
+    "--ephemeral",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--sandbox",
+    "read-only",
+    "--skip-git-repo-check",
+    "--output-last-message",
+    environment.outputPath,
+    ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
+    "--config",
+    `developer_instructions=${JSON.stringify(`${system}\n\n${DATA_BOUNDARY}`)}`,
+  ];
+  if (hasSchema) args.push("--output-schema", environment.schemaPath);
+  if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
+  args.push("-");
+
+  const { stderrHead } = await runCodexProcess(environment, args, signal, prompt);
 
   const text = (await readFile(environment.outputPath, "utf8")).trim();
   const model =
@@ -320,9 +348,11 @@ async function generateInIsolation<T>(
       maxToolCalls,
       controller.signal,
     );
+    await assertNoMcpServers(environment, controller.signal);
     const result = await runCodexExec(
       environment,
-      buildPrompt(options.system, options.prompt, data),
+      options.system,
+      buildPrompt(options.prompt, data),
       Boolean(options.schema),
       controller.signal,
     );

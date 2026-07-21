@@ -23,7 +23,9 @@ afterEach(async () => {
   );
 });
 
-function createFakeCodex(options: { exitCode?: number; output?: string } = {}) {
+function createFakeCodex(
+  options: { exitCode?: number; mcpServers?: unknown[]; output?: string } = {},
+) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   let input = "";
@@ -39,6 +41,12 @@ function createFakeCodex(options: { exitCode?: number; output?: string } = {}) {
     },
     async final(callback) {
       const args = spawnMock.mock.calls.at(-1)?.[1] as string[];
+      if (args[0] === "mcp") {
+        stdout.write(JSON.stringify(options.mcpServers ?? []));
+        queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
+        callback();
+        return;
+      }
       const outputIndex = args.indexOf("--output-last-message");
       if (options.exitCode === undefined || options.exitCode === 0) {
         await writeFile(args[outputIndex + 1]!, options.output ?? '{"value":"ok"}');
@@ -60,8 +68,9 @@ function createFakeCodex(options: { exitCode?: number; output?: string } = {}) {
 describe("generateWithCodexExec", () => {
   test("runs an isolated one-shot command with preloaded tool data and structured output", async () => {
     process.env.UNTRUSTED_SECRET = "must-not-be-forwarded";
+    const mcp = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock.mockReturnValue(fake.child);
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
     const execute = vi.fn<() => Promise<{ value: string }>>(async () => ({
       value: "tool-value",
     }));
@@ -85,7 +94,7 @@ describe("generateWithCodexExec", () => {
     );
     expect(fake.getInput()).toContain('<tool_results>\n{"lookupValue":{"value":"tool-value"}}');
 
-    const [command, args, spawnOptions] = spawnMock.mock.calls[0]!;
+    const [command, args, spawnOptions] = spawnMock.mock.calls[1]!;
     expect(command).toBe("codex");
     expect(args).toEqual(
       expect.arrayContaining([
@@ -96,6 +105,7 @@ describe("generateWithCodexExec", () => {
         "--sandbox",
         "read-only",
         "--output-schema",
+        expect.stringContaining("developer_instructions="),
       ]),
     );
     expect(spawnOptions?.cwd).toContain("mf-dashboard-codex-");
@@ -105,8 +115,9 @@ describe("generateWithCodexExec", () => {
   });
 
   test("does not execute tools that are absent from the instructions", async () => {
+    const mcp = createFakeCodex();
     const fake = createFakeCodex({ output: "plain result" });
-    spawnMock.mockReturnValue(fake.child);
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
     const execute = vi.fn<() => string>(() => "unused");
 
     const result = await generateWithCodexExec({
@@ -179,13 +190,24 @@ describe("generateWithCodexExec", () => {
   });
 
   test("reports non-zero Codex exits", async () => {
+    const mcp = createFakeCodex();
     const fake = createFakeCodex({ exitCode: 2 });
-    spawnMock.mockReturnValue(fake.child);
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "codex exec exited with code 2",
+      "codex exited with code 2",
     );
     expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("fails closed when effective MCP servers are present", async () => {
+    const mcp = createFakeCodex({ mcpServers: [{ name: "managed-server" }] });
+    spawnMock.mockReturnValue(mcp.child);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec loaded unexpected MCP servers",
+    );
+    expect(spawnMock).toHaveBeenCalledOnce();
   });
 
   test("rejects invalid timeout configuration before creating a process", async () => {
@@ -202,8 +224,9 @@ describe("generateWithCodexExec", () => {
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
     await writeFile(sourceAuthPath, '{"token":"initial"}');
     process.env.CODEX_HOME = sourceCodexHome;
+    const mcp = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock.mockImplementation((_command, _args, options) => {
+    spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
       const isolatedHome = options?.env?.CODEX_HOME;
       if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
       void writeFile(join(isolatedHome, "auth.json"), '{"token":"refreshed"}');
