@@ -55,6 +55,21 @@ describe("ActionIcons", () => {
     expect(screen.queryByText("MCP 連携")).toBeNull();
   });
 
+  it("moves the repository link from the header into the help dialog", () => {
+    render(<ActionIcons variant="header" />);
+
+    expect(screen.queryByRole("link", { name: "GitHub リポジトリ" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "ヘルプ" }));
+
+    const repositoryLink = screen.getByRole("link", { name: "GitHub リポジトリ" });
+    const issuesLink = screen.getByRole("link", { name: "バグ報告・機能要望" });
+
+    expect(repositoryLink.getAttribute("href")).toBe("https://github.com/hiroppy/mf-dashboard");
+    expect(repositoryLink.querySelector("svg")).not.toBeNull();
+    expect(repositoryLink.parentElement?.nextElementSibling?.contains(issuesLink)).toBe(true);
+  });
+
   it("does not render a link to the removed daily update workflow", () => {
     process.env.NEXT_PUBLIC_GITHUB_ORG = "org-a";
     process.env.NEXT_PUBLIC_GITHUB_REPO = "repo-a";
