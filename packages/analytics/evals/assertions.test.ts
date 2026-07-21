@@ -7,7 +7,7 @@ const validOutput = JSON.stringify({
     {
       type: "summary",
       title: "食費",
-      metrics: [{ label: "支出", amount: 41_837, amountType: "expense" }],
+      metrics: [{ label: "食費", amount: 41_837, amountType: "expense" }],
     },
     {
       type: "categoryBreakdown",
@@ -162,7 +162,7 @@ describe("assertFinanceChatOutput", () => {
     );
 
     expect(result).toMatchObject({ pass: false, score: 0 });
-    expect(result.reason).toContain("本文の未根拠数値: 999");
+    expect(result.reason).toContain("本文の未根拠金額: 999");
     expect(result.reason).toContain("本文の未根拠期間: 2020");
     expect(result.reason).toContain("黒字／赤字表現");
   });
@@ -192,5 +192,177 @@ describe("assertFinanceChatOutput", () => {
     expect(result).toMatchObject({ pass: false, score: 0 });
     expect(result.reason).toContain("期待 facts 不足: 2026-07");
     expect(result.reason).not.toContain("期待 route 不足");
+  });
+
+  it("binds final-text amounts to financial labels", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "収入は219,894円、支出は313,235円です。",
+        cards: [
+          {
+            type: "summary",
+            title: "2026-07の月次収支",
+            metrics: [
+              { label: "収入", amount: 313_235, amountType: "income" },
+              { label: "支出", amount: 219_894, amountType: "expense" },
+            ],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      { config: { expectedCardTypes: ["summary"] } },
+    );
+
+    expect(result.reason).toContain("本文の未根拠金額");
+  });
+
+  it("accepts correctly labeled amounts and a derived savings rate", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "収入は313,235円、支出は219,894円、貯蓄率は29.8%です。",
+        cards: [
+          {
+            type: "summary",
+            title: "2026-07の月次収支",
+            metrics: [
+              { label: "収入", amount: 313_235, amountType: "income" },
+              { label: "支出", amount: 219_894, amountType: "expense" },
+              { label: "収支", amount: 93_341, amountType: "balance" },
+            ],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      { config: { expectedCardTypes: ["summary"] } },
+    );
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it("rejects scaled yen, yearless month, and fabricated link claims", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "8月の支出は￥999万円です。[詳細](https://example.com)",
+        cards: [
+          {
+            type: "summary",
+            title: "2026-07の支出",
+            metrics: [{ label: "支出", amount: 219_894, amountType: "expense" }],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      { config: { expectedCardTypes: ["summary"] } },
+    );
+
+    expect(result.reason).toContain("9990000");
+    expect(result.reason).toContain("未根拠期間: 8");
+    expect(result.reason).toContain("未根拠リンク: https://example.com");
+  });
+
+  it("rejects unexpected metrics and amount-as-percentage claims", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "貯蓄率は313235%です。",
+        cards: [
+          {
+            type: "summary",
+            title: "2026-07の収支",
+            metrics: [
+              { label: "収入", amount: 313_235, amountType: "income" },
+              { label: "貯蓄", amount: 999_999, amountType: "balance" },
+            ],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["summary"],
+          expectedMetrics: [{ label: "収入", amount: 313_235, amountType: "income" }],
+        },
+      },
+    );
+
+    expect(result.reason).toContain("未根拠 metric: 貯蓄");
+    expect(result.reason).toContain("本文の未根拠割合: 313235");
+  });
+
+  it("validates category percentage and every transaction row", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "2026-07の食費です。",
+        cards: [
+          {
+            type: "summary",
+            title: "食費",
+            metrics: [{ label: "食費", amount: 41_837, amountType: "expense" }],
+          },
+          {
+            type: "categoryBreakdown",
+            title: "カテゴリ別支出",
+            categories: [{ name: "食費", amount: 41_837, amountType: "expense", percentage: 100 }],
+          },
+          {
+            type: "transactionList",
+            title: "食費明細",
+            transactions: [
+              {
+                id: "fabricated",
+                date: "2026-07-10",
+                description: "架空店舗",
+                category: "食費",
+                amount: 41_837,
+                amountType: "expense",
+              },
+            ],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedCardTypes: ["summary", "categoryBreakdown", "transactionList"],
+          expectedCategories: [
+            {
+              label: "食費",
+              amount: 41_837,
+              amountType: "expense",
+              percentage: 19.02598525,
+            },
+          ],
+          expectedTransactions: ["demo_001265|2026-07-10|成城石井|食費|3152|expense"],
+          expectedTransactionTotal: 41_837,
+        },
+      },
+    );
+
+    expect(result.reason).toContain("カテゴリ期待値不一致: 食費");
+    expect(result.reason).toContain("fixture にない取引明細");
+  });
+
+  it("validates financial claims and comparisons in card prose", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "結果をカードにまとめました。",
+        cards: [
+          {
+            type: "summary",
+            title: "2026-07の収支",
+            metrics: [{ label: "支出", amount: 219_894, amountType: "expense" }],
+            href: "/demo/cf/2026-07",
+          },
+          {
+            type: "insight",
+            title: "支出の変化",
+            description: "前月より支出が999万円増えました",
+          },
+        ],
+      }),
+      { config: { expectedCardTypes: ["summary", "insight"] } },
+    );
+
+    expect(result.reason).toContain("card proseの未根拠金額: 9990000");
+    expect(result.reason).toContain("card proseに根拠のない期間比較");
   });
 });

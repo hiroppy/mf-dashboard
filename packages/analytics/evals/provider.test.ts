@@ -12,7 +12,7 @@ describe("FinanceChatProvider", () => {
           steps: [
             {
               toolResults: [
-                { toolName: "getLatestMonthlySummary", output: { income: 1 } },
+                { toolName: "getMonthlySummaryByMonth", output: { income: 1 } },
                 { toolName: "presentFinanceCards", output: [{ type: "summary", amount: 1 }] },
               ],
             },
@@ -21,6 +21,7 @@ describe("FinanceChatProvider", () => {
       });
     const provider = new FinanceChatProvider({}, {
       generate,
+      getDatabasePath: vi.fn<() => string>().mockReturnValue("../../data/demo.db"),
       getCurrentGroup: vi.fn<() => Promise<{ id: string }>>().mockResolvedValue({ id: "demo" }),
       getDb: vi.fn<() => object>().mockReturnValue({}),
       getModel: vi.fn<() => object>().mockReturnValue({}),
@@ -53,6 +54,7 @@ describe("FinanceChatProvider", () => {
   it("returns a clear error when demo.db is missing", async () => {
     const provider = new FinanceChatProvider({}, {
       isLLMEnabled: vi.fn<() => boolean>().mockReturnValue(true),
+      getDatabasePath: vi.fn<() => string>().mockReturnValue("../../data/demo.db"),
       isDatabaseAvailable: vi.fn<() => boolean>().mockReturnValue(false),
     } as never);
 
@@ -60,6 +62,19 @@ describe("FinanceChatProvider", () => {
 
     expect(response.error).toContain("demo.db がありません");
     expect(response.error).toContain("build:demo");
+  });
+
+  it("rejects an unset or non-demo database path", async () => {
+    for (const databasePath of [undefined, "../../data/moneyforward.db"]) {
+      const provider = new FinanceChatProvider({}, {
+        isLLMEnabled: vi.fn<() => boolean>().mockReturnValue(true),
+        getDatabasePath: vi.fn<() => string | undefined>().mockReturnValue(databasePath),
+      } as never);
+
+      await expect(provider.callApi("今月どう？")).resolves.toEqual({
+        error: "評価にはリポジトリの data/demo.db を DB_PATH に指定してください。",
+      });
+    }
   });
 });
 

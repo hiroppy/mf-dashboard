@@ -28,6 +28,36 @@
         expectedFacts: ["2026-07", 食費]
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }
+        expectedCategories:
+          - { label: 食費, amount: 41837, amountType: expense, percentage: 19.02598525 }
+        expectedTransactions:
+          - demo_001283|2026-07-03|サンマルクカフェ|食費|761|expense
+          - demo_001278|2026-07-04|丸亀製麺|食費|1632|expense
+          - demo_001268|2026-07-06|成城石井|食費|3112|expense
+          - demo_001274|2026-07-06|ライフ|食費|1985|expense
+          - demo_001284|2026-07-06|サンマルクカフェ|食費|391|expense
+          - demo_001275|2026-07-09|まいばすけっと|食費|861|expense
+          - demo_001289|2026-07-09|タリーズ|食費|460|expense
+          - demo_001265|2026-07-10|成城石井|食費|3152|expense
+          - demo_001286|2026-07-14|コメダ珈琲|食費|577|expense
+          - demo_001277|2026-07-16|やよい軒|食費|2016|expense
+          - demo_001271|2026-07-17|ライフ|食費|1678|expense
+          - demo_001285|2026-07-17|サンマルクカフェ|食費|759|expense
+          - demo_001267|2026-07-18|まいばすけっと|食費|3037|expense
+          - demo_001270|2026-07-18|サミット|食費|941|expense
+          - demo_001273|2026-07-18|業務スーパー|食費|3393|expense
+          - demo_001264|2026-07-19|オーケー|食費|1004|expense
+          - demo_001272|2026-07-19|ライフ|食費|2668|expense
+          - demo_001280|2026-07-19|餃子の王将|食費|1647|expense
+          - demo_001287|2026-07-20|サンマルクカフェ|食費|666|expense
+          - demo_001276|2026-07-22|ガスト|食費|1537|expense
+          - demo_001288|2026-07-22|タリーズ|食費|489|expense
+          - demo_001282|2026-07-26|サンマルクカフェ|食費|687|expense
+          - demo_001266|2026-07-27|サミット|食費|860|expense
+          - demo_001269|2026-07-27|成城石井|食費|2142|expense
+          - demo_001279|2026-07-29|大戸屋|食費|2744|expense
+          - demo_001281|2026-07-31|すき家|食費|2638|expense
+        expectedTransactionTotal: 41837
         expectedCardTypes: [summary, categoryBreakdown, transactionList]
         expectedRoute: /cf/2026-07
         forbiddenPhrases: [データを取得できません, わかりません]
@@ -43,6 +73,10 @@
       config:
         expectedMetrics:
           - { label: 支出, amount: 6587, amountType: expense }
+        expectedTransactions:
+          - demo_001260|2026-07-10|東京ガス ガス代|水道・光熱費|3435|expense
+          - demo_001265|2026-07-10|成城石井|食費|3152|expense
+        expectedTransactionTotal: 6587
         expectedAnyFacts: ["2026-07-10", "7/10", 7月10日]
         expectedCardTypes: [summary, transactionList, action]
         expectedRoute: /cf/2026-07

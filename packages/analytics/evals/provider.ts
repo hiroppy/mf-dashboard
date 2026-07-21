@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
 import MockDate from "mockdate";
@@ -21,6 +22,7 @@ interface ChatResponse {
 }
 
 interface ProviderDependencies {
+  getDatabasePath: () => string | undefined;
   generate: (options: Parameters<typeof generateText>[0]) => Promise<ChatResponse>;
   getCurrentGroup: typeof getCurrentGroup;
   getDb: typeof getDb;
@@ -30,6 +32,7 @@ interface ProviderDependencies {
 }
 
 const defaultDependencies: ProviderDependencies = {
+  getDatabasePath: () => process.env.DB_PATH,
   generate: generateText as ProviderDependencies["generate"],
   getCurrentGroup,
   getDb,
@@ -37,6 +40,8 @@ const defaultDependencies: ProviderDependencies = {
   isDatabaseAvailable,
   isLLMEnabled,
 };
+
+const DEMO_DB_PATH = resolve(import.meta.dirname, "../../../data/demo.db");
 
 export function toEvaluationOutput(response: ChatResponse) {
   const presentations = response.steps.flatMap(({ toolResults }) =>
@@ -74,6 +79,10 @@ export default class FinanceChatProvider {
     try {
       if (!this.dependencies.isLLMEnabled()) {
         throw new Error("AI_PROVIDER、AI_MODEL、AI_API_KEY を設定してください。");
+      }
+      const databasePath = this.dependencies.getDatabasePath();
+      if (!databasePath || resolve(process.cwd(), databasePath) !== DEMO_DB_PATH) {
+        throw new Error("評価にはリポジトリの data/demo.db を DB_PATH に指定してください。");
       }
       if (!this.dependencies.isDatabaseAvailable()) {
         throw new Error(
