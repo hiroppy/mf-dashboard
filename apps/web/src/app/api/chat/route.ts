@@ -31,7 +31,6 @@ const SIGNATURE_METADATA_KEY = "serverSignature";
 function errorResponse(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
 }
-
 function getMessageText(message: UIMessage): string {
   return message.parts
     .filter((part) => part.type === "text")

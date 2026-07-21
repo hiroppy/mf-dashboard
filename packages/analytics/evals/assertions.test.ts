@@ -391,7 +391,7 @@ describe("assertFinanceChatOutput", () => {
     expect(result.reason).toContain("card proseの未根拠期間: 2020");
   });
 
-  it("compares transaction rows as an exact multiset", () => {
+  it("rejects extra transaction rows when comparing exact multisets", () => {
     const transaction = {
       id: "demo_001265",
       date: "2026-07-10",
@@ -407,7 +407,7 @@ describe("assertFinanceChatOutput", () => {
           {
             type: "transactionList",
             title: "明細",
-            transactions: [transaction, transaction],
+            transactions: [transaction, { ...transaction, id: "demo_001266" }],
             href: "/demo/cf/2026-07",
           },
         ],

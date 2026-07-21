@@ -169,6 +169,25 @@ describe("FinanceChatCard", () => {
     const legend = figure.querySelector('ul[aria-hidden="true"]');
     expect(legend?.textContent).toContain("食費");
     expect(legend?.textContent).toContain("日用品");
-    expect(screen.getByRole("list").textContent).toContain("食費: 3,000円");
+    expect(screen.getByRole("list").textContent).toContain("食費: 支出: 3,000円");
+  });
+
+  it("labels each chart series in the screen-reader fallback", () => {
+    render(
+      <FinanceChatCard
+        card={{
+          type: "chart",
+          title: "収支推移",
+          chartType: "bar",
+          series: [
+            { name: "収入", amountType: "income" },
+            { name: "支出", amountType: "expense" },
+          ],
+          data: [{ label: "7月", values: [300_000, 200_000] }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/7月: 収入: 300,000円、支出: 200,000円/)).toBeTruthy();
   });
 });

@@ -191,6 +191,24 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate transaction IDs", () => {
+    const transaction = {
+      id: "transaction-1",
+      date: "2026-07-01",
+      description: "店舗 A",
+      amount: -100,
+      amountType: "expense",
+    } as const;
+
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "transactionList",
+        title: "取引",
+        transactions: [transaction, transaction],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects category percentages materially above 100%", () => {
     const card = {
       type: "categoryBreakdown" as const,

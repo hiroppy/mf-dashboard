@@ -161,7 +161,8 @@ describe("POST /api/chat", () => {
     expect(systemPrompt).toContain("transactionListは、ユーザーが取引、明細");
     expect(systemPrompt).toContain("比較・推移・構成比を文章や数値だけより明確に");
     expect(systemPrompt).toContain("pieのdataは最大5件");
-    expect(systemPrompt).toContain("必要な指標が一括で得られるgetFinancialMetricsを優先");
+    expect(systemPrompt).toContain("質問に対応する集計ツールを優先");
+    expect(systemPrompt).not.toContain("getFinancialMetrics");
     expect(systemPrompt).toContain("互いに依存しないツールは同じステップで並列");
     expect(systemPrompt).toContain("最新の総資産を取得し、summary");
     expect(systemPrompt).toContain("emptyだけを提示");

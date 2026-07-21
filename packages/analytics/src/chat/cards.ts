@@ -96,7 +96,19 @@ export const transactionListCardSchema = z
       .min(1)
       .max(MAX_TRANSACTION_CARD_ROWS),
   })
-  .extend(linkableCardSchema.shape);
+  .extend(linkableCardSchema.shape)
+  .superRefine((card, context) => {
+    if (
+      new Set(card.transactions.map((transaction) => transaction.id)).size !==
+      card.transactions.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Transaction IDs must be unique",
+        path: ["transactions"],
+      });
+    }
+  });
 
 export const categoryBreakdownCardSchema = z
   .object({
