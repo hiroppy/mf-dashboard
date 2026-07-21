@@ -8,6 +8,7 @@ import {
   getFinanceChatEvaluationDate,
 } from "../src/evals/finance-chat-cases";
 import { evaluateFinanceChatTrace } from "../src/evals/finance-chat-evaluator";
+import { runFinanceChatEvaluationCases } from "../src/evals/finance-chat-runner";
 
 function getSelectedCases(evaluationDate: Date) {
   const evaluationCases = createFinanceChatEvaluationCases(evaluationDate);
@@ -37,9 +38,7 @@ async function main() {
   const selectedCases = getSelectedCases(evaluationDate);
   const tools = createFinanceChatTools(db, group.id);
   const model = getModel();
-  let failed = 0;
-
-  for (const evaluationCase of selectedCases) {
+  const results = await runFinanceChatEvaluationCases(selectedCases, async (evaluationCase) => {
     const response = await generateText({
       model,
       system: getFinanceChatSystemPrompt(evaluationDate),
@@ -47,15 +46,16 @@ async function main() {
       tools,
       stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
     });
-    const result = evaluateFinanceChatTrace(evaluationCase, {
+    return evaluateFinanceChatTrace(evaluationCase, {
       steps: response.steps,
       text: response.text,
     });
+  });
 
-    if (!result.passed) failed += 1;
+  for (const result of results) {
     console.log(
       JSON.stringify({
-        id: evaluationCase.id,
+        id: result.id,
         passed: result.passed,
         tools: result.toolNames,
         cards: result.cardTypes,
@@ -64,6 +64,7 @@ async function main() {
     );
   }
 
+  const failed = results.filter(({ passed }) => !passed).length;
   console.log(
     JSON.stringify({ total: selectedCases.length, passed: selectedCases.length - failed, failed }),
   );

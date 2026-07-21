@@ -36,6 +36,13 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
     expect(monthlySummary?.allowedDataTools).toEqual(["getLatestMonthlySummary"]);
   });
 
+  it("requires actionable content for the spending review", () => {
+    expect(
+      FINANCE_CHAT_EVALUATION_CASES.find(({ id }) => id === "spending-review")
+        ?.requireActionableInsight,
+    ).toBe(true);
+  });
+
   it("uses Asia/Tokyo for relative dates across a UTC month boundary", () => {
     const utcMonthEnd = new Date("2026-07-31T15:30:00.000Z");
     const cases = createFinanceChatEvaluationCases(utcMonthEnd);

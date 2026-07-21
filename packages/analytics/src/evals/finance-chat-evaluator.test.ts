@@ -1129,4 +1129,212 @@ describe("evaluateFinanceChatTrace", () => {
 
     expect(result.passed).toBe(true);
   });
+
+  it("normalizes numeric transaction IDs before record matching", () => {
+    const transactionCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      expectedCardTypes: ["transactionList"],
+    };
+    const transactionCards = [
+      {
+        type: "transactionList" as const,
+        title: "明細",
+        transactions: [
+          {
+            id: "42",
+            date: "2026-07-10",
+            description: "食品店",
+            category: "食費",
+            amount: 1_000,
+            amountType: "expense" as const,
+          },
+        ],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(transactionCase, {
+      text: "明細を表示します。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              output: [
+                {
+                  id: 42,
+                  date: "2026-07-10",
+                  description: "食品店",
+                  category: "食費",
+                  amount: 1_000,
+                  type: "expense",
+                },
+              ],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: transactionCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: transactionCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
+  it("infers financial meaning from prose around a claim", () => {
+    const result = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "今月の支出は300,000円です。" }),
+    );
+
+    expect(result.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+  });
+
+  it("requires actionable spending-review content and grounds byCategory amounts", () => {
+    const spendingCase: FinanceChatEvaluationCase = {
+      ...evaluationCase,
+      id: "spending-review",
+      prompt: "削れそうな支出ある？",
+      toolStrategies: [[{ name: "getFinancialMetrics" }]],
+      allowedDataTools: ["getFinancialMetrics"],
+      expectedCardTypes: ["insight"],
+      requireActionableInsight: true,
+    };
+    const base = createTrace();
+    const evaluateDescription = (description: string) => {
+      const insightCards = [
+        {
+          type: "insight" as const,
+          title: "見直し候補",
+          description,
+          amount: 50_000,
+          amountLabel: "支出額",
+          amountType: "expense" as const,
+          action: { label: "内訳を確認", href },
+        },
+      ];
+      return evaluateFinanceChatTrace(spendingCase, {
+        text: "見直し候補を表示します。",
+        steps: [
+          {
+            toolCalls: [{ toolCallId: "data", toolName: "getFinancialMetrics", input: {} }],
+            toolResults: [
+              {
+                toolCallId: "data",
+                toolName: "getFinancialMetrics",
+                output: { spending: { byCategory: { 食費: 50_000 } } },
+              },
+            ],
+          },
+          base.steps[1]!,
+          {
+            toolCalls: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                input: { cards: insightCards },
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                output: insightCards,
+              },
+            ],
+          },
+        ],
+      });
+    };
+
+    expect(evaluateDescription("支出を見直しましょう。").passed).toBe(false);
+    expect(
+      evaluateDescription("今月の食費は前月平均より高いため、変動要因を確認しましょう。").passed,
+    ).toBe(true);
+  });
+
+  it("does not derive category shares from individual transaction rows", () => {
+    const transactionCategoryCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      expectedCardTypes: ["categoryBreakdown"],
+    };
+    const categoryCards = [
+      {
+        type: "categoryBreakdown" as const,
+        title: "カテゴリ別支出",
+        categories: [
+          { name: "食費", amount: 1_000, amountType: "expense" as const, percentage: 100 },
+        ],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(transactionCategoryCase, {
+      text: "カテゴリ別支出です。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              input: { month: "2026-07", category: "食費", type: "expense" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "searchTransactions",
+              output: [{ id: 1, category: "食費", amount: 1_000, type: "expense" }],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: categoryCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: categoryCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
 });

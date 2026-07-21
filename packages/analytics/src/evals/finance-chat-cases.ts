@@ -8,6 +8,7 @@ export interface FinanceChatEvaluationCase {
   allowedDataTools: readonly string[];
   navigationInput: Readonly<Record<string, unknown>>;
   expectedCardTypes: readonly FinanceChatCard["type"][];
+  requireActionableInsight?: boolean;
 }
 
 export interface FinanceChatToolExpectation {
@@ -72,6 +73,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["getFinancialMetrics"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["insight"],
+      requireActionableInsight: true,
     },
   ];
 }
