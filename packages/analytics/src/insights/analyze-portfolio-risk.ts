@@ -1,5 +1,34 @@
 import type { HoldingInfo, DailyChangeInfo, PortfolioRiskResult } from "./analyzer-types";
 
+function aggregateHoldingsByName(holdings: HoldingInfo[]): HoldingInfo[] {
+  const totals = new Map<string, { amount: number; unrealizedGain: number }>();
+
+  for (const holding of holdings) {
+    const total = totals.get(holding.name) ?? { amount: 0, unrealizedGain: 0 };
+    total.amount += holding.amount;
+    total.unrealizedGain += holding.unrealizedGain;
+    totals.set(holding.name, total);
+  }
+
+  return [...totals].map(([name, total]) => {
+    const costBasis = total.amount - total.unrealizedGain;
+    return {
+      name,
+      amount: total.amount,
+      unrealizedGain: total.unrealizedGain,
+      unrealizedGainPct: costBasis > 0 ? (total.unrealizedGain / costBasis) * 100 : 0,
+    };
+  });
+}
+
+function aggregateDailyChangesByName(changes: DailyChangeInfo[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const change of changes) {
+    totals.set(change.name, (totals.get(change.name) ?? 0) + change.dailyChange);
+  }
+  return totals;
+}
+
 export function analyzePortfolioRisk(
   holdings: HoldingInfo[],
   holdingsWithDailyChange: DailyChangeInfo[],
@@ -23,13 +52,15 @@ export function analyzePortfolioRisk(
     };
   }
 
-  const totalValue = holdings.reduce((s, h) => s + h.amount, 0);
-  const totalUnrealizedGain = holdings.reduce((s, h) => s + h.unrealizedGain, 0);
+  const aggregatedHoldings = aggregateHoldingsByName(holdings);
+
+  const totalValue = aggregatedHoldings.reduce((s, h) => s + h.amount, 0);
+  const totalUnrealizedGain = aggregatedHoldings.reduce((s, h) => s + h.unrealizedGain, 0);
   const costBasis = totalValue - totalUnrealizedGain;
   const totalUnrealizedGainPct = costBasis > 0 ? (totalUnrealizedGain / costBasis) * 100 : 0;
 
   // Concentration
-  const sorted = [...holdings].sort((a, b) => b.amount - a.amount);
+  const sorted = [...aggregatedHoldings].sort((a, b) => b.amount - a.amount);
   const top3 = sorted.slice(0, 3);
   const top3Pct = totalValue > 0 ? (top3.reduce((s, h) => s + h.amount, 0) / totalValue) * 100 : 0;
 
@@ -39,11 +70,11 @@ export function analyzePortfolioRisk(
       : null;
 
   // Daily change analysis
-  const dailyChangeMap = new Map(holdingsWithDailyChange.map((h) => [h.name, h.dailyChange]));
-  const totalDailyChange = holdingsWithDailyChange.reduce((s, h) => s + h.dailyChange, 0);
+  const dailyChangeMap = aggregateDailyChangesByName(holdingsWithDailyChange);
+  const totalDailyChange = [...dailyChangeMap.values()].reduce((sum, change) => sum + change, 0);
   const totalDailyChangePct = totalValue > 0 ? (totalDailyChange / totalValue) * 100 : 0;
 
-  const volatileHoldings = holdings
+  const volatileHoldings = aggregatedHoldings
     .map((h) => {
       const dailyChange = dailyChangeMap.get(h.name) ?? 0;
       const portfolioImpactPct = totalValue > 0 ? (Math.abs(dailyChange) / totalValue) * 100 : 0;
@@ -62,12 +93,12 @@ export function analyzePortfolioRisk(
   }
 
   // Gain/loss counts
-  const positiveCount = holdings.filter((h) => h.unrealizedGain > 0).length;
-  const negativeCount = holdings.filter((h) => h.unrealizedGain < 0).length;
+  const positiveCount = aggregatedHoldings.filter((h) => h.unrealizedGain > 0).length;
+  const negativeCount = aggregatedHoldings.filter((h) => h.unrealizedGain < 0).length;
 
   // Max gain/loss
-  const withGains = holdings.filter((h) => h.unrealizedGain > 0);
-  const withLosses = holdings.filter((h) => h.unrealizedGain < 0);
+  const withGains = aggregatedHoldings.filter((h) => h.unrealizedGain > 0);
+  const withLosses = aggregatedHoldings.filter((h) => h.unrealizedGain < 0);
 
   const maxGainHolding =
     withGains.length > 0 ? withGains.sort((a, b) => b.unrealizedGain - a.unrealizedGain)[0] : null;
@@ -97,7 +128,7 @@ export function analyzePortfolioRisk(
       : null,
     totalDailyChange,
     totalDailyChangePct,
-    holdingsCount: holdings.length,
+    holdingsCount: aggregatedHoldings.length,
     positiveCount,
     negativeCount,
     totalUnrealizedGain,

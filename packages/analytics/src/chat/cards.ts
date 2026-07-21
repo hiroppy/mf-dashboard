@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 export const MAX_PIE_CATEGORIES = 5;
+export const MAX_SUMMARY_CARD_METRICS = 12;
 export const MAX_TRANSACTION_CARD_ROWS = 25;
 const MAX_CATEGORY_PERCENTAGE_TOTAL = 100.1;
-const transactionTextSchema = z.string().trim().min(1).max(200);
+const cardTextSchema = z.string().trim().min(1).max(200);
 
 const routeSegmentSchema = z
   .string()
@@ -64,17 +65,18 @@ const linkableCardSchema = z.object({
 export const summaryCardSchema = z
   .object({
     type: z.literal("summary"),
-    title: z.string().min(1),
-    description: z.string().min(1).optional(),
+    title: cardTextSchema,
+    description: cardTextSchema.optional(),
     metrics: z
       .array(
         z.object({
-          label: z.string().min(1),
+          label: cardTextSchema,
           amount: finiteAmountSchema,
           amountType: amountTypeSchema,
         }),
       )
-      .min(1),
+      .min(1)
+      .max(MAX_SUMMARY_CARD_METRICS),
   })
   .extend(linkableCardSchema.shape);
 
@@ -87,8 +89,8 @@ export const transactionListCardSchema = z
         z.object({
           id: z.string().min(1).max(100),
           date: z.iso.date(),
-          description: transactionTextSchema,
-          category: transactionTextSchema.optional(),
+          description: cardTextSchema,
+          category: cardTextSchema.optional(),
           amount: finiteAmountSchema,
           amountType: z.enum(["income", "expense"]),
         }),

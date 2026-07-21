@@ -191,6 +191,33 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("limits summary metrics and display text", () => {
+    const metric = { label: "収支", amount: 12_000, amountType: "balance" as const };
+    const card = { type: "summary", title: "今月の収支", metrics: [metric] } as const;
+
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        metrics: Array.from({ length: 13 }, (_, index) => ({
+          ...metric,
+          label: `指標${index + 1}`,
+        })),
+      }).success,
+    ).toBe(false);
+    expect(financeChatCardSchema.safeParse({ ...card, title: "a".repeat(201) }).success).toBe(
+      false,
+    );
+    expect(financeChatCardSchema.safeParse({ ...card, description: "a".repeat(201) }).success).toBe(
+      false,
+    );
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        metrics: [{ ...metric, label: "a".repeat(201) }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects duplicate transaction IDs", () => {
     const transaction = {
       id: "transaction-1",

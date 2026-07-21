@@ -344,6 +344,29 @@ describe("analyzePortfolioRisk", () => {
     expect(result.totalDailyChangePct).toBeCloseTo(-2.5);
   });
 
+  it("should aggregate same-named holdings before calculating portfolio risk", () => {
+    const holdings: HoldingInfo[] = [
+      { name: "Fund A", amount: 600000, unrealizedGain: 60000, unrealizedGainPct: 11.1 },
+      { name: "Fund A", amount: 200000, unrealizedGain: -10000, unrealizedGainPct: -4.8 },
+      { name: "Stock B", amount: 200000, unrealizedGain: 10000, unrealizedGainPct: 5.3 },
+    ];
+    const dailyChanges: DailyChangeInfo[] = [
+      { name: "Fund A", dailyChange: 10000 },
+      { name: "Fund A", dailyChange: -5000 },
+    ];
+
+    const result = analyzePortfolioRisk(holdings, dailyChanges, 50);
+
+    expect(result.maxHolding).toEqual({ name: "Fund A", pct: 80 });
+    expect(result.topConcentration.names).toEqual(["Fund A", "Stock B"]);
+    expect(result.volatileHoldings).toEqual([
+      { name: "Fund A", dailyChange: 5000, portfolioImpactPct: 0.5 },
+    ]);
+    expect(result.holdingsCount).toBe(2);
+    expect(result.positiveCount).toBe(2);
+    expect(result.negativeCount).toBe(0);
+  });
+
   it("should count positive and negative holdings", () => {
     const holdings: HoldingInfo[] = [
       { name: "A", amount: 300000, unrealizedGain: 50000, unrealizedGainPct: 20 },
