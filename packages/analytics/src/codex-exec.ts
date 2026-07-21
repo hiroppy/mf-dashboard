@@ -648,24 +648,26 @@ async function generateInIsolation<T>(
     generationError = error;
   }
 
-  const persistenceController = new AbortController();
-  const persistenceTimeout = setTimeout(
-    () =>
-      persistenceController.abort(
-        new Error(
-          `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
-        ),
-      ),
-    CREDENTIAL_PERSIST_TIMEOUT_MS,
-  );
   let persistenceFailed = false;
-  try {
-    await persistRefreshedCredentials(environment, persistenceController.signal);
-  } catch {
-    persistenceFailed = true;
-    console.warn("[analytics] Failed to persist refreshed Codex credentials");
-  } finally {
-    clearTimeout(persistenceTimeout);
+  if (!generationFailed) {
+    const persistenceController = new AbortController();
+    const persistenceTimeout = setTimeout(
+      () =>
+        persistenceController.abort(
+          new Error(
+            `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
+          ),
+        ),
+      CREDENTIAL_PERSIST_TIMEOUT_MS,
+    );
+    try {
+      await persistRefreshedCredentials(environment, persistenceController.signal);
+    } catch {
+      persistenceFailed = true;
+      console.warn("[analytics] Failed to persist refreshed Codex credentials");
+    } finally {
+      clearTimeout(persistenceTimeout);
+    }
   }
   await removeTemporaryEnvironment(environment.root);
 

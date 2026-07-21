@@ -375,6 +375,30 @@ describe("generateWithCodexExec", () => {
     expect(fake.kill).not.toHaveBeenCalled();
   });
 
+  test("does not persist credentials from a failed Codex process", async () => {
+    const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
+    temporaryDirectories.push(sourceCodexHome);
+    const sourceAuthPath = join(sourceCodexHome, "auth.json");
+    await writeFile(sourceAuthPath, '{"token":"initial"}');
+    process.env.CODEX_HOME = sourceCodexHome;
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ exitCode: 2 });
+    spawnMock
+      .mockReturnValueOnce(mcp.child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockImplementation((_command, _args, options) => {
+        writeFileSync(join(options?.env?.CODEX_HOME as string, "auth.json"), "{}");
+        return fake.child;
+      });
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exited with code 2",
+    );
+
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"initial"}');
+  });
+
   test("redacts malformed structured output from parser errors", async () => {
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ output: "private financial summary is malformed" });
