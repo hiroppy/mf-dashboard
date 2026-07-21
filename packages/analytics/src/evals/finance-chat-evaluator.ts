@@ -132,10 +132,12 @@ function isDataTool(toolName: string): boolean {
 }
 
 type FinancialUnit = "currency" | "percentage";
+type AmountType = "income" | "expense" | "balance";
 
 interface FinancialClaim {
   value: number;
   unit: FinancialUnit;
+  amountType?: AmountType;
 }
 
 interface GroundedRecord {
@@ -161,9 +163,24 @@ function getFinancialUnit(key: string): FinancialUnit | undefined {
   return undefined;
 }
 
-function addClaim(grounded: GroundedValues, value: unknown, unit: FinancialUnit | undefined): void {
+function getAmountType(key: string, record?: GroundedRecord): AmountType | undefined {
+  const recordType = record?.type;
+  if (recordType === "income" || recordType === "expense") return recordType;
+
+  const normalized = key.toLowerCase();
+  if (normalized.includes("income")) return "income";
+  if (normalized.includes("expense")) return "expense";
+  return getFinancialUnit(key) === "currency" ? "balance" : undefined;
+}
+
+function addClaim(
+  grounded: GroundedValues,
+  value: unknown,
+  unit: FinancialUnit | undefined,
+  amountType?: AmountType,
+): void {
   if (unit !== undefined && typeof value === "number" && Number.isFinite(value)) {
-    grounded.claims.push({ value, unit });
+    grounded.claims.push({ value, unit, amountType });
   }
 }
 
@@ -182,14 +199,14 @@ function collectGroundedValues(value: unknown, grounded: GroundedValues, key = "
         ? [{ amount, record: entry as GroundedRecord }]
         : [];
     });
-    if (amountRecords.length > 0) {
-      const total = amountRecords.reduce((sum, { amount }) => sum + amount, 0);
-      grounded.claims.push({
-        value: total,
-        unit: "currency",
-      });
-      if (total !== 0) {
-        for (const { amount, record } of amountRecords) {
+    const recordsByType = Map.groupBy(amountRecords, ({ record }) =>
+      getAmountType("amount", record),
+    );
+    for (const [amountType, typedRecords] of recordsByType) {
+      const total = typedRecords.reduce((sum, { amount }) => sum + amount, 0);
+      grounded.claims.push({ value: total, unit: "currency", amountType });
+      if (total !== 0 && amountType !== undefined) {
+        for (const { amount, record } of typedRecords) {
           const category = record.category ?? record.name;
           if (typeof category === "string") {
             const percentage = (amount / total) * 100;
@@ -210,24 +227,29 @@ function collectGroundedValues(value: unknown, grounded: GroundedValues, key = "
     const record = value as GroundedRecord;
     grounded.records.push(record);
     for (const [entryKey, entry] of Object.entries(record)) {
-      collectGroundedValues(entry, grounded, entryKey);
+      if (typeof entry === "number") {
+        addClaim(grounded, entry, getFinancialUnit(entryKey), getAmountType(entryKey, record));
+      } else {
+        collectGroundedValues(entry, grounded, entryKey);
+      }
     }
 
     const income = record.income ?? record.totalIncome;
     const expense = record.expense ?? record.totalExpense;
     if (typeof income === "number" && typeof expense === "number") {
-      grounded.claims.push({ value: income - expense, unit: "currency" });
+      grounded.claims.push({ value: income - expense, unit: "currency", amountType: "balance" });
     }
     return;
   }
 
-  addClaim(grounded, value, getFinancialUnit(key));
+  addClaim(grounded, value, getFinancialUnit(key), getAmountType(key));
 }
 
 function isGroundedClaim(claim: FinancialClaim, sources: readonly FinancialClaim[]): boolean {
   return sources.some(
     (source) =>
       source.unit === claim.unit &&
+      (claim.amountType === undefined || source.amountType === claim.amountType) &&
       Math.abs(source.value - claim.value) < (claim.unit === "percentage" ? 0.5 : 0.01),
   );
 }
@@ -242,23 +264,31 @@ function getCardClaims(cards: readonly FinanceChatCard[]): {
   for (const card of cards) {
     if (card.type === "summary") {
       claims.push(
-        ...card.metrics.map(({ amount }) => ({ value: amount, unit: "currency" as const })),
+        ...card.metrics.map(({ amount, amountType }) => ({
+          value: amount,
+          unit: "currency" as const,
+          amountType,
+        })),
       );
     }
     if (card.type === "insight" && card.amount !== undefined) {
-      claims.push({ value: card.amount, unit: "currency" });
+      claims.push({ value: card.amount, unit: "currency", amountType: card.amountType });
     }
     if (card.type === "chart") {
       claims.push(
         ...card.data.flatMap(({ values }) =>
-          values.map((value) => ({ value, unit: "currency" as const })),
+          values.map((value, index) => ({
+            value,
+            unit: "currency" as const,
+            amountType: card.series[index]?.amountType,
+          })),
         ),
       );
     }
     if (card.type === "categoryBreakdown") {
       for (const category of card.categories) {
         claims.push(
-          { value: category.amount, unit: "currency" },
+          { value: category.amount, unit: "currency", amountType: category.amountType },
           { value: category.percentage, unit: "percentage" },
         );
         strings.push(category.name);
@@ -266,7 +296,11 @@ function getCardClaims(cards: readonly FinanceChatCard[]): {
     }
     if (card.type === "transactionList") {
       for (const transaction of card.transactions) {
-        claims.push({ value: transaction.amount, unit: "currency" });
+        claims.push({
+          value: transaction.amount,
+          unit: "currency",
+          amountType: transaction.amountType,
+        });
         strings.push(
           transaction.id,
           transaction.date,
@@ -280,27 +314,38 @@ function getCardClaims(cards: readonly FinanceChatCard[]): {
   return { claims, strings };
 }
 
-function extractFinancialClaims(text: string): FinancialClaim[] {
-  const claims: FinancialClaim[] = [];
-  const number = "-?\\d[\\d,]*(?:\\.\\d+)?";
-  const pattern = new RegExp(
-    `(?:¥\\s*(${number})\\s*(兆|億|万|千)?(?:\\s*円)?|(${number})\\s*(兆|億|万|千)?\\s*(円|%|％))`,
-    "g",
-  );
+function parseJapaneseCurrency(expression: string): number {
+  const negative = expression.trimStart().startsWith("-");
+  const unsigned = expression.replace(/^\s*-/, "");
   const multipliers: Record<string, number> = {
     兆: 1_000_000_000_000,
     億: 100_000_000,
     万: 10_000,
     千: 1_000,
   };
+  let value = 0;
+  for (const component of unsigned.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(兆|億|万|千)?/g)) {
+    value += Number(component[1]?.replaceAll(",", "")) * (multipliers[component[2] ?? ""] ?? 1);
+  }
+  return negative ? -value : value;
+}
+
+function extractFinancialClaims(text: string): FinancialClaim[] {
+  const claims: FinancialClaim[] = [];
+  const number = "-?\\d[\\d,]*(?:\\.\\d+)?";
+  const currency = `(?:${number}\\s*(?:兆|億|万|千)\\s*)*${number}\\s*(?:兆|億|万|千)?`;
+  const pattern = new RegExp(
+    `(?:¥\\s*(${currency})(?:\\s*円)?|(${currency})\\s*円|(${number})\\s*(%|％))`,
+    "g",
+  );
 
   for (const match of text.matchAll(pattern)) {
-    const value = Number((match[1] ?? match[3])?.replaceAll(",", ""));
-    const multiplier = multipliers[match[2] ?? match[4] ?? ""] ?? 1;
-    claims.push({
-      value: value * multiplier,
-      unit: match[5] === "%" || match[5] === "％" ? "percentage" : "currency",
-    });
+    const percentage = match[3];
+    claims.push(
+      percentage === undefined
+        ? { value: parseJapaneseCurrency(match[1] ?? match[2] ?? ""), unit: "currency" }
+        : { value: Number(percentage.replaceAll(",", "")), unit: "percentage" },
+    );
   }
   return claims;
 }
@@ -335,6 +380,35 @@ function recordMatches(record: GroundedRecord, expected: GroundedRecord): boolea
       return Math.abs(actual - value) < (key === "percentage" ? 0.5 : 0.01);
     }
     return actual === value;
+  });
+}
+
+function getLabelAmountType(label: string): AmountType | undefined {
+  if (/(?:収入|所得|入金)/.test(label)) return "income";
+  if (/(?:支出|費用|出金)/.test(label)) return "expense";
+  if (/(?:収支|資産|残高|貯蓄|手残り|負債)/.test(label)) return "balance";
+  return undefined;
+}
+
+function areCardLabelsConsistent(cards: readonly FinanceChatCard[]): boolean {
+  return cards.every((card) => {
+    if (card.type === "summary") {
+      return card.metrics.every(({ label, amountType }) => {
+        const labelType = getLabelAmountType(label);
+        return labelType === undefined || labelType === amountType;
+      });
+    }
+    if (card.type === "insight" && card.amountLabel !== undefined) {
+      const labelType = getLabelAmountType(card.amountLabel);
+      return labelType === undefined || labelType === card.amountType;
+    }
+    if (card.type === "chart") {
+      return card.series.every(({ name, amountType }) => {
+        const labelType = getLabelAmountType(name);
+        return labelType === undefined || labelType === amountType;
+      });
+    }
+    return true;
   });
 }
 
@@ -473,6 +547,7 @@ export function evaluateFinanceChatTrace(
     ungroundedCardClaims.length > 0 ||
     ungroundedCardStrings.length > 0 ||
     ungroundedCardProse.length > 0 ||
+    !areCardLabelsConsistent(cards) ||
     !areCardRecordsGrounded(cards, grounded.records)
   ) {
     violations.push("カード内容に取得結果で根拠付けられない金融 claim が含まれる");

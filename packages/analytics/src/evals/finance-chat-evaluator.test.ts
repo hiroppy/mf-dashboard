@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { FinanceChatCard } from "../chat/cards";
 import type { FinanceChatEvaluationCase } from "./finance-chat-cases";
 import {
   evaluateFinanceChatTrace,
@@ -964,5 +965,168 @@ describe("evaluateFinanceChatTrace", () => {
     expect(selfDivision.violations).toContain(
       "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
     );
+  });
+
+  it("derives category percentages within each amount type", () => {
+    const mixedCategoryCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      toolStrategies: [[{ name: "getMonthlyCategoryTotals", input: { month: "2026-07" } }]],
+      allowedDataTools: ["getMonthlyCategoryTotals"],
+      expectedCardTypes: ["categoryBreakdown"],
+    };
+    const categoryCards = [
+      {
+        type: "categoryBreakdown" as const,
+        title: "カテゴリ別支出",
+        categories: [
+          {
+            name: "食費",
+            amount: 1_000,
+            amountType: "expense" as const,
+            percentage: 33.33,
+          },
+        ],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(mixedCategoryCase, {
+      text: "カテゴリ別支出です。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "data",
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "getMonthlyCategoryTotals",
+              output: [
+                { category: "給与", totalAmount: 10_000, type: "income" },
+                { category: "食費", totalAmount: 1_000, type: "expense" },
+                { category: "交通費", totalAmount: 2_000, type: "expense" },
+              ],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: categoryCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: categoryCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
+  it("rejects summary amounts assigned to the wrong financial type or label", () => {
+    const base = createTrace();
+    const wrongTypeCards = cards.map((card) =>
+      card.type === "summary"
+        ? {
+            ...card,
+            metrics: [{ label: "支出", amount: 300_000, amountType: "expense" as const }],
+          }
+        : card,
+    );
+    const wrongLabelCards = cards.map((card) =>
+      card.type === "summary"
+        ? {
+            ...card,
+            metrics: [{ label: "収入", amount: 250_000, amountType: "expense" as const }],
+          }
+        : card,
+    );
+    const evaluateCards = (replacementCards: FinanceChatCard[]) =>
+      evaluateFinanceChatTrace(evaluationCase, {
+        ...base,
+        text: "今月の状況です。",
+        steps: [
+          ...base.steps.slice(0, 2),
+          {
+            toolCalls: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                input: { cards: replacementCards },
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                output: replacementCards,
+              },
+            ],
+          },
+        ],
+      });
+
+    expect(evaluateCards(wrongTypeCards).violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+    expect(evaluateCards(wrongLabelCards).violations).toContain(
+      "カード内容に取得結果で根拠付けられない金融 claim が含まれる",
+    );
+  });
+
+  it("parses compound Japanese currency expressions as single claims", () => {
+    const base = createTrace();
+    const compoundCards = cards.map((card) =>
+      card.type === "summary"
+        ? { ...card, metrics: [{ ...card.metrics[0]!, amount: 15_000 }] }
+        : card,
+    );
+    const result = evaluateFinanceChatTrace(evaluationCase, {
+      text: "収入は12万3,000円、収支は1万5千円です。",
+      steps: [
+        {
+          ...base.steps[0]!,
+          toolResults: [
+            {
+              toolCallId: "data",
+              toolName: "getLatestMonthlySummary",
+              output: { income: 123_000, expense: 108_000 },
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: compoundCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: compoundCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.passed).toBe(true);
   });
 });
