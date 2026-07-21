@@ -77,6 +77,8 @@ function createFakeCodex(
 
 describe("generateWithCodexExec", () => {
   test("runs an isolated one-shot command with preloaded tool data and structured output", async () => {
+    process.env.CODEX_ACCESS_TOKEN = "must-not-be-forwarded";
+    process.env.OPENAI_API_KEY = "must-not-be-forwarded";
     process.env.UNTRUSTED_SECRET = "must-not-be-forwarded";
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
@@ -113,6 +115,7 @@ describe("generateWithCodexExec", () => {
         "--ephemeral",
         "--ignore-user-config",
         "--ignore-rules",
+        "--strict-config",
         "--sandbox",
         "read-only",
         "--output-schema",
@@ -122,6 +125,12 @@ describe("generateWithCodexExec", () => {
     expect(spawnOptions?.cwd).toContain("mf-dashboard-codex-");
     expect(spawnOptions?.env).not.toEqual(
       expect.objectContaining({ UNTRUSTED_SECRET: expect.anything() }),
+    );
+    expect(spawnOptions?.env).not.toEqual(
+      expect.objectContaining({
+        CODEX_ACCESS_TOKEN: expect.anything(),
+        OPENAI_API_KEY: expect.anything(),
+      }),
     );
   });
 
