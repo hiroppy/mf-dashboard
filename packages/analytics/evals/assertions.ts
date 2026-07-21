@@ -3,6 +3,7 @@ interface AssertionContext {
     expectedCardTypes?: string[];
     expectedAnyFacts?: Array<string | number>;
     expectedFacts?: Array<string | number>;
+    expectedMetrics?: Array<{ label: string; amount: number; amountType: string }>;
     expectedRoute?: string;
     forbiddenPhrases?: string[];
   };
@@ -60,6 +61,59 @@ function getRoutes(cards: FinanceChatCard[]): string[] {
   });
 }
 
+function getMetrics(cards: FinanceChatCard[]) {
+  return cards.flatMap((card) => {
+    if (card.type === "summary") return card.metrics;
+    if (card.type === "categoryBreakdown") {
+      return card.categories.map(({ name, amount, amountType }) => ({
+        label: name,
+        amount,
+        amountType,
+      }));
+    }
+    if (card.type === "insight" && card.amount !== undefined) {
+      return [{ label: card.amountLabel!, amount: card.amount, amountType: card.amountType! }];
+    }
+    return [];
+  });
+}
+
+function getTextClaimFailures(text: string, cards: FinanceChatCard[]): string[] {
+  const facts = collectFacts(cards);
+  const cardNumbers = facts.filter((fact): fact is number => typeof fact === "number");
+  const currencyClaims = [...text.matchAll(/[¥￥]?\s*(-?[\d,]+(?:\.\d+)?)\s*円/g)].map((match) =>
+    Number(match[1]!.replaceAll(",", "")),
+  );
+  const percentageClaims = [...text.matchAll(/(-?[\d,]+(?:\.\d+)?)\s*[%％]/g)].map((match) =>
+    Number(match[1]!.replaceAll(",", "")),
+  );
+  const unsupportedNumbers = [...currencyClaims, ...percentageClaims].filter(
+    (claim) => !cardNumbers.includes(claim),
+  );
+
+  const cardText = facts.filter((fact): fact is string => typeof fact === "string").join(" ");
+  const unsupportedPeriods = [...text.matchAll(/(20\d{2})年(?:\s*(\d{1,2})月)?/g)]
+    .map((match) =>
+      match[2] ? `${match[1]}-${String(Number(match[2])).padStart(2, "0")}` : String(match[1]),
+    )
+    .filter((period) => !normalize(cardText).includes(normalize(period)));
+
+  const balance = getMetrics(cards).find(({ label }) => /収支|差額/.test(label));
+  const invertedBalance =
+    (text.includes("赤字") && balance && balance.amount >= 0) ||
+    (text.includes("黒字") && balance && balance.amount < 0);
+
+  return [
+    unsupportedNumbers.length > 0
+      ? `本文の未根拠数値: ${[...new Set(unsupportedNumbers)].join(", ")}`
+      : undefined,
+    unsupportedPeriods.length > 0
+      ? `本文の未根拠期間: ${[...new Set(unsupportedPeriods)].join(", ")}`
+      : undefined,
+    invertedBalance ? "本文の黒字／赤字表現が card の収支と矛盾しています" : undefined,
+  ].filter((failure): failure is string => failure !== undefined);
+}
+
 export default function assertFinanceChatOutput(output: string, context: AssertionContext = {}) {
   const result = parseOutput(output);
   if (!result)
@@ -77,6 +131,16 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
     cardTypes.length === expectedCardTypes.length &&
     cardTypes.every((type, index) => type === expectedCardTypes[index]);
   const visibleOutput = normalize(JSON.stringify({ text: result.text, cards: result.cards }));
+  const metrics = getMetrics(result.cards);
+  const missingMetrics = (config.expectedMetrics ?? []).filter(
+    (expected) =>
+      !metrics.some(
+        (metric) =>
+          normalize(metric.label).includes(normalize(expected.label)) &&
+          metric.amount === expected.amount &&
+          metric.amountType === expected.amountType,
+      ),
+  );
   const forbiddenPhrases = (config.forbiddenPhrases ?? []).filter((phrase) =>
     visibleOutput.includes(normalize(phrase)),
   );
@@ -91,12 +155,16 @@ export default function assertFinanceChatOutput(output: string, context: Asserti
     config.expectedAnyFacts?.length && !hasExpectedAlternative
       ? `期待候補 facts 不足: ${config.expectedAnyFacts.join(", ")}`
       : undefined,
+    missingMetrics.length > 0
+      ? `期待 metric 不足: ${missingMetrics.map(({ label }) => label).join(", ")}`
+      : undefined,
     !hasExpectedCardOrder
       ? `card 順序不一致: ${cardTypes.join(", ")}（期待: ${expectedCardTypes.join(", ")}）`
       : undefined,
     forbiddenPhrases.length > 0 ? `禁止表現: ${forbiddenPhrases.join(", ")}` : undefined,
     missingRoute ? `期待 route 不足: ${missingRoute}` : undefined,
     result.text.trim() === "" && result.cards.length === 0 ? "最終回答が空です" : undefined,
+    ...getTextClaimFailures(result.text, result.cards),
   ].filter((failure): failure is string => failure !== undefined);
 
   return failures.length === 0

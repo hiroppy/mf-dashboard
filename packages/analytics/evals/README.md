@@ -4,10 +4,9 @@
 
 ## 実行
 
-リポジトリルートで demo データを生成し、AI provider を設定する。
+`eval:chat` は再現可能な fixture として `demo.db` を 2026-07 まで再生成してから評価する。AI provider を設定してリポジトリルートで実行する。
 
 ```sh
-pnpm --filter @mf-dashboard/db build:demo
 AI_PROVIDER=openai AI_MODEL=<provider-model-id> AI_API_KEY=<provider-api-key> \
   pnpm --filter @mf-dashboard/analytics eval:chat
 ```
