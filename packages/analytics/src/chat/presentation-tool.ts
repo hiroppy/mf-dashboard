@@ -10,7 +10,10 @@ function getCardHrefs(cards: FinanceChatCard[]): string[] {
   });
 }
 
-export function createFinancePresentationInputSchema(groupId: string) {
+export function createFinancePresentationInputSchema(
+  groupId: string,
+  allowedHrefs?: ReadonlySet<string>,
+) {
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
 
   return z.object({ cards: financeChatCardsSchema }).superRefine(({ cards }, context) => {
@@ -21,16 +24,22 @@ export function createFinancePresentationInputSchema(groupId: string) {
           message: "CTA routes must belong to the current group",
           path: ["cards"],
         });
+      } else if (allowedHrefs !== undefined && !allowedHrefs.has(href)) {
+        context.addIssue({
+          code: "custom",
+          message: "CTA routes must come from the navigation tool",
+          path: ["cards"],
+        });
       }
     }
   });
 }
 
-export function createFinancePresentationTool(groupId: string) {
+export function createFinancePresentationTool(groupId: string, allowedHrefs?: ReadonlySet<string>) {
   return tool({
     description:
       "取得済みの家計データを検証済みの画面カードとして提示する。必要なデータ取得後、ユーザーへの回答ごとに1回だけ呼び出す。データがない場合は推測せずemptyカードを使う",
-    inputSchema: createFinancePresentationInputSchema(groupId),
+    inputSchema: createFinancePresentationInputSchema(groupId, allowedHrefs),
     execute: async ({ cards }) => cards,
   });
 }

@@ -159,6 +159,28 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects category percentages materially above 100%", () => {
+    const card = {
+      type: "categoryBreakdown" as const,
+      title: "カテゴリ別支出",
+      categories: [
+        { name: "食費", amount: -6_000, amountType: "expense" as const, percentage: 60 },
+        { name: "住居費", amount: -6_000, amountType: "expense" as const, percentage: 60 },
+      ],
+    };
+
+    expect(financeChatCardSchema.safeParse(card).success).toBe(false);
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        categories: card.categories.map((category, index) => ({
+          ...category,
+          percentage: index === 0 ? 50.1 : 50,
+        })),
+      }).success,
+    ).toBe(true);
+  });
+
   it("rejects chart data that does not match its series", () => {
     expect(
       financeChatCardSchema.safeParse({

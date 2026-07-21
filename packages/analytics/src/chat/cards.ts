@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const MAX_PIE_CATEGORIES = 5;
+const MAX_CATEGORY_PERCENTAGE_TOTAL = 100.1;
 
 const routeSegmentSchema = z
   .string()
@@ -109,7 +110,16 @@ export const categoryBreakdownCardSchema = z
       )
       .min(1),
   })
-  .extend(linkableCardSchema.shape);
+  .extend(linkableCardSchema.shape)
+  .refine(
+    (card) =>
+      card.categories.reduce((total, category) => total + category.percentage, 0) <=
+      MAX_CATEGORY_PERCENTAGE_TOTAL,
+    {
+      message: "Category percentages must not total more than 100%",
+      path: ["categories"],
+    },
+  );
 
 const chartSeriesSchema = z.object({
   name: z.string().min(1),

@@ -45,7 +45,15 @@ const transactionSearchInputSchema = z
   .refine(({ startDate, endDate }) => !startDate || !endDate || startDate <= endDate, {
     message: "開始日は終了日以前を指定してください",
     path: ["endDate"],
-  });
+  })
+  .refine(
+    ({ minAmount, maxAmount }) =>
+      minAmount === undefined || maxAmount === undefined || minAmount <= maxAmount,
+    {
+      message: "最小金額は最大金額以下を指定してください",
+      path: ["maxAmount"],
+    },
+  );
 
 export function createTransactionSearchTool(db: Db, groupId: string) {
   return tool({
