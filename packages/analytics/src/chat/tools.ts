@@ -24,6 +24,15 @@ function createChatFinancialTools(db: Db, groupId: string) {
   };
 }
 
+function createChatAnalysisTools(db: Db, groupId: string) {
+  const tools = createAnalysisTools(db, groupId);
+
+  return {
+    analyzeSpendingComparison: tools.analyzeSpendingComparison,
+    analyzePortfolioRisk: tools.analyzePortfolioRisk,
+  };
+}
+
 export function createFinanceChatTools(db: Db, groupId: string) {
   const allowedHrefs = new Set<string>();
 
@@ -32,7 +41,7 @@ export function createFinanceChatTools(db: Db, groupId: string) {
     getFinanceDashboardRoute: createFinanceNavigationTool(groupId, allowedHrefs),
     presentFinanceCards: createFinancePresentationTool(groupId, allowedHrefs),
     ...createChatFinancialTools(db, groupId),
-    ...createAnalysisTools(db, groupId),
+    ...createChatAnalysisTools(db, groupId),
   };
 }
 

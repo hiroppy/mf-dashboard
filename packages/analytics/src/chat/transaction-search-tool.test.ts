@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createTransactionSearchTool } from "./transaction-search-tool.js";
 
-const { searchTransactions } = vi.hoisted(() => ({
-  searchTransactions: vi.fn<(options: unknown, db: Db) => never[]>(() => []),
+const { searchTransactionsWithMetadata } = vi.hoisted(() => ({
+  searchTransactionsWithMetadata: vi.fn<
+    (options: unknown, db: Db) => { transactions: never[]; truncated: boolean }
+  >(() => ({ transactions: [], truncated: false })),
 }));
 
 vi.mock("@mf-dashboard/db", () => ({
-  searchTransactions,
+  searchTransactionsWithMetadata,
   SEARCH_TRANSACTIONS_MAX_LIMIT: 100,
   SEARCH_TRANSACTIONS_MAX_OFFSET: 900,
 }));
@@ -36,7 +38,10 @@ describe("createTransactionSearchTool", () => {
 
     await tool.execute?.(options, execOptions);
 
-    expect(searchTransactions).toHaveBeenCalledWith({ ...options, groupId: "group-a" }, db);
+    expect(searchTransactionsWithMetadata).toHaveBeenCalledWith(
+      { ...options, groupId: "group-a" },
+      db,
+    );
   });
 
   it.each(["2025-00", "2025-13", "2025-1"])("不正な月 %s を拒否する", (month) => {
@@ -62,5 +67,13 @@ describe("createTransactionSearchTool", () => {
 
     expect(schema.safeParse({ minAmount: 2_000, maxAmount: 1_000 }).success).toBe(false);
     expect(schema.safeParse({ minAmount: 1_000, maxAmount: 1_000 }).success).toBe(true);
+  });
+
+  it.each(["", "   "])("空の検索filter %jを拒否する", (filter) => {
+    const schema = createTransactionSearchTool(db, "group-a").inputSchema as z.ZodType;
+
+    for (const name of ["category", "subCategory", "keyword"]) {
+      expect(schema.safeParse({ [name]: filter }).success).toBe(false);
+    }
   });
 });

@@ -9,6 +9,7 @@ import {
   SEARCH_TRANSACTIONS_MAX_LIMIT,
   SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS,
   searchTransactions,
+  searchTransactionsWithMetadata,
 } from "./transaction";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
@@ -693,7 +694,9 @@ describe("searchTransactions", () => {
       category: "食費",
     });
 
-    expect(await searchTransactions({ groupId: TEST_GROUP_ID, category: "食費" }, db)).toEqual([]);
+    expect(
+      await searchTransactionsWithMetadata({ groupId: TEST_GROUP_ID, category: "食費" }, db),
+    ).toEqual({ transactions: [], truncated: true });
   });
 
   it("明示されたgroupIdのアカウントだけを検索する", async () => {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildFinanceChatHref, financeChatCardSchema, financeChatHrefSchema } from "./cards.js";
+import {
+  buildFinanceChatHref,
+  financeChatCardSchema,
+  financeChatHrefSchema,
+  MAX_TRANSACTION_CARD_ROWS,
+} from "./cards.js";
 
 describe("financeChatHrefSchema", () => {
   it.each(["/", "/cf", "/cf/2026-07", "/group-a/accounts/account-1", "/group-a/insights"])(
@@ -155,6 +160,33 @@ describe("financeChatCardSchema", () => {
         description: "食費を前月と比較しました",
         amount: 1000,
         amountType: "balance",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("limits transaction card rows and display text", () => {
+    const transaction = {
+      id: "transaction-1",
+      date: "2026-07-01",
+      description: "店舗 A",
+      amount: -100,
+      amountType: "expense",
+    } as const;
+    const card = { type: "transactionList", title: "取引", transactions: [transaction] } as const;
+
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        transactions: Array.from({ length: MAX_TRANSACTION_CARD_ROWS + 1 }, (_, index) => ({
+          ...transaction,
+          id: `transaction-${index}`,
+        })),
+      }).success,
+    ).toBe(false);
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        transactions: [{ ...transaction, description: "a".repeat(201) }],
       }).success,
     ).toBe(false);
   });

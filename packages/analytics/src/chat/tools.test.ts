@@ -20,6 +20,11 @@ const excludedChatFinancialTools = new Set([
   "getHoldingsWithDailyChange",
   "getHoldingsByAccountId",
 ]);
+const excludedChatAnalysisTools = new Set([
+  "analyzeMoMTrend",
+  "analyzeSavingsTrajectory",
+  "analyzeIncomeStability",
+]);
 const execOptions = {
   toolCallId: "test",
   messages: [],
@@ -40,7 +45,7 @@ describe("createChatTools", () => {
       "getFinanceDashboardRoute",
       "presentFinanceCards",
       ...chatFinancialToolNames,
-      ...Object.keys(analysisTools),
+      ...Object.keys(analysisTools).filter((name) => !excludedChatAnalysisTools.has(name)),
     ]);
   });
 
@@ -48,6 +53,7 @@ describe("createChatTools", () => {
     const toolNames = new Set(Object.keys(createChatTools(db, groupId)));
 
     for (const name of excludedChatFinancialTools) expect(toolNames.has(name)).toBe(false);
+    for (const name of excludedChatAnalysisTools) expect(toolNames.has(name)).toBe(false);
     expect(toolNames.has("searchTransactions")).toBe(true);
   });
 
@@ -70,11 +76,8 @@ describe("createChatTools", () => {
         getAssetBreakdownByCategory: expect.any(Object),
         getLatestTotalAssets: expect.any(Object),
         getFinancialMetrics: expect.any(Object),
-        analyzeMoMTrend: expect.any(Object),
         analyzeSpendingComparison: expect.any(Object),
         analyzePortfolioRisk: expect.any(Object),
-        analyzeSavingsTrajectory: expect.any(Object),
-        analyzeIncomeStability: expect.any(Object),
       }),
     );
   });

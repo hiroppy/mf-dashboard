@@ -256,6 +256,19 @@ describe("POST /api/chat", () => {
       "oversized message text",
       [{ id: "long", role: "user", parts: [{ type: "text", text: "a".repeat(8_001) }] }],
     ],
+    [
+      "user file part",
+      [
+        {
+          id: "file",
+          role: "user",
+          parts: [
+            { type: "text", text: "このファイルを見て" },
+            { type: "file", mediaType: "text/plain", url: "http://127.0.0.1/private" },
+          ],
+        },
+      ],
+    ],
   ])("rejects %s before model execution", async (_name, invalidMessages) => {
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: invalidMessages });
 
