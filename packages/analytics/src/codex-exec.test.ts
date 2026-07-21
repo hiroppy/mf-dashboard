@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
@@ -118,9 +118,11 @@ describe("generateWithCodexExec", () => {
     process.env.OPENAI_API_KEY = "must-not-be-forwarded";
     process.env.UNTRUSTED_SECRET = "must-not-be-forwarded";
     process.env.all_proxy = "socks5://proxy.example.com";
+    process.env.DBUS_SESSION_BUS_ADDRESS = "unix:path=/run/user/1000/bus";
     process.env.http_proxy = "http://proxy.example.com";
     process.env.https_proxy = "http://secure-proxy.example.com";
     process.env.no_proxy = "localhost";
+    process.env.XDG_RUNTIME_DIR = "/run/user/1000";
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
@@ -180,9 +182,11 @@ describe("generateWithCodexExec", () => {
     expect(spawnOptions?.env).toEqual(
       expect.objectContaining({
         all_proxy: "socks5://proxy.example.com",
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus",
         http_proxy: "http://proxy.example.com",
         https_proxy: "http://secure-proxy.example.com",
         no_proxy: "localhost",
+        XDG_RUNTIME_DIR: "/run/user/1000",
       }),
     );
   });
@@ -552,12 +556,12 @@ describe("generateWithCodexExec", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  test("lets Codex manage refreshed credentials in the canonical Codex home", async () => {
+  test("resolves a relative canonical home before Codex manages refreshed credentials", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
     await writeFile(sourceAuthPath, '{"token":"initial"}');
-    process.env.CODEX_HOME = sourceCodexHome;
+    process.env.CODEX_HOME = relative(process.cwd(), sourceCodexHome);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {

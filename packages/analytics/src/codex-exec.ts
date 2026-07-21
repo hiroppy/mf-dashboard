@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 
 interface CodexTool {
@@ -50,6 +50,7 @@ const CLEANUP_TIMEOUT_MS = 5_000;
 const MAX_CANONICAL_SKILLS = 1_000;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
+  "DBUS_SESSION_BUS_ADDRESS",
   "HTTPS_PROXY",
   "HTTP_PROXY",
   "LOGNAME",
@@ -62,6 +63,7 @@ const ALLOWED_ENV_KEYS = [
   "TMP",
   "TMPDIR",
   "USER",
+  "XDG_RUNTIME_DIR",
   "all_proxy",
   "http_proxy",
   "https_proxy",
@@ -160,7 +162,7 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
 
     const environment = {
-      authHome: process.env.CODEX_HOME ?? join(homedir(), ".codex"),
+      authHome: resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")),
       configHome,
       cwd,
       outputPath: join(root, "output.txt"),
