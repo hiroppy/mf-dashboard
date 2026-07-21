@@ -40,6 +40,8 @@ jobs:
       - run: docker compose build ${{ matrix.app }}
   e2e-web:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.0-noble
     steps:
       - uses: actions/checkout@v6.0.3
       - uses: ./.github/actions/setup-node
