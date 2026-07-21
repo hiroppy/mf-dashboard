@@ -58,7 +58,9 @@ function createFakeCodex(
     hang?: boolean;
     ignoreKill?: boolean;
     mcpServers?: unknown[];
+    materializeSystemSkill?: boolean;
     output?: string;
+    promptInput?: string;
     stderr?: string;
   } = {},
 ) {
@@ -87,6 +89,18 @@ function createFakeCodex(
         callback();
         return;
       }
+      if (args[0] === "debug") {
+        if (options.materializeSystemSkill) {
+          const codexHome = spawnMock.mock.calls.at(-1)?.[2]?.env?.CODEX_HOME as string;
+          const skillDirectory = join(codexHome, "skills", ".system", "bundled");
+          await mkdirMock(skillDirectory, { recursive: true });
+          await writeFile(join(skillDirectory, "SKILL.md"), "# Bundled skill");
+        }
+        stdout.write(options.promptInput ?? "[]");
+        queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
+        callback();
+        return;
+      }
       const outputIndex = args.indexOf("--output-last-message");
       if (options.exitCode === undefined || options.exitCode === 0) {
         await writeFile(args[outputIndex + 1]!, options.output ?? '{"value":"ok"}');
@@ -105,6 +119,19 @@ function createFakeCodex(
   return { child, getInput: () => input, kill };
 }
 
+function mockCodexRun(
+  mcp: ReturnType<typeof createFakeCodex>,
+  codex: ReturnType<typeof createFakeCodex>,
+  initialize = createFakeCodex(),
+) {
+  const verify = createFakeCodex();
+  spawnMock
+    .mockReturnValueOnce(mcp.child)
+    .mockReturnValueOnce(initialize.child)
+    .mockReturnValueOnce(verify.child)
+    .mockReturnValueOnce(codex.child);
+}
+
 describe("generateWithCodexExec", () => {
   test("runs an isolated one-shot command with preloaded tool data and structured output", async () => {
     process.env.CODEX_ACCESS_TOKEN = "must-not-be-forwarded";
@@ -118,7 +145,7 @@ describe("generateWithCodexExec", () => {
     process.env.XDG_RUNTIME_DIR = "/run/user/1000";
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
     const execute = vi.fn<() => Promise<{ value: string }>>(async () => ({
       value: "tool-value",
     }));
@@ -143,7 +170,7 @@ describe("generateWithCodexExec", () => {
     );
     expect(fake.getInput()).toContain('<tool_results>\n{"lookupValue":{"value":"tool-value"}}');
 
-    const [command, args, spawnOptions] = spawnMock.mock.calls[1]!;
+    const [command, args, spawnOptions] = spawnMock.mock.calls[3]!;
     expect(command).toBe("codex");
     expect(spawnMock.mock.calls[0]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
     expect(spawnOptions?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
@@ -189,18 +216,36 @@ describe("generateWithCodexExec", () => {
     await writeFile(join(process.env.CODEX_HOME!, "skills", "custom", "SKILL.md"), "# Skill");
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
-    expect(spawnMock).toHaveBeenCalledTimes(2);
-    expect(spawnMock.mock.calls[1]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
+    expect(spawnMock).toHaveBeenCalledTimes(4);
+    expect(spawnMock.mock.calls[3]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
+  });
+
+  test("materializes and disables bundled system skills before Codex exec", async () => {
+    const mcp = createFakeCodex();
+    const initialize = createFakeCodex({ materializeSystemSkill: true });
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake, initialize);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    const codexHome = spawnMock.mock.calls[3]?.[2]?.env?.CODEX_HOME as string;
+    const skillPath = join(codexHome, "skills", ".system", "bundled", "SKILL.md");
+    expect(spawnMock.mock.calls[2]?.[1]).toContain(
+      `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`,
+    );
+    expect(spawnMock.mock.calls[3]?.[1]).toContain(
+      `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`,
+    );
   });
 
   test("does not execute tools that are absent from the instructions", async () => {
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ output: "plain result" });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
     const execute = vi.fn<() => string>(() => "unused");
 
     const result = await generateWithCodexExec({
@@ -260,8 +305,12 @@ describe("generateWithCodexExec", () => {
     const firstCodex = createFakeCodex({ output: "first result" });
     spawnMock
       .mockReturnValueOnce(secondMcp.child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockReturnValueOnce(createFakeCodex().child)
       .mockReturnValueOnce(secondCodex.child)
       .mockReturnValueOnce(firstMcp.child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockReturnValueOnce(createFakeCodex().child)
       .mockReturnValueOnce(firstCodex.child);
 
     const first = generateWithCodexExec({
@@ -313,7 +362,7 @@ describe("generateWithCodexExec", () => {
   test("reports non-zero Codex exits", async () => {
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ exitCode: 2, stderr: "sensitive tool data" });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     const error = await generateWithCodexExec({ system: "System.", prompt: "Prompt." }).catch(
       (error: unknown) => error,
@@ -325,7 +374,7 @@ describe("generateWithCodexExec", () => {
   test("redacts malformed structured output from parser errors", async () => {
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ output: "private financial summary is malformed" });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     const error = await generateWithCodexExec({
       system: "Return JSON.",
@@ -341,7 +390,7 @@ describe("generateWithCodexExec", () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ hang: true });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "codex exec timed out after 1000ms",
@@ -353,7 +402,7 @@ describe("generateWithCodexExec", () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ hang: true, ignoreKill: true });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "codex exec timed out after 1000ms",
@@ -374,7 +423,7 @@ describe("generateWithCodexExec", () => {
     });
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ hang: true });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     let settled = false;
     const outcome = generateWithCodexExec({ system: "System.", prompt: "Prompt." })
@@ -412,7 +461,7 @@ describe("generateWithCodexExec", () => {
     ) => originalSetTimeout(callback, delay === 5_000 ? 1 : delay, ...args)) as typeof setTimeout);
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ output: "completed" });
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).resolves.toEqual(
       expect.objectContaining({ text: "completed" }),
@@ -453,7 +502,7 @@ describe("generateWithCodexExec", () => {
     vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(101);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    mockCodexRun(mcp, fake);
 
     await expect(
       generateWithCodexExec({
@@ -511,13 +560,17 @@ describe("generateWithCodexExec", () => {
     process.env.CODEX_HOME = relative(process.cwd(), sourceCodexHome);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
-    spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
-      const codexHome = options?.env?.CODEX_HOME;
-      if (!codexHome || codexHome === sourceCodexHome)
-        throw new Error("missing isolated CODEX_HOME");
-      void writeFile(join(codexHome, "auth.json"), '{"token":"refreshed"}');
-      return fake.child;
-    });
+    spawnMock
+      .mockReturnValueOnce(mcp.child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockImplementation((_command, _args, options) => {
+        const codexHome = options?.env?.CODEX_HOME;
+        if (!codexHome || codexHome === sourceCodexHome)
+          throw new Error("missing isolated CODEX_HOME");
+        void writeFile(join(codexHome, "auth.json"), '{"token":"refreshed"}');
+        return fake.child;
+      });
 
     await generateWithCodexExec({
       system: "Return JSON.",

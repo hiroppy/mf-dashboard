@@ -1,6 +1,16 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
@@ -51,6 +61,8 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 const SHUTDOWN_GRACE_MS = 500;
 const CLEANUP_TIMEOUT_MS = 5_000;
 const CREDENTIAL_PERSIST_TIMEOUT_MS = 5_000;
+const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
+const MAX_ISOLATED_SKILL_DEPTH = 10;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -401,11 +413,81 @@ async function assertNoMcpServers(
   }
 }
 
+async function listIsolatedSkills(
+  environment: IsolatedEnvironment,
+  signal: AbortSignal,
+): Promise<string[]> {
+  const skillsRoot = join(environment.authHome, "skills");
+  const skills: string[] = [];
+  let directoryCount = 0;
+  const visit = async (directory: string, depth: number): Promise<void> => {
+    signal.throwIfAborted();
+    if (depth > MAX_ISOLATED_SKILL_DEPTH || ++directoryCount > MAX_ISOLATED_SKILL_DIRECTORIES) {
+      throw new Error("codex exec created an unexpected isolated skill tree");
+    }
+    let entries;
+    try {
+      entries = await waitForToolResult(() => readdir(directory, { withFileTypes: true }), signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && directory === skillsRoot) return;
+      throw new Error("codex exec could not inspect isolated skills");
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) {
+        throw new Error("codex exec created an unexpected isolated skill link");
+      }
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) await visit(path, depth + 1);
+      else if (entry.isFile() && entry.name === "SKILL.md") skills.push(path);
+    }
+  };
+  await visit(skillsRoot, 0);
+  return skills.sort();
+}
+
+function buildSkillConfig(skillPaths: string[]): string {
+  return `skills.config=[${skillPaths
+    .map((path) => `{path=${JSON.stringify(path)},enabled=false}`)
+    .join(",")}]`;
+}
+
+async function initializeAndDisableBundledSkills(
+  environment: IsolatedEnvironment,
+  signal: AbortSignal,
+): Promise<string> {
+  const baseArgs = [
+    "debug",
+    "prompt-input",
+    ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
+  ];
+  await runCodexProcess(environment, [...baseArgs, "skill initialization"], signal);
+  const skillPaths = await listIsolatedSkills(environment, signal);
+  const skillConfig = buildSkillConfig(skillPaths);
+  const { stdout } = await runCodexProcess(
+    environment,
+    [...baseArgs, "--config", skillConfig, "skill isolation check"],
+    signal,
+  );
+  if (stdout.includes(`${join(environment.authHome, "skills")}/`)) {
+    throw new Error("codex exec loaded bundled skills");
+  }
+  const verifiedPaths = await listIsolatedSkills(environment, signal);
+  if (
+    verifiedPaths.length !== skillPaths.length ||
+    verifiedPaths.some((path, index) => path !== skillPaths[index])
+  ) {
+    throw new Error("codex exec isolated skills changed during verification");
+  }
+  return skillConfig;
+}
+
 async function runCodexExec(
   environment: IsolatedEnvironment,
   system: string,
   prompt: string,
   hasSchema: boolean,
+  skillConfig: string,
   signal: AbortSignal,
 ): Promise<{ model: string; text: string }> {
   const args = [
@@ -422,6 +504,8 @@ async function runCodexExec(
     ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
     "--config",
     `developer_instructions=${JSON.stringify(`${system}\n\n${DATA_BOUNDARY}`)}`,
+    "--config",
+    skillConfig,
   ];
   if (hasSchema) args.push("--output-schema", environment.schemaPath);
   if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
@@ -479,11 +563,13 @@ async function generateInIsolation<T>(
       });
     }
     await assertNoMcpServers(environment, controller.signal);
+    const skillConfig = await initializeAndDisableBundledSkills(environment, controller.signal);
     const result = await runCodexExec(
       environment,
       options.system,
       prompt,
       Boolean(options.schema),
+      skillConfig,
       controller.signal,
     );
     let output: T | undefined;
