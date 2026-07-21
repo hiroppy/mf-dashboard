@@ -308,6 +308,10 @@ CODEX_APP_SERVER_TIMEOUT_MS=120000
 
 app-server 経路には Codex CLI のインストールと事前ログインが必要で、`AI_MODEL` は省略時に
 Codex の既定モデルを使う。`CODEX_APP_SERVER_TIMEOUT_MS` の既定値は 120000 ミリ秒。
+この設定は Codex CLI をインストールした host 上で
+`pnpm --filter @mf-dashboard/crawler dev:scrape` を実行する場合に限る。現在の crawler Docker
+image / Compose service は Codex CLI、ログイン情報、`AI_BACKEND` を provision しないため、
+Compose では AI SDK 経路を使う。
 
 - Money Forward MEから取得した候補カテゴリの中から選択し、カテゴリIDは生成しない
 - 1回の実行件数は`llm.maxPerRun`で制限する。既定値は`5`

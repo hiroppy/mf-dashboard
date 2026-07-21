@@ -255,17 +255,19 @@ class CodexAppServerConnection {
       const completion = new Promise<Record<string, unknown>>((resolve, reject) => {
         this.turnCompletion = { resolve, reject };
       });
-      await this.request("turn/start", {
-        threadId: thread.id,
-        input: [
-          {
-            type: "text",
-            text: options.prompt,
-          },
-        ],
-        outputSchema: options.schema ? z.toJSONSchema(options.schema) : undefined,
-      });
-      await completion;
+      await Promise.all([
+        this.request("turn/start", {
+          threadId: thread.id,
+          input: [
+            {
+              type: "text",
+              text: options.prompt,
+            },
+          ],
+          outputSchema: options.schema ? z.toJSONSchema(options.schema) : undefined,
+        }),
+        completion,
+      ]);
 
       const output = options.schema ? options.schema.parse(JSON.parse(this.finalText)) : undefined;
       return { text: this.finalText, output, toolNames: this.toolNames, model };

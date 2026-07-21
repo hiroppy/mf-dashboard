@@ -17,12 +17,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function createFakeAppServer(toolCallCount = 1, instructionSources: string[] = []) {
+function createFakeAppServer(
+  toolCallCount = 1,
+  instructionSources: string[] = [],
+  exitDuringTurnStart = false,
+) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   const messages: Array<Record<string, unknown>> = [];
   let completedToolCalls = 0;
   let input = "";
+  let child: ChildProcessWithoutNullStreams;
 
   const respond = (message: Record<string, unknown>) => {
     stdout.write(`${JSON.stringify(message)}\n`);
@@ -52,6 +57,10 @@ function createFakeAppServer(toolCallCount = 1, instructionSources: string[] = [
             },
           });
         } else if (message.method === "turn/start") {
+          if (exitDuringTurnStart) {
+            child.emit("close", 1);
+            continue;
+          }
           respond({ id: message.id, result: { turn: { id: "turn-test" } } });
           respond({
             id: 99,
@@ -83,7 +92,7 @@ function createFakeAppServer(toolCallCount = 1, instructionSources: string[] = [
   });
 
   const kill = vi.fn<() => boolean>(() => true);
-  const child = Object.assign(new EventEmitter(), {
+  child = Object.assign(new EventEmitter(), {
     stdout,
     stderr,
     stdin,
@@ -252,6 +261,16 @@ describe("generateWithCodexAppServer", () => {
     setTimeout(() => fake.child.stdin.emit("error", new Error("write EPIPE")), 0);
 
     await expect(generation).rejects.toThrow("write EPIPE");
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("handles turn completion rejection while turn start is pending", async () => {
+    const fake = createFakeAppServer(1, [], true);
+    spawnMock.mockReturnValue(fake.child);
+
+    await expect(
+      generateWithCodexAppServer({ system: "System", prompt: "Prompt" }),
+    ).rejects.toThrow("codex app-server exited before completion (code 1)");
     expect(fake.kill).toHaveBeenCalledOnce();
   });
 });
