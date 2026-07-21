@@ -41,23 +41,47 @@ export function ChatProvider({
   initialOpen = false,
 }: ChatProviderProps) {
   const [isOpen, setIsOpen] = useState(initialOpen);
-  const [draft, setDraft] = useState("");
-  const isInFlightRef = useRef(false);
   const pathname = usePathname();
   const explicitGroupId = pathname ? extractGroupIdFromPath(pathname) : null;
   const groupId = explicitGroupId ?? currentGroupId;
+
+  return (
+    <GroupChatProvider
+      key={groupId ?? "current"}
+      groupId={groupId}
+      initialMessages={initialMessages}
+      isOpen={isOpen}
+      setIsOpen={setIsOpen}
+    >
+      {children}
+    </GroupChatProvider>
+  );
+}
+
+interface GroupChatProviderProps {
+  children: ReactNode;
+  groupId: string | null;
+  initialMessages: UIMessage[];
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+}
+
+function GroupChatProvider({
+  children,
+  groupId,
+  initialMessages,
+  isOpen,
+  setIsOpen,
+}: GroupChatProviderProps) {
+  const [draft, setDraft] = useState("");
+  const isInFlightRef = useRef(false);
   const { error, messages, sendMessage, status } = useChat({
     id: `finance-chat:${groupId ?? "current"}`,
     messages: initialMessages,
   });
   const isSubmitting = status === "submitted" || status === "streaming";
-  const close = useCallback(() => setIsOpen(false), []);
-  const open = useCallback(() => setIsOpen(true), []);
-
-  useEffect(() => {
-    isInFlightRef.current = false;
-    setDraft("");
-  }, [groupId]);
+  const close = useCallback(() => setIsOpen(false), [setIsOpen]);
+  const open = useCallback(() => setIsOpen(true), [setIsOpen]);
 
   useEffect(() => {
     if (status === "ready" || status === "error") isInFlightRef.current = false;
