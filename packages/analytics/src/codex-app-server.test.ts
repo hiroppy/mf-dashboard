@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -118,7 +118,7 @@ function createFakeAppServer(
     kill,
   }) as unknown as ChildProcessWithoutNullStreams;
 
-  return { child, kill, messages };
+  return { child, kill, messages, respond };
 }
 
 describe("generateWithCodexAppServer", () => {
@@ -273,9 +273,15 @@ describe("generateWithCodexAppServer", () => {
       }),
     ).rejects.toThrow("codex app-server timed out after 5ms");
 
+    fake.respond({
+      id: 100,
+      method: "item/tool/call",
+      params: { tool: "lookupValue", arguments: {} },
+    });
     finishTool?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(execute).toHaveBeenCalledOnce();
     expect(fake.messages).not.toContainEqual(expect.objectContaining({ id: 99 }));
     expect(fake.kill).toHaveBeenCalledOnce();
   });
@@ -384,5 +390,35 @@ describe("generateWithCodexAppServer", () => {
 
     await generation;
     await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
+  });
+
+  test("removes the isolated Codex home when credential persistence fails", async () => {
+    const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
+    temporaryDirectories.push(sourceCodexHome);
+    await writeFile(join(sourceCodexHome, "auth.json"), '{"token":"initial"}');
+    process.env.CODEX_HOME = sourceCodexHome;
+
+    const fake = createFakeAppServer();
+    spawnMock.mockReturnValue(fake.child);
+    let finishTool: (() => void) | undefined;
+    const execute = vi.fn<() => Promise<string>>(
+      () =>
+        new Promise<string>((resolve) => {
+          finishTool = () => resolve("tool-result");
+        }),
+    );
+    const generation = generateWithCodexAppServer({
+      system: "System",
+      prompt: "Prompt",
+      tools: { lookupValue: { inputSchema: z.object({}), execute } },
+    });
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    const isolatedCodexHome = spawnMock.mock.calls[0]?.[2]?.env?.CODEX_HOME;
+    if (typeof isolatedCodexHome !== "string") throw new Error("missing isolated CODEX_HOME");
+    await writeFile(join(isolatedCodexHome, "auth.json"), "invalid-json");
+    finishTool?.();
+
+    await expect(generation).rejects.toThrow(/JSON|Unexpected/);
+    await expect(access(isolatedCodexHome)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

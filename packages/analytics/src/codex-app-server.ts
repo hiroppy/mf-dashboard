@@ -179,13 +179,16 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown tool error";
 }
 
-function waitForToolResult<T>(operation: PromiseLike<T> | T, signal: AbortSignal): Promise<T> {
+function waitForToolResult<T>(
+  operation: () => PromiseLike<T> | T,
+  signal: AbortSignal,
+): Promise<T> {
   signal.throwIfAborted();
 
   return new Promise((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
     signal.addEventListener("abort", onAbort, { once: true });
-    Promise.resolve(operation).then(
+    Promise.resolve(operation()).then(
       (result) => {
         signal.removeEventListener("abort", onAbort);
         resolve(result);
@@ -388,6 +391,8 @@ class CodexAppServerConnection {
   }
 
   private async handleServerRequest(request: AppServerRequest): Promise<void> {
+    if (this.stopped) return;
+
     if (request.method === "item/tool/requestUserInput") {
       this.send({ id: request.id, result: { answers: {} } });
       this.rejectAll(new Error("codex app-server requested unsupported interactive input"));
@@ -434,12 +439,13 @@ class CodexAppServerConnection {
       this.toolNames.push(toolName as string);
       const input = tool.inputSchema.parse(request.params?.arguments);
       const result = await waitForToolResult(
-        tool.execute(input as never, {
-          abortSignal: this.abortController.signal,
-          context: undefined,
-          messages: [],
-          toolCallId: String(request.id),
-        }),
+        () =>
+          tool.execute!(input as never, {
+            abortSignal: this.abortController.signal,
+            context: undefined,
+            messages: [],
+            toolCallId: String(request.id),
+          }),
         this.abortController.signal,
       );
       this.send({
@@ -514,7 +520,10 @@ export async function generateWithCodexAppServer<T>(
       environment,
     ).generate(options);
   } finally {
-    await persistRefreshedCredentials(environment);
-    await rm(environment.root, { recursive: true, force: true });
+    try {
+      await persistRefreshedCredentials(environment);
+    } finally {
+      await rm(environment.root, { recursive: true, force: true });
+    }
   }
 }
