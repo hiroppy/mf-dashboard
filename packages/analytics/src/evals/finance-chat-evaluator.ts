@@ -130,13 +130,23 @@ function matchesStrategy(
 function completesStrategyInSingleStep(
   strategy: readonly FinanceChatToolExpectation[],
   steps: readonly FinanceChatEvaluationStep[],
+  navigationInput: Readonly<Record<string, unknown>>,
 ): boolean {
   return steps.some((step) => {
     const dataCalls = step.toolCalls.filter(({ toolName }) => isDataTool(toolName));
     const completedDataCalls = dataCalls.filter((call) =>
       hasMatchingResult(call, step.toolResults),
     );
-    return matchesStrategy(strategy, dataCalls, completedDataCalls);
+    const completedNavigationCalls = step.toolCalls.filter(
+      (call) =>
+        call.toolName === NAVIGATION_TOOL &&
+        inputsEqual(call.input, navigationInput) &&
+        hasMatchingResult(call, step.toolResults),
+    );
+    return (
+      matchesStrategy(strategy, dataCalls, completedDataCalls) &&
+      completedNavigationCalls.length === 1
+    );
   });
 }
 
@@ -146,11 +156,14 @@ function isDataTool(toolName: string): boolean {
 
 type FinancialUnit = "currency" | "percentage";
 type AmountType = "income" | "expense" | "balance";
+type BalanceType = "asset" | "liability";
 
 interface FinancialClaim {
   value: number;
   unit: FinancialUnit;
   amountType?: AmountType;
+  balanceType?: BalanceType;
+  context?: string;
 }
 
 interface GroundedRecord {
@@ -187,14 +200,21 @@ function getAmountType(key: string, record?: GroundedRecord): AmountType | undef
   return getFinancialUnit(key) === "currency" ? "balance" : undefined;
 }
 
+function getBalanceType(text: string): BalanceType | undefined {
+  if (/(?:asset|資産)/i.test(text)) return "asset";
+  if (/(?:liabilit|debt|負債|借入)/i.test(text)) return "liability";
+  return undefined;
+}
+
 function addClaim(
   grounded: GroundedValues,
   value: unknown,
   unit: FinancialUnit | undefined,
   amountType?: AmountType,
+  balanceType?: BalanceType,
 ): void {
   if (unit !== undefined && typeof value === "number" && Number.isFinite(value)) {
-    grounded.claims.push({ value, unit, amountType });
+    grounded.claims.push({ value, unit, amountType, balanceType });
   }
 }
 
@@ -250,11 +270,16 @@ function collectGroundedValues(value: unknown, grounded: GroundedValues, key = "
       if (typeof entry === "number") {
         if (entryKey === "id" || entryKey === "mfId") grounded.strings.add(String(entry));
         const isCategoryMap = key.endsWith(".spending.byCategory");
+        const normalizedEntry =
+          entryKey === "monthlyGrowthRate" || entryKey === "projectedAnnualRate"
+            ? entry * 100
+            : entry;
         addClaim(
           grounded,
-          entry,
+          normalizedEntry,
           isCategoryMap ? "currency" : getFinancialUnit(entryKey),
           isCategoryMap ? "expense" : getAmountType(entryKey, record),
+          getBalanceType(entryKey),
         );
         if (isCategoryMap) {
           grounded.claims.push({ value: entry, unit: "currency", amountType: "balance" });
@@ -278,7 +303,13 @@ function collectGroundedValues(value: unknown, grounded: GroundedValues, key = "
     return;
   }
 
-  addClaim(grounded, value, getFinancialUnit(fieldName), getAmountType(fieldName));
+  addClaim(
+    grounded,
+    value,
+    getFinancialUnit(fieldName),
+    getAmountType(fieldName),
+    getBalanceType(fieldName),
+  );
 }
 
 function isGroundedClaim(claim: FinancialClaim, sources: readonly FinancialClaim[]): boolean {
@@ -286,8 +317,35 @@ function isGroundedClaim(claim: FinancialClaim, sources: readonly FinancialClaim
     (source) =>
       source.unit === claim.unit &&
       (claim.amountType === undefined || source.amountType === claim.amountType) &&
+      (claim.balanceType === undefined || source.balanceType === claim.balanceType) &&
       Math.abs(source.value - claim.value) < (claim.unit === "percentage" ? 0.5 : 0.01),
   );
+}
+
+function isContextualClaimGrounded(
+  claim: FinancialClaim,
+  sources: readonly FinancialClaim[],
+  records: readonly GroundedRecord[],
+): boolean {
+  if (!isGroundedClaim(claim, sources)) return false;
+  if (claim.unit !== "currency" || claim.context === undefined) return true;
+
+  const namedCategories = records.flatMap((record) => {
+    const category = record.category ?? record.name;
+    return typeof category === "string" && claim.context?.includes(category) ? [category] : [];
+  });
+  if (namedCategories.length === 0) return true;
+
+  return records.some((record) => {
+    const category = record.category ?? record.name;
+    const amount = record.amount ?? record.totalAmount;
+    return (
+      typeof category === "string" &&
+      namedCategories.includes(category) &&
+      typeof amount === "number" &&
+      Math.abs(amount - claim.value) < 0.01
+    );
+  });
 }
 
 function getCardClaims(cards: readonly FinanceChatCard[]): {
@@ -300,15 +358,21 @@ function getCardClaims(cards: readonly FinanceChatCard[]): {
   for (const card of cards) {
     if (card.type === "summary") {
       claims.push(
-        ...card.metrics.map(({ amount, amountType }) => ({
+        ...card.metrics.map(({ label, amount, amountType }) => ({
           value: amount,
           unit: "currency" as const,
           amountType,
+          balanceType: getBalanceType(label),
         })),
       );
     }
     if (card.type === "insight" && card.amount !== undefined) {
-      claims.push({ value: card.amount, unit: "currency", amountType: card.amountType });
+      claims.push({
+        value: card.amount,
+        unit: "currency",
+        amountType: card.amountType,
+        balanceType: getBalanceType(card.amountLabel ?? ""),
+      });
     }
     if (card.type === "chart") {
       claims.push(
@@ -317,6 +381,7 @@ function getCardClaims(cards: readonly FinanceChatCard[]): {
             value,
             unit: "currency" as const,
             amountType: card.series[index]?.amountType,
+            balanceType: getBalanceType(card.series[index]?.name ?? ""),
           })),
         ),
       );
@@ -366,7 +431,11 @@ function parseJapaneseCurrency(expression: string): number {
   return negative ? -value : value;
 }
 
-function getClaimContext(text: string, claimStart: number, claimEnd: number): string {
+function getClaimClause(
+  text: string,
+  claimStart: number,
+  claimEnd: number,
+): { text: string; start: number } {
   const preceding = text.slice(0, claimStart);
   const precedingBoundary = Math.max(
     preceding.lastIndexOf("。"),
@@ -379,7 +448,46 @@ function getClaimContext(text: string, claimStart: number, claimEnd: number): st
     .map((separator) => following.indexOf(separator))
     .filter((index) => index >= 0);
   const followingBoundary = Math.min(...followingBoundaries, 24);
-  return `${preceding.slice(Math.max(precedingBoundary + 1, claimStart - 24))}${following.slice(0, followingBoundary)}`;
+  const start = Math.max(precedingBoundary + 1, claimStart - 24);
+  return { text: text.slice(start, claimEnd + followingBoundary), start };
+}
+
+function getNearestClaimLabel(
+  text: string,
+  claimStart: number,
+  claimEnd: number,
+  pattern: RegExp,
+): string | undefined {
+  const clause = getClaimClause(text, claimStart, claimEnd);
+  let nearest: { label: string; distance: number } | undefined;
+  for (const match of clause.text.matchAll(pattern)) {
+    const labelStart = clause.start + (match.index ?? 0);
+    const labelEnd = labelStart + match[0].length;
+    const distance =
+      labelEnd <= claimStart
+        ? claimStart - labelEnd
+        : labelStart >= claimEnd
+          ? labelStart - claimEnd
+          : 0;
+    if (nearest === undefined || distance < nearest.distance) {
+      nearest = { label: match[0], distance };
+    }
+  }
+  return nearest?.label;
+}
+
+function getNearestClaimAmountType(
+  text: string,
+  claimStart: number,
+  claimEnd: number,
+): AmountType | undefined {
+  const label = getNearestClaimLabel(
+    text,
+    claimStart,
+    claimEnd,
+    /(?:収入|所得|入金|支出|費用|出金|収支|資産|残高|貯蓄|手残り|負債)/g,
+  );
+  return label === undefined ? undefined : getLabelAmountType(label);
 }
 
 function extractFinancialClaims(text: string): FinancialClaim[] {
@@ -394,6 +502,9 @@ function extractFinancialClaims(text: string): FinancialClaim[] {
 
   for (const match of text.matchAll(pattern)) {
     const percentage = match.groups?.percentage;
+    const claimStart = match.index ?? 0;
+    const claimEnd = claimStart + match[0].length;
+    const context = getClaimClause(text, claimStart, claimEnd).text;
     claims.push(
       percentage === undefined
         ? {
@@ -401,11 +512,13 @@ function extractFinancialClaims(text: string): FinancialClaim[] {
               match.groups?.prefixed ?? match.groups?.yen ?? match.groups?.shorthand ?? "",
             ),
             unit: "currency",
-            amountType: getLabelAmountType(
-              getClaimContext(text, match.index ?? 0, (match.index ?? 0) + match[0].length),
+            amountType: getNearestClaimAmountType(text, claimStart, claimEnd),
+            balanceType: getBalanceType(
+              getNearestClaimLabel(text, claimStart, claimEnd, /(?:資産|負債|借入)/g) ?? "",
             ),
+            context,
           }
-        : { value: Number(percentage.replaceAll(",", "")), unit: "percentage" },
+        : { value: Number(percentage.replaceAll(",", "")), unit: "percentage", context },
     );
   }
   return claims;
@@ -541,6 +654,9 @@ function hasActionableInsight(
   const spendingCategoryRecords = records.filter(
     (record) => record._sourcePath === "getFinancialMetrics.spending.byCategory",
   );
+  const anomalyRecords = records.filter(
+    (record) => record._sourcePath === "getFinancialMetrics.spending.anomalies",
+  );
   const categories = spendingCategoryRecords.flatMap((record) => {
     const category = record.category ?? record.name;
     return typeof category === "string" ? [category] : [];
@@ -564,6 +680,16 @@ function hasActionableInsight(
     }
   }
   const citedAmounts = [...citedCategoryAmounts.values()];
+  const eligibleAmounts = new Set(citedAmounts);
+  for (const record of anomalyRecords) {
+    if (
+      typeof record.category === "string" &&
+      description.includes(record.category) &&
+      typeof record.amount === "number"
+    ) {
+      eligibleAmounts.add(record.amount);
+    }
+  }
   const amountTotal = citedAmounts.reduce((sum, amount) => sum + amount, 0);
   const insightAmounts = cards.flatMap((card) =>
     card.type === "insight" && card.amount !== undefined
@@ -572,16 +698,11 @@ function hasActionableInsight(
   );
   const hasGroundedAmounts = insightAmounts.every(
     ({ amount, amountType }) =>
-      amountType === "balance" && (citedAmounts.includes(amount) || amount === amountTotal),
+      amountType === "balance" && (eligibleAmounts.has(amount) || amount === amountTotal),
   );
-  const hasComparisonEvidence = records.some((record) => {
+  const hasComparisonEvidence = anomalyRecords.some((record) => {
     const category = record.category;
-    return (
-      typeof category === "string" &&
-      citedCategoryAmounts.has(category) &&
-      typeof record._sourcePath === "string" &&
-      record._sourcePath.endsWith(".spending.anomalies")
-    );
+    return typeof category === "string" && citedCategoryAmounts.has(category);
   });
   const hasSpecificCta = cards
     .filter((card) => card.type === "insight")
@@ -597,6 +718,31 @@ function hasActionableInsight(
     hasGroundedAmounts &&
     hasComparisonEvidence &&
     hasSpecificCta
+  );
+}
+
+function areInsightComparisonsGrounded(
+  evaluationCase: FinanceChatEvaluationCase,
+  cards: readonly FinanceChatCard[],
+  records: readonly GroundedRecord[],
+): boolean {
+  if (evaluationCase.requireActionableInsight) return true;
+
+  const descriptions = cards
+    .filter((card) => card.type === "insight")
+    .map(({ description }) => description)
+    .join("\n");
+  if (
+    !/(?:前月|前年|平均|比較|通常|普段|前回|増加|減少|増え|減っ|多い|少ない)/.test(descriptions)
+  ) {
+    return true;
+  }
+
+  return records.some((record) =>
+    Object.entries(record).some(
+      ([key, value]) =>
+        /(?:previous|comparison|deviation|diff|change)/i.test(key) && value !== null,
+    ),
   );
 }
 
@@ -681,12 +827,12 @@ export function evaluateFinanceChatTrace(
     violations.push("必須ツールまたは引数が期待する戦略を満たさない");
   }
   if (
-    evaluationCase.requireParallelDataTools &&
+    evaluationCase.requireParallelTools &&
     !evaluationCase.toolStrategies.some((strategy) =>
-      completesStrategyInSingleStep(strategy, priorSteps),
+      completesStrategyInSingleStep(strategy, priorSteps, evaluationCase.navigationInput),
     )
   ) {
-    violations.push("独立したデータツールが同一ステップで完了していない");
+    violations.push("独立したデータ・ナビゲーションツールが同一ステップで完了していない");
   }
 
   if (toolCalls.some(({ invalid }) => invalid)) {
@@ -750,7 +896,7 @@ export function evaluateFinanceChatTrace(
   );
   const ungroundedCardStrings = cardClaims.strings.filter((claim) => !grounded.strings.has(claim));
   const ungroundedCardProse = extractFinancialClaims(getCardProse(cards)).filter(
-    (claim) => !isGroundedClaim(claim, grounded.claims),
+    (claim) => !isContextualClaimGrounded(claim, grounded.claims, grounded.records),
   );
   if (
     ungroundedCardClaims.length > 0 ||
@@ -760,6 +906,7 @@ export function evaluateFinanceChatTrace(
     !areSummaryMetricsCaseGrounded(evaluationCase, cards, grounded.records) ||
     !includesRequiredCategory(evaluationCase, cards) ||
     !hasActionableInsight(evaluationCase, cards, grounded.records) ||
+    !areInsightComparisonsGrounded(evaluationCase, cards, grounded.records) ||
     !areCardRecordsGrounded(cards, grounded.records)
   ) {
     violations.push("カード内容に取得結果で根拠付けられない金融 claim が含まれる");
@@ -769,7 +916,9 @@ export function evaluateFinanceChatTrace(
   if (trace.text === undefined) {
     violations.push("最終回答テキストが評価 trace に含まれない");
   } else if (
-    extractFinancialClaims(trace.text).some((claim) => !isGroundedClaim(claim, finalTextSources))
+    extractFinancialClaims(trace.text).some(
+      (claim) => !isContextualClaimGrounded(claim, finalTextSources, grounded.records),
+    )
   ) {
     violations.push("最終回答に取得結果またはカードと一致しない金融 claim が含まれる");
   }

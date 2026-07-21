@@ -9,7 +9,7 @@ export interface FinanceChatEvaluationCase {
   navigationInput: Readonly<Record<string, unknown>>;
   expectedCardTypes: readonly FinanceChatCard["type"][];
   requireActionableInsight?: boolean;
-  requireParallelDataTools?: boolean;
+  requireParallelTools?: boolean;
   requiredCategory?: string;
   summaryAmountSource?: "requestedCategory" | "transactionTotal";
 }
@@ -39,6 +39,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["getLatestMonthlySummary"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "insight"],
+      requireParallelTools: true,
     },
     {
       id: "category-expense",
@@ -52,7 +53,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["searchTransactions", "getMonthlyCategoryTotals"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "categoryBreakdown", "transactionList"],
-      requireParallelDataTools: true,
+      requireParallelTools: true,
       requiredCategory: "食費",
       summaryAmountSource: "requestedCategory",
     },
@@ -63,6 +64,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["searchTransactions"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "transactionList", "action"],
+      requireParallelTools: true,
       summaryAmountSource: "transactionTotal",
     },
     {
@@ -72,6 +74,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["getLatestTotalAssets"],
       navigationInput: { page: "balanceSheet" },
       expectedCardTypes: ["summary"],
+      requireParallelTools: true,
     },
     {
       id: "spending-review",
@@ -81,6 +84,7 @@ export function createFinanceChatEvaluationCases(
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["insight"],
       requireActionableInsight: true,
+      requireParallelTools: true,
     },
   ];
 }

@@ -48,12 +48,15 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
       ({ id }) => id === "category-expense",
     );
 
-    expect(categoryExpense?.requireParallelDataTools).toBe(true);
+    expect(categoryExpense?.requireParallelTools).toBe(true);
     expect(categoryExpense?.requiredCategory).toBe("食費");
     expect(categoryExpense?.summaryAmountSource).toBe("requestedCategory");
     expect(
       FINANCE_CHAT_EVALUATION_CASES.find(({ id }) => id === "daily-expense")?.summaryAmountSource,
     ).toBe("transactionTotal");
+    expect(
+      FINANCE_CHAT_EVALUATION_CASES.every(({ requireParallelTools }) => requireParallelTools),
+    ).toBe(true);
   });
 
   it("uses Asia/Tokyo for relative dates across a UTC month boundary", () => {
