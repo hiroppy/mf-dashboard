@@ -266,6 +266,22 @@ describe("generateWithCodexExec", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
+  test("rejects output whose synchronous validation crosses the deadline", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "100";
+    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(101);
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+
+    await expect(
+      generateWithCodexExec({
+        system: "System.",
+        prompt: "Prompt.",
+        schema: z.object({ value: z.string() }),
+      }),
+    ).rejects.toThrow("codex exec timed out after 100ms");
+  });
+
   test("persists refreshed credentials from the isolated Codex home", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);

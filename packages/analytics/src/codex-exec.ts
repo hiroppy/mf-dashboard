@@ -364,6 +364,7 @@ async function generateInIsolation<T>(
 ): Promise<CodexExecResult<T>> {
   const environment = await createIsolatedEnvironment();
   const controller = new AbortController();
+  const deadline = Date.now() + timeoutMs;
   const timeout = setTimeout(
     () => controller.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
     timeoutMs,
@@ -389,6 +390,9 @@ async function generateInIsolation<T>(
     );
     const output = options.schema ? options.schema.parse(JSON.parse(result.text)) : undefined;
     controller.signal.throwIfAborted();
+    if (Date.now() >= deadline) {
+      throw new Error(`codex exec timed out after ${timeoutMs}ms`);
+    }
     return { ...result, output, toolNames };
   } finally {
     clearTimeout(timeout);
