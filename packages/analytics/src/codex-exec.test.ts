@@ -7,9 +7,17 @@ import { PassThrough, Writable } from "node:stream";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const spawnMock = vi.hoisted(() => vi.fn<typeof import("node:child_process").spawn>());
+const { readFileMock, spawnMock } = vi.hoisted(() => ({
+  readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+  spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
+}));
 
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  readFileMock.mockImplementation(original.readFile);
+  return { ...original, readFile: readFileMock };
+});
 
 const { generateWithCodexExec } = await import("./codex-exec.js");
 const originalEnv = { ...process.env };
@@ -332,5 +340,42 @@ describe("generateWithCodexExec", () => {
     });
 
     await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
+  });
+
+  test("aborts while reading credentials for persistence", async () => {
+    const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
+    temporaryDirectories.push(sourceCodexHome);
+    const sourceAuthPath = join(sourceCodexHome, "auth.json");
+    await writeFile(sourceAuthPath, '{"token":"initial"}');
+    process.env.CODEX_HOME = sourceCodexHome;
+    process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
+      const isolatedHome = options?.env?.CODEX_HOME;
+      if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
+      void writeFile(join(isolatedHome, "auth.json"), '{"token":"refreshed"}');
+      return fake.child;
+    });
+    const originalReadFile = readFileMock.getMockImplementation()!;
+    let sourceReads = 0;
+    readFileMock.mockImplementation((path, options) => {
+      if (path === sourceAuthPath && ++sourceReads === 2) {
+        const signal = typeof options === "object" && options !== null ? options.signal : undefined;
+        return new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      }
+      return originalReadFile(path, options as never) as never;
+    });
+
+    await expect(
+      generateWithCodexExec({
+        system: "Return JSON.",
+        prompt: "Answer.",
+        schema: z.object({ value: z.string() }),
+      }),
+    ).rejects.toThrow("codex exec timed out after 1000ms");
+    expect(sourceReads).toBe(2);
   });
 });

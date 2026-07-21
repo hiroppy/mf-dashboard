@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -177,24 +177,30 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
   }
 }
 
-async function persistRefreshedCredentials(environment: IsolatedEnvironment): Promise<void> {
+async function persistRefreshedCredentials(
+  environment: IsolatedEnvironment,
+  signal: AbortSignal,
+): Promise<void> {
   const { authPath, initialAuth, sourceAuthPath } = environment;
   if (!authPath || !initialAuth || !sourceAuthPath) return;
 
+  signal.throwIfAborted();
   const [isolatedAuth, currentAuth] = await Promise.all([
-    readFile(authPath),
-    readFile(sourceAuthPath),
+    readFile(authPath, { signal }),
+    readFile(sourceAuthPath, { signal }),
   ]);
   if (isolatedAuth.equals(initialAuth) || !currentAuth.equals(initialAuth)) return;
 
   JSON.parse(isolatedAuth.toString("utf8"));
   const stagedAuthPath = `${sourceAuthPath}.mf-dashboard-${randomUUID()}.tmp`;
   try {
-    await copyFile(authPath, stagedAuthPath);
-    await chmod(stagedAuthPath, 0o600);
-    await rename(stagedAuthPath, sourceAuthPath);
+    await writeFile(stagedAuthPath, isolatedAuth, { mode: 0o600, signal });
+    signal.throwIfAborted();
+    await waitForToolResult(() => rename(stagedAuthPath, sourceAuthPath), signal);
   } finally {
-    await rm(stagedAuthPath, { force: true });
+    const removal = rm(stagedAuthPath, { force: true });
+    if (signal.aborted) void removal.catch(() => undefined);
+    else await waitForToolResult(() => removal, signal);
   }
 }
 
@@ -399,12 +405,14 @@ async function generateInIsolation<T>(
     return { ...result, output, toolNames };
   } finally {
     try {
-      await persistRefreshedCredentials(environment);
+      await persistRefreshedCredentials(environment, controller.signal);
     } catch (error) {
       console.warn("[analytics] Failed to persist refreshed Codex credentials:", error);
     }
     try {
-      await rm(environment.root, { recursive: true, force: true });
+      const removal = rm(environment.root, { recursive: true, force: true });
+      if (controller.signal.aborted) void removal.catch(() => undefined);
+      else await waitForToolResult(() => removal, controller.signal);
     } catch (error) {
       console.warn("[analytics] Failed to remove the temporary Codex environment:", error);
     }
