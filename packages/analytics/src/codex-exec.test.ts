@@ -1,38 +1,46 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { mkdirMock, mkdtempMock, openMock, readFileMock, rmMock, spawnMock } = vi.hoisted(() => ({
-  mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
-  mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
-  openMock: vi.fn<typeof import("node:fs/promises").open>(),
-  readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
-  rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
-  spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
-}));
+const { lockMock, mkdirMock, mkdtempMock, readFileMock, renameMock, rmMock, spawnMock } =
+  vi.hoisted(() => ({
+    lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
+    mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
+    mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
+    readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+    renameMock: vi.fn<typeof import("node:fs/promises").rename>(),
+    rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
+    spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
+  }));
 
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs/promises")>();
   mkdirMock.mockImplementation(original.mkdir);
   mkdtempMock.mockImplementation(original.mkdtemp);
-  openMock.mockImplementation(original.open);
   readFileMock.mockImplementation(original.readFile);
+  renameMock.mockImplementation(original.rename);
   rmMock.mockImplementation(original.rm);
   return {
     ...original,
     mkdir: mkdirMock,
     mkdtemp: mkdtempMock,
-    open: openMock,
     readFile: readFileMock,
+    rename: renameMock,
     rm: rmMock,
   };
+});
+
+vi.mock("proper-lockfile", async (importOriginal) => {
+  const original = await importOriginal<typeof import("proper-lockfile")>();
+  lockMock.mockImplementation(original.lock);
+  return { ...original, lock: lockMock };
 });
 
 const { generateWithCodexExec } = await import("./codex-exec.js");
@@ -486,7 +494,7 @@ describe("generateWithCodexExec", () => {
       callback: (...args: unknown[]) => void,
       delay?: number,
       ...args: unknown[]
-    ) => originalSetTimeout(callback, delay === 5_000 ? 1 : delay, ...args)) as typeof setTimeout);
+    ) => originalSetTimeout(callback, delay === 5_000 ? 50 : delay, ...args)) as typeof setTimeout);
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ output: "completed" });
     mockCodexRun(mcp, fake);
@@ -555,52 +563,58 @@ describe("generateWithCodexExec", () => {
 
   test("times out while acquiring the credential lock", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "20";
-    const originalOpen = openMock.getMockImplementation()!;
-    openMock.mockImplementation(() => new Promise<never>(() => undefined));
+    const originalLock = lockMock.getMockImplementation()!;
+    lockMock.mockImplementation(() => new Promise<never>(() => undefined));
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "codex exec timed out after 20ms",
     );
     expect(spawnMock).not.toHaveBeenCalled();
-    openMock.mockImplementation(originalOpen);
+    lockMock.mockImplementation(originalLock);
   });
 
-  test("recovers a credential lock only after its owner has exited", async () => {
+  test("bounds a stalled credential lock release", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    const originalLock = lockMock.getMockImplementation()!;
+    lockMock.mockResolvedValue(() => new Promise<never>(() => undefined));
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec timed out after 20ms",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+    lockMock.mockImplementation(originalLock);
+  });
+
+  test("ignores an orphaned legacy empty credential lock", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
     const lockPath = `${sourceAuthPath}.mf-dashboard.lock`;
     await writeFile(sourceAuthPath, '{"token":"initial"}');
-    await writeFile(lockPath, JSON.stringify({ pid: 2_147_483_647, token: "exited-owner" }));
+    await writeFile(lockPath, "");
     process.env.CODEX_HOME = sourceCodexHome;
     mockCodexRun(createFakeCodex(), createFakeCodex());
 
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
-    await expect(readFile(lockPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(lockPath, "utf8")).resolves.toBe("");
   });
 
-  test("does not release a credential lock replaced by another owner", async () => {
-    const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
-    temporaryDirectories.push(sourceCodexHome);
-    const sourceAuthPath = join(sourceCodexHome, "auth.json");
-    const lockPath = `${sourceAuthPath}.mf-dashboard.lock`;
-    await writeFile(sourceAuthPath, '{"token":"initial"}');
-    process.env.CODEX_HOME = sourceCodexHome;
-    const mcp = createFakeCodex();
-    const fake = createFakeCodex();
-    spawnMock
-      .mockReturnValueOnce(mcp.child)
-      .mockReturnValueOnce(createFakeCodex().child)
-      .mockReturnValueOnce(createFakeCodex().child)
-      .mockImplementation(() => {
-        writeFileSync(lockPath, JSON.stringify({ pid: process.pid, token: "replacement-owner" }));
-        return fake.child;
-      });
+  test("releases the auth snapshot lock before spawning Codex", async () => {
+    const originalLock = lockMock.getMockImplementation()!;
+    const releaseSnapshot = vi.fn<() => Promise<void>>(async () => undefined);
+    const releasePersistence = vi.fn<() => Promise<void>>(async () => undefined);
+    lockMock.mockResolvedValueOnce(releaseSnapshot).mockResolvedValueOnce(releasePersistence);
+    mockCodexRun(createFakeCodex(), createFakeCodex());
 
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
-    await expect(readFile(lockPath, "utf8")).resolves.toContain("replacement-owner");
+    expect(releaseSnapshot).toHaveBeenCalledOnce();
+    expect(releaseSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
+      spawnMock.mock.invocationCallOrder[0]!,
+    );
+    expect(releasePersistence).toHaveBeenCalledOnce();
+    lockMock.mockImplementation(originalLock);
   });
 
   test("times out while creating isolated subdirectories", async () => {
@@ -674,5 +688,44 @@ describe("generateWithCodexExec", () => {
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "Codex credential persistence failed",
     );
+  });
+
+  test("keeps the credential lock until a timed-out rename settles", async () => {
+    const sourceAuthPath = join(process.env.CODEX_HOME!, "auth.json");
+    const lockPath = `${sourceAuthPath}.mf-dashboard.lockdir`;
+    const originalRename = renameMock.getMockImplementation()!;
+    const originalSetTimeout = globalThis.setTimeout;
+    let releaseRename!: () => void;
+    renameMock.mockImplementation((source, destination) => {
+      if (destination === sourceAuthPath) {
+        return new Promise<void>((resolve) => (releaseRename = resolve));
+      }
+      return originalRename(source, destination);
+    });
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      callback: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => originalSetTimeout(callback, delay === 5_000 ? 20 : delay, ...args)) as typeof setTimeout);
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock
+      .mockReturnValueOnce(mcp.child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockReturnValueOnce(createFakeCodex().child)
+      .mockImplementation((_command, _args, options) => {
+        writeFileSync(join(options?.env?.CODEX_HOME as string, "auth.json"), '{"token":"new"}');
+        return fake.child;
+      });
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "Codex credential persistence failed",
+    );
+    expect(releaseRename).toBeTypeOf("function");
+    await expect(stat(lockPath)).resolves.toBeDefined();
+
+    releaseRename();
+    await vi.waitFor(() => expect(stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" }));
+    renameMock.mockImplementation(originalRename);
   });
 });

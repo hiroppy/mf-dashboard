@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { lock } from "proper-lockfile";
 import { z } from "zod";
 
 interface CodexTool {
@@ -51,6 +52,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 const SHUTDOWN_GRACE_MS = 500;
 const CLEANUP_TIMEOUT_MS = 5_000;
 const CREDENTIAL_PERSIST_TIMEOUT_MS = 5_000;
+const CREDENTIAL_LOCK_STALE_MS = 30_000;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
 const ALLOWED_ENV_KEYS = [
@@ -140,107 +142,47 @@ function getSourceAuthPath(): string {
   return join(resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")), "auth.json");
 }
 
-interface CredentialLockOwner {
-  pid: number;
-  token: string;
-}
-
-async function openCredentialLock(path: string, signal: AbortSignal) {
-  const opening = open(path, "wx", 0o600);
+async function withCredentialLock<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  const sourceAuthPath = getSourceAuthPath();
+  const locking = lock(sourceAuthPath, {
+    lockfilePath: `${sourceAuthPath}.mf-dashboard.lockdir`,
+    onCompromised: (error) =>
+      console.warn(`[analytics] Codex credential lock was compromised: ${error.message}`),
+    realpath: false,
+    retries: { factor: 1, forever: true, maxTimeout: 50, minTimeout: 50 },
+    stale: CREDENTIAL_LOCK_STALE_MS,
+    update: CREDENTIAL_LOCK_STALE_MS / 3,
+  });
+  let release: () => Promise<void>;
   try {
-    return await waitForToolResult(() => opening, signal);
+    release = await waitForToolResult(() => locking, signal);
   } catch (error) {
     if (signal.aborted) {
-      void opening
-        .then(async (handle) => {
-          await handle.close().catch(() => undefined);
-          await rm(path, { force: true }).catch(() => undefined);
-        })
-        .catch(() => undefined);
+      void locking.then((lateRelease) => lateRelease()).catch(() => undefined);
     }
     throw error;
   }
-}
 
-async function readCredentialLockOwner(
-  path: string,
-  signal?: AbortSignal,
-): Promise<Partial<CredentialLockOwner> | undefined> {
+  let operationFailed = false;
+  let operationError: unknown;
+  let result!: T;
   try {
-    const value = signal
-      ? await readFile(path, { encoding: "utf8", signal })
-      : await readFile(path, "utf8");
-    return JSON.parse(value) as Partial<CredentialLockOwner>;
-  } catch {
-    signal?.throwIfAborted();
-    return undefined;
-  }
-}
-
-async function withCredentialLock<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
-  const lockPath = `${getSourceAuthPath()}.mf-dashboard.lock`;
-  const recoveryLockPath = `${lockPath}.recovery`;
-  const owner = { pid: process.pid, token: randomUUID() };
-  let lockHandle;
-  while (true) {
-    signal.throwIfAborted();
-    try {
-      lockHandle = await openCredentialLock(lockPath, signal);
-      break;
-    } catch (error) {
-      if (signal.aborted) throw error;
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const existingOwner = await readCredentialLockOwner(lockPath, signal);
-      let ownerIsDead = false;
-      if (typeof existingOwner?.pid === "number") {
-        try {
-          process.kill(existingOwner.pid, 0);
-        } catch (ownerError) {
-          ownerIsDead = (ownerError as NodeJS.ErrnoException).code === "ESRCH";
-        }
-      }
-      if (ownerIsDead) {
-        let recoveryHandle;
-        try {
-          recoveryHandle = await openCredentialLock(recoveryLockPath, signal);
-          const latestOwner = await readCredentialLockOwner(lockPath, signal);
-          if (latestOwner?.token === existingOwner?.token) {
-            const stalePath = `${lockPath}.stale-${randomUUID()}`;
-            await waitForToolResult(() => rename(lockPath, stalePath), signal);
-            await waitForToolResult(() => rm(stalePath, { force: true }), signal);
-          }
-        } catch (recoveryError) {
-          if ((recoveryError as NodeJS.ErrnoException).code !== "EEXIST") throw recoveryError;
-        } finally {
-          await recoveryHandle?.close().catch(() => undefined);
-          if (recoveryHandle) await rm(recoveryLockPath, { force: true }).catch(() => undefined);
-        }
-        continue;
-      }
-      await waitForToolResult(
-        () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
-        signal,
-      );
-    }
-  }
-  try {
-    await waitForToolResult(() => lockHandle.writeFile(JSON.stringify(owner)), signal);
+    result = await operation();
   } catch (error) {
-    await lockHandle.close().catch(() => undefined);
-    await rm(lockPath, { force: true }).catch(() => undefined);
-    throw error;
+    operationFailed = true;
+    operationError = error;
   }
+
+  const releasing = release();
   try {
-    return await operation();
-  } finally {
-    await lockHandle.close().catch(() => undefined);
-    const currentOwner = await readCredentialLockOwner(lockPath);
-    if (currentOwner?.token === owner.token) {
-      await rm(lockPath, { force: true }).catch(() =>
-        console.warn("[analytics] Failed to release the Codex credential lock"),
-      );
-    }
+    await waitForToolResult(() => releasing, signal);
+  } catch (releaseError) {
+    void releasing.catch(() => undefined);
+    if (!operationFailed) throw releaseError;
+    console.warn("[analytics] Failed to release the Codex credential lock");
   }
+  if (operationFailed) throw operationError;
+  return result;
 }
 
 async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedEnvironment> {
@@ -609,7 +551,10 @@ async function generateInIsolation<T>(
   controller: AbortController,
   deadline: number,
 ): Promise<CodexExecResult<T>> {
-  const environment = await createIsolatedEnvironment(controller.signal);
+  const environment = await withCredentialLock(
+    () => createIsolatedEnvironment(controller.signal),
+    controller.signal,
+  );
   let generationResult!: CodexExecResult<T>;
   let generationError: unknown;
   let generationFailed = false;
@@ -661,7 +606,11 @@ async function generateInIsolation<T>(
       CREDENTIAL_PERSIST_TIMEOUT_MS,
     );
     try {
-      await persistRefreshedCredentials(environment, persistenceController.signal);
+      const persistence = withCredentialLock(
+        () => persistRefreshedCredentials(environment, persistenceController.signal),
+        persistenceController.signal,
+      );
+      await waitForToolResult(() => persistence, persistenceController.signal);
     } catch {
       persistenceFailed = true;
       console.warn("[analytics] Failed to persist refreshed Codex credentials");
@@ -699,9 +648,13 @@ export async function generateWithCodexExec<T>(
     if (Date.now() >= deadline) {
       throw new Error(`codex exec timed out after ${timeoutMs}ms`);
     }
-    const result = await withCredentialLock(
-      () => generateInIsolation(options, toolData, prompt, timeoutMs, controller, deadline),
-      controller.signal,
+    const result = await generateInIsolation(
+      options,
+      toolData,
+      prompt,
+      timeoutMs,
+      controller,
+      deadline,
     );
     controller.signal.throwIfAborted();
     if (Date.now() >= deadline) {
