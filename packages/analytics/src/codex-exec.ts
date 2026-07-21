@@ -551,24 +551,38 @@ async function generateInIsolation<T>(
   controller: AbortController,
   deadline: number,
 ): Promise<CodexExecResult<T>> {
-  const environment = await withCredentialLock(
-    () => createIsolatedEnvironment(controller.signal),
-    controller.signal,
-  );
+  let environment: IsolatedEnvironment | undefined;
+  try {
+    await withCredentialLock(async () => {
+      environment = await createIsolatedEnvironment(controller.signal);
+    }, controller.signal);
+  } catch (error) {
+    if (environment) await removeTemporaryEnvironment(environment.root);
+    throw error;
+  }
+  if (!environment) throw new Error("Codex isolated environment was not created");
+  const isolatedEnvironment = environment;
   let generationResult!: CodexExecResult<T>;
   let generationError: unknown;
   let generationFailed = false;
 
   try {
     if (options.schema) {
-      await writeFile(environment.schemaPath, JSON.stringify(z.toJSONSchema(options.schema)), {
-        signal: controller.signal,
-      });
+      await writeFile(
+        isolatedEnvironment.schemaPath,
+        JSON.stringify(z.toJSONSchema(options.schema)),
+        {
+          signal: controller.signal,
+        },
+      );
     }
-    await assertNoMcpServers(environment, controller.signal);
-    const skillConfig = await initializeAndDisableBundledSkills(environment, controller.signal);
+    await assertNoMcpServers(isolatedEnvironment, controller.signal);
+    const skillConfig = await initializeAndDisableBundledSkills(
+      isolatedEnvironment,
+      controller.signal,
+    );
     const result = await runCodexExec(
-      environment,
+      isolatedEnvironment,
       options.system,
       prompt,
       Boolean(options.schema),
@@ -607,7 +621,7 @@ async function generateInIsolation<T>(
     );
     try {
       const persistence = withCredentialLock(
-        () => persistRefreshedCredentials(environment, persistenceController.signal),
+        () => persistRefreshedCredentials(isolatedEnvironment, persistenceController.signal),
         persistenceController.signal,
       );
       await waitForToolResult(() => persistence, persistenceController.signal);
@@ -618,7 +632,7 @@ async function generateInIsolation<T>(
       clearTimeout(persistenceTimeout);
     }
   }
-  await removeTemporaryEnvironment(environment.root);
+  await removeTemporaryEnvironment(isolatedEnvironment.root);
 
   if (generationFailed) throw generationError;
   if (persistenceFailed) throw new Error("Codex credential persistence failed");

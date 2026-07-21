@@ -576,13 +576,23 @@ describe("generateWithCodexExec", () => {
   test("bounds a stalled credential lock release", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "20";
     const originalLock = lockMock.getMockImplementation()!;
+    const originalRm = rmMock.getMockImplementation()!;
+    let removedTemporaryAuth = false;
     lockMock.mockResolvedValue(() => new Promise<never>(() => undefined));
+    rmMock.mockImplementation((path, options) => {
+      if (String(path).includes("mf-dashboard-codex-") && !String(path).includes("-test-")) {
+        removedTemporaryAuth = true;
+      }
+      return originalRm(path, options);
+    });
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "codex exec timed out after 20ms",
     );
     expect(spawnMock).not.toHaveBeenCalled();
+    expect(removedTemporaryAuth).toBe(true);
     lockMock.mockImplementation(originalLock);
+    rmMock.mockImplementation(originalRm);
   });
 
   test("ignores an orphaned legacy empty credential lock", async () => {
