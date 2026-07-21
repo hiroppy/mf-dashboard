@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -59,6 +59,7 @@ function createFakeCodex(
     ignoreKill?: boolean;
     mcpServers?: unknown[];
     output?: string;
+    promptInput?: string;
     stderr?: string;
   } = {},
 ) {
@@ -87,6 +88,12 @@ function createFakeCodex(
         callback();
         return;
       }
+      if (args[0] === "debug") {
+        stdout.write(options.promptInput ?? "[]");
+        queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
+        callback();
+        return;
+      }
       const outputIndex = args.indexOf("--output-last-message");
       if (options.exitCode === undefined || options.exitCode === 0) {
         await writeFile(args[outputIndex + 1]!, options.output ?? '{"value":"ok"}');
@@ -110,6 +117,10 @@ describe("generateWithCodexExec", () => {
     process.env.CODEX_ACCESS_TOKEN = "must-not-be-forwarded";
     process.env.OPENAI_API_KEY = "must-not-be-forwarded";
     process.env.UNTRUSTED_SECRET = "must-not-be-forwarded";
+    process.env.all_proxy = "socks5://proxy.example.com";
+    process.env.http_proxy = "http://proxy.example.com";
+    process.env.https_proxy = "http://secure-proxy.example.com";
+    process.env.no_proxy = "localhost";
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
@@ -166,6 +177,73 @@ describe("generateWithCodexExec", () => {
         OPENAI_API_KEY: expect.anything(),
       }),
     );
+    expect(spawnOptions?.env).toEqual(
+      expect.objectContaining({
+        all_proxy: "socks5://proxy.example.com",
+        http_proxy: "http://proxy.example.com",
+        https_proxy: "http://secure-proxy.example.com",
+        no_proxy: "localhost",
+      }),
+    );
+  });
+
+  test("disables canonical skills and verifies they are absent from the model prompt", async () => {
+    const skillPath = join(process.env.CODEX_HOME!, "skills", "custom", "SKILL.md");
+    await mkdirMock(join(process.env.CODEX_HOME!, "skills", "custom"), { recursive: true });
+    await writeFile(skillPath, "# Custom skill");
+    const mcp = createFakeCodex();
+    const promptInput = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock
+      .mockReturnValueOnce(mcp.child)
+      .mockReturnValueOnce(promptInput.child)
+      .mockReturnValueOnce(fake.child);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    const debugArgs = spawnMock.mock.calls[1]?.[1] as string[];
+    const execArgs = spawnMock.mock.calls[2]?.[1] as string[];
+    const skillConfig = `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`;
+    expect(debugArgs).toEqual(expect.arrayContaining(["debug", "prompt-input", skillConfig]));
+    expect(execArgs).toContain(skillConfig);
+  });
+
+  test("disables canonical skills exposed through directory links", async () => {
+    const target = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-skill-target-"));
+    temporaryDirectories.push(target);
+    await writeFile(join(target, "SKILL.md"), "# Linked skill");
+    const skillsDirectory = join(process.env.CODEX_HOME!, "skills");
+    await mkdirMock(skillsDirectory, { recursive: true });
+    const skillDirectory = join(skillsDirectory, "linked");
+    await symlink(target, skillDirectory);
+    const skillPath = join(skillDirectory, "SKILL.md");
+    const mcp = createFakeCodex();
+    const promptInput = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock
+      .mockReturnValueOnce(mcp.child)
+      .mockReturnValueOnce(promptInput.child)
+      .mockReturnValueOnce(fake.child);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    expect(spawnMock.mock.calls[2]?.[1]).toContain(
+      `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`,
+    );
+  });
+
+  test("fails closed when a canonical skill remains in the model prompt", async () => {
+    const skillPath = join(process.env.CODEX_HOME!, "skills", "custom", "SKILL.md");
+    await mkdirMock(join(process.env.CODEX_HOME!, "skills", "custom"), { recursive: true });
+    await writeFile(skillPath, "# Custom skill");
+    const mcp = createFakeCodex();
+    const promptInput = createFakeCodex({ promptInput: JSON.stringify([{ content: skillPath }]) });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(promptInput.child);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec loaded canonical skills",
+    );
+    expect(spawnMock).toHaveBeenCalledTimes(2);
   });
 
   test("does not execute tools that are absent from the instructions", async () => {
@@ -363,6 +441,33 @@ describe("generateWithCodexExec", () => {
     releaseCleanup();
     const { error } = await outcome;
     expect(error).toEqual(new Error("codex exec timed out after 20ms"));
+    rmMock.mockImplementation(originalRm);
+  });
+
+  test("bounds stalled isolated workspace cleanup independently", async () => {
+    const originalRm = rmMock.getMockImplementation()!;
+    const originalSetTimeout = globalThis.setTimeout;
+    let releaseCleanup!: () => void;
+    rmMock.mockImplementation((path, options) => {
+      if (String(path).includes("mf-dashboard-codex-") && !String(path).includes("-test-")) {
+        return new Promise<void>((resolve) => (releaseCleanup = resolve));
+      }
+      return originalRm(path, options);
+    });
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      callback: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => originalSetTimeout(callback, delay === 5_000 ? 1 : delay, ...args)) as typeof setTimeout);
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ output: "completed" });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).resolves.toEqual(
+      expect.objectContaining({ text: "completed" }),
+    );
+    expect(releaseCleanup).toBeTypeOf("function");
+    releaseCleanup();
     rmMock.mockImplementation(originalRm);
   });
 

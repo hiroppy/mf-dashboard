@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -46,6 +46,8 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_TOOL_CALLS = 20;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const SHUTDOWN_GRACE_MS = 500;
+const CLEANUP_TIMEOUT_MS = 5_000;
+const MAX_CANONICAL_SKILLS = 1_000;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "HTTPS_PROXY",
@@ -60,6 +62,10 @@ const ALLOWED_ENV_KEYS = [
   "TMP",
   "TMPDIR",
   "USER",
+  "all_proxy",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
 ] as const;
 const CODEX_CONFIG = [
   "features.apps=false",
@@ -306,11 +312,102 @@ async function assertNoMcpServers(
   }
 }
 
+async function listCanonicalSkills(authHome: string, signal: AbortSignal): Promise<string[]> {
+  const skillsRoot = join(authHome, "skills");
+  const skills: string[] = [];
+  const visitedDirectories = new Set<string>();
+  const visit = async (directory: string): Promise<void> => {
+    signal.throwIfAborted();
+    let entries;
+    try {
+      entries = await waitForToolResult(() => readdir(directory, { withFileTypes: true }), signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" && directory === skillsRoot) return;
+      throw new Error("codex exec could not inspect canonical skills");
+    }
+    let resolvedDirectory: string;
+    try {
+      resolvedDirectory = await waitForToolResult(() => realpath(directory), signal);
+    } catch {
+      signal.throwIfAborted();
+      throw new Error("codex exec could not inspect canonical skills");
+    }
+    if (visitedDirectories.has(resolvedDirectory)) return;
+    visitedDirectories.add(resolvedDirectory);
+    for (const entry of entries) {
+      signal.throwIfAborted();
+      const path = join(directory, entry.name);
+      let isDirectory = entry.isDirectory();
+      let isFile = entry.isFile();
+      if (entry.isSymbolicLink()) {
+        try {
+          const target = await waitForToolResult(() => stat(path), signal);
+          isDirectory = target.isDirectory();
+          isFile = target.isFile();
+        } catch {
+          signal.throwIfAborted();
+          throw new Error("codex exec could not inspect a canonical skill link");
+        }
+      }
+      if (isDirectory) await visit(path);
+      else if (isFile && entry.name === "SKILL.md") skills.push(path);
+      if (skills.length > MAX_CANONICAL_SKILLS) {
+        throw new Error("codex exec found too many canonical skills");
+      }
+    }
+  };
+  await visit(skillsRoot);
+  return skills.sort();
+}
+
+function buildSkillConfig(skillPaths: string[]): string {
+  const entries = skillPaths.map((path) => `{path=${JSON.stringify(path)},enabled=false}`);
+  return `skills.config=[${entries.join(",")}]`;
+}
+
+async function getVerifiedSkillConfig(
+  environment: IsolatedEnvironment,
+  signal: AbortSignal,
+): Promise<string> {
+  const skillPaths = await listCanonicalSkills(environment.authHome, signal);
+  const skillConfig = buildSkillConfig(skillPaths);
+  if (skillPaths.length > 0) {
+    const args = [
+      "debug",
+      "prompt-input",
+      ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
+      "--config",
+      skillConfig,
+      "skill isolation check",
+    ];
+    const { stdout } = await runCodexProcess(
+      environment,
+      args,
+      signal,
+      undefined,
+      environment.authHome,
+    );
+    if (skillPaths.some((path) => stdout.includes(path))) {
+      throw new Error("codex exec loaded canonical skills");
+    }
+  }
+  const verifiedPaths = await listCanonicalSkills(environment.authHome, signal);
+  if (
+    verifiedPaths.length !== skillPaths.length ||
+    verifiedPaths.some((path, i) => path !== skillPaths[i])
+  ) {
+    throw new Error("codex exec canonical skills changed during verification");
+  }
+  return skillConfig;
+}
+
 async function runCodexExec(
   environment: IsolatedEnvironment,
   system: string,
   prompt: string,
   hasSchema: boolean,
+  skillConfig: string,
   signal: AbortSignal,
 ): Promise<{ model: string; text: string }> {
   const args = [
@@ -327,6 +424,8 @@ async function runCodexExec(
     ...CODEX_CONFIG.flatMap((config) => ["--config", config]),
     "--config",
     `developer_instructions=${JSON.stringify(`${system}\n\n${DATA_BOUNDARY}`)}`,
+    "--config",
+    skillConfig,
   ];
   if (hasSchema) args.push("--output-schema", environment.schemaPath);
   if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
@@ -345,6 +444,29 @@ async function runCodexExec(
   const model =
     stderrHead.match(/^model: (.+)$/m)?.[1]?.trim() ?? process.env.AI_MODEL ?? "codex-default";
   return { model, text };
+}
+
+async function removeTemporaryEnvironment(root: string): Promise<void> {
+  const removal = rm(root, { recursive: true, force: true });
+  let cleanupTimeout: ReturnType<typeof setTimeout> | undefined;
+  const outcome = await Promise.race([
+    removal.then(
+      () => "removed" as const,
+      () => "failed" as const,
+    ),
+    new Promise<"timed-out">((resolve) => {
+      cleanupTimeout = setTimeout(() => resolve("timed-out"), CLEANUP_TIMEOUT_MS);
+    }),
+  ]);
+  clearTimeout(cleanupTimeout);
+  if (outcome === "timed-out") {
+    console.warn("[analytics] Temporary Codex environment cleanup exceeded its time budget");
+    void removal.catch(() =>
+      console.warn("[analytics] Delayed temporary Codex environment cleanup failed"),
+    );
+  } else if (outcome === "failed") {
+    console.warn("[analytics] Failed to remove the temporary Codex environment");
+  }
 }
 
 async function generateInIsolation<T>(
@@ -367,11 +489,13 @@ async function generateInIsolation<T>(
       });
     }
     await assertNoMcpServers(environment, controller.signal);
+    const skillConfig = await getVerifiedSkillConfig(environment, controller.signal);
     const result = await runCodexExec(
       environment,
       options.system,
       prompt,
       Boolean(options.schema),
+      skillConfig,
       controller.signal,
     );
     let output: T | undefined;
@@ -392,11 +516,7 @@ async function generateInIsolation<T>(
     generationError = error;
   }
 
-  try {
-    await rm(environment.root, { recursive: true, force: true });
-  } catch (error) {
-    console.warn("[analytics] Failed to remove the temporary Codex environment:", error);
-  }
+  await removeTemporaryEnvironment(environment.root);
 
   if (generationFailed) throw generationError;
   return generationResult;
