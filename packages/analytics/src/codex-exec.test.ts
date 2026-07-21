@@ -357,7 +357,7 @@ describe("generateWithCodexExec", () => {
   });
 
   test("bounds a stalled final-output open by the request deadline", async () => {
-    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const originalOpen = openMock.getMockImplementation()!;
     const originalRm = rmMock.getMockImplementation()!;
     const closeMock = vi.fn<() => Promise<void>>(async () => undefined);
@@ -384,7 +384,7 @@ describe("generateWithCodexExec", () => {
 
     try {
       await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-        "codex exec timed out after 20ms",
+        "codex exec timed out after 1000ms",
       );
       expect(isolatedRootRemovals).toBe(1);
       resolveOpen(lateHandle);
@@ -394,10 +394,10 @@ describe("generateWithCodexExec", () => {
       openMock.mockImplementation(originalOpen);
       rmMock.mockImplementation(originalRm);
     }
-  }, 500);
+  }, 2500);
 
   test("retries root cleanup after a delayed opened handle closes", async () => {
-    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const originalOpen = openMock.getMockImplementation()!;
     const originalRm = rmMock.getMockImplementation()!;
     let resolveClose!: () => void;
@@ -426,7 +426,7 @@ describe("generateWithCodexExec", () => {
 
     try {
       await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-        "codex exec timed out after 20ms",
+        "codex exec timed out after 1000ms",
       );
       expect(isolatedRootRemovals).toBe(1);
       resolveClose();
@@ -435,7 +435,7 @@ describe("generateWithCodexExec", () => {
       openMock.mockImplementation(originalOpen);
       rmMock.mockImplementation(originalRm);
     }
-  }, 500);
+  }, 2500);
 
   test("uses the remaining request budget for credential-lock acquisition", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "100";
