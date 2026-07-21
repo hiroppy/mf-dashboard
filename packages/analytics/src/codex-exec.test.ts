@@ -7,7 +7,8 @@ import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { mkdtempMock, readFileMock, spawnMock } = vi.hoisted(() => ({
+const { mkdirMock, mkdtempMock, readFileMock, spawnMock } = vi.hoisted(() => ({
+  mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
   mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
   readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
   spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
@@ -16,9 +17,10 @@ const { mkdtempMock, readFileMock, spawnMock } = vi.hoisted(() => ({
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs/promises")>();
+  mkdirMock.mockImplementation(original.mkdir);
   mkdtempMock.mockImplementation(original.mkdtemp);
   readFileMock.mockImplementation(original.readFile);
-  return { ...original, mkdtemp: mkdtempMock, readFile: readFileMock };
+  return { ...original, mkdir: mkdirMock, mkdtemp: mkdtempMock, readFile: readFileMock };
 });
 
 const { generateWithCodexExec } = await import("./codex-exec.js");
@@ -34,7 +36,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   process.env = { ...originalEnv };
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  spawnMock.mockReset();
   await Promise.all(
     temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
@@ -277,6 +281,21 @@ describe("generateWithCodexExec", () => {
     expect(fake.kill).not.toHaveBeenCalled();
   });
 
+  test("redacts malformed structured output from parser errors", async () => {
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ output: "private financial summary is malformed" });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+
+    const error = await generateWithCodexExec({
+      system: "Return JSON.",
+      prompt: "Answer.",
+      schema: z.object({ value: z.string() }),
+    }).catch((error: unknown) => error);
+
+    expect(error).toEqual(new Error("Codex returned invalid structured output"));
+    expect(String(error)).not.toContain("private financial summary");
+  });
+
   test("waits for the Codex process to close after a timeout", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const mcp = createFakeCodex();
@@ -354,6 +373,33 @@ describe("generateWithCodexExec", () => {
     );
     expect(spawnMock).not.toHaveBeenCalled();
     mkdtempMock.mockImplementation(originalMkdtemp);
+  });
+
+  test("times out while creating isolated subdirectories", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    const originalMkdir = mkdirMock.getMockImplementation()!;
+    mkdirMock.mockImplementation(() => new Promise<never>(() => undefined));
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec timed out after 20ms",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+    mkdirMock.mockImplementation(originalMkdir);
+  });
+
+  test("rejects when tool-data serialization crosses the deadline", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "100";
+    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(101);
+
+    await expect(
+      generateWithCodexExec({
+        preloadTools: ["lookup"],
+        system: "Use lookup.",
+        prompt: "Prompt.",
+        tools: { lookup: { inputSchema: z.object({}), execute: () => ({ value: "data" }) } },
+      }),
+    ).rejects.toThrow("codex exec timed out after 100ms");
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   test("times out while waiting for the credential lock", async () => {

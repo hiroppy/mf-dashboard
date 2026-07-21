@@ -159,7 +159,19 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
     const codexHome = join(root, "codex-home");
     const cwd = join(root, "workspace");
-    await Promise.all([mkdir(codexHome, { mode: 0o700 }), mkdir(cwd, { mode: 0o700 })]);
+    const directoryCreation = Promise.all([
+      mkdir(codexHome, { mode: 0o700 }),
+      mkdir(cwd, { mode: 0o700 }),
+    ]);
+    try {
+      await waitForToolResult(() => directoryCreation, signal);
+    } catch (error) {
+      void directoryCreation
+        .then(() => rm(root, { recursive: true, force: true }))
+        .catch(() => rm(root, { recursive: true, force: true }))
+        .catch(() => undefined);
+      throw error;
+    }
     signal.throwIfAborted();
 
     const environment = {
@@ -186,7 +198,12 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
     return { ...environment, authPath, initialAuth, sourceAuthPath };
   } catch (error) {
-    await rm(root, { recursive: true, force: true });
+    const removal = rm(root, { recursive: true, force: true });
+    try {
+      await waitForToolResult(() => removal, signal);
+    } catch {
+      void removal.catch(() => undefined);
+    }
     throw error;
   }
 }
@@ -389,6 +406,7 @@ async function runCodexExec(
 async function generateInIsolation<T>(
   options: CodexExecOptions<T>,
   toolData: { data: Record<string, unknown>; toolNames: string[] },
+  prompt: string,
   timeoutMs: number,
   controller: AbortController,
   deadline: number,
@@ -408,11 +426,18 @@ async function generateInIsolation<T>(
     const result = await runCodexExec(
       environment,
       options.system,
-      buildPrompt(options.prompt, toolData.data),
+      prompt,
       Boolean(options.schema),
       controller.signal,
     );
-    const output = options.schema ? options.schema.parse(JSON.parse(result.text)) : undefined;
+    let output: T | undefined;
+    if (options.schema) {
+      try {
+        output = options.schema.parse(JSON.parse(result.text));
+      } catch {
+        throw new Error("Codex returned invalid structured output");
+      }
+    }
     controller.signal.throwIfAborted();
     if (Date.now() >= deadline) {
       throw new Error(`codex exec timed out after ${timeoutMs}ms`);
@@ -477,8 +502,13 @@ export async function generateWithCodexExec<T>(
       maxToolCalls,
       controller.signal,
     );
+    const prompt = buildPrompt(options.prompt, toolData.data);
+    controller.signal.throwIfAborted();
+    if (Date.now() >= deadline) {
+      throw new Error(`codex exec timed out after ${timeoutMs}ms`);
+    }
     const result = await withCredentialLock(
-      () => generateInIsolation(options, toolData, timeoutMs, controller, deadline),
+      () => generateInIsolation(options, toolData, prompt, timeoutMs, controller, deadline),
       controller.signal,
     );
     controller.signal.throwIfAborted();
