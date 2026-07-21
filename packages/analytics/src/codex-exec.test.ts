@@ -186,7 +186,7 @@ describe("generateWithCodexExec", () => {
   });
 
   test("aborts a slow preloaded tool when the command times out", async () => {
-    process.env.CODEX_EXEC_TIMEOUT_MS = "5";
+    process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     let aborted = false;
 
     await expect(
@@ -207,7 +207,7 @@ describe("generateWithCodexExec", () => {
           },
         },
       }),
-    ).rejects.toThrow("codex exec timed out after 5ms");
+    ).rejects.toThrow("codex exec timed out after 1000ms");
     expect(aborted).toBe(true);
     expect(spawnMock).not.toHaveBeenCalled();
   });
@@ -224,25 +224,25 @@ describe("generateWithCodexExec", () => {
   });
 
   test("waits for the Codex process to close after a timeout", async () => {
-    process.env.CODEX_EXEC_TIMEOUT_MS = "5";
+    process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ hang: true });
     spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "codex exec timed out after 5ms",
+      "codex exec timed out after 1000ms",
     );
     expect(fake.kill).toHaveBeenCalledOnce();
   });
 
   test("returns the timeout when a killed process never emits close", async () => {
-    process.env.CODEX_EXEC_TIMEOUT_MS = "5";
+    process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     const mcp = createFakeCodex();
     const fake = createFakeCodex({ hang: true, ignoreKill: true });
     spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "codex exec timed out after 5ms",
+      "codex exec timed out after 1000ms",
     );
     expect(fake.kill).toHaveBeenNthCalledWith(1);
     expect(fake.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
