@@ -89,7 +89,10 @@ analytics package では `AI_BACKEND` によって AI SDK と app-server を選�
 app-server 経路は接続ごとに ephemeral thread を作成し、read-only sandbox と
 `approvalPolicy: "never"` を指定する。さらに shell、filesystem、network、apps、plugins、
 MCP、collaboration tool を thread config で無効化し、子プロセスへ渡す環境変数を
-Codex の認証・通信に必要な allowlist に限定する。system prompt は `developerInstructions`、
+Codex の認証・通信に必要な allowlist に限定する。実行ごとに一時 `CODEX_HOME` と clean な
+cwd を作成し、元の `CODEX_HOME` からは `auth.json` だけをコピーする。`thread/start` の
+応答に instruction source が含まれる場合や cwd が一時 workspace と一致しない場合は
+fail closed とし、完了時に一時ディレクトリを削除する。system prompt は `developerInstructions`、
 取引情報などの untrusted input は turn の user message として分離する。
 既存の Zod output schema は `outputSchema`、
 AI SDK tool 定義は experimental な `dynamicTools` に変換し、tool の実行結果だけを
@@ -102,6 +105,7 @@ app-server 側は 2 倍の有限上限として無制限な反復を防ぐ。
 
 `CODEX_APP_SERVER_TIMEOUT_MS` は接続全体の timeout で、既定値は 120 秒。
 成功、失敗、timeout のいずれでも子プロセスの stdin を閉じて終了させる。
+`thread/start` が返した実際のモデル名は、生成した analytics report の metadata に保存する。
 
 app-server を使う価値があるのは、会話履歴、承認 UI、ツール実行、ストリーミングイベントを
 ダッシュボードへ統合する場合である。その場合は Next.js のリクエスト処理から都度起動せず、

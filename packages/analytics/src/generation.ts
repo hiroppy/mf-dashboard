@@ -17,6 +17,7 @@ export interface GenerateResult<T> {
   output: T | undefined;
   stepCount: number;
   toolNames: string[];
+  model: string;
 }
 
 export async function generateWithConfiguredBackend<T>(
@@ -36,8 +37,9 @@ export async function generateWithConfiguredBackend<T>(
     };
   }
 
+  const configuredModel = getModel();
   const result = await generateText({
-    model: getModel(),
+    model: configuredModel,
     system: options.system,
     prompt: options.prompt,
     tools: options.tools,
@@ -48,6 +50,7 @@ export async function generateWithConfiguredBackend<T>(
     text: result.text,
     output: result.output as T | undefined,
     stepCount: result.steps.length,
+    model: typeof configuredModel === "string" ? configuredModel : process.env.AI_MODEL!,
     toolNames: result.steps.flatMap((step: StepResult<ToolSet>) =>
       step.toolCalls.map((toolCall) => toolCall.toolName),
     ),

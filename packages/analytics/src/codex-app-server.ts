@@ -1,4 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { chmod, copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 
@@ -44,6 +47,13 @@ export interface CodexGenerationResult<T> {
   text: string;
   output: T | undefined;
   toolNames: string[];
+  model: string;
+}
+
+interface IsolatedEnvironment {
+  codexHome: string;
+  cwd: string;
+  root: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -51,8 +61,6 @@ const DEFAULT_MAX_TOOL_CALLS = 20;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "CODEX_ACCESS_TOKEN",
-  "CODEX_HOME",
-  "HOME",
   "HTTPS_PROXY",
   "HTTP_PROXY",
   "LOGNAME",
@@ -112,6 +120,27 @@ function getAppServerEnv(): NodeJS.ProcessEnv {
   );
 }
 
+async function createIsolatedEnvironment(): Promise<IsolatedEnvironment> {
+  const root = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-"));
+  const codexHome = join(root, "codex-home");
+  const cwd = join(root, "workspace");
+  await Promise.all([mkdir(codexHome, { mode: 0o700 }), mkdir(cwd, { mode: 0o700 })]);
+
+  const sourceCodexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
+  try {
+    const authPath = join(codexHome, "auth.json");
+    await copyFile(join(sourceCodexHome, "auth.json"), authPath);
+    await chmod(authPath, 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      await rm(root, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  return { codexHome, cwd, root };
+}
+
 function serializeToolResult(value: unknown): string {
   const serialized = JSON.stringify(value);
   return serialized ?? "null";
@@ -125,6 +154,7 @@ class CodexAppServerConnection {
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly maxToolCalls: number;
   private readonly pending = new Map<number, PendingRequest>();
+  private readonly cwd: string;
   private readonly timeoutMs: number;
   private readonly tools: Record<string, AppServerTool>;
   private readonly toolNames: string[] = [];
@@ -134,13 +164,23 @@ class CodexAppServerConnection {
   private turnCompletion?: PendingRequest;
   private stopped = false;
 
-  constructor(tools: Record<string, AppServerTool>, timeoutMs: number, maxToolCalls: number) {
+  constructor(
+    tools: Record<string, AppServerTool>,
+    timeoutMs: number,
+    maxToolCalls: number,
+    environment: IsolatedEnvironment,
+  ) {
     this.tools = tools;
     this.timeoutMs = timeoutMs;
     this.maxToolCalls = maxToolCalls;
+    this.cwd = environment.cwd;
     this.child = spawn("codex", ["app-server", "--listen", "stdio://"], {
-      cwd: process.cwd(),
-      env: getAppServerEnv(),
+      cwd: environment.cwd,
+      env: {
+        ...getAppServerEnv(),
+        CODEX_HOME: environment.codexHome,
+        HOME: environment.root,
+      },
       stdio: "pipe",
     });
 
@@ -148,6 +188,9 @@ class CodexAppServerConnection {
     lines.on("line", (line) => this.handleLine(line));
     this.child.stderr.on("data", (chunk: Buffer) => {
       this.stderr = `${this.stderr}${chunk.toString()}`.slice(-4_000);
+    });
+    this.child.stdin.on("error", (error) => {
+      if (!this.stopped) this.rejectAll(error);
     });
     this.child.on("error", (error) => this.rejectAll(error));
     this.child.on("close", (code) => {
@@ -180,7 +223,7 @@ class CodexAppServerConnection {
 
       const threadResponse = await this.request("thread/start", {
         model: process.env.AI_MODEL,
-        cwd: process.cwd(),
+        cwd: this.cwd,
         approvalPolicy: "never",
         sandbox: "read-only",
         ephemeral: true,
@@ -197,6 +240,17 @@ class CodexAppServerConnection {
       });
       const thread = threadResponse.thread as { id?: string } | undefined;
       if (!thread?.id) throw new Error("codex app-server did not return a thread id");
+      const instructionSources = threadResponse.instructionSources;
+      if (!Array.isArray(instructionSources) || instructionSources.length > 0) {
+        throw new Error("codex app-server loaded unexpected instruction sources");
+      }
+      if (threadResponse.cwd !== this.cwd) {
+        throw new Error("codex app-server started outside the isolated workspace");
+      }
+      const model = threadResponse.model;
+      if (typeof model !== "string" || !model) {
+        throw new Error("codex app-server did not return a model");
+      }
 
       const completion = new Promise<Record<string, unknown>>((resolve, reject) => {
         this.turnCompletion = { resolve, reject };
@@ -214,7 +268,7 @@ class CodexAppServerConnection {
       await completion;
 
       const output = options.schema ? options.schema.parse(JSON.parse(this.finalText)) : undefined;
-      return { text: this.finalText, output, toolNames: this.toolNames };
+      return { text: this.finalText, output, toolNames: this.toolNames, model };
     } finally {
       clearTimeout(timeout);
       this.stop();
@@ -375,9 +429,17 @@ class CodexAppServerConnection {
 export async function generateWithCodexAppServer<T>(
   options: CodexGenerationOptions<T>,
 ): Promise<CodexGenerationResult<T>> {
-  return new CodexAppServerConnection(
-    options.tools ?? {},
-    getTimeoutMs(),
-    getMaxToolCalls(options.maxToolCalls),
-  ).generate(options);
+  const timeoutMs = getTimeoutMs();
+  const maxToolCalls = getMaxToolCalls(options.maxToolCalls);
+  const environment = await createIsolatedEnvironment();
+  try {
+    return await new CodexAppServerConnection(
+      options.tools ?? {},
+      timeoutMs,
+      maxToolCalls,
+      environment,
+    ).generate(options);
+  } finally {
+    await rm(environment.root, { recursive: true, force: true });
+  }
 }

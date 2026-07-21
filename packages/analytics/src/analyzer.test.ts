@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 type AnyMock = (...args: any[]) => any;
 
 const mockSaveAnalyticsReport = vi.fn<AnyMock>();
-const mockGenerateInsights = vi.fn<AnyMock>();
+const mockGenerateInsightsWithMetadata = vi.fn<AnyMock>();
 const mockIsLLMEnabled = vi.fn<AnyMock>();
 
 vi.mock("@mf-dashboard/db/repository/analytics", () => ({
@@ -15,7 +15,7 @@ vi.mock("./config.js", () => ({
 }));
 
 vi.mock("./insights/generator.js", () => ({
-  generateInsights: (...args: any[]) => mockGenerateInsights(...args),
+  generateInsightsWithMetadata: (...args: any[]) => mockGenerateInsightsWithMetadata(...args),
 }));
 
 const { analyzeFinancialData } = await import("./analyzer");
@@ -40,24 +40,27 @@ describe("analyzeFinancialData", () => {
     const result = await analyzeFinancialData(mockDb, groupId);
 
     expect(result).toBe(false);
-    expect(mockGenerateInsights).not.toHaveBeenCalled();
+    expect(mockGenerateInsightsWithMetadata).not.toHaveBeenCalled();
     expect(mockSaveAnalyticsReport).not.toHaveBeenCalled();
   });
 
   it("should call generateInsights with db and groupId when LLM is enabled", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
-    mockGenerateInsights.mockResolvedValue({
-      summary: "summary",
-      savingsInsight: "savings",
-      investmentInsight: null,
-      spendingInsight: null,
-      balanceInsight: null,
-      liabilityInsight: null,
+    mockGenerateInsightsWithMetadata.mockResolvedValue({
+      model: "test-model",
+      insights: {
+        summary: "summary",
+        savingsInsight: "savings",
+        investmentInsight: null,
+        spendingInsight: null,
+        balanceInsight: null,
+        liabilityInsight: null,
+      },
     });
 
     await analyzeFinancialData(mockDb, groupId);
 
-    expect(mockGenerateInsights).toHaveBeenCalledWith(mockDb, groupId);
+    expect(mockGenerateInsightsWithMetadata).toHaveBeenCalledWith(mockDb, groupId);
   });
 
   it("should save report on successful insights generation", async () => {
@@ -70,7 +73,7 @@ describe("analyzeFinancialData", () => {
       balanceInsight: "balance",
       liabilityInsight: "liability",
     };
-    mockGenerateInsights.mockResolvedValue(insights);
+    mockGenerateInsightsWithMetadata.mockResolvedValue({ insights, model: "resolved-model" });
 
     const result = await analyzeFinancialData(mockDb, groupId);
 
@@ -79,7 +82,7 @@ describe("analyzeFinancialData", () => {
       groupId,
       date: "2025-06-15",
       insights,
-      model: null,
+      model: "resolved-model",
     });
   });
 
@@ -94,7 +97,7 @@ describe("analyzeFinancialData", () => {
       balanceInsight: null,
       liabilityInsight: null,
     };
-    mockGenerateInsights.mockResolvedValue(insights);
+    mockGenerateInsightsWithMetadata.mockResolvedValue({ insights, model: "test-model" });
 
     await analyzeFinancialData(mockDb, groupId);
 
@@ -108,13 +111,16 @@ describe("analyzeFinancialData", () => {
 
   it("should return false when all insight values are null", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
-    mockGenerateInsights.mockResolvedValue({
-      summary: null,
-      savingsInsight: null,
-      investmentInsight: null,
-      spendingInsight: null,
-      balanceInsight: null,
-      liabilityInsight: null,
+    mockGenerateInsightsWithMetadata.mockResolvedValue({
+      model: "test-model",
+      insights: {
+        summary: null,
+        savingsInsight: null,
+        investmentInsight: null,
+        spendingInsight: null,
+        balanceInsight: null,
+        liabilityInsight: null,
+      },
     });
 
     const result = await analyzeFinancialData(mockDb, groupId);
@@ -125,7 +131,7 @@ describe("analyzeFinancialData", () => {
 
   it("should return false and not throw when generateInsights fails", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
-    mockGenerateInsights.mockRejectedValue(new Error("LLM error"));
+    mockGenerateInsightsWithMetadata.mockRejectedValue(new Error("LLM error"));
 
     const result = await analyzeFinancialData(mockDb, groupId);
 
@@ -133,15 +139,18 @@ describe("analyzeFinancialData", () => {
     expect(mockSaveAnalyticsReport).not.toHaveBeenCalled();
   });
 
-  it("should use AI_MODEL env var for model field", async () => {
+  it("should use the model resolved by the backend for model field", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
-    mockGenerateInsights.mockResolvedValue({
-      summary: "summary",
-      savingsInsight: null,
-      investmentInsight: null,
-      spendingInsight: null,
-      balanceInsight: null,
-      liabilityInsight: null,
+    mockGenerateInsightsWithMetadata.mockResolvedValue({
+      model: "resolved-model",
+      insights: {
+        summary: "summary",
+        savingsInsight: null,
+        investmentInsight: null,
+        spendingInsight: null,
+        balanceInsight: null,
+        liabilityInsight: null,
+      },
     });
     process.env.AI_MODEL = "gpt-4o";
 
@@ -151,7 +160,7 @@ describe("analyzeFinancialData", () => {
     expect(mockSaveAnalyticsReport).toHaveBeenCalledWith(
       mockDb,
       expect.objectContaining({
-        model: "gpt-4o",
+        model: "resolved-model",
       }),
     );
 

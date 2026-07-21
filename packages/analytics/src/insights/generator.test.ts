@@ -26,7 +26,7 @@ vi.mock("./analysis-tools.js", () => ({
   createAnalysisTools: vi.fn<AnyMock>(() => ({ analysisTool1: {}, analysisTool2: {} })),
 }));
 
-const { generateInsights } = await import("./generator");
+const { generateInsights, generateInsightsWithMetadata } = await import("./generator");
 const { createFinancialTools } = await import("./tools.js");
 const { createAnalysisTools } = await import("./analysis-tools.js");
 
@@ -161,6 +161,16 @@ describe("generateInsights", () => {
 
     const result = await generateInsights(mockDb, groupId);
     expect(result).toEqual(validOutput);
+  });
+
+  it("should return the model resolved by the generation backend", async () => {
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(validOutput));
+
+    const result = await generateInsightsWithMetadata(mockDb, groupId);
+
+    expect(result).toEqual({ insights: validOutput, model: "mock-model" });
   });
 
   it("should throw when Stage 2 output is null", async () => {

@@ -17,7 +17,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function createFakeAppServer(toolCallCount = 1) {
+function createFakeAppServer(toolCallCount = 1, instructionSources: string[] = []) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   const messages: Array<Record<string, unknown>> = [];
@@ -42,7 +42,15 @@ function createFakeAppServer(toolCallCount = 1) {
         if (message.method === "initialize") {
           respond({ id: message.id, result: {} });
         } else if (message.method === "thread/start") {
-          respond({ id: message.id, result: { thread: { id: "thread-test" } } });
+          respond({
+            id: message.id,
+            result: {
+              thread: { id: "thread-test" },
+              instructionSources,
+              model: "codex-test-model",
+              cwd: (message.params as Record<string, unknown>).cwd,
+            },
+          });
         } else if (message.method === "turn/start") {
           respond({ id: message.id, result: { turn: { id: "turn-test" } } });
           respond({
@@ -111,13 +119,22 @@ describe("generateWithCodexAppServer", () => {
       text: '{"value":"tool-result"}',
       output: { value: "tool-result" },
       toolNames: ["lookupValue"],
+      model: "codex-test-model",
     });
     expect(execute).toHaveBeenCalledWith({});
     expect(spawnMock).toHaveBeenCalledWith("codex", ["app-server", "--listen", "stdio://"], {
-      cwd: process.cwd(),
-      env: expect.not.objectContaining({ UNTRUSTED_SECRET: expect.anything() }),
+      cwd: expect.stringContaining("mf-dashboard-codex-"),
+      env: expect.objectContaining({
+        CODEX_HOME: expect.stringContaining("mf-dashboard-codex-"),
+        HOME: expect.stringContaining("mf-dashboard-codex-"),
+      }),
       stdio: "pipe",
     });
+    const spawnOptions = spawnMock.mock.calls[0]?.[2];
+    expect(spawnOptions?.env).not.toEqual(
+      expect.objectContaining({ UNTRUSTED_SECRET: expect.anything() }),
+    );
+    expect(spawnOptions?.cwd).not.toBe(process.cwd());
 
     const threadStart = fake.messages.find((message) => message.method === "thread/start");
     expect(threadStart?.params).toMatchObject({
@@ -140,6 +157,17 @@ describe("generateWithCodexAppServer", () => {
     expect(turnStart?.params).toMatchObject({
       input: [{ type: "text", text: "Call lookupValue." }],
     });
+    expect(threadStart?.params).toMatchObject({ cwd: spawnOptions?.cwd });
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("fails closed when app-server reports inherited instruction sources", async () => {
+    const fake = createFakeAppServer(1, ["AGENTS.md"]);
+    spawnMock.mockReturnValue(fake.child);
+
+    await expect(
+      generateWithCodexAppServer({ system: "System", prompt: "Prompt" }),
+    ).rejects.toThrow("codex app-server loaded unexpected instruction sources");
     expect(fake.kill).toHaveBeenCalledOnce();
   });
 
@@ -203,6 +231,27 @@ describe("generateWithCodexAppServer", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(fake.messages).not.toContainEqual(expect.objectContaining({ id: 99 }));
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
+
+  test("rejects child stdin errors instead of emitting an unhandled error", async () => {
+    const fake = createFakeAppServer();
+    spawnMock.mockReturnValue(fake.child);
+
+    const generation = generateWithCodexAppServer({
+      system: "System",
+      prompt: "Prompt",
+      tools: {
+        lookupValue: {
+          inputSchema: z.object({}),
+          execute: () => new Promise(() => undefined),
+        },
+      },
+    });
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledOnce());
+    setTimeout(() => fake.child.stdin.emit("error", new Error("write EPIPE")), 0);
+
+    await expect(generation).rejects.toThrow("write EPIPE");
     expect(fake.kill).toHaveBeenCalledOnce();
   });
 });

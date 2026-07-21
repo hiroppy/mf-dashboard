@@ -165,7 +165,15 @@ const STAGE2_SYSTEM_PROMPT = `あなたはプロの個人財務アドバイザ�
 - 増加なのに「減少」、減少なのに「増加」と記述する矛盾
 - 英語の技術用語（netIncome, savingsRate 等）をそのまま出力すること。必ず日本語（純収入、貯蓄率 等）に置き換える`;
 
-export async function generateInsights(db: Db, groupId: string): Promise<AnalyticsInsights> {
+export interface GeneratedInsights {
+  insights: AnalyticsInsights;
+  model: string;
+}
+
+export async function generateInsightsWithMetadata(
+  db: Db,
+  groupId: string,
+): Promise<GeneratedInsights> {
   const dbTools = createFinancialTools(db, groupId);
   const analysisTools = createAnalysisTools(db, groupId);
   const allTools = { ...dbTools, ...analysisTools };
@@ -210,11 +218,18 @@ export async function generateInsights(db: Db, groupId: string): Promise<Analyti
   }
 
   return {
-    summary: stage2.output.summary,
-    savingsInsight: stage2.output.savingsInsight,
-    investmentInsight: stage2.output.investmentInsight,
-    spendingInsight: stage2.output.spendingInsight,
-    balanceInsight: stage2.output.balanceInsight,
-    liabilityInsight: stage2.output.liabilityInsight,
+    model: stage2.model,
+    insights: {
+      summary: stage2.output.summary,
+      savingsInsight: stage2.output.savingsInsight,
+      investmentInsight: stage2.output.investmentInsight,
+      spendingInsight: stage2.output.spendingInsight,
+      balanceInsight: stage2.output.balanceInsight,
+      liabilityInsight: stage2.output.liabilityInsight,
+    },
   };
+}
+
+export async function generateInsights(db: Db, groupId: string): Promise<AnalyticsInsights> {
+  return (await generateInsightsWithMetadata(db, groupId)).insights;
 }
