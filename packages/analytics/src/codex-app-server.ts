@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -166,8 +167,14 @@ async function persistRefreshedCredentials(environment: IsolatedEnvironment): Pr
   if (isolatedAuth.equals(initialAuth) || !currentAuth.equals(initialAuth)) return;
 
   JSON.parse(isolatedAuth.toString("utf8"));
-  await copyFile(authPath, sourceAuthPath);
-  await chmod(sourceAuthPath, 0o600);
+  const stagedAuthPath = `${sourceAuthPath}.mf-dashboard-${randomUUID()}.tmp`;
+  try {
+    await copyFile(authPath, stagedAuthPath);
+    await chmod(stagedAuthPath, 0o600);
+    await rename(stagedAuthPath, sourceAuthPath);
+  } finally {
+    await rm(stagedAuthPath, { force: true });
+  }
 }
 
 function serializeToolResult(value: unknown): string {

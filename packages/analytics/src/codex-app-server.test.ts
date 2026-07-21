@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -390,6 +390,7 @@ describe("generateWithCodexAppServer", () => {
 
     await generation;
     await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
+    expect((await stat(sourceAuthPath)).mode & 0o777).toBe(0o600);
   });
 
   test("removes the isolated Codex home when credential persistence fails", async () => {
