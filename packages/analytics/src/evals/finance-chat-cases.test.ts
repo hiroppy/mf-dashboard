@@ -43,6 +43,13 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
     ).toBe(true);
   });
 
+  it("requires independent category tools to run in parallel", () => {
+    expect(
+      FINANCE_CHAT_EVALUATION_CASES.find(({ id }) => id === "category-expense")
+        ?.requireParallelDataTools,
+    ).toBe(true);
+  });
+
   it("uses Asia/Tokyo for relative dates across a UTC month boundary", () => {
     const utcMonthEnd = new Date("2026-07-31T15:30:00.000Z");
     const cases = createFinanceChatEvaluationCases(utcMonthEnd);

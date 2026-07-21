@@ -127,6 +127,19 @@ function matchesStrategy(
   );
 }
 
+function completesStrategyInSingleStep(
+  strategy: readonly FinanceChatToolExpectation[],
+  steps: readonly FinanceChatEvaluationStep[],
+): boolean {
+  return steps.some((step) => {
+    const dataCalls = step.toolCalls.filter(({ toolName }) => isDataTool(toolName));
+    const completedDataCalls = dataCalls.filter((call) =>
+      hasMatchingResult(call, step.toolResults),
+    );
+    return matchesStrategy(strategy, dataCalls, completedDataCalls);
+  });
+}
+
 function isDataTool(toolName: string): boolean {
   return toolName !== NAVIGATION_TOOL && toolName !== PRESENTATION_TOOL;
 }
@@ -168,6 +181,7 @@ function getAmountType(key: string, record?: GroundedRecord): AmountType | undef
   if (recordType === "income" || recordType === "expense") return recordType;
 
   const normalized = key.toLowerCase();
+  if (normalized.includes("netincome")) return "balance";
   if (normalized.includes("income")) return "income";
   if (normalized.includes("expense")) return "expense";
   return getFinancialUnit(key) === "currency" ? "balance" : undefined;
@@ -202,9 +216,12 @@ function collectGroundedValues(value: unknown, grounded: GroundedValues, key = "
     const recordsByType = Map.groupBy(amountRecords, ({ record }) =>
       getAmountType("amount", record),
     );
+    const supportsAmountTotals = key === "getMonthlyCategoryTotals" || key === "searchTransactions";
     for (const [amountType, typedRecords] of recordsByType) {
       const total = typedRecords.reduce((sum, { amount }) => sum + amount, 0);
-      grounded.claims.push({ value: total, unit: "currency", amountType });
+      if (supportsAmountTotals) {
+        grounded.claims.push({ value: total, unit: "currency", amountType });
+      }
       if (key === "getMonthlyCategoryTotals" && total !== 0 && amountType !== undefined) {
         for (const { amount, record } of typedRecords) {
           const category = record.category ?? record.name;
@@ -237,6 +254,7 @@ function collectGroundedValues(value: unknown, grounded: GroundedValues, key = "
           isCategoryMap ? "expense" : getAmountType(entryKey, record),
         );
         if (isCategoryMap) {
+          grounded.claims.push({ value: entry, unit: "currency", amountType: "balance" });
           grounded.records.push({ category: entryKey, amount: entry, type: "expense" });
         }
       } else {
@@ -458,7 +476,26 @@ function hasActionableInsight(
     description,
   );
   const hasReason = /(?:ため|ので|理由|要因|異常|変動|高い|低い)/.test(description);
-  return hasPeriod && hasCategory && hasComparison && hasReason;
+  const citedCategoryAmounts = records.flatMap((record) => {
+    const category = record.category ?? record.name;
+    const amount = record.amount ?? record.totalAmount;
+    return typeof category === "string" &&
+      description.includes(category) &&
+      typeof amount === "number"
+      ? [amount]
+      : [];
+  });
+  const amountTotal = citedCategoryAmounts.reduce((sum, amount) => sum + amount, 0);
+  const insightAmounts = cards.flatMap((card) =>
+    card.type === "insight" && card.amount !== undefined
+      ? [{ amount: card.amount, amountType: card.amountType }]
+      : [],
+  );
+  const hasGroundedAmounts = insightAmounts.every(
+    ({ amount, amountType }) =>
+      amountType === "balance" && (citedCategoryAmounts.includes(amount) || amount === amountTotal),
+  );
+  return hasPeriod && hasCategory && hasComparison && hasReason && hasGroundedAmounts;
 }
 
 function areCardRecordsGrounded(
@@ -536,6 +573,14 @@ export function evaluateFinanceChatTrace(
   );
   if (!matchedStrategy) {
     violations.push("必須ツールまたは引数が期待する戦略を満たさない");
+  }
+  if (
+    evaluationCase.requireParallelDataTools &&
+    !evaluationCase.toolStrategies.some((strategy) =>
+      completesStrategyInSingleStep(strategy, priorSteps),
+    )
+  ) {
+    violations.push("独立したデータツールが同一ステップで完了していない");
   }
 
   if (toolCalls.some(({ invalid }) => invalid)) {

@@ -9,6 +9,7 @@ export interface FinanceChatEvaluationCase {
   navigationInput: Readonly<Record<string, unknown>>;
   expectedCardTypes: readonly FinanceChatCard["type"][];
   requireActionableInsight?: boolean;
+  requireParallelDataTools?: boolean;
 }
 
 export interface FinanceChatToolExpectation {
@@ -49,6 +50,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["searchTransactions", "getMonthlyCategoryTotals"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "categoryBreakdown", "transactionList"],
+      requireParallelDataTools: true,
     },
     {
       id: "daily-expense",
