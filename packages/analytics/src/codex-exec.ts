@@ -335,6 +335,7 @@ async function runCodexExec(
   const { stderrHead } = await runCodexProcess(environment, args, signal, prompt);
 
   const text = (await readFile(environment.outputPath, "utf8")).trim();
+  signal.throwIfAborted();
   const model =
     stderrHead.match(/^model: (.+)$/m)?.[1]?.trim() ?? process.env.AI_MODEL ?? "codex-default";
   return { model, text };
@@ -371,6 +372,7 @@ async function generateInIsolation<T>(
       controller.signal,
     );
     const output = options.schema ? options.schema.parse(JSON.parse(result.text)) : undefined;
+    controller.signal.throwIfAborted();
     return { ...result, output, toolNames };
   } finally {
     clearTimeout(timeout);
