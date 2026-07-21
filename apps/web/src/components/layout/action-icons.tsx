@@ -1,7 +1,7 @@
 "use client";
 
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import { Home, Code2, HelpCircle, RefreshCw } from "lucide-react";
+import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDateTime } from "../../lib/format";
@@ -49,7 +49,6 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
     return (
       <div className="border-t p-4 flex items-center gap-1 lg:hidden">
         <HelpButton iconSize={iconSize} />
-        <GitHubButton iconSize={iconSize} />
       </div>
     );
   }
@@ -59,7 +58,6 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
       {notifications}
       <RefreshButton iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
-      <GitHubButton iconSize={iconSize} className="hidden lg:block" />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
   );
@@ -156,8 +154,20 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
       <DialogTrigger className={className}>
         <IconButton icon={<HelpCircle className={iconSize} />} ariaLabel="ヘルプ" />
       </DialogTrigger>
-      <DialogContent>
-        <DialogTitle>MoneyForward Me Dashboard について</DialogTitle>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <div className="flex items-center justify-between gap-4">
+          <DialogTitle>MoneyForward Me Dashboard について</DialogTitle>
+          <IconButton
+            icon={
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.3c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z" />
+              </svg>
+            }
+            href="https://github.com/hiroppy/mf-dashboard"
+            ariaLabel="GitHub リポジトリ"
+            isExternal
+          />
+        </div>
         <DialogDescription asChild>
           <div className="mt-2 text-sm text-muted-foreground space-y-4">
             <p>MoneyForward Me を自動化・可視化するダッシュボードです。</p>
@@ -182,9 +192,15 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
                   <span className="block ml-5 mt-1">前日との差分を Slack へ自動投稿できます。</span>
                 </li>
                 <li>
+                  <span className="font-medium text-foreground">未分類取引の自動分類</span>
+                  <span className="block ml-5 mt-1">
+                    固定ルールと任意の LLM 推論で、未分類の取引を自動分類できます。
+                  </span>
+                </li>
+                <li>
                   <span className="font-medium text-foreground">カスタム処理（Hooks）</span>
                   <span className="block ml-5 mt-1">
-                    スクレイピング時に独自のスクリプトを実行可能。例：特定の取引のカテゴリを自動設定。
+                    スクレイピング時に独自のスクリプトを実行できます。
                   </span>
                 </li>
                 <li>
@@ -209,18 +225,6 @@ function HelpButton({ iconSize, className }: { iconSize: string; className?: str
         </DialogDescription>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function GitHubButton({ iconSize, className }: { iconSize: string; className?: string }) {
-  return (
-    <IconButton
-      icon={<Code2 className={iconSize} />}
-      href="https://github.com/hiroppy/mf-dashboard"
-      ariaLabel="GitHub"
-      className={className}
-      isExternal
-    />
   );
 }
 
