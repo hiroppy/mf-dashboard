@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "concurrency": "50%",
+  "checkers": ["typescript"],
   "ignoreStatic": true,
   "mutate": [
     "src/app/accounts/account-list.client.tsx",
@@ -19,7 +20,7 @@
     "src/lib/{aggregation,calendar,chart,colors,format,metadata,runtime-rendering,transaction-utils,url}.ts"
   ],
   "packageManager": "pnpm",
-  "plugins": ["@stryker-mutator/vitest-runner"],
+  "plugins": ["@stryker-mutator/typescript-checker", "@stryker-mutator/vitest-runner"],
   "reporters": ["clear-text", "progress", "html", "json"],
   "testRunner": "vitest",
   "thresholds": {

@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "concurrency": "50%",
+  "checkers": ["typescript"],
   "ignoreStatic": true,
   "mutate": [
     "src/auth/{credentials,state}.ts",
@@ -12,7 +13,7 @@
     "!src/index.ts"
   ],
   "packageManager": "pnpm",
-  "plugins": ["@stryker-mutator/vitest-runner"],
+  "plugins": ["@stryker-mutator/typescript-checker", "@stryker-mutator/vitest-runner"],
   "reporters": ["clear-text", "progress", "html", "json"],
   "testRunner": "vitest",
   "thresholds": {

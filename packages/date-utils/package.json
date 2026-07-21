@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/typescript-checker": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

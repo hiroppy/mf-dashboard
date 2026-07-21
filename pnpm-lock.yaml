@@ -12,6 +12,9 @@ catalogs:
     '@stryker-mutator/core':
       specifier: 9.6.1
       version: 9.6.1
+    '@stryker-mutator/typescript-checker':
+      specifier: 9.6.1
+      version: 9.6.1
     '@stryker-mutator/vitest-runner':
       specifier: 9.6.1
       version: 9.6.1
@@ -93,6 +96,9 @@ importers:
       '@stryker-mutator/core':
         specifier: 'catalog:'
         version: 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/typescript-checker':
+        specifier: 'catalog:'
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(vitest@4.1.9)
@@ -240,6 +246,9 @@ importers:
       '@stryker-mutator/core':
         specifier: 'catalog:'
         version: 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/typescript-checker':
+        specifier: 'catalog:'
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(vitest@4.1.9)
@@ -316,6 +325,9 @@ importers:
       '@stryker-mutator/core':
         specifier: 'catalog:'
         version: 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/typescript-checker':
+        specifier: 'catalog:'
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(vitest@4.1.9)
@@ -334,6 +346,9 @@ importers:
       '@stryker-mutator/core':
         specifier: 'catalog:'
         version: 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/typescript-checker':
+        specifier: 'catalog:'
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(vitest@4.1.9)
@@ -359,6 +374,9 @@ importers:
       '@stryker-mutator/core':
         specifier: 'catalog:'
         version: 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/typescript-checker':
+        specifier: 'catalog:'
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(vitest@4.1.9)
@@ -402,6 +420,9 @@ importers:
       '@stryker-mutator/core':
         specifier: 'catalog:'
         version: 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/typescript-checker':
+        specifier: 'catalog:'
+        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(vitest@4.1.9)
@@ -3440,6 +3461,13 @@ packages:
   '@stryker-mutator/instrumenter@9.6.1':
     resolution: {integrity: sha512-5K8wH4Pthly25c2uKKik4Dfcoeou7sbJdFS6u3QIYHlulgFVDJwtEMWTZGkZfs7IiUEXIDNa0keRACq5jn5AvA==}
     engines: {node: '>=20.0.0'}
+
+  '@stryker-mutator/typescript-checker@9.6.1':
+    resolution: {integrity: sha512-dCFJDoFixFe7cbilsukb7a5jpn9JRSPef7/vgx+xfaf4gPf/neDVbci8E/YSvxmcFveuPHdeUxioocA1CKZqrg==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      '@stryker-mutator/core': 9.6.1
+      typescript: '>=3.6'
 
   '@stryker-mutator/util@9.6.1':
     resolution: {integrity: sha512-Lk/ALVctJjFv1vvwR+CFoKzDCWvsBlq7flDUnmnpuwTrGbm156EdZD1Jjq4o8KdOap0ezUZqQNE9OAI1m2+pUQ==}
@@ -8295,6 +8323,14 @@ snapshots:
       weapon-regex: 1.3.6
     transitivePeerDependencies:
       - supports-color
+
+  '@stryker-mutator/typescript-checker@9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.3))(typescript@6.0.3)':
+    dependencies:
+      '@stryker-mutator/api': 9.6.1
+      '@stryker-mutator/core': 9.6.1(@types/node@25.9.3)
+      '@stryker-mutator/util': 9.6.1
+      semver: 7.7.4
+      typescript: 6.0.3
 
   '@stryker-mutator/util@9.6.1': {}
 
