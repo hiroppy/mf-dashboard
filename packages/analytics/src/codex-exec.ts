@@ -145,7 +145,16 @@ async function withCredentialLock<T>(operation: () => Promise<T>, signal: AbortS
 
 async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedEnvironment> {
   signal.throwIfAborted();
-  const root = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-"));
+  const rootCreation = mkdtemp(join(tmpdir(), "mf-dashboard-codex-"));
+  let root: string;
+  try {
+    root = await waitForToolResult(() => rootCreation, signal);
+  } catch (error) {
+    void rootCreation
+      .then((createdRoot) => rm(createdRoot, { recursive: true, force: true }))
+      .catch(() => undefined);
+    throw error;
+  }
   try {
     signal.throwIfAborted();
     const codexHome = join(root, "codex-home");
@@ -201,6 +210,8 @@ async function persistRefreshedCredentials(
   try {
     await writeFile(stagedAuthPath, isolatedAuth, { mode: 0o600, signal });
     signal.throwIfAborted();
+    const latestAuth = await readFile(sourceAuthPath, { signal });
+    if (!latestAuth.equals(initialAuth)) return;
     await waitForToolResult(() => rename(stagedAuthPath, sourceAuthPath), signal);
   } finally {
     const removal = rm(stagedAuthPath, { force: true });
@@ -383,6 +394,9 @@ async function generateInIsolation<T>(
   deadline: number,
 ): Promise<CodexExecResult<T>> {
   const environment = await createIsolatedEnvironment(controller.signal);
+  let generationResult!: CodexExecResult<T>;
+  let generationError: unknown;
+  let generationFailed = false;
 
   try {
     if (options.schema) {
@@ -403,33 +417,46 @@ async function generateInIsolation<T>(
     if (Date.now() >= deadline) {
       throw new Error(`codex exec timed out after ${timeoutMs}ms`);
     }
-    return { ...result, output, toolNames: toolData.toolNames };
-  } finally {
-    const persistenceController = new AbortController();
-    const persistenceTimeout = setTimeout(
-      () =>
-        persistenceController.abort(
-          new Error(
-            `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
-          ),
+    generationResult = { ...result, output, toolNames: toolData.toolNames };
+  } catch (error) {
+    generationFailed = true;
+    generationError = error;
+  }
+
+  const persistenceController = new AbortController();
+  const persistenceTimeout = setTimeout(
+    () =>
+      persistenceController.abort(
+        new Error(
+          `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
         ),
-      CREDENTIAL_PERSIST_TIMEOUT_MS,
-    );
-    try {
-      await persistRefreshedCredentials(environment, persistenceController.signal);
-    } catch (error) {
+      ),
+    CREDENTIAL_PERSIST_TIMEOUT_MS,
+  );
+  let persistenceError: unknown;
+  try {
+    await persistRefreshedCredentials(environment, persistenceController.signal);
+  } catch (error) {
+    persistenceError = error;
+    if (generationFailed) {
       console.warn("[analytics] Failed to persist refreshed Codex credentials:", error);
     }
-    try {
-      const removal = rm(environment.root, { recursive: true, force: true });
-      if (persistenceController.signal.aborted) void removal.catch(() => undefined);
-      else await waitForToolResult(() => removal, persistenceController.signal);
-    } catch (error) {
-      console.warn("[analytics] Failed to remove the temporary Codex environment:", error);
-    } finally {
-      clearTimeout(persistenceTimeout);
-    }
   }
+  try {
+    const removal = rm(environment.root, { recursive: true, force: true });
+    if (persistenceController.signal.aborted) void removal.catch(() => undefined);
+    else await waitForToolResult(() => removal, persistenceController.signal);
+  } catch (error) {
+    console.warn("[analytics] Failed to remove the temporary Codex environment:", error);
+  } finally {
+    clearTimeout(persistenceTimeout);
+  }
+
+  if (generationFailed) throw generationError;
+  if (persistenceError) {
+    throw new Error("Codex credential persistence failed", { cause: persistenceError });
+  }
+  return generationResult;
 }
 
 export async function generateWithCodexExec<T>(

@@ -7,7 +7,8 @@ import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { readFileMock, spawnMock } = vi.hoisted(() => ({
+const { mkdtempMock, readFileMock, spawnMock } = vi.hoisted(() => ({
+  mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
   readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
   spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
 }));
@@ -15,8 +16,9 @@ const { readFileMock, spawnMock } = vi.hoisted(() => ({
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs/promises")>();
+  mkdtempMock.mockImplementation(original.mkdtemp);
   readFileMock.mockImplementation(original.readFile);
-  return { ...original, readFile: readFileMock };
+  return { ...original, mkdtemp: mkdtempMock, readFile: readFileMock };
 });
 
 const { generateWithCodexExec } = await import("./codex-exec.js");
@@ -342,6 +344,18 @@ describe("generateWithCodexExec", () => {
     ).rejects.toThrow("codex exec timed out after 100ms");
   });
 
+  test("times out while creating the isolated environment", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    const originalMkdtemp = mkdtempMock.getMockImplementation()!;
+    mkdtempMock.mockImplementation(() => new Promise<never>(() => undefined));
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec timed out after 20ms",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+    mkdtempMock.mockImplementation(originalMkdtemp);
+  });
+
   test("times out while waiting for the credential lock", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "5000";
     const mcp = createFakeCodex();
@@ -406,7 +420,38 @@ describe("generateWithCodexExec", () => {
     await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
   });
 
-  test("bounds stalled credential persistence independently", async () => {
+  test("does not overwrite credentials changed by another process", async () => {
+    const sourceCodexHome = process.env.CODEX_HOME!;
+    const sourceAuthPath = join(sourceCodexHome, "auth.json");
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
+      const isolatedHome = options?.env?.CODEX_HOME;
+      if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
+      void writeFile(join(isolatedHome, "auth.json"), '{"token":"refreshed"}');
+      return fake.child;
+    });
+    const originalReadFile = readFileMock.getMockImplementation()!;
+    let sourceReads = 0;
+    readFileMock.mockImplementation(async (path, options) => {
+      if (path === sourceAuthPath && ++sourceReads === 3) {
+        await writeFile(sourceAuthPath, '{"token":"external-refresh"}');
+      }
+      return originalReadFile(path, options as never) as never;
+    });
+
+    await generateWithCodexExec({
+      system: "Return JSON.",
+      prompt: "Answer.",
+      schema: z.object({ value: z.string() }),
+    });
+
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"external-refresh"}');
+    expect(sourceReads).toBe(4);
+    readFileMock.mockImplementation(originalReadFile);
+  });
+
+  test("fails closed when bounded credential persistence stalls", async () => {
     const sourceCodexHome = process.env.CODEX_HOME!;
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
     const mcp = createFakeCodex();
@@ -435,7 +480,7 @@ describe("generateWithCodexExec", () => {
         prompt: "Answer.",
         schema: z.object({ value: z.string() }),
       }),
-    ).resolves.toEqual(expect.objectContaining({ text: '{"value":"ok"}' }));
+    ).rejects.toThrow("Codex credential persistence failed");
     expect(sourceReads).toBe(2);
   }, 7_000);
 

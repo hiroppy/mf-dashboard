@@ -316,7 +316,9 @@ keyring-only のログインは隔離した一時 `CODEX_HOME` へ引き継げ�
 `AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
 120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で
-`pnpm --filter @mf-dashboard/crawler dev:scrape` を実行する場合に限る。現在の crawler Docker
+`pnpm --filter @mf-dashboard/crawler dev:scrape` を実行する場合に限る。crawler の Load phase が
+repository root の `.env` を `process.loadEnvFile` で読み込むため、package script へ環境変数を
+個別指定する必要はない。現在の crawler Docker
 image / Compose service は Codex CLI、ログイン情報、`AI_BACKEND` を provision しないため、
 Compose では AI SDK 経路を使う。
 
