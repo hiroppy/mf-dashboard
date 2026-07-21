@@ -38,7 +38,9 @@ function collectFacts(value: unknown): Array<string | number> {
   if (typeof value === "string" || typeof value === "number") return [value];
   if (Array.isArray(value)) return value.flatMap(collectFacts);
   if (typeof value === "object" && value !== null) {
-    return Object.values(value).flatMap(collectFacts);
+    return Object.entries(value).flatMap(([key, item]) =>
+      key === "href" || key === "action" || key === "type" ? [] : collectFacts(item),
+    );
   }
   return [];
 }

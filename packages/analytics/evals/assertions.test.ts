@@ -166,4 +166,31 @@ describe("assertFinanceChatOutput", () => {
     expect(result.reason).toContain("本文の未根拠期間: 2020");
     expect(result.reason).toContain("黒字／赤字表現");
   });
+
+  it("does not treat a CTA route as a semantic period fact", () => {
+    const result = assertFinanceChatOutput(
+      JSON.stringify({
+        text: "月次結果です。",
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [{ label: "収支", amount: 93_341, amountType: "balance" }],
+            href: "/demo/cf/2026-07",
+          },
+        ],
+      }),
+      {
+        config: {
+          expectedFacts: ["2026-07"],
+          expectedCardTypes: ["summary"],
+          expectedRoute: "/cf/2026-07",
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain("期待 facts 不足: 2026-07");
+    expect(result.reason).not.toContain("期待 route 不足");
+  });
 });
