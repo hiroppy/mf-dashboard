@@ -320,6 +320,9 @@ credential は、通常の Codex CLI による同時更新を上書きしない�
 自動では戻さない。canonical credential が変わらないまま一時 credential だけが更新された場合は
 fail closed になるため、`codex login --config 'cli_auth_credentials_store="file"'` を再実行してから
 retry する。
+preload tool 1 件の JSON は 512 KiB、Codex へ渡す prompt / stdin は 2 MiB、子プロセスの
+stdout と最終 output file はそれぞれ 1 MiB を上限とする。超過時は process を停止して一時
+output を削除し、結果を返さず fail closed にする。
 `AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
 120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で

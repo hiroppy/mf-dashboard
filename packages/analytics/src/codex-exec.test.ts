@@ -68,8 +68,10 @@ function createFakeCodex(
     mcpServers?: unknown[];
     materializeSystemSkill?: boolean;
     output?: string;
+    outputWhileHanging?: string;
     promptInput?: string;
     stderr?: string;
+    stdout?: string;
   } = {},
 ) {
   const stdout = new PassThrough();
@@ -86,13 +88,17 @@ function createFakeCodex(
       callback();
     },
     async final(callback) {
+      const args = spawnMock.mock.calls.at(-1)?.[1] as string[];
       if (options.hang) {
+        if (options.outputWhileHanging !== undefined) {
+          const outputIndex = args.indexOf("--output-last-message");
+          await writeFile(args[outputIndex + 1]!, options.outputWhileHanging);
+        }
         callback();
         return;
       }
-      const args = spawnMock.mock.calls.at(-1)?.[1] as string[];
       if (args[0] === "mcp") {
-        stdout.write(JSON.stringify(options.mcpServers ?? []));
+        stdout.write(options.stdout ?? JSON.stringify(options.mcpServers ?? []));
         queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
         callback();
         return;
@@ -113,6 +119,7 @@ function createFakeCodex(
       if (options.exitCode === undefined || options.exitCode === 0) {
         await writeFile(args[outputIndex + 1]!, options.output ?? '{"value":"ok"}');
       }
+      if (options.stdout) stdout.write(options.stdout);
       stderr.write(options.stderr ?? "model: codex-test-model\n");
       queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
       callback();
@@ -230,6 +237,52 @@ describe("generateWithCodexExec", () => {
 
     expect(spawnMock).toHaveBeenCalledTimes(4);
     expect(spawnMock.mock.calls[3]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
+  });
+
+  test("rejects oversized preloaded tool data before spawning Codex", async () => {
+    await expect(
+      generateWithCodexExec({
+        preloadTools: ["lookupValue"],
+        system: "System.",
+        prompt: "Prompt.",
+        tools: {
+          lookupValue: {
+            inputSchema: z.object({}),
+            execute: async () => ({ value: "x".repeat(600_000) }),
+          },
+        },
+      }),
+    ).rejects.toThrow("Codex tool result exceeds the byte limit");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects oversized prompt input before spawning Codex", async () => {
+    await expect(
+      generateWithCodexExec({ system: "System.", prompt: "x".repeat(2_100_000) }),
+    ).rejects.toThrow("Codex prompt exceeds the byte limit");
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  test("aborts when Codex stdout exceeds the byte limit", async () => {
+    const mcp = createFakeCodex({ stdout: "x".repeat(1_100_000) });
+    spawnMock.mockReturnValue(mcp.child);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "Codex stdout exceeds the byte limit",
+    );
+    expect(mcp.kill).toHaveBeenCalled();
+  });
+
+  test("aborts and deletes an oversized Codex output file", async () => {
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ hang: true, outputWhileHanging: "x".repeat(1_100_000) });
+    mockCodexRun(mcp, fake);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "Codex output exceeds the byte limit",
+    );
+    expect(fake.kill).toHaveBeenCalled();
+    expect(rmMock).toHaveBeenCalledWith(expect.stringMatching(/output\.txt$/), { force: true });
   });
 
   test("materializes and disables bundled system skills before Codex exec", async () => {

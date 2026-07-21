@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { lock } from "proper-lockfile";
@@ -52,6 +52,11 @@ const SHUTDOWN_GRACE_MS = 500;
 const CLEANUP_TIMEOUT_MS = 5_000;
 const CREDENTIAL_PERSIST_TIMEOUT_MS = 5_000;
 const CREDENTIAL_LOCK_STALE_MS = 30_000;
+const MAX_TOOL_RESULT_BYTES = 512 * 1024;
+const MAX_PROMPT_BYTES = 2 * 1024 * 1024;
+const MAX_PROCESS_STDOUT_BYTES = 1024 * 1024;
+const MAX_OUTPUT_BYTES = 1024 * 1024;
+const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
 const ALLOWED_ENV_KEYS = [
@@ -353,7 +358,7 @@ async function collectToolData(
     if (!input.success || !tool.execute) {
       throw new Error(`Codex exec cannot preload tool ${name} without input`);
     }
-    data[name] = await waitForToolResult(
+    const result = await waitForToolResult(
       () =>
         tool.execute!(input.data as never, {
           abortSignal: signal,
@@ -363,14 +368,29 @@ async function collectToolData(
         }),
       signal,
     );
+    const serializedResult = JSON.stringify(result);
+    if (
+      serializedResult !== undefined &&
+      Buffer.byteLength(serializedResult) > MAX_TOOL_RESULT_BYTES
+    ) {
+      throw new Error("Codex tool result exceeds the byte limit");
+    }
+    data[name] = result;
     toolNames.push(name);
   }
   return { data, toolNames };
 }
 
 function buildPrompt(prompt: string, toolData: Record<string, unknown>): string {
+  if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) {
+    throw new Error("Codex prompt exceeds the byte limit");
+  }
   const serializedData = JSON.stringify(toolData);
-  return `<user_request>\n${prompt}\n</user_request>\n\n<tool_results>\n${serializedData}\n</tool_results>`;
+  const input = `<user_request>\n${prompt}\n</user_request>\n\n<tool_results>\n${serializedData}\n</tool_results>`;
+  if (Buffer.byteLength(input) > MAX_PROMPT_BYTES) {
+    throw new Error("Codex prompt exceeds the byte limit");
+  }
+  return input;
 }
 
 async function runCodexProcess(
@@ -378,10 +398,15 @@ async function runCodexProcess(
   args: string[],
   signal: AbortSignal,
   input?: string,
+  outputPath?: string,
 ): Promise<{ stderrHead: string; stdout: string }> {
   signal.throwIfAborted();
+  if (input !== undefined && Buffer.byteLength(input) > MAX_PROMPT_BYTES) {
+    throw new Error("Codex prompt exceeds the byte limit");
+  }
   let stderrHead = "";
   let stdout = "";
+  let stdoutBytes = 0;
   await new Promise<void>((resolve, reject) => {
     const child = spawn("codex", args, {
       cwd: environment.cwd,
@@ -392,11 +417,14 @@ async function runCodexProcess(
     let stopError: Error | undefined;
     let forceKill: ReturnType<typeof setTimeout> | undefined;
     let forceFinish: ReturnType<typeof setTimeout> | undefined;
+    let outputMonitor: ReturnType<typeof setInterval> | undefined;
+    let checkingOutput = false;
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(forceKill);
       clearTimeout(forceFinish);
+      clearInterval(outputMonitor);
       signal.removeEventListener("abort", stop);
       if (error) reject(error);
       else resolve();
@@ -411,8 +439,31 @@ async function runCodexProcess(
       }, SHUTDOWN_GRACE_MS);
     };
     const stop = () => stopProcess(signal.reason as Error);
+    if (outputPath) {
+      outputMonitor = setInterval(() => {
+        if (settled || checkingOutput) return;
+        checkingOutput = true;
+        void stat(outputPath)
+          .then(({ size }) => {
+            if (settled || size <= MAX_OUTPUT_BYTES) return;
+            void rm(outputPath, { force: true }).catch(() => undefined);
+            stopProcess(new Error("Codex output exceeds the byte limit"));
+          })
+          .catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") stopProcess(error);
+          })
+          .finally(() => {
+            checkingOutput = false;
+          });
+      }, OUTPUT_SIZE_POLL_MS);
+    }
     signal.addEventListener("abort", stop, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > MAX_PROCESS_STDOUT_BYTES) {
+        stopProcess(new Error("Codex stdout exceeds the byte limit"));
+        return;
+      }
       stdout += chunk.toString();
     });
     child.stderr.on("data", (chunk: Buffer) => {
@@ -429,6 +480,26 @@ async function runCodexProcess(
     child.stdin.end(input);
   });
   return { stderrHead, stdout };
+}
+
+async function readCodexOutput(path: string, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted();
+  const handle = await open(path, "r");
+  let oversized = false;
+  try {
+    const metadata = await handle.stat();
+    oversized = metadata.size > MAX_OUTPUT_BYTES;
+    if (oversized) throw new Error("Codex output exceeds the byte limit");
+    const buffer = Buffer.allocUnsafe(MAX_OUTPUT_BYTES + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    oversized = bytesRead > MAX_OUTPUT_BYTES;
+    if (oversized) throw new Error("Codex output exceeds the byte limit");
+    signal.throwIfAborted();
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await handle.close();
+    if (oversized) await rm(path, { force: true }).catch(() => undefined);
+  }
 }
 
 async function assertNoMcpServers(
@@ -541,9 +612,15 @@ async function runCodexExec(
   if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
   args.push("-");
 
-  const { stderrHead } = await runCodexProcess(environment, args, signal, prompt);
+  const { stderrHead } = await runCodexProcess(
+    environment,
+    args,
+    signal,
+    prompt,
+    environment.outputPath,
+  );
 
-  const text = (await readFile(environment.outputPath, { encoding: "utf8", signal })).trim();
+  const text = (await readCodexOutput(environment.outputPath, signal)).trim();
   signal.throwIfAborted();
   const model =
     stderrHead.match(/^model: (.+)$/m)?.[1]?.trim() ?? process.env.AI_MODEL ?? "codex-default";
