@@ -1,23 +1,21 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { lockMock, mkdirMock, mkdtempMock, readFileMock, renameMock, rmMock, spawnMock } =
-  vi.hoisted(() => ({
-    lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
-    mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
-    mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
-    readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
-    renameMock: vi.fn<typeof import("node:fs/promises").rename>(),
-    rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
-    spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
-  }));
+const { lockMock, mkdirMock, mkdtempMock, readFileMock, rmMock, spawnMock } = vi.hoisted(() => ({
+  lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
+  mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
+  mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
+  readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+  rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
+  spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
+}));
 
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -25,14 +23,12 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   mkdirMock.mockImplementation(original.mkdir);
   mkdtempMock.mockImplementation(original.mkdtemp);
   readFileMock.mockImplementation(original.readFile);
-  renameMock.mockImplementation(original.rename);
   rmMock.mockImplementation(original.rm);
   return {
     ...original,
     mkdir: mkdirMock,
     mkdtemp: mkdtempMock,
     readFile: readFileMock,
-    rename: renameMock,
     rm: rmMock,
   };
 });
@@ -685,7 +681,7 @@ describe("generateWithCodexExec", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  test("resolves a relative canonical home before Codex manages refreshed credentials", async () => {
+  test("fails closed instead of copying an isolated refresh to a relative canonical home", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
@@ -705,13 +701,15 @@ describe("generateWithCodexExec", () => {
         return fake.child;
       });
 
-    await generateWithCodexExec({
-      system: "Return JSON.",
-      prompt: "Answer.",
-      schema: z.object({ value: z.string() }),
-    });
+    await expect(
+      generateWithCodexExec({
+        system: "Return JSON.",
+        prompt: "Answer.",
+        schema: z.object({ value: z.string() }),
+      }),
+    ).rejects.toThrow("Codex credential persistence failed");
 
-    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"initial"}');
   });
 
   test("fails closed when refreshed credentials cannot be persisted", async () => {
@@ -731,23 +729,8 @@ describe("generateWithCodexExec", () => {
     );
   });
 
-  test("keeps the credential lock until a timed-out rename settles", async () => {
+  test("does not overwrite credentials refreshed by an external Codex process", async () => {
     const sourceAuthPath = join(process.env.CODEX_HOME!, "auth.json");
-    const lockPath = `${sourceAuthPath}.mf-dashboard.lockdir`;
-    const originalRename = renameMock.getMockImplementation()!;
-    const originalSetTimeout = globalThis.setTimeout;
-    let releaseRename!: () => void;
-    renameMock.mockImplementation((source, destination) => {
-      if (destination === sourceAuthPath) {
-        return new Promise<void>((resolve) => (releaseRename = resolve));
-      }
-      return originalRename(source, destination);
-    });
-    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
-      callback: (...args: unknown[]) => void,
-      delay?: number,
-      ...args: unknown[]
-    ) => originalSetTimeout(callback, delay === 5_000 ? 20 : delay, ...args)) as typeof setTimeout);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     spawnMock
@@ -755,18 +738,17 @@ describe("generateWithCodexExec", () => {
       .mockReturnValueOnce(createFakeCodex().child)
       .mockReturnValueOnce(createFakeCodex().child)
       .mockImplementation((_command, _args, options) => {
-        writeFileSync(join(options?.env?.CODEX_HOME as string, "auth.json"), '{"token":"new"}');
+        writeFileSync(
+          join(options?.env?.CODEX_HOME as string, "auth.json"),
+          '{"token":"isolated-refresh"}',
+        );
+        writeFileSync(sourceAuthPath, '{"token":"external-refresh"}');
         return fake.child;
       });
 
-    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "Codex credential persistence failed",
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).resolves.toEqual(
+      expect.objectContaining({ text: '{"value":"ok"}' }),
     );
-    expect(releaseRename).toBeTypeOf("function");
-    await expect(stat(lockPath)).resolves.toBeDefined();
-
-    releaseRename();
-    await vi.waitFor(() => expect(stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" }));
-    renameMock.mockImplementation(originalRename);
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"external-refresh"}');
   });
 });

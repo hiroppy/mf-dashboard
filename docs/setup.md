@@ -316,7 +316,10 @@ Codex 経路は custom filesystem permissions を strict config で指定し、�
 範囲を空の一時 workspace に限定する。`--ignore-user-config` と `--ignore-rules` で設定・rules
 の読込を止める。canonical `CODEX_HOME` からは file-backed credential だけを予測不能な一時
 `CODEX_HOME` へコピーし、skill・plugin・instruction source は渡さない。Codex が更新した
-credential はアプリ間 lock と atomic rename で canonical `auth.json` へ戻す。
+credential は、通常の Codex CLI による同時更新を上書きしないよう canonical `auth.json` へ
+自動では戻さない。canonical credential が変わらないまま一時 credential だけが更新された場合は
+fail closed になるため、`codex login --config 'cli_auth_credentials_store="file"'` を再実行してから
+retry する。
 `AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
 120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で
