@@ -19,6 +19,8 @@ const excludedChatFinancialTools = new Set([
   "getHoldingsWithLatestValues",
   "getHoldingsWithDailyChange",
   "getHoldingsByAccountId",
+  "getFinancialMetrics",
+  "getLatestAnalytics",
 ]);
 const excludedChatAnalysisTools = new Set([
   "analyzeMoMTrend",
@@ -75,7 +77,6 @@ describe("createChatTools", () => {
         getMonthlyCategoryTotals: expect.any(Object),
         getAssetBreakdownByCategory: expect.any(Object),
         getLatestTotalAssets: expect.any(Object),
-        getFinancialMetrics: expect.any(Object),
         analyzeSpendingComparison: expect.any(Object),
         analyzePortfolioRisk: expect.any(Object),
       }),

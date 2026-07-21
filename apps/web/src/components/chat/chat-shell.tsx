@@ -124,7 +124,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     if (!isOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeChat();
+      if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) closeChat();
     };
 
     window.addEventListener("keydown", handleKeyDown);

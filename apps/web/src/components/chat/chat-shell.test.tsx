@@ -221,6 +221,12 @@ describe("ChatShell", () => {
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByLabelText("家計AIへのメッセージ")),
     );
+    fireEvent.keyDown(screen.getByLabelText("家計AIへのメッセージ"), {
+      key: "Escape",
+      isComposing: true,
+      keyCode: 229,
+    });
+    expect(screen.getByLabelText("家計AIチャット").getAttribute("aria-hidden")).toBe("false");
     fireEvent.keyDown(screen.getByLabelText("家計AIへのメッセージ"), { key: "Escape" });
 
     expect(screen.getByLabelText("家計AIチャット").getAttribute("aria-hidden")).toBe("true");

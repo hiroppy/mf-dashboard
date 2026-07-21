@@ -19,8 +19,6 @@ function createChatFinancialTools(db: Db, groupId: string) {
     getLatestTotalAssets: tools.getLatestTotalAssets,
     getDailyAssetChange: tools.getDailyAssetChange,
     getCategoryChangesForPeriod: tools.getCategoryChangesForPeriod,
-    getFinancialMetrics: tools.getFinancialMetrics,
-    getLatestAnalytics: tools.getLatestAnalytics,
   };
 }
 
