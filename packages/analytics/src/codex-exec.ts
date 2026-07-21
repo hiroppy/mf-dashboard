@@ -757,6 +757,10 @@ export async function generateWithCodexExec<T>(
     throw new Error(`codex exec timed out after ${timeoutMs}ms`);
   }
   const prompt = buildPrompt(options.prompt, toolData.data);
+  preloadController.signal.throwIfAborted();
+  if (Date.now() >= preloadDeadline) {
+    throw new Error(`codex exec timed out after ${timeoutMs}ms`);
+  }
   return withCredentialLock(
     (signal, deadline) =>
       generateInIsolation(options, toolData, prompt, timeoutMs, signal, deadline),

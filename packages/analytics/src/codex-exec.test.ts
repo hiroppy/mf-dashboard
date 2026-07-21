@@ -590,6 +590,7 @@ describe("generateWithCodexExec", () => {
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
       .mockReturnValue(101);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
@@ -721,7 +722,7 @@ describe("generateWithCodexExec", () => {
 
   test("rejects when tool-data serialization crosses the deadline", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "100";
-    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(101);
+    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(101);
 
     await expect(
       generateWithCodexExec({
