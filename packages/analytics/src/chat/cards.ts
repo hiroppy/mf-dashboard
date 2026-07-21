@@ -78,7 +78,16 @@ export const summaryCardSchema = z
       .min(1)
       .max(MAX_SUMMARY_CARD_METRICS),
   })
-  .extend(linkableCardSchema.shape);
+  .extend(linkableCardSchema.shape)
+  .superRefine((card, context) => {
+    if (new Set(card.metrics.map((metric) => metric.label)).size !== card.metrics.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Summary metric labels must be unique",
+        path: ["metrics"],
+      });
+    }
+  });
 
 export const transactionListCardSchema = z
   .object({

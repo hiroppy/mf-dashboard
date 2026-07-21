@@ -218,6 +218,18 @@ describe("financeChatCardSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate summary metric labels", () => {
+    const metric = { label: "収支", amount: 12_000, amountType: "balance" as const };
+
+    expect(
+      financeChatCardSchema.safeParse({
+        type: "summary",
+        title: "今月の収支",
+        metrics: [metric, metric],
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects duplicate transaction IDs", () => {
     const transaction = {
       id: "transaction-1",

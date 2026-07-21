@@ -28,6 +28,9 @@ vi.mock("@mf-dashboard/db", () => ({
     investment: { diversificationScore: 50 },
   })),
   getAvailableMonths: vi.fn<AnyMock>(() => [{ month: "2025-02" }, { month: "2025-01" }]),
+  isInvestmentCategory: vi.fn<AnyMock>((categoryName: string) =>
+    ["株式(現物)", "投資信託"].includes(categoryName),
+  ),
 }));
 
 vi.mock("./analyze-mom-trend.js", () => ({
@@ -115,6 +118,68 @@ describe("createAnalysisTools", () => {
     expect(getHoldingsWithDailyChange).toHaveBeenCalledWith(groupId, mockDb);
     expect(getFinancialMetrics).toHaveBeenCalledWith(groupId, mockDb);
     expect(analyzePortfolioRisk).toHaveBeenCalled();
+  });
+
+  it("analyzePortfolioRisk should exclude non-investment holdings", async () => {
+    const investmentHolding = {
+      id: 1,
+      name: "Fund A",
+      type: "asset",
+      liabilityCategory: null,
+      categoryId: 1,
+      categoryName: "投資信託",
+      accountId: 1,
+      accountName: "Account A",
+      institution: "Institution A",
+      amount: 500000,
+      quantity: null,
+      unitPrice: null,
+      avgCostPrice: null,
+      dailyChange: 5000,
+      unrealizedGain: 50000,
+      unrealizedGainPct: 10,
+    };
+    vi.mocked(getHoldingsWithLatestValues).mockResolvedValueOnce([
+      investmentHolding,
+      {
+        ...investmentHolding,
+        id: 2,
+        name: "Deposit A",
+        categoryId: 2,
+        categoryName: "預金・現金",
+        amount: 1000000,
+        dailyChange: 100,
+        unrealizedGain: null,
+        unrealizedGainPct: null,
+      },
+    ]);
+    const investmentDailyChange = {
+      id: 1,
+      name: "Fund A",
+      code: null,
+      categoryName: "投資信託",
+      accountName: "Account A",
+      dailyChange: 5000,
+    };
+    vi.mocked(getHoldingsWithDailyChange).mockResolvedValueOnce([
+      investmentDailyChange,
+      {
+        ...investmentDailyChange,
+        id: 2,
+        name: "Deposit A",
+        categoryName: "預金・現金",
+        dailyChange: 100,
+      },
+    ]);
+
+    const tools = createAnalysisTools(mockDb, groupId);
+    await tools.analyzePortfolioRisk.execute!({}, execOpts);
+
+    expect(analyzePortfolioRisk).toHaveBeenLastCalledWith(
+      [{ name: "Fund A", amount: 500000, unrealizedGain: 50000, unrealizedGainPct: 10 }],
+      [{ name: "Fund A", dailyChange: 5000 }],
+      50,
+    );
   });
 
   it("analyzeSavingsTrajectory should fetch metrics and all summaries", async () => {

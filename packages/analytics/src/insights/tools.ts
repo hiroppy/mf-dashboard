@@ -127,7 +127,7 @@ export function createFinancialTools(db: Db, groupId: string) {
       execute: async () => await getLatestTotalAssets(groupId, db),
     }),
     getDailyAssetChange: tool({
-      description: "前日比の資産変動額を取得",
+      description: "最新2件の資産スナップショット間の変動額と各日付を取得",
       inputSchema: z.object({}),
       execute: async () => await getDailyAssetChange(groupId, db),
     }),

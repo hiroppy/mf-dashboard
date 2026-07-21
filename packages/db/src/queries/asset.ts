@@ -188,7 +188,7 @@ export async function getLatestTotalAssets(
 }
 
 /**
- * 日次資産変動を取得（今日vs昨日）
+ * 最新2件の資産スナップショット間の変動を取得
  */
 export async function getDailyAssetChange(groupIdParam?: string, db: Db = getDb()) {
   const groupId = await resolveGroupId(db, groupIdParam);
@@ -207,6 +207,8 @@ export async function getDailyAssetChange(groupIdParam?: string, db: Db = getDb(
   }
 
   return {
+    currentDate: latest[0].date,
+    previousDate: latest[1].date,
     today: latest[0].totalAssets,
     yesterday: latest[1].totalAssets,
     change: latest[0].totalAssets - latest[1].totalAssets,
