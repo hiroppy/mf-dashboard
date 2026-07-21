@@ -46,6 +46,7 @@ interface IsolatedEnvironment {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_TOOL_CALLS = 20;
+const SHUTDOWN_GRACE_MS = 2_000;
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "CODEX_ACCESS_TOKEN",
@@ -247,18 +248,23 @@ async function runCodexProcess(
       stdio: "pipe",
     });
     let settled = false;
+    let stopError: Error | undefined;
+    let forceKill: ReturnType<typeof setTimeout> | undefined;
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
+      clearTimeout(forceKill);
       signal.removeEventListener("abort", stop);
-      if (error) {
-        child.kill();
-        reject(error);
-      } else {
-        resolve();
-      }
+      if (error) reject(error);
+      else resolve();
     };
-    const stop = () => finish(signal.reason as Error);
+    const stopProcess = (error: Error) => {
+      if (stopError) return;
+      stopError = error;
+      child.kill();
+      forceKill = setTimeout(() => child.kill("SIGKILL"), SHUTDOWN_GRACE_MS);
+    };
+    const stop = () => stopProcess(signal.reason as Error);
     signal.addEventListener("abort", stop, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();
@@ -268,10 +274,11 @@ async function runCodexProcess(
       stderrHead = `${stderrHead}${text}`.slice(0, 4_000);
       stderrTail = `${stderrTail}${text}`.slice(-8_000);
     });
-    child.stdin.on("error", finish);
-    child.on("error", finish);
+    child.stdin.on("error", stopProcess);
+    child.on("error", stopProcess);
     child.on("close", (code) => {
-      if (code === 0) finish();
+      if (stopError) finish(stopError);
+      else if (code === 0) finish();
       else {
         finish(new Error(`codex exited with code ${code}${stderrTail ? `: ${stderrTail}` : ""}`));
       }

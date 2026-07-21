@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 function createFakeCodex(
-  options: { exitCode?: number; mcpServers?: unknown[]; output?: string } = {},
+  options: { exitCode?: number; hang?: boolean; mcpServers?: unknown[]; output?: string } = {},
 ) {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -40,6 +40,10 @@ function createFakeCodex(
       callback();
     },
     async final(callback) {
+      if (options.hang) {
+        callback();
+        return;
+      }
       const args = spawnMock.mock.calls.at(-1)?.[1] as string[];
       if (args[0] === "mcp") {
         stdout.write(JSON.stringify(options.mcpServers ?? []));
@@ -196,6 +200,18 @@ describe("generateWithCodexExec", () => {
 
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "codex exited with code 2",
+    );
+    expect(fake.kill).not.toHaveBeenCalled();
+  });
+
+  test("waits for the Codex process to close after a timeout", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "5";
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ hang: true });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec timed out after 5ms",
     );
     expect(fake.kill).toHaveBeenCalledOnce();
   });
