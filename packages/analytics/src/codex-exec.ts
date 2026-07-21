@@ -123,17 +123,21 @@ function getCodexEnv(): NodeJS.ProcessEnv {
   );
 }
 
-async function withCredentialLock<T>(operation: () => Promise<T>): Promise<T> {
+async function withCredentialLock<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   const previous = credentialQueue;
   let release!: () => void;
-  credentialQueue = new Promise<void>((resolve) => {
+  const slot = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await previous;
+  credentialQueue = previous.then(() => slot);
+  let acquired = false;
   try {
+    await waitForToolResult(() => previous, signal);
+    acquired = true;
     return await operation();
   } finally {
-    release();
+    if (acquired) release();
+    else void previous.then(release, release);
   }
 }
 
@@ -422,9 +426,15 @@ export async function generateWithCodexExec<T>(
     timeoutMs,
   );
   try {
-    return await withCredentialLock(() =>
-      generateInIsolation(options, timeoutMs, maxToolCalls, controller, deadline),
+    const result = await withCredentialLock(
+      () => generateInIsolation(options, timeoutMs, maxToolCalls, controller, deadline),
+      controller.signal,
     );
+    controller.signal.throwIfAborted();
+    if (Date.now() >= deadline) {
+      throw new Error(`codex exec timed out after ${timeoutMs}ms`);
+    }
+    return result;
   } finally {
     clearTimeout(timeout);
   }

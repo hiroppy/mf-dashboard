@@ -282,6 +282,24 @@ describe("generateWithCodexExec", () => {
     ).rejects.toThrow("codex exec timed out after 100ms");
   });
 
+  test("times out while waiting for the credential lock", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "5000";
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ hang: true, ignoreKill: true });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+    const firstGeneration = generateWithCodexExec({ system: "System.", prompt: "First." });
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2));
+
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Second." })).rejects.toThrow(
+      "codex exec timed out after 20ms",
+    );
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+
+    fake.child.emit("close", 1);
+    await expect(firstGeneration).rejects.toThrow("codex exited with code 1");
+  });
+
   test("persists refreshed credentials from the isolated Codex home", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
