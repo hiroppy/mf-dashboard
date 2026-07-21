@@ -1,5 +1,5 @@
 import {
-  searchTransactions,
+  searchTransactionsWithMetadata,
   SEARCH_TRANSACTIONS_MAX_LIMIT,
   SEARCH_TRANSACTIONS_MAX_OFFSET,
   type Db,
@@ -9,6 +9,7 @@ import { z } from "zod";
 
 const dateSchema = z.iso.date();
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+const nonEmptyFilterSchema = z.string().trim().min(1);
 
 const transactionSearchInputSchema = z
   .object({
@@ -16,10 +17,9 @@ const transactionSearchInputSchema = z
     startDate: dateSchema.optional().describe("期間の開始日、境界を含む (YYYY-MM-DD形式)"),
     endDate: dateSchema.optional().describe("期間の終了日、境界を含む (YYYY-MM-DD形式)"),
     month: monthSchema.optional().describe("対象月 (YYYY-MM形式)"),
-    category: z.string().optional().describe("大カテゴリの完全一致"),
-    subCategory: z.string().optional().describe("中カテゴリの完全一致"),
-    keyword: z
-      .string()
+    category: nonEmptyFilterSchema.optional().describe("大カテゴリの完全一致"),
+    subCategory: nonEmptyFilterSchema.optional().describe("中カテゴリの完全一致"),
+    keyword: nonEmptyFilterSchema
       .optional()
       .describe("内容・大カテゴリ・中カテゴリを対象にした部分一致キーワード"),
     minAmount: z.number().nonnegative().optional().describe("最小金額、境界を含む"),
@@ -60,6 +60,6 @@ export function createTransactionSearchTool(db: Db, groupId: string) {
     description:
       "家計の取引明細を日付・期間・月・カテゴリ・キーワード・金額・種別・振替/計算対象外の状態で検索する",
     inputSchema: transactionSearchInputSchema,
-    execute: async (options) => await searchTransactions({ ...options, groupId }, db),
+    execute: async (options) => await searchTransactionsWithMetadata({ ...options, groupId }, db),
   });
 }

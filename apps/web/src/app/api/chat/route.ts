@@ -146,6 +146,7 @@ function hasValidConversationBounds(messages: UIMessage[]): boolean {
 
   let conversationTextLength = 0;
   for (const message of messages) {
+    if (message.role === "user" && message.parts.some((part) => part.type !== "text")) return false;
     const textLength = getMessageText(message).length;
     if (textLength > MAX_MESSAGE_TEXT_LENGTH) return false;
     conversationTextLength += textLength;

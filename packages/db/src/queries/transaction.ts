@@ -36,9 +36,12 @@ function boundedInteger(
   return Math.min(Math.max(integer, minimum), maximum);
 }
 
-export async function searchTransactions(options: SearchTransactionsOptions, db: Db = getDb()) {
+export async function searchTransactionsWithMetadata(
+  options: SearchTransactionsOptions,
+  db: Db = getDb(),
+) {
   const accountIds = await getAccountIdsForGroup(db, options.groupId);
-  if (accountIds.length === 0) return [];
+  if (accountIds.length === 0) return { transactions: [], truncated: false };
 
   const conditions: SQL[] = [
     or(
@@ -338,6 +341,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
   const page: SearchTransaction[] = [];
   let batchOffset = 0;
   let remainingOffset = offset;
+  let truncated = false;
 
   while (page.length < limit && batchOffset < SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS) {
     const batch = await fetchBatch(batchOffset);
@@ -357,9 +361,16 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
 
     if (batch.length < SEARCH_TRANSACTIONS_MAX_LIMIT) break;
     batchOffset += batch.length;
+    if (batchOffset >= SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS && page.length < limit) {
+      truncated = true;
+    }
   }
 
-  return page;
+  return { transactions: page, truncated };
+}
+
+export async function searchTransactions(options: SearchTransactionsOptions, db: Db = getDb()) {
+  return (await searchTransactionsWithMetadata(options, db)).transactions;
 }
 
 export async function getTransactions(
