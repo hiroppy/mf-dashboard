@@ -32,6 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
       - uses: ./.github/actions/setup-node
+        with:
+          playwright-browsers: chromium webkit
       - run: pnpm test:e2e:web
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7.0.1
