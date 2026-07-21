@@ -19,6 +19,7 @@ interface CodexTool {
 }
 
 export interface CodexExecOptions<T> {
+  preloadTools?: string[];
   system: string;
   prompt: string;
   schema?: z.ZodType<T>;
@@ -194,21 +195,20 @@ function waitForToolResult<T>(
 
 async function collectToolData(
   tools: Record<string, CodexTool>,
-  trustedInstructions: string,
+  preloadTools: string[],
   maxToolCalls: number,
   signal: AbortSignal,
 ): Promise<{ data: Record<string, unknown>; toolNames: string[] }> {
   signal.throwIfAborted();
-  const mentionedTools = Object.entries(tools).filter(([name]) =>
-    trustedInstructions.includes(name),
-  );
-  if (mentionedTools.length > maxToolCalls) {
+  if (preloadTools.length > maxToolCalls) {
     throw new Error(`Codex exec input exceeds ${maxToolCalls} tool calls`);
   }
 
   const data: Record<string, unknown> = {};
   const toolNames: string[] = [];
-  for (const [name, tool] of mentionedTools) {
+  for (const name of preloadTools) {
+    const tool = tools[name];
+    if (!tool) throw new Error(`Unknown Codex exec preload tool: ${name}`);
     const input = tool.inputSchema.safeParse({});
     if (!input.success || !tool.execute) {
       throw new Error(`Codex exec cannot preload tool ${name} without input`);
@@ -359,7 +359,7 @@ async function generateInIsolation<T>(
     }
     const { data, toolNames } = await collectToolData(
       options.tools ?? {},
-      options.system,
+      options.preloadTools ?? [],
       maxToolCalls,
       controller.signal,
     );

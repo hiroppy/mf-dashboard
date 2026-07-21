@@ -165,6 +165,16 @@ const STAGE2_SYSTEM_PROMPT = `あなたはプロの個人財務アドバイザ�
 - 増加なのに「減少」、減少なのに「増加」と記述する矛盾
 - 英語の技術用語（netIncome, savingsRate 等）をそのまま出力すること。必ず日本語（純収入、貯蓄率 等）に置き換える`;
 
+const STAGE1_PRELOAD_TOOLS = [
+  "getFinancialMetrics",
+  "analyzeMoMTrend",
+  "analyzeSpendingComparison",
+  "analyzePortfolioRisk",
+  "analyzeSavingsTrajectory",
+  "analyzeIncomeStability",
+  "getLiabilityBreakdownByCategory",
+];
+
 export interface GeneratedInsights {
   insights: AnalyticsInsights;
   model: string;
@@ -191,6 +201,7 @@ export async function generateInsightsWithMetadata(
 
   // Stage 1: Data collection + analysis memo
   const stage1 = await generateWithConfiguredBackend({
+    preloadTools: STAGE1_PRELOAD_TOOLS,
     tools: allTools,
     stopWhen: stepCountIs(10),
     maxToolCalls: 20,

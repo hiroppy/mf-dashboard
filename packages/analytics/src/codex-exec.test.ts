@@ -86,6 +86,7 @@ describe("generateWithCodexExec", () => {
     }));
 
     const result = await generateWithCodexExec({
+      preloadTools: ["lookupValue"],
       system: "Use lookupValue and return its value.",
       prompt: "Return JSON.",
       schema: z.object({ value: z.string() }),
@@ -145,6 +146,7 @@ describe("generateWithCodexExec", () => {
   test("rejects a mentioned tool that requires input before spawning Codex", async () => {
     await expect(
       generateWithCodexExec({
+        preloadTools: ["lookupValue"],
         system: "Use lookupValue.",
         prompt: "Answer.",
         tools: {
@@ -161,6 +163,7 @@ describe("generateWithCodexExec", () => {
   test("enforces the preloaded tool limit before spawning Codex", async () => {
     await expect(
       generateWithCodexExec({
+        preloadTools: ["firstTool", "secondTool"],
         system: "Use firstTool and secondTool.",
         prompt: "Answer.",
         maxToolCalls: 1,
@@ -179,6 +182,7 @@ describe("generateWithCodexExec", () => {
 
     await expect(
       generateWithCodexExec({
+        preloadTools: ["lookupValue"],
         system: "Use lookupValue.",
         prompt: "Answer.",
         tools: {

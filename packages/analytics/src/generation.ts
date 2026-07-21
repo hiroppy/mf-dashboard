@@ -4,6 +4,7 @@ import { generateWithCodexExec } from "./codex-exec.js";
 import { getAIBackend, getModel } from "./config.js";
 
 interface GenerateOptions<T> {
+  preloadTools?: string[];
   system: string;
   prompt: string;
   schema?: z.ZodType<T>;
@@ -25,6 +26,7 @@ export async function generateWithConfiguredBackend<T>(
 ): Promise<GenerateResult<T>> {
   if (getAIBackend() === "codex") {
     const result = await generateWithCodexExec({
+      preloadTools: options.preloadTools,
       system: options.system,
       prompt: options.prompt,
       schema: options.schema,
