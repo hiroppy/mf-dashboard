@@ -421,11 +421,12 @@ describe("generateWithCodexAppServer", () => {
     expect(spawnMock).toHaveBeenCalledTimes(2);
   });
 
-  test("removes the isolated Codex home when credential persistence fails", async () => {
+  test("preserves the generation result and removes isolation when persistence fails", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
     await writeFile(join(sourceCodexHome, "auth.json"), '{"token":"initial"}');
     process.env.CODEX_HOME = sourceCodexHome;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     const fake = createFakeAppServer();
     spawnMock.mockReturnValue(fake.child);
@@ -447,7 +448,11 @@ describe("generateWithCodexAppServer", () => {
     await writeFile(join(isolatedCodexHome, "auth.json"), "invalid-json");
     finishTool?.();
 
-    await expect(generation).rejects.toThrow(/JSON|Unexpected/);
+    await expect(generation).resolves.toMatchObject({ text: '{"value":"tool-result"}' });
+    expect(warn).toHaveBeenCalledWith(
+      "[analytics] Failed to persist refreshed Codex credentials:",
+      expect.any(SyntaxError),
+    );
     await expect(access(isolatedCodexHome)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

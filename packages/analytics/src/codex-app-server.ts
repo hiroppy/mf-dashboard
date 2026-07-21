@@ -545,8 +545,13 @@ export async function generateWithCodexAppServer<T>(
     } finally {
       try {
         await persistRefreshedCredentials(environment);
-      } finally {
+      } catch (error) {
+        console.warn("[analytics] Failed to persist refreshed Codex credentials:", error);
+      }
+      try {
         await rm(environment.root, { recursive: true, force: true });
+      } catch (error) {
+        console.warn("[analytics] Failed to remove isolated Codex environment:", error);
       }
     }
   });
