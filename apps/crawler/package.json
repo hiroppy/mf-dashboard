@@ -26,7 +26,7 @@
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
     "@mf-dashboard/meta": "workspace:*",
-    "@slack/web-api": "7.17.0",
+    "@slack/web-api": "7.19.0",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
