@@ -238,7 +238,11 @@ class CodexAppServerConnection {
   }
 
   private send(message: AppServerMessage): void {
-    this.child.stdin.write(`${JSON.stringify(message)}\n`);
+    if (this.stopped || !this.child.stdin.writable) return;
+
+    this.child.stdin.write(`${JSON.stringify(message)}\n`, (error) => {
+      if (error && !this.stopped) this.rejectAll(error);
+    });
   }
 
   private handleLine(line: string): void {

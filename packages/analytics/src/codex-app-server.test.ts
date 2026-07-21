@@ -178,4 +178,31 @@ describe("generateWithCodexAppServer", () => {
     ).rejects.toThrow("maxToolCalls must be a positive integer");
     expect(spawnMock).not.toHaveBeenCalled();
   });
+
+  test("does not write a slow tool result after a timeout stops the process", async () => {
+    process.env.CODEX_APP_SERVER_TIMEOUT_MS = "5";
+    const fake = createFakeAppServer();
+    spawnMock.mockReturnValue(fake.child);
+    let finishTool: (() => void) | undefined;
+    const execute = vi.fn<() => Promise<string>>(
+      () =>
+        new Promise((resolve) => {
+          finishTool = () => resolve("late-result");
+        }),
+    );
+
+    await expect(
+      generateWithCodexAppServer({
+        system: "System",
+        prompt: "Call lookupValue.",
+        tools: { lookupValue: { inputSchema: z.object({}), execute } },
+      }),
+    ).rejects.toThrow("codex app-server timed out after 5ms");
+
+    finishTool?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fake.messages).not.toContainEqual(expect.objectContaining({ id: 99 }));
+    expect(fake.kill).toHaveBeenCalledOnce();
+  });
 });
