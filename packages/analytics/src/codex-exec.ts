@@ -125,6 +125,12 @@ function getTimeoutMs(): number {
   return timeout;
 }
 
+function getRemainingTimeout(deadline: number, timeoutMs: number): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error(`codex exec timed out after ${timeoutMs}ms`);
+  return remaining;
+}
+
 function getMaxToolCalls(value: number | undefined): number {
   const maxToolCalls = value ?? DEFAULT_MAX_TOOL_CALLS;
   if (!Number.isInteger(maxToolCalls) || maxToolCalls <= 0) {
@@ -148,14 +154,16 @@ function getSourceAuthPath(): string {
 
 async function withCredentialLock<T>(
   operation: (signal: AbortSignal, deadline: number) => Promise<T>,
+  deadline: number,
   timeoutMs: number,
 ): Promise<T> {
   const sourceAuthPath = getSourceAuthPath();
   const lockfilePath = `${sourceAuthPath}.mf-dashboard.lockdir`;
   const acquisitionController = new AbortController();
+  const acquisitionBudget = getRemainingTimeout(deadline, timeoutMs);
   const acquisitionTimeout = setTimeout(
     () => acquisitionController.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
-    timeoutMs,
+    acquisitionBudget,
   );
   let operationController: AbortController | undefined;
   let release: (() => Promise<void>) | undefined;
@@ -191,15 +199,16 @@ async function withCredentialLock<T>(
   }
 
   operationController = new AbortController();
-  const deadline = Date.now() + timeoutMs;
-  const operationTimeout = setTimeout(
-    () => operationController?.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
-    timeoutMs,
-  );
+  let operationTimeout: ReturnType<typeof setTimeout> | undefined;
   let operationFailed = false;
   let operationError: unknown;
   let result!: T;
   try {
+    const operationBudget = getRemainingTimeout(deadline, timeoutMs);
+    operationTimeout = setTimeout(
+      () => operationController?.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
+      operationBudget,
+    );
     result = await operation(operationController.signal, deadline);
   } catch (error) {
     operationFailed = true;
@@ -229,13 +238,13 @@ async function withCredentialLock<T>(
 
 async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedEnvironment> {
   signal.throwIfAborted();
-  const rootCreation = mkdtemp(join(tmpdir(), "mf-dashboard-codex-"));
+  const rootCreation = mkdtemp(join(resolve(tmpdir()), "mf-dashboard-codex-"));
   let root: string;
   try {
-    root = await waitForToolResult(() => rootCreation, signal);
+    root = resolve(await waitForToolResult(() => rootCreation, signal));
   } catch (error) {
     void rootCreation
-      .then((createdRoot) => rm(createdRoot, { recursive: true, force: true }))
+      .then((createdRoot) => rm(resolve(createdRoot), { recursive: true, force: true }))
       .catch(() => undefined);
     throw error;
   }
@@ -484,22 +493,51 @@ async function runCodexProcess(
 
 async function readCodexOutput(path: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  const handle = await open(path, "r");
-  let oversized = false;
+  const opening = open(path, "r");
+  let handle: Awaited<ReturnType<typeof open>>;
   try {
-    const metadata = await handle.stat();
+    handle = await waitForToolResult(() => opening, signal);
+  } catch (error) {
+    void opening.then((lateHandle) => lateHandle.close()).catch(() => undefined);
+    throw error;
+  }
+  let oversized = false;
+  let output: string | undefined;
+  let operationError: unknown;
+  try {
+    const stating = handle.stat();
+    const metadata = await waitForToolResult(() => stating, signal);
     oversized = metadata.size > MAX_OUTPUT_BYTES;
     if (oversized) throw new Error("Codex output exceeds the byte limit");
     const buffer = Buffer.allocUnsafe(MAX_OUTPUT_BYTES + 1);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const reading = handle.read(buffer, 0, buffer.length, 0);
+    const { bytesRead } = await waitForToolResult(() => reading, signal);
     oversized = bytesRead > MAX_OUTPUT_BYTES;
     if (oversized) throw new Error("Codex output exceeds the byte limit");
     signal.throwIfAborted();
-    return buffer.subarray(0, bytesRead).toString("utf8");
-  } finally {
-    await handle.close();
-    if (oversized) await rm(path, { force: true }).catch(() => undefined);
+    output = buffer.subarray(0, bytesRead).toString("utf8");
+  } catch (error) {
+    operationError = error;
   }
+
+  const closing = handle.close();
+  try {
+    await waitForToolResult(() => closing, signal);
+  } catch (error) {
+    void closing.catch(() => undefined);
+    operationError = signal.aborted ? signal.reason : (operationError ?? error);
+  }
+  if (oversized) {
+    const removal = rm(path, { force: true });
+    try {
+      await waitForToolResult(() => removal, signal);
+    } catch {
+      void removal.catch(() => undefined);
+    }
+  }
+  if (signal.aborted) throw signal.reason;
+  if (operationError) throw operationError;
+  return output!;
 }
 
 async function assertNoMcpServers(
@@ -704,18 +742,24 @@ async function generateInIsolation<T>(
   let persistenceFailed = false;
   if (!generationFailed) {
     const persistenceController = new AbortController();
-    const persistenceTimeout = setTimeout(
-      () =>
-        persistenceController.abort(
-          new Error(
-            `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
-          ),
-        ),
-      CREDENTIAL_PERSIST_TIMEOUT_MS,
-    );
-    const persistence = verifyCredentialState(isolatedEnvironment, persistenceController.signal);
+    let persistenceTimeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      await waitForToolResult(() => persistence, persistenceController.signal);
+      const persistenceBudget = Math.min(
+        CREDENTIAL_PERSIST_TIMEOUT_MS,
+        getRemainingTimeout(deadline, timeoutMs),
+      );
+      persistenceTimeout = setTimeout(
+        () =>
+          persistenceController.abort(
+            new Error(
+              `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
+            ),
+          ),
+        persistenceBudget,
+      );
+      const persistenceSignal = AbortSignal.any([signal, persistenceController.signal]);
+      const persistence = verifyCredentialState(isolatedEnvironment, persistenceSignal);
+      await waitForToolResult(() => persistence, persistenceSignal);
     } catch {
       persistenceFailed = true;
       console.warn("[analytics] Failed to persist refreshed Codex credentials");
@@ -734,12 +778,12 @@ export async function generateWithCodexExec<T>(
   options: CodexExecOptions<T>,
 ): Promise<CodexExecResult<T>> {
   const timeoutMs = getTimeoutMs();
+  const deadline = Date.now() + timeoutMs;
   const maxToolCalls = getMaxToolCalls(options.maxToolCalls);
   const preloadController = new AbortController();
-  const preloadDeadline = Date.now() + timeoutMs;
   const preloadTimeout = setTimeout(
     () => preloadController.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
-    timeoutMs,
+    getRemainingTimeout(deadline, timeoutMs),
   );
   let toolData: { data: Record<string, unknown>; toolNames: string[] };
   try {
@@ -753,17 +797,18 @@ export async function generateWithCodexExec<T>(
     clearTimeout(preloadTimeout);
   }
   preloadController.signal.throwIfAborted();
-  if (Date.now() >= preloadDeadline) {
+  if (Date.now() >= deadline) {
     throw new Error(`codex exec timed out after ${timeoutMs}ms`);
   }
   const prompt = buildPrompt(options.prompt, toolData.data);
   preloadController.signal.throwIfAborted();
-  if (Date.now() >= preloadDeadline) {
+  if (Date.now() >= deadline) {
     throw new Error(`codex exec timed out after ${timeoutMs}ms`);
   }
   return withCredentialLock(
     (signal, deadline) =>
       generateInIsolation(options, toolData, prompt, timeoutMs, signal, deadline),
+    deadline,
     timeoutMs,
   );
 }

@@ -324,7 +324,9 @@ preload tool 1 件の JSON は 512 KiB、Codex へ渡す prompt / stdin は 2 Mi
 stdout と最終 output file はそれぞれ 1 MiB を上限とする。超過時は process を停止して一時
 output を削除し、結果を返さず fail closed にする。
 `AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
-120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
+120000 ミリ秒。tool preload、credential lock 待機、Codex 実行、output / credential 検証は
+同じ request deadline を共有する。deadline 後の一時環境削除と lock release だけは安全な後始末として
+独立した有限 budget を使う。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で
 `pnpm --filter @mf-dashboard/crawler dev:scrape` を実行する場合に限る。crawler の Load phase が
 repository root の `.env` を `process.loadEnvFile` で読み込むため、package script へ環境変数を

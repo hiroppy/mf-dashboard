@@ -3,31 +3,36 @@ import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { lockMock, mkdirMock, mkdtempMock, readFileMock, rmMock, spawnMock } = vi.hoisted(() => ({
-  lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
-  mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
-  mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
-  readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
-  rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
-  spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
-}));
+const { lockMock, mkdirMock, mkdtempMock, openMock, readFileMock, rmMock, spawnMock } = vi.hoisted(
+  () => ({
+    lockMock: vi.fn<typeof import("proper-lockfile").lock>(),
+    mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
+    mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
+    openMock: vi.fn<typeof import("node:fs/promises").open>(),
+    readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+    rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
+    spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
+  }),
+);
 
 vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs/promises")>();
   mkdirMock.mockImplementation(original.mkdir);
   mkdtempMock.mockImplementation(original.mkdtemp);
+  openMock.mockImplementation(original.open);
   readFileMock.mockImplementation(original.readFile);
   rmMock.mockImplementation(original.rm);
   return {
     ...original,
     mkdir: mkdirMock,
     mkdtemp: mkdtempMock,
+    open: openMock,
     readFile: readFileMock,
     rm: rmMock,
   };
@@ -283,6 +288,56 @@ describe("generateWithCodexExec", () => {
     );
     expect(fake.kill).toHaveBeenCalled();
     expect(rmMock).toHaveBeenCalledWith(expect.stringMatching(/output\.txt$/), { force: true });
+  });
+
+  test("resolves a relative temporary root before spawning Codex", async () => {
+    const isolatedRoot = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-relative-"));
+    temporaryDirectories.push(isolatedRoot);
+    mkdtempMock.mockResolvedValueOnce(relative(process.cwd(), isolatedRoot));
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    expect(isAbsolute(spawnMock.mock.calls[3]?.[2]?.env?.CODEX_HOME ?? "")).toBe(true);
+    expect(isAbsolute(spawnMock.mock.calls[3]?.[2]?.env?.HOME ?? "")).toBe(true);
+  });
+
+  test("bounds a stalled final-output open by the request deadline", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    const originalOpen = openMock.getMockImplementation()!;
+    openMock.mockImplementation(() => new Promise<never>(() => undefined));
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake);
+
+    try {
+      await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+        "codex exec timed out after 20ms",
+      );
+    } finally {
+      openMock.mockImplementation(originalOpen);
+    }
+  }, 500);
+
+  test("uses the remaining request budget for credential-lock acquisition", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "100";
+    vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(40);
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const originalLock = lockMock.getMockImplementation()!;
+    lockMock.mockImplementation(() => new Promise<never>(() => undefined));
+
+    try {
+      await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+        "codex exec timed out after 100ms",
+      );
+
+      expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 60);
+      expect(spawnMock).not.toHaveBeenCalled();
+    } finally {
+      lockMock.mockImplementation(originalLock);
+    }
   });
 
   test("materializes and disables bundled system skills before Codex exec", async () => {
