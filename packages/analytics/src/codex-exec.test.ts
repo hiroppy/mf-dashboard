@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
@@ -290,6 +290,37 @@ describe("generateWithCodexExec", () => {
     expect(rmMock).toHaveBeenCalledWith(expect.stringMatching(/output\.txt$/), { force: true });
   });
 
+  test("continues reading after a short final-output read", async () => {
+    const originalOpen = openMock.getMockImplementation()!;
+    const output = '{"value":"short-read-ok"}';
+    const closeMock = vi.fn<() => Promise<void>>(async () => undefined);
+    openMock.mockResolvedValueOnce({
+      close: closeMock,
+      stat: async () => ({ size: Buffer.byteLength(output) }),
+      read: async (buffer: Buffer, offset: number, length: number, position: number) => {
+        const chunk = Buffer.from(output).subarray(position, position + Math.min(length, 2));
+        chunk.copy(buffer, offset);
+        return { buffer, bytesRead: chunk.length };
+      },
+    } as never);
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ output });
+    mockCodexRun(mcp, fake);
+
+    try {
+      await expect(
+        generateWithCodexExec({
+          system: "System.",
+          prompt: "Prompt.",
+          schema: z.object({ value: z.string() }),
+        }),
+      ).resolves.toEqual(expect.objectContaining({ text: output }));
+      expect(closeMock).toHaveBeenCalledOnce();
+    } finally {
+      openMock.mockImplementation(originalOpen);
+    }
+  });
+
   test("resolves a relative temporary root before spawning Codex", async () => {
     const isolatedRoot = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-relative-"));
     temporaryDirectories.push(isolatedRoot);
@@ -302,6 +333,27 @@ describe("generateWithCodexExec", () => {
 
     expect(isAbsolute(spawnMock.mock.calls[3]?.[2]?.env?.CODEX_HOME ?? "")).toBe(true);
     expect(isAbsolute(spawnMock.mock.calls[3]?.[2]?.env?.HOME ?? "")).toBe(true);
+  });
+
+  test("normalizes relative temporary-directory variables for the child", async () => {
+    const originalMkdtemp = mkdtempMock.getMockImplementation()!;
+    const parentTmp = tmpdir();
+    process.env.TMPDIR = ".relative-tmpdir";
+    process.env.TMP = ".relative-tmp";
+    process.env.TEMP = ".relative-temp";
+    mkdtempMock.mockImplementationOnce(() =>
+      originalMkdtemp(join(parentTmp, "mf-dashboard-codex-env-")),
+    );
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    const childEnv = spawnMock.mock.calls[3]?.[2]?.env;
+    expect(childEnv?.TMPDIR).toBe(resolve(".relative-tmpdir"));
+    expect(childEnv?.TMP).toBe(resolve(".relative-tmp"));
+    expect(childEnv?.TEMP).toBe(resolve(".relative-temp"));
   });
 
   test("bounds a stalled final-output open by the request deadline", async () => {
@@ -338,6 +390,47 @@ describe("generateWithCodexExec", () => {
       resolveOpen(lateHandle);
       await vi.waitFor(() => expect(isolatedRootRemovals).toBe(2));
       expect(closeMock).toHaveBeenCalledOnce();
+    } finally {
+      openMock.mockImplementation(originalOpen);
+      rmMock.mockImplementation(originalRm);
+    }
+  }, 500);
+
+  test("retries root cleanup after a delayed opened handle closes", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    const originalOpen = openMock.getMockImplementation()!;
+    const originalRm = rmMock.getMockImplementation()!;
+    let resolveClose!: () => void;
+    const closeMock = vi.fn<() => Promise<void>>(
+      () => new Promise<void>((resolve) => (resolveClose = resolve)),
+    );
+    openMock.mockResolvedValueOnce({
+      close: closeMock,
+      stat: () => new Promise<never>(() => undefined),
+    } as never);
+    let isolatedRootRemovals = 0;
+    rmMock.mockImplementation((path, options) => {
+      if (
+        String(path).includes("mf-dashboard-codex-") &&
+        !String(path).includes("-test-") &&
+        "recursive" in options!
+      ) {
+        isolatedRootRemovals += 1;
+        if (isolatedRootRemovals === 1) return Promise.reject(new Error("busy"));
+      }
+      return originalRm(path, options);
+    });
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake);
+
+    try {
+      await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+        "codex exec timed out after 20ms",
+      );
+      expect(isolatedRootRemovals).toBe(1);
+      resolveClose();
+      await vi.waitFor(() => expect(isolatedRootRemovals).toBe(2));
     } finally {
       openMock.mockImplementation(originalOpen);
       rmMock.mockImplementation(originalRm);

@@ -59,6 +59,7 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
+const TEMP_ENV_KEYS = new Set(["TEMP", "TMP", "TMPDIR"]);
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -143,7 +144,7 @@ function getCodexEnv(): NodeJS.ProcessEnv {
   return Object.fromEntries(
     ALLOWED_ENV_KEYS.flatMap((key) => {
       const value = process.env[key];
-      return value === undefined ? [] : [[key, value]];
+      return value === undefined ? [] : [[key, TEMP_ENV_KEYS.has(key) ? resolve(value) : value]];
     }),
   );
 }
@@ -491,6 +492,17 @@ async function runCodexProcess(
   return { stderrHead, stdout };
 }
 
+function retryCleanupAfterDelayedHandle(
+  handleSettlement: PromiseLike<unknown>,
+  outputPath: string,
+): void {
+  void Promise.resolve(handleSettlement)
+    .then(() => rm(dirname(outputPath), { recursive: true, force: true }))
+    .catch(() =>
+      console.warn("[analytics] Failed to clean up after a delayed Codex output handle"),
+    );
+}
+
 async function readCodexOutput(path: string, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
   const opening = open(path, "r");
@@ -498,14 +510,10 @@ async function readCodexOutput(path: string, signal: AbortSignal): Promise<strin
   try {
     handle = await waitForToolResult(() => opening, signal);
   } catch (error) {
-    void opening
-      .then(async (lateHandle) => {
-        await lateHandle.close();
-        await rm(dirname(path), { recursive: true, force: true });
-      })
-      .catch(() =>
-        console.warn("[analytics] Failed to clean up after a delayed Codex output open"),
-      );
+    retryCleanupAfterDelayedHandle(
+      opening.then((lateHandle) => lateHandle.close()),
+      path,
+    );
     throw error;
   }
   let oversized = false;
@@ -517,12 +525,22 @@ async function readCodexOutput(path: string, signal: AbortSignal): Promise<strin
     oversized = metadata.size > MAX_OUTPUT_BYTES;
     if (oversized) throw new Error("Codex output exceeds the byte limit");
     const buffer = Buffer.allocUnsafe(MAX_OUTPUT_BYTES + 1);
-    const reading = handle.read(buffer, 0, buffer.length, 0);
-    const { bytesRead } = await waitForToolResult(() => reading, signal);
-    oversized = bytesRead > MAX_OUTPUT_BYTES;
+    let totalBytesRead = 0;
+    while (totalBytesRead < buffer.length) {
+      const reading = handle.read(
+        buffer,
+        totalBytesRead,
+        buffer.length - totalBytesRead,
+        totalBytesRead,
+      );
+      const { bytesRead } = await waitForToolResult(() => reading, signal);
+      if (bytesRead === 0) break;
+      totalBytesRead += bytesRead;
+    }
+    oversized = totalBytesRead > MAX_OUTPUT_BYTES;
     if (oversized) throw new Error("Codex output exceeds the byte limit");
     signal.throwIfAborted();
-    output = buffer.subarray(0, bytesRead).toString("utf8");
+    output = buffer.subarray(0, totalBytesRead).toString("utf8");
   } catch (error) {
     operationError = error;
   }
@@ -531,7 +549,7 @@ async function readCodexOutput(path: string, signal: AbortSignal): Promise<strin
   try {
     await waitForToolResult(() => closing, signal);
   } catch (error) {
-    void closing.catch(() => undefined);
+    retryCleanupAfterDelayedHandle(closing, path);
     operationError = signal.aborted ? signal.reason : (operationError ?? error);
   }
   if (oversized) {
