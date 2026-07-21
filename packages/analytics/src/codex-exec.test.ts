@@ -150,6 +150,7 @@ describe("generateWithCodexExec", () => {
         "read-only",
         "--output-schema",
         expect.stringContaining("developer_instructions="),
+        "tools.view_image=false",
       ]),
     );
     expect(spawnOptions?.cwd).toContain("mf-dashboard-codex-");
@@ -450,6 +451,28 @@ describe("generateWithCodexExec", () => {
     });
 
     await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
+  });
+
+  test("redacts malformed refreshed credentials from parser errors", async () => {
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
+      const isolatedHome = options?.env?.CODEX_HOME;
+      if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
+      void writeFile(join(isolatedHome, "auth.json"), '{"token":"private-refresh-token" SECRET}');
+      return fake.child;
+    });
+
+    const error = await generateWithCodexExec({ system: "System.", prompt: "Prompt." }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Codex credential persistence failed");
+    expect((error as Error).cause).toEqual(
+      new Error("Codex returned invalid refreshed credentials"),
+    );
+    expect(String((error as Error).cause)).not.toContain("private-refresh-token");
   });
 
   test("persists refreshed credentials after the generation deadline", async () => {

@@ -313,6 +313,9 @@ codex login --config 'cli_auth_credentials_store="file"'
 ```
 
 keyring-only のログインは隔離した一時 `CODEX_HOME` へ引き継げないため利用できない。
+Codex 経路は host filesystem の画像を読み取れる組み込み `view_image` tool を strict config で
+無効化する。使用中の Codex CLI が `tools.view_image=false` を受理しない場合は、安全のため
+生成を開始せず失敗する。
 `AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
 120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で

@@ -91,6 +91,7 @@ const CODEX_CONFIG = [
   "features.unified_exec=false",
   "features.workspace_dependencies=false",
   "mcp_servers={}",
+  "tools.view_image=false",
   'web_search="disabled"',
 ] as const;
 const DATA_BOUNDARY =
@@ -232,7 +233,11 @@ async function persistRefreshedCredentials(
   ]);
   if (isolatedAuth.equals(initialAuth) || !currentAuth.equals(initialAuth)) return;
 
-  JSON.parse(isolatedAuth.toString("utf8"));
+  try {
+    JSON.parse(isolatedAuth.toString("utf8"));
+  } catch {
+    throw new Error("Codex returned invalid refreshed credentials");
+  }
   const stagedAuthPath = `${sourceAuthPath}.mf-dashboard-${randomUUID()}.tmp`;
   try {
     await writeFile(stagedAuthPath, isolatedAuth, { mode: 0o600, signal });
