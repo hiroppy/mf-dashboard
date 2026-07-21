@@ -47,6 +47,7 @@ interface IsolatedEnvironment {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_TOOL_CALLS = 20;
+const CREDENTIAL_PERSIST_TIMEOUT_MS = 5_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const SHUTDOWN_GRACE_MS = 500;
 const ALLOWED_ENV_KEYS = [
@@ -165,7 +166,11 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     try {
       initialAuth = await readFile(sourceAuthPath, { signal });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return environment;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(
+          'Codex backend requires file-backed authentication; run codex login with cli_auth_credentials_store="file"',
+        );
+      }
       throw error;
     }
     await writeFile(authPath, initialAuth, { mode: 0o600, signal });
@@ -363,7 +368,7 @@ async function runCodexExec(
 
   const { stderrHead } = await runCodexProcess(environment, args, signal, prompt);
 
-  const text = (await readFile(environment.outputPath, "utf8")).trim();
+  const text = (await readFile(environment.outputPath, { encoding: "utf8", signal })).trim();
   signal.throwIfAborted();
   const model =
     stderrHead.match(/^model: (.+)$/m)?.[1]?.trim() ?? process.env.AI_MODEL ?? "codex-default";
@@ -372,8 +377,8 @@ async function runCodexExec(
 
 async function generateInIsolation<T>(
   options: CodexExecOptions<T>,
+  toolData: { data: Record<string, unknown>; toolNames: string[] },
   timeoutMs: number,
-  maxToolCalls: number,
   controller: AbortController,
   deadline: number,
 ): Promise<CodexExecResult<T>> {
@@ -381,19 +386,15 @@ async function generateInIsolation<T>(
 
   try {
     if (options.schema) {
-      await writeFile(environment.schemaPath, JSON.stringify(z.toJSONSchema(options.schema)));
+      await writeFile(environment.schemaPath, JSON.stringify(z.toJSONSchema(options.schema)), {
+        signal: controller.signal,
+      });
     }
-    const { data, toolNames } = await collectToolData(
-      options.tools ?? {},
-      options.preloadTools ?? [],
-      maxToolCalls,
-      controller.signal,
-    );
     await assertNoMcpServers(environment, controller.signal);
     const result = await runCodexExec(
       environment,
       options.system,
-      buildPrompt(options.prompt, data),
+      buildPrompt(options.prompt, toolData.data),
       Boolean(options.schema),
       controller.signal,
     );
@@ -402,19 +403,31 @@ async function generateInIsolation<T>(
     if (Date.now() >= deadline) {
       throw new Error(`codex exec timed out after ${timeoutMs}ms`);
     }
-    return { ...result, output, toolNames };
+    return { ...result, output, toolNames: toolData.toolNames };
   } finally {
+    const persistenceController = new AbortController();
+    const persistenceTimeout = setTimeout(
+      () =>
+        persistenceController.abort(
+          new Error(
+            `Codex credential persistence timed out after ${CREDENTIAL_PERSIST_TIMEOUT_MS}ms`,
+          ),
+        ),
+      CREDENTIAL_PERSIST_TIMEOUT_MS,
+    );
     try {
-      await persistRefreshedCredentials(environment, controller.signal);
+      await persistRefreshedCredentials(environment, persistenceController.signal);
     } catch (error) {
       console.warn("[analytics] Failed to persist refreshed Codex credentials:", error);
     }
     try {
       const removal = rm(environment.root, { recursive: true, force: true });
-      if (controller.signal.aborted) void removal.catch(() => undefined);
-      else await waitForToolResult(() => removal, controller.signal);
+      if (persistenceController.signal.aborted) void removal.catch(() => undefined);
+      else await waitForToolResult(() => removal, persistenceController.signal);
     } catch (error) {
       console.warn("[analytics] Failed to remove the temporary Codex environment:", error);
+    } finally {
+      clearTimeout(persistenceTimeout);
     }
   }
 }
@@ -431,8 +444,14 @@ export async function generateWithCodexExec<T>(
     timeoutMs,
   );
   try {
+    const toolData = await collectToolData(
+      options.tools ?? {},
+      options.preloadTools ?? [],
+      maxToolCalls,
+      controller.signal,
+    );
     const result = await withCredentialLock(
-      () => generateInIsolation(options, timeoutMs, maxToolCalls, controller, deadline),
+      () => generateInIsolation(options, toolData, timeoutMs, controller, deadline),
       controller.signal,
     );
     controller.signal.throwIfAborted();

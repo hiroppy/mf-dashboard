@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Writable } from "node:stream";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
 const { readFileMock, spawnMock } = vi.hoisted(() => ({
@@ -22,6 +22,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 const { generateWithCodexExec } = await import("./codex-exec.js");
 const originalEnv = { ...process.env };
 const temporaryDirectories: string[] = [];
+
+beforeEach(async () => {
+  const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
+  temporaryDirectories.push(sourceCodexHome);
+  await writeFile(join(sourceCodexHome, "auth.json"), '{"token":"initial"}');
+  process.env.CODEX_HOME = sourceCodexHome;
+});
 
 afterEach(async () => {
   process.env = { ...originalEnv };
@@ -194,6 +201,41 @@ describe("generateWithCodexExec", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
+  test("preloads tools concurrently before acquiring the credential lock", async () => {
+    let releaseFirst!: () => void;
+    const firstTool = vi.fn<() => Promise<void>>(
+      () => new Promise<void>((resolve) => (releaseFirst = resolve)),
+    );
+    const secondTool = vi.fn<() => string>(() => "second");
+    const secondMcp = createFakeCodex();
+    const secondCodex = createFakeCodex({ output: "second result" });
+    const firstMcp = createFakeCodex();
+    const firstCodex = createFakeCodex({ output: "first result" });
+    spawnMock
+      .mockReturnValueOnce(secondMcp.child)
+      .mockReturnValueOnce(secondCodex.child)
+      .mockReturnValueOnce(firstMcp.child)
+      .mockReturnValueOnce(firstCodex.child);
+
+    const first = generateWithCodexExec({
+      preloadTools: ["lookup"],
+      system: "Use lookup.",
+      prompt: "First.",
+      tools: { lookup: { inputSchema: z.object({}), execute: firstTool } },
+    });
+    await vi.waitFor(() => expect(firstTool).toHaveBeenCalledOnce());
+    const second = generateWithCodexExec({
+      preloadTools: ["lookup"],
+      system: "Use lookup.",
+      prompt: "Second.",
+      tools: { lookup: { inputSchema: z.object({}), execute: secondTool } },
+    });
+
+    await expect(second).resolves.toEqual(expect.objectContaining({ text: "second result" }));
+    releaseFirst();
+    await expect(first).resolves.toEqual(expect.objectContaining({ text: "first result" }));
+  });
+
   test("aborts a slow preloaded tool when the command times out", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
     let aborted = false;
@@ -342,13 +384,31 @@ describe("generateWithCodexExec", () => {
     await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
   });
 
-  test("aborts while reading credentials for persistence", async () => {
+  test("persists refreshed credentials after the generation deadline", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
     await writeFile(sourceAuthPath, '{"token":"initial"}');
     process.env.CODEX_HOME = sourceCodexHome;
     process.env.CODEX_EXEC_TIMEOUT_MS = "1000";
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ hang: true });
+    spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
+      const isolatedHome = options?.env?.CODEX_HOME;
+      if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
+      void writeFile(join(isolatedHome, "auth.json"), '{"token":"refreshed"}');
+      return fake.child;
+    });
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec timed out after 1000ms",
+    );
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
+  });
+
+  test("bounds stalled credential persistence independently", async () => {
+    const sourceCodexHome = process.env.CODEX_HOME!;
+    const sourceAuthPath = join(sourceCodexHome, "auth.json");
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
@@ -375,7 +435,18 @@ describe("generateWithCodexExec", () => {
         prompt: "Answer.",
         schema: z.object({ value: z.string() }),
       }),
-    ).rejects.toThrow("codex exec timed out after 1000ms");
+    ).resolves.toEqual(expect.objectContaining({ text: '{"value":"ok"}' }));
     expect(sourceReads).toBe(2);
+  }, 7_000);
+
+  test("rejects keyring-only authentication before spawning Codex", async () => {
+    const emptyCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
+    temporaryDirectories.push(emptyCodexHome);
+    process.env.CODEX_HOME = emptyCodexHome;
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "Codex backend requires file-backed authentication",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 });
