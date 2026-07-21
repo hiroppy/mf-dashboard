@@ -1,16 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
-  mkdir,
-  mkdtemp,
-  open,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
@@ -150,23 +140,81 @@ function getSourceAuthPath(): string {
   return join(resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")), "auth.json");
 }
 
-async function withCredentialLock<T>(
-  operation: () => Promise<T>,
-  signal: AbortSignal,
-  staleAfterMs: number,
-): Promise<T> {
+interface CredentialLockOwner {
+  pid: number;
+  token: string;
+}
+
+async function openCredentialLock(path: string, signal: AbortSignal) {
+  const opening = open(path, "wx", 0o600);
+  try {
+    return await waitForToolResult(() => opening, signal);
+  } catch (error) {
+    if (signal.aborted) {
+      void opening
+        .then(async (handle) => {
+          await handle.close().catch(() => undefined);
+          await rm(path, { force: true }).catch(() => undefined);
+        })
+        .catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+async function readCredentialLockOwner(
+  path: string,
+  signal?: AbortSignal,
+): Promise<Partial<CredentialLockOwner> | undefined> {
+  try {
+    const value = signal
+      ? await readFile(path, { encoding: "utf8", signal })
+      : await readFile(path, "utf8");
+    return JSON.parse(value) as Partial<CredentialLockOwner>;
+  } catch {
+    signal?.throwIfAborted();
+    return undefined;
+  }
+}
+
+async function withCredentialLock<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   const lockPath = `${getSourceAuthPath()}.mf-dashboard.lock`;
+  const recoveryLockPath = `${lockPath}.recovery`;
+  const owner = { pid: process.pid, token: randomUUID() };
   let lockHandle;
   while (true) {
     signal.throwIfAborted();
     try {
-      lockHandle = await open(lockPath, "wx", 0o600);
+      lockHandle = await openCredentialLock(lockPath, signal);
       break;
     } catch (error) {
+      if (signal.aborted) throw error;
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const lock = await stat(lockPath).catch(() => undefined);
-      if (lock && Date.now() - lock.mtimeMs > staleAfterMs) {
-        await rm(lockPath, { force: true });
+      const existingOwner = await readCredentialLockOwner(lockPath, signal);
+      let ownerIsDead = false;
+      if (typeof existingOwner?.pid === "number") {
+        try {
+          process.kill(existingOwner.pid, 0);
+        } catch (ownerError) {
+          ownerIsDead = (ownerError as NodeJS.ErrnoException).code === "ESRCH";
+        }
+      }
+      if (ownerIsDead) {
+        let recoveryHandle;
+        try {
+          recoveryHandle = await openCredentialLock(recoveryLockPath, signal);
+          const latestOwner = await readCredentialLockOwner(lockPath, signal);
+          if (latestOwner?.token === existingOwner?.token) {
+            const stalePath = `${lockPath}.stale-${randomUUID()}`;
+            await waitForToolResult(() => rename(lockPath, stalePath), signal);
+            await waitForToolResult(() => rm(stalePath, { force: true }), signal);
+          }
+        } catch (recoveryError) {
+          if ((recoveryError as NodeJS.ErrnoException).code !== "EEXIST") throw recoveryError;
+        } finally {
+          await recoveryHandle?.close().catch(() => undefined);
+          if (recoveryHandle) await rm(recoveryLockPath, { force: true }).catch(() => undefined);
+        }
         continue;
       }
       await waitForToolResult(
@@ -176,12 +224,22 @@ async function withCredentialLock<T>(
     }
   }
   try {
+    await waitForToolResult(() => lockHandle.writeFile(JSON.stringify(owner)), signal);
+  } catch (error) {
+    await lockHandle.close().catch(() => undefined);
+    await rm(lockPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  try {
     return await operation();
   } finally {
     await lockHandle.close().catch(() => undefined);
-    await rm(lockPath, { force: true }).catch(() =>
-      console.warn("[analytics] Failed to release the Codex credential lock"),
-    );
+    const currentOwner = await readCredentialLockOwner(lockPath);
+    if (currentOwner?.token === owner.token) {
+      await rm(lockPath, { force: true }).catch(() =>
+        console.warn("[analytics] Failed to release the Codex credential lock"),
+      );
+    }
   }
 }
 
@@ -600,9 +658,11 @@ async function generateInIsolation<T>(
       ),
     CREDENTIAL_PERSIST_TIMEOUT_MS,
   );
+  let persistenceFailed = false;
   try {
     await persistRefreshedCredentials(environment, persistenceController.signal);
   } catch {
+    persistenceFailed = true;
     console.warn("[analytics] Failed to persist refreshed Codex credentials");
   } finally {
     clearTimeout(persistenceTimeout);
@@ -610,6 +670,7 @@ async function generateInIsolation<T>(
   await removeTemporaryEnvironment(environment.root);
 
   if (generationFailed) throw generationError;
+  if (persistenceFailed) throw new Error("Codex credential persistence failed");
   return generationResult;
 }
 
@@ -639,7 +700,6 @@ export async function generateWithCodexExec<T>(
     const result = await withCredentialLock(
       () => generateInIsolation(options, toolData, prompt, timeoutMs, controller, deadline),
       controller.signal,
-      timeoutMs + CREDENTIAL_PERSIST_TIMEOUT_MS + CLEANUP_TIMEOUT_MS,
     );
     controller.signal.throwIfAborted();
     if (Date.now() >= deadline) {
