@@ -7,10 +7,11 @@ import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
-const { mkdirMock, mkdtempMock, readFileMock, spawnMock } = vi.hoisted(() => ({
+const { mkdirMock, mkdtempMock, readFileMock, rmMock, spawnMock } = vi.hoisted(() => ({
   mkdirMock: vi.fn<typeof import("node:fs/promises").mkdir>(),
   mkdtempMock: vi.fn<typeof import("node:fs/promises").mkdtemp>(),
   readFileMock: vi.fn<typeof import("node:fs/promises").readFile>(),
+  rmMock: vi.fn<typeof import("node:fs/promises").rm>(),
   spawnMock: vi.fn<typeof import("node:child_process").spawn>(),
 }));
 
@@ -20,11 +21,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   mkdirMock.mockImplementation(original.mkdir);
   mkdtempMock.mockImplementation(original.mkdtemp);
   readFileMock.mockImplementation(original.readFile);
+  rmMock.mockImplementation(original.rm);
   return {
     ...original,
     mkdir: mkdirMock,
     mkdtemp: mkdtempMock,
     readFile: readFileMock,
+    rm: rmMock,
   };
 });
 
@@ -136,6 +139,8 @@ describe("generateWithCodexExec", () => {
 
     const [command, args, spawnOptions] = spawnMock.mock.calls[1]!;
     expect(command).toBe("codex");
+    expect(spawnMock.mock.calls[0]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
+    expect(spawnOptions?.env?.CODEX_HOME).toBe(process.env.CODEX_HOME);
     expect(args).toEqual(
       expect.arrayContaining([
         "exec",
@@ -328,6 +333,39 @@ describe("generateWithCodexExec", () => {
     expect(fake.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
   });
 
+  test("waits for isolated workspace cleanup after a timeout", async () => {
+    process.env.CODEX_EXEC_TIMEOUT_MS = "20";
+    const originalRm = rmMock.getMockImplementation()!;
+    let releaseCleanup!: () => void;
+    rmMock.mockImplementation((path, options) => {
+      if (String(path).includes("mf-dashboard-codex-") && !String(path).includes("-test-")) {
+        return new Promise<void>((resolve) => (releaseCleanup = resolve));
+      }
+      return originalRm(path, options);
+    });
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex({ hang: true });
+    spawnMock.mockReturnValueOnce(mcp.child).mockReturnValueOnce(fake.child);
+
+    let settled = false;
+    const outcome = generateWithCodexExec({ system: "System.", prompt: "Prompt." })
+      .then(
+        (result) => ({ result, error: undefined }),
+        (error: unknown) => ({ result: undefined, error }),
+      )
+      .finally(() => {
+        settled = true;
+      });
+    await vi.waitFor(() => expect(releaseCleanup).toBeTypeOf("function"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+
+    releaseCleanup();
+    const { error } = await outcome;
+    expect(error).toEqual(new Error("codex exec timed out after 20ms"));
+    rmMock.mockImplementation(originalRm);
+  });
+
   test("fails closed when effective MCP servers are present", async () => {
     const mcp = createFakeCodex({ mcpServers: [{ name: "managed-server" }] });
     spawnMock.mockReturnValue(mcp.child);
@@ -409,7 +447,7 @@ describe("generateWithCodexExec", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  test("does not copy refreshed credentials back from the isolated Codex home", async () => {
+  test("lets Codex manage refreshed credentials in the canonical Codex home", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);
     const sourceAuthPath = join(sourceCodexHome, "auth.json");
@@ -418,9 +456,9 @@ describe("generateWithCodexExec", () => {
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     spawnMock.mockReturnValueOnce(mcp.child).mockImplementation((_command, _args, options) => {
-      const isolatedHome = options?.env?.CODEX_HOME;
-      if (typeof isolatedHome !== "string") throw new Error("missing isolated CODEX_HOME");
-      void writeFile(join(isolatedHome, "auth.json"), '{"token":"refreshed"}');
+      const codexHome = options?.env?.CODEX_HOME;
+      if (codexHome !== sourceCodexHome) throw new Error("missing canonical CODEX_HOME");
+      void writeFile(join(codexHome, "auth.json"), '{"token":"refreshed"}');
       return fake.child;
     });
 
@@ -430,17 +468,6 @@ describe("generateWithCodexExec", () => {
       schema: z.object({ value: z.string() }),
     });
 
-    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"initial"}');
-  });
-
-  test("rejects keyring-only authentication before spawning Codex", async () => {
-    const emptyCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
-    temporaryDirectories.push(emptyCodexHome);
-    process.env.CODEX_HOME = emptyCodexHome;
-
-    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
-      "Codex backend requires file-backed authentication",
-    );
-    expect(spawnMock).not.toHaveBeenCalled();
+    await expect(readFile(sourceAuthPath, "utf8")).resolves.toBe('{"token":"refreshed"}');
   });
 });

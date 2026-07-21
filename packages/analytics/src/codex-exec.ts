@@ -34,7 +34,8 @@ export interface CodexExecResult<T> {
 }
 
 interface IsolatedEnvironment {
-  codexHome: string;
+  authHome: string;
+  configHome: string;
   cwd: string;
   outputPath: string;
   root: string;
@@ -135,10 +136,10 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
   }
   try {
     signal.throwIfAborted();
-    const codexHome = join(root, "codex-home");
+    const configHome = join(root, "codex-config");
     const cwd = join(root, "workspace");
     const directoryCreation = Promise.all([
-      mkdir(codexHome, { mode: 0o700 }),
+      mkdir(configHome, { mode: 0o700 }),
       mkdir(cwd, { mode: 0o700 }),
     ]);
     try {
@@ -153,26 +154,13 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     signal.throwIfAborted();
 
     const environment = {
-      codexHome,
+      authHome: process.env.CODEX_HOME ?? join(homedir(), ".codex"),
+      configHome,
       cwd,
       outputPath: join(root, "output.txt"),
       root,
       schemaPath: join(root, "output-schema.json"),
     };
-    const sourceAuthPath = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json");
-    const authPath = join(codexHome, "auth.json");
-    let sourceAuth: Buffer;
-    try {
-      sourceAuth = await readFile(sourceAuthPath, { signal });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(
-          'Codex backend requires file-backed authentication; run codex login with cli_auth_credentials_store="file"',
-        );
-      }
-      throw error;
-    }
-    await writeFile(authPath, sourceAuth, { mode: 0o600, signal });
     signal.throwIfAborted();
     return environment;
   } catch (error) {
@@ -252,6 +240,7 @@ async function runCodexProcess(
   args: string[],
   signal: AbortSignal,
   input?: string,
+  codexHome = environment.configHome,
 ): Promise<{ stderrHead: string; stdout: string }> {
   signal.throwIfAborted();
   let stderrHead = "";
@@ -259,7 +248,7 @@ async function runCodexProcess(
   await new Promise<void>((resolve, reject) => {
     const child = spawn("codex", args, {
       cwd: environment.cwd,
-      env: { ...getCodexEnv(), CODEX_HOME: environment.codexHome, HOME: environment.root },
+      env: { ...getCodexEnv(), CODEX_HOME: codexHome, HOME: environment.root },
       stdio: "pipe",
     });
     let settled = false;
@@ -343,7 +332,13 @@ async function runCodexExec(
   if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
   args.push("-");
 
-  const { stderrHead } = await runCodexProcess(environment, args, signal, prompt);
+  const { stderrHead } = await runCodexProcess(
+    environment,
+    args,
+    signal,
+    prompt,
+    environment.authHome,
+  );
 
   const text = (await readFile(environment.outputPath, { encoding: "utf8", signal })).trim();
   signal.throwIfAborted();
@@ -398,9 +393,7 @@ async function generateInIsolation<T>(
   }
 
   try {
-    const removal = rm(environment.root, { recursive: true, force: true });
-    if (controller.signal.aborted) void removal.catch(() => undefined);
-    else await waitForToolResult(() => removal, controller.signal);
+    await rm(environment.root, { recursive: true, force: true });
   } catch (error) {
     console.warn("[analytics] Failed to remove the temporary Codex environment:", error);
   }
