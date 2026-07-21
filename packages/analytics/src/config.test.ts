@@ -25,8 +25,8 @@ describe("AI backend config", () => {
     expect(isLLMEnabled()).toBe(false);
   });
 
-  test("app-server enables LLM without AI SDK credentials", () => {
-    process.env.AI_BACKEND = "codex-app-server";
+  test("Codex CLI enables LLM without AI SDK credentials", () => {
+    process.env.AI_BACKEND = "codex";
     delete process.env.AI_PROVIDER;
     delete process.env.AI_MODEL;
 

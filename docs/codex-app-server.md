@@ -79,38 +79,29 @@ codex app-server generate-json-schema --experimental --out ./schemas
 
 ## mf-dashboard で利用する場合
 
-analytics package では `AI_BACKEND` によって AI SDK と app-server を選択できる。
+subscription 利用だけが目的なら app-server の双方向 RPC は不要であるため、実装では
+`AI_BACKEND` によって AI SDK と一回完結の Codex CLI を選択する。
 
-| `AI_BACKEND`       | 実行経路                                                   |
-| ------------------ | ---------------------------------------------------------- |
-| `ai-sdk`（既定値） | `AI_PROVIDER`、`AI_MODEL`、`AI_API_KEY` で AI SDK を利用   |
-| `codex-app-server` | ログイン済み Codex CLI を子プロセスとして stdio 経由で利用 |
+| `AI_BACKEND`       | 実行経路                                                  |
+| ------------------ | --------------------------------------------------------- |
+| `ai-sdk`（既定値） | `AI_PROVIDER`、`AI_MODEL`、`AI_API_KEY` で AI SDK を利用  |
+| `codex`            | ChatGPT ログイン済み Codex CLI を `codex exec` で一回実行 |
 
-app-server 経路は接続ごとに ephemeral thread を作成し、read-only sandbox と
-`approvalPolicy: "never"` を指定する。さらに shell、filesystem、network、apps、plugins、
-MCP、collaboration tool を thread config で無効化し、子プロセスへ渡す環境変数を
-Codex の認証・通信に必要な allowlist に限定する。実行ごとに一時 `CODEX_HOME` と clean な
-cwd を作成し、元の `CODEX_HOME` からは `auth.json` だけをコピーする。`thread/start` の
-応答に instruction source が含まれる場合や cwd が一時 workspace と一致しない場合は
-fail closed とする。さらに `mcpServerStatus/list` で effective MCP server が空であることを
-turn 前に確認する。認証 refresh で一時 `auth.json` が更新された場合は、元 credential が
-同時更新されていないことを確認してから戻す。複数 group の generation も credential の
-copy から永続化まで process 内で直列化し、完了時に一時ディレクトリを削除する。
-system prompt は `developerInstructions`、
-取引情報などの untrusted input は turn の user message として分離する。
-既存の Zod output schema は `outputSchema`、
-AI SDK tool 定義は experimental な `dynamicTools` に変換し、tool の実行結果だけを
-app-server へ返す。insights と未分類取引の categorization は同じ生成境界を使うため、
-AI SDK の既存経路を変更せず切り替えられる。
+Codex 経路は要求ごとに `codex exec --ephemeral --ignore-user-config --ignore-rules` を
+read-only sandbox で起動する。shell、network、apps、plugins、MCP などを config で無効化し、
+子プロセスへ渡す環境変数を認証と通信に必要な allowlist に限定する。実行ごとに一時
+`CODEX_HOME` と空の cwd を作り、元の `CODEX_HOME` からは `auth.json` だけをコピーする。
+認証 refresh があれば競合を確認して atomic に戻し、最後に一時ディレクトリを削除する。
 
-insights の app-server 経路は 20 回の dynamic tool call 上限を持ち、超過時は turn と
-子プロセスを終了する。AI SDK 経路の `stepCountIs(10)` は 1 step で複数 tool を呼び得るため、
-app-server 側は 2 倍の有限上限として無制限な反復を防ぐ。
+Codex CLI はアプリ内の AI SDK tool を直接呼べない。そのため system prompt で名前が指定され、
+空入力で検証できる tool だけをアプリ側で事前実行し、結果を untrusted data と明記して prompt
+へ添付する。入力が必要な tool や上限を超える要求は実行前に失敗させる。Zod schema は
+`--output-schema` へ渡し、最後のメッセージを同じ schema でも検証する。insights と未分類取引の
+categorization は共通の生成境界を使うため、AI SDK の既存経路を変更せず切り替えられる。
 
-`CODEX_APP_SERVER_TIMEOUT_MS` は接続全体の timeout で、既定値は 120 秒。
-成功、失敗、timeout のいずれでも子プロセスの stdin を閉じ、実行中の dynamic tool へ
-`AbortSignal` を通知して終了させる。
-`thread/start` が返した実際のモデル名は、生成した analytics report の metadata に保存する。
+`CODEX_EXEC_TIMEOUT_MS` は tool の事前実行から CLI 終了までの timeout で、既定値は 120 秒。
+timeout では実行中 tool へ `AbortSignal` を通知し、子プロセスを終了する。Codex CLI が報告した
+モデル名は analytics report の metadata に保存する。
 
 app-server を使う価値があるのは、会話履歴、承認 UI、ツール実行、ストリーミングイベントを
 ダッシュボードへ統合する場合である。その場合は Next.js のリクエスト処理から都度起動せず、
@@ -129,9 +120,9 @@ app-server を使う価値があるのは、会話履歴、承認 UI、ツール
   ブラウザへの転送とログ保存では allowlist と秘匿化が必要
 - app-server は開発・デバッグ用途が主で、予告なく変わる可能性がある
 
-今回の単一 stdio CLI 検証の範囲では技術的な blocker を確認しなかった。本番 client
-統合、長時間負荷、WebSocket の実動作は未検証である。定型実行だけが目的なら SDK の方が
-安定性と保守性に優れる。
+今回の単一 stdio CLI 検証の範囲では app-server の技術的な blocker を確認しなかった。
+ただし、本番 client 統合、長時間負荷、WebSocket の実動作は未検証である。定型実行と
+subscription 利用だけが目的なら、app-server より `codex exec` の方が構成を小さくできる。
 
 ## 参考資料
 

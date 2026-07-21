@@ -298,16 +298,17 @@ AI_MODEL=gpt-4o-mini
 AI_API_KEY=your-api-key
 ```
 
-ローカルの Codex app-server を使う場合:
+ChatGPT subscription でログインしたローカル Codex CLI を使う場合:
 
 ```env
-AI_BACKEND=codex-app-server
+AI_BACKEND=codex
 AI_MODEL=gpt-5.4
-CODEX_APP_SERVER_TIMEOUT_MS=120000
+CODEX_EXEC_TIMEOUT_MS=120000
 ```
 
-app-server 経路には Codex CLI のインストールと事前ログインが必要で、`AI_MODEL` は省略時に
-Codex の既定モデルを使う。`CODEX_APP_SERVER_TIMEOUT_MS` の既定値は 120000 ミリ秒。
+Codex 経路には Codex CLI のインストールと `codex login` による事前ログインが必要で、
+`AI_MODEL` は省略時に Codex の既定モデルを使う。`CODEX_EXEC_TIMEOUT_MS` の既定値は
+120000 ミリ秒。要求ごとに `codex exec` を一回実行し、セッションは保存しない。
 この設定は Codex CLI をインストールした host 上で
 `pnpm --filter @mf-dashboard/crawler dev:scrape` を実行する場合に限る。現在の crawler Docker
 image / Compose service は Codex CLI、ログイン情報、`AI_BACKEND` を provision しないため、

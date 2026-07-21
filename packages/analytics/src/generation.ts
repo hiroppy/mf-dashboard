@@ -1,6 +1,6 @@
 import { generateText, Output, type StepResult, type ToolSet } from "ai";
 import { z } from "zod";
-import { generateWithCodexAppServer } from "./codex-app-server.js";
+import { generateWithCodexExec } from "./codex-exec.js";
 import { getAIBackend, getModel } from "./config.js";
 
 interface GenerateOptions<T> {
@@ -23,8 +23,8 @@ export interface GenerateResult<T> {
 export async function generateWithConfiguredBackend<T>(
   options: GenerateOptions<T>,
 ): Promise<GenerateResult<T>> {
-  if (getAIBackend() === "codex-app-server") {
-    const result = await generateWithCodexAppServer({
+  if (getAIBackend() === "codex") {
+    const result = await generateWithCodexExec({
       system: options.system,
       prompt: options.prompt,
       schema: options.schema,
