@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
@@ -365,7 +365,7 @@ describe("generateWithCodexExec", () => {
 
   test("normalizes relative TLS certificate paths before changing the child cwd", async () => {
     process.env.SSL_CERT_FILE = "certs/company-ca.pem";
-    process.env.SSL_CERT_DIR = "certs/authorities";
+    process.env.SSL_CERT_DIR = ["certs/internal", "certs/vendor"].join(delimiter);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     mockCodexRun(mcp, fake);
@@ -374,7 +374,9 @@ describe("generateWithCodexExec", () => {
 
     const childEnv = spawnMock.mock.calls[3]?.[2]?.env;
     expect(childEnv?.SSL_CERT_FILE).toBe(resolve("certs/company-ca.pem"));
-    expect(childEnv?.SSL_CERT_DIR).toBe(resolve("certs/authorities"));
+    expect(childEnv?.SSL_CERT_DIR).toBe(
+      [resolve("certs/internal"), resolve("certs/vendor")].join(delimiter),
+    );
   });
 
   test("waits for isolated credential cleanup when auth copying is aborted", async () => {

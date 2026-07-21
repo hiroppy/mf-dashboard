@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { lock } from "proper-lockfile";
 import { z } from "zod";
 
@@ -60,7 +60,6 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
-const PATH_ENV_KEYS = new Set(["SSL_CERT_DIR", "SSL_CERT_FILE"]);
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -142,13 +141,22 @@ function getMaxToolCalls(value: number | undefined): number {
 }
 
 function getCodexEnv(tempDir: string): NodeJS.ProcessEnv {
+  const inheritedEnv: NodeJS.ProcessEnv = {};
+  for (const key of ALLOWED_ENV_KEYS) {
+    const value = process.env[key];
+    if (value === undefined) continue;
+    inheritedEnv[key] =
+      key === "SSL_CERT_DIR"
+        ? value
+            .split(delimiter)
+            .map((path) => resolve(path))
+            .join(delimiter)
+        : key === "SSL_CERT_FILE"
+          ? resolve(value)
+          : value;
+  }
   return {
-    ...Object.fromEntries(
-      ALLOWED_ENV_KEYS.flatMap((key) => {
-        const value = process.env[key];
-        return value === undefined ? [] : [[key, PATH_ENV_KEYS.has(key) ? resolve(value) : value]];
-      }),
-    ),
+    ...inheritedEnv,
     TEMP: tempDir,
     TMP: tempDir,
     TMPDIR: tempDir,
