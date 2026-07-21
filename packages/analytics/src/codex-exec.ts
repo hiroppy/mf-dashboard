@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { lock } from "proper-lockfile";
 import { z } from "zod";
 
@@ -498,7 +498,14 @@ async function readCodexOutput(path: string, signal: AbortSignal): Promise<strin
   try {
     handle = await waitForToolResult(() => opening, signal);
   } catch (error) {
-    void opening.then((lateHandle) => lateHandle.close()).catch(() => undefined);
+    void opening
+      .then(async (lateHandle) => {
+        await lateHandle.close();
+        await rm(dirname(path), { recursive: true, force: true });
+      })
+      .catch(() =>
+        console.warn("[analytics] Failed to clean up after a delayed Codex output open"),
+      );
     throw error;
   }
   let oversized = false;

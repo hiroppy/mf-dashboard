@@ -307,7 +307,25 @@ describe("generateWithCodexExec", () => {
   test("bounds a stalled final-output open by the request deadline", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "20";
     const originalOpen = openMock.getMockImplementation()!;
-    openMock.mockImplementation(() => new Promise<never>(() => undefined));
+    const originalRm = rmMock.getMockImplementation()!;
+    const closeMock = vi.fn<() => Promise<void>>(async () => undefined);
+    const lateHandle = { close: closeMock } as unknown as Awaited<
+      ReturnType<typeof import("node:fs/promises").open>
+    >;
+    let resolveOpen!: (handle: typeof lateHandle) => void;
+    let isolatedRootRemovals = 0;
+    openMock.mockImplementation(() => new Promise((resolve) => (resolveOpen = resolve)));
+    rmMock.mockImplementation((path, options) => {
+      if (
+        String(path).includes("mf-dashboard-codex-") &&
+        !String(path).includes("-test-") &&
+        "recursive" in options!
+      ) {
+        isolatedRootRemovals += 1;
+        if (isolatedRootRemovals === 1) return Promise.reject(new Error("busy"));
+      }
+      return originalRm(path, options);
+    });
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
     mockCodexRun(mcp, fake);
@@ -316,8 +334,13 @@ describe("generateWithCodexExec", () => {
       await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
         "codex exec timed out after 20ms",
       );
+      expect(isolatedRootRemovals).toBe(1);
+      resolveOpen(lateHandle);
+      await vi.waitFor(() => expect(isolatedRootRemovals).toBe(2));
+      expect(closeMock).toHaveBeenCalledOnce();
     } finally {
       openMock.mockImplementation(originalOpen);
+      rmMock.mockImplementation(originalRm);
     }
   }, 500);
 

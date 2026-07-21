@@ -192,7 +192,7 @@ export async function runSavePhase(
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
 
   if (noGroupData) {
-    info(`Saving full data for ${noGroupData.group.name}`);
+    info("Saving full data");
     let globalData = scrapeResult.globalData;
     if (categoryDecision.config) {
       await switchGroup(page, NO_GROUP_ID);
@@ -220,7 +220,7 @@ export async function runSavePhase(
   );
 
   for (const groupData of groupOnlyData) {
-    info(`Saving group-only data for ${groupData.group.name}`);
+    info("Saving group-only data");
     const scrapedData = buildGroupOnlyScrapedData(groupData);
     await saveGroupOnlyData(db, scrapedData);
   }
@@ -320,12 +320,12 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
   }
 
   const analyzeGroup = async (groupData: GroupData) => {
-    info(`Running financial analysis for ${groupData.group.name}`);
+    info("Running financial analysis");
     const report = await analyzeFinancialData(db, groupData.group.id);
     if (report) {
-      info(`Analysis completed and saved for ${groupData.group.name}`);
+      info("Analysis completed and saved");
     } else {
-      log(`No changes detected, skipped analysis for ${groupData.group.name}`);
+      log("No changes detected, skipped analysis");
     }
     return report;
   };
