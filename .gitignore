@@ -16,9 +16,11 @@ test-auth-state.json
 
 test-groups-moneyforward.db
 test-moneyforward.db*
-data/demo.db
+data/*
+!data/category-rules.example.json
 *.db-shm
 *.db-wal
+secrets/
 
 playwright-report
 test-results
@@ -29,3 +31,5 @@ apps/crawler/tests/e2e/screenshots/
 .worktrees/
 docs/plans
 error-*.png
+.claude/scheduled_tasks.lock
+com.mf-dashboard.e2e-crawler.plist

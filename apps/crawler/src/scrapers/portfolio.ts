@@ -157,6 +157,51 @@ export function parseOptionalJapaneseNumber(text: string): number | undefined {
   return parseJapaneseNumber(trimmed);
 }
 
+type InvestmentPortfolioTexts = {
+  name: string;
+  institution: string;
+  balance: string;
+  quantity: string;
+  avgCost: string;
+  unitPrice: string;
+  dailyChange: string;
+  unrealizedGain: string;
+  unrealizedGainPct: string;
+};
+
+function parseInvestmentPortfolioItem(
+  type: "株式(現物)" | "投資信託",
+  texts: InvestmentPortfolioTexts,
+  code?: string,
+): PortfolioItem | null {
+  const name = texts.name.trim();
+  if (!name) return null;
+
+  return {
+    name,
+    ...(code?.trim() ? { code: code.trim() } : {}),
+    type,
+    institution: texts.institution.trim(),
+    balance: parseJapaneseNumber(texts.balance),
+    quantity: orUndefined(parseDecimalNumber(texts.quantity)),
+    avgCostPrice: orUndefined(parseDecimalNumber(texts.avgCost)),
+    unitPrice: orUndefined(parseDecimalNumber(texts.unitPrice)),
+    dailyChange: parseOptionalJapaneseNumber(texts.dailyChange),
+    unrealizedGain: parseOptionalJapaneseNumber(texts.unrealizedGain),
+    unrealizedGainPct: parsePercentage(texts.unrealizedGainPct),
+  };
+}
+
+export function parseStockPortfolioItem(
+  texts: InvestmentPortfolioTexts & { code: string },
+): PortfolioItem | null {
+  return parseInvestmentPortfolioItem("株式(現物)", texts, texts.code);
+}
+
+export function parseFundPortfolioItem(texts: InvestmentPortfolioTexts): PortfolioItem | null {
+  return parseInvestmentPortfolioItem("投資信託", texts);
+}
+
 export function isPointCategory(category: string): boolean {
   return POINT_CATEGORIES.has(category);
 }
@@ -226,24 +271,19 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
       getCellText(cells, STOCK_COLUMNS.UNREALIZED_GAIN),
       getCellText(cells, STOCK_COLUMNS.UNREALIZED_GAIN_PCT),
     ]);
-    if (!name) continue;
-
-    // Parse daily change - keep 0 as valid value (only undefined if empty)
-    const dailyChange = parseOptionalJapaneseNumber(dailyChangeText);
-
-    items.push({
+    const item = parseStockPortfolioItem({
       name,
-      code: code || undefined,
-      type: "株式(現物)",
+      code,
       institution,
-      balance: parseJapaneseNumber(balanceText),
-      quantity: orUndefined(parseDecimalNumber(quantityText)),
-      avgCostPrice: orUndefined(parseDecimalNumber(avgCostText)),
-      unitPrice: orUndefined(parseDecimalNumber(unitPriceText)),
-      dailyChange,
-      unrealizedGain: parseOptionalJapaneseNumber(unrealizedGainText),
-      unrealizedGainPct: parsePercentage(unrealizedGainPctText),
+      balance: balanceText,
+      quantity: quantityText,
+      avgCost: avgCostText,
+      unitPrice: unitPriceText,
+      dailyChange: dailyChangeText,
+      unrealizedGain: unrealizedGainText,
+      unrealizedGainPct: unrealizedGainPctText,
     });
+    if (item) items.push(item);
   }
   return items;
 }
@@ -278,23 +318,18 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
       getCellText(cells, FUND_COLUMNS.UNREALIZED_GAIN),
       getCellText(cells, FUND_COLUMNS.UNREALIZED_GAIN_PCT),
     ]);
-    if (!name) continue;
-
-    // Parse daily change - keep 0 as valid value (only undefined if empty)
-    const dailyChange = parseOptionalJapaneseNumber(dailyChangeText);
-
-    items.push({
+    const item = parseFundPortfolioItem({
       name,
-      type: "投資信託",
       institution,
-      balance: parseJapaneseNumber(balanceText),
-      quantity: orUndefined(parseDecimalNumber(quantityText)),
-      avgCostPrice: orUndefined(parseDecimalNumber(avgCostText)),
-      unitPrice: orUndefined(parseDecimalNumber(unitPriceText)),
-      dailyChange,
-      unrealizedGain: parseOptionalJapaneseNumber(unrealizedGainText),
-      unrealizedGainPct: parsePercentage(unrealizedGainPctText),
+      balance: balanceText,
+      quantity: quantityText,
+      avgCost: avgCostText,
+      unitPrice: unitPriceText,
+      dailyChange: dailyChangeText,
+      unrealizedGain: unrealizedGainText,
+      unrealizedGainPct: unrealizedGainPctText,
     });
+    if (item) items.push(item);
   }
   return items;
 }

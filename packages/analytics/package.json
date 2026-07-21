@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./categorization": "./src/categorization.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {
@@ -13,12 +14,12 @@
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "3.0.84",
-    "@ai-sdk/google": "3.0.82",
-    "@ai-sdk/openai": "3.0.71",
+    "@ai-sdk/anthropic": "4.0.15",
+    "@ai-sdk/google": "4.0.17",
+    "@ai-sdk/openai": "4.0.15",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "6.0.206",
+    "ai": "7.0.30",
     "zod": "4.4.3"
   },
   "devDependencies": {

@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../../lib/chart";
 import { formatCurrency } from "../../../lib/format";
 import { chartTooltipStyle } from "../chart-tooltip";
 import type { YearlyProjection } from "./calculate-compound";
@@ -43,7 +44,7 @@ export function ProjectionChart({
 
   return (
     <>
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={300} initialDimension={CHART_INITIAL_DIMENSION}>
         <ComposedChart data={projections} margin={{ top: 20, right: 10, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis

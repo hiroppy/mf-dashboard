@@ -14,7 +14,7 @@ import {
   Legend,
   ReferenceLine,
 } from "recharts";
-import { roundToNice } from "../../lib/chart";
+import { CHART_INITIAL_DIMENSION, roundToNice } from "../../lib/chart";
 import { semanticColors } from "../../lib/colors";
 import { getShortMonth } from "../../lib/format";
 import { buildGroupPath } from "../../lib/url";
@@ -147,7 +147,7 @@ export function MonthlyIncomeExpenseChartClient({ data, groupId }: MonthlyIncome
         <CardTitle icon={TrendingUp}>月別収支推移</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={350}>
+        <ResponsiveContainer width="100%" height={350} initialDimension={CHART_INITIAL_DIMENSION}>
           <ComposedChart
             data={chartData}
             margin={{ top: 10, right: 10, left: 10, bottom: 5 }}

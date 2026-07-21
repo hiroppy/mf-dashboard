@@ -16,6 +16,8 @@ export const mfUrls = {
   accounts: `${BASE_URL}/accounts`,
   /** 予算 */
   spendingTargets: `${BASE_URL}/spending_targets/edit`,
+  /** カテゴリ設定 */
+  categoryRules: `${BASE_URL}/profile/rule`,
   /** ME ログイン */
   signIn: `${BASE_URL}/sign_in`,
 

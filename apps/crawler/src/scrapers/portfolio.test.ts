@@ -3,8 +3,10 @@ import {
   identifyTableTypeFromTitle,
   isPointCategory,
   parseDepositPortfolioItem,
+  parseFundPortfolioItem,
   parseOptionalJapaneseNumber,
   parsePnsPortfolioItem,
+  parseStockPortfolioItem,
   resolveDepositTableCategory,
 } from "./portfolio.js";
 
@@ -162,5 +164,65 @@ describe("parseOptionalJapaneseNumber", () => {
     expect(parseOptionalJapaneseNumber("-")).toBeUndefined();
     expect(parseOptionalJapaneseNumber("−")).toBeUndefined();
     expect(parseOptionalJapaneseNumber("—")).toBeUndefined();
+  });
+});
+
+describe("parseStockPortfolioItem", () => {
+  test("株式の全詳細カラムをPortfolioItemへ変換する", () => {
+    expect(
+      parseStockPortfolioItem({
+        name: "Stock A",
+        code: "1234",
+        institution: "Institution A",
+        balance: "1,234,500円",
+        quantity: "100",
+        avgCost: "10,000",
+        unitPrice: "12,345",
+        dailyChange: "+120円",
+        unrealizedGain: "+234,500円",
+        unrealizedGainPct: "+23.45%",
+      }),
+    ).toEqual({
+      name: "Stock A",
+      code: "1234",
+      type: "株式(現物)",
+      institution: "Institution A",
+      balance: 1234500,
+      quantity: 100,
+      avgCostPrice: 10000,
+      unitPrice: 12345,
+      dailyChange: 120,
+      unrealizedGain: 234500,
+      unrealizedGainPct: 23.45,
+    });
+  });
+});
+
+describe("parseFundPortfolioItem", () => {
+  test("投資信託の0と欠損値を区別して変換する", () => {
+    expect(
+      parseFundPortfolioItem({
+        name: "Fund A",
+        institution: "Institution A",
+        balance: "500,000円",
+        quantity: "52.3491",
+        avgCost: "9,551",
+        unitPrice: "10,000",
+        dailyChange: "0",
+        unrealizedGain: "-",
+        unrealizedGainPct: "-",
+      }),
+    ).toEqual({
+      name: "Fund A",
+      type: "投資信託",
+      institution: "Institution A",
+      balance: 500000,
+      quantity: 52.3491,
+      avgCostPrice: 9551,
+      unitPrice: 10000,
+      dailyChange: 0,
+      unrealizedGain: undefined,
+      unrealizedGainPct: undefined,
+    });
   });
 });

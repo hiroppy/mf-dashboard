@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { BrowserContext } from "playwright";
 import { debug } from "../logger.js";
 
-// Auth state file path
-const AUTH_STATE_PATH = path.join(
+const DEFAULT_AUTH_STATE_PATH = path.join(
   import.meta.dirname,
   "..",
   "..",
@@ -14,15 +14,22 @@ const AUTH_STATE_PATH = path.join(
   "auth-state.json",
 );
 
-export function getAuthStatePath(): string {
-  return AUTH_STATE_PATH;
+export function getAuthStatePath(env: NodeJS.ProcessEnv = process.env): string {
+  const configuredPath = env.AUTH_STATE_PATH?.trim();
+  if (configuredPath) {
+    return path.resolve(configuredPath);
+  }
+
+  return DEFAULT_AUTH_STATE_PATH;
 }
 
 export function hasAuthState(): boolean {
-  return existsSync(AUTH_STATE_PATH);
+  return existsSync(getAuthStatePath());
 }
 
 export async function saveAuthState(context: BrowserContext): Promise<void> {
-  await context.storageState({ path: AUTH_STATE_PATH });
-  debug(`Auth state saved to ${AUTH_STATE_PATH}`);
+  const authStatePath = getAuthStatePath();
+  await mkdir(path.dirname(authStatePath), { recursive: true });
+  await context.storageState({ path: authStatePath });
+  debug(`Auth state saved to ${authStatePath}`);
 }
