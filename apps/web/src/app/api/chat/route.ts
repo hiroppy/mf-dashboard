@@ -127,6 +127,27 @@ function hasValidConversationBounds(messages: UIMessage[]): boolean {
   );
 }
 
+async function readRequestText(request: Request): Promise<string | undefined> {
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+
+    byteLength += value.byteLength;
+    if (byteLength > MAX_REQUEST_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return undefined;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
 
@@ -136,8 +157,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const requestText = await request.text();
-    if (new TextEncoder().encode(requestText).byteLength > MAX_REQUEST_BYTES) {
+    const requestText = await readRequestText(request);
+    if (requestText === undefined) {
       return errorResponse(413, "REQUEST_TOO_LARGE", "チャット履歴が大きすぎます。");
     }
     body = JSON.parse(requestText);

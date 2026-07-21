@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatProvider, useFinanceChat } from "./chat-provider";
 
@@ -43,6 +44,12 @@ function DraftEditor() {
   return (
     <input aria-label="下書き" value={draft} onChange={(event) => setDraft(event.target.value)} />
   );
+}
+
+function MessageList() {
+  const { messages } = useFinanceChat();
+
+  return <div>{messages.map((message) => message.id).join(",")}</div>;
 }
 
 describe("ChatProvider", () => {
@@ -162,6 +169,35 @@ describe("ChatProvider", () => {
     await waitFor(() =>
       expect((screen.getByRole("textbox", { name: "下書き" }) as HTMLInputElement).value).toBe(""),
     );
+  });
+
+  it("recreates chat history after the selected group changes", () => {
+    mocks.useChat.mockImplementation((options) => {
+      const { id } = options as { id: string };
+      const [initialId] = useState(id);
+      return {
+        messages: [{ id: initialId, role: "assistant", parts: [] }],
+        sendMessage: mocks.sendMessage,
+        status: "ready",
+      };
+    });
+    mocks.usePathname.mockReturnValue("/group-a/cf");
+    const { rerender } = render(
+      <ChatProvider>
+        <MessageList />
+      </ChatProvider>,
+    );
+    expect(screen.getByText("finance-chat:group-a")).not.toBeNull();
+
+    mocks.usePathname.mockReturnValue("/group-b/cf");
+    rerender(
+      <ChatProvider>
+        <MessageList />
+      </ChatProvider>,
+    );
+
+    expect(screen.getByText("finance-chat:group-b")).not.toBeNull();
+    expect(screen.queryByText("finance-chat:group-a")).toBeNull();
   });
 
   it("allows a new submission after changing groups during an in-flight request", () => {

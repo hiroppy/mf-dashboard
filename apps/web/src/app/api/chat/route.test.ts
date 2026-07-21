@@ -215,6 +215,28 @@ describe("POST /api/chat", () => {
     expect(mocks.safeValidateUIMessages).not.toHaveBeenCalled();
   });
 
+  it("cancels a chunked request stream as soon as it exceeds the chat limit", async () => {
+    const cancel = vi.fn<() => void>();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(40_000));
+        controller.enqueue(new Uint8Array(40_000));
+      },
+      cancel,
+    });
+    const chunkedRequest = new Request("http://localhost/api/chat", {
+      method: "POST",
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    const response = await POST(chunkedRequest);
+
+    expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.safeValidateUIMessages).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["empty history", []],
     [
