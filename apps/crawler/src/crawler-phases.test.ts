@@ -1,4 +1,5 @@
 import path from "node:path";
+import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { saveGroupOnlyData, saveScrapedData } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
@@ -11,6 +12,7 @@ import { categorizeCashFlowMonth } from "./category-decision/categorize-cash-flo
 import {
   getDebugScreenshotPath,
   loadCrawlerConfig,
+  runAnalyticsPhase,
   runCashFlowHistoryPhase,
   runSavePhase,
   type CategoryDecisionRuntime,
@@ -22,6 +24,10 @@ import { switchGroup } from "./scrapers/group.js";
 
 vi.mock("./category-decision/categorize-cash-flow.js", () => ({
   categorizeCashFlowMonth: vi.fn<() => Promise<CashFlowSummary>>(),
+}));
+
+vi.mock("@mf-dashboard/analytics", () => ({
+  analyzeFinancialData: vi.fn<() => Promise<boolean>>(),
 }));
 
 vi.mock("./data-builder.js", () => ({
@@ -131,6 +137,7 @@ function scrapeResult(cashFlowSummary: CashFlowSummary): ScrapeResult {
 }
 
 beforeEach(() => {
+  vi.mocked(analyzeFinancialData).mockReset();
   vi.mocked(categorizeCashFlowMonth).mockReset();
   vi.mocked(buildScrapedData).mockClear();
   vi.mocked(buildGroupOnlyScrapedData).mockClear();
@@ -141,6 +148,59 @@ beforeEach(() => {
   vi.mocked(saveTransactionsForMonth).mockReset();
   vi.mocked(scrapeCashFlowHistory).mockReset();
   vi.mocked(switchGroup).mockReset();
+});
+
+describe("runAnalyticsPhase", () => {
+  test("Codex backend では各 group の分析を順番に開始する", async () => {
+    const previousBackend = process.env.AI_BACKEND;
+    process.env.AI_BACKEND = "codex";
+    let finishFirst!: () => void;
+    vi.mocked(analyzeFinancialData)
+      .mockImplementationOnce(
+        () => new Promise<boolean>((resolve) => (finishFirst = () => resolve(true))),
+      )
+      .mockResolvedValueOnce(true);
+
+    try {
+      const run = runAnalyticsPhase(
+        {} as Parameters<typeof runAnalyticsPhase>[0],
+        scrapeResult(cashFlow("2026-06", "Service A")).groupDataList,
+      );
+      await vi.waitFor(() => expect(analyzeFinancialData).toHaveBeenCalledTimes(1));
+      expect(analyzeFinancialData).toHaveBeenNthCalledWith(1, {}, "0");
+
+      finishFirst();
+      await run;
+
+      expect(analyzeFinancialData).toHaveBeenNthCalledWith(2, {}, "group-a");
+    } finally {
+      if (previousBackend === undefined) delete process.env.AI_BACKEND;
+      else process.env.AI_BACKEND = previousBackend;
+    }
+  });
+
+  test("AI SDK backend では各 group の分析を並列に開始する", async () => {
+    const previousBackend = process.env.AI_BACKEND;
+    process.env.AI_BACKEND = "ai-sdk";
+    const finishes: Array<() => void> = [];
+    vi.mocked(analyzeFinancialData).mockImplementation(
+      () => new Promise<boolean>((resolve) => finishes.push(() => resolve(true))),
+    );
+
+    try {
+      const run = runAnalyticsPhase(
+        {} as Parameters<typeof runAnalyticsPhase>[0],
+        scrapeResult(cashFlow("2026-06", "Service A")).groupDataList,
+      );
+      await vi.waitFor(() => expect(analyzeFinancialData).toHaveBeenCalledTimes(2));
+
+      for (const finish of finishes) finish();
+      await run;
+    } finally {
+      if (previousBackend === undefined) delete process.env.AI_BACKEND;
+      else process.env.AI_BACKEND = previousBackend;
+    }
+  });
 });
 
 describe("loadCrawlerConfig", () => {

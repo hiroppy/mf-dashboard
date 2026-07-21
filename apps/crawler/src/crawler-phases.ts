@@ -319,18 +319,22 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
     return;
   }
 
-  const results = await Promise.all(
-    groupDataList.map(async (groupData) => {
-      info(`Running financial analysis for ${groupData.group.name}`);
-      const report = await analyzeFinancialData(db, groupData.group.id);
-      if (report) {
-        info(`Analysis completed and saved for ${groupData.group.name}`);
-      } else {
-        log(`No changes detected, skipped analysis for ${groupData.group.name}`);
-      }
-      return report;
-    }),
-  );
+  const analyzeGroup = async (groupData: GroupData) => {
+    info(`Running financial analysis for ${groupData.group.name}`);
+    const report = await analyzeFinancialData(db, groupData.group.id);
+    if (report) {
+      info(`Analysis completed and saved for ${groupData.group.name}`);
+    } else {
+      log(`No changes detected, skipped analysis for ${groupData.group.name}`);
+    }
+    return report;
+  };
+  const results: Awaited<ReturnType<typeof analyzeGroup>>[] = [];
+  if (process.env.AI_BACKEND === "codex") {
+    for (const groupData of groupDataList) results.push(await analyzeGroup(groupData));
+  } else {
+    results.push(...(await Promise.all(groupDataList.map(analyzeGroup))));
+  }
   info(`Analytics finished: ${results.filter(Boolean).length}/${groupDataList.length} groups`);
 }
 
