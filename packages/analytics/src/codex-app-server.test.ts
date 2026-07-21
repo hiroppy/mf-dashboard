@@ -393,6 +393,34 @@ describe("generateWithCodexAppServer", () => {
     expect((await stat(sourceAuthPath)).mode & 0o777).toBe(0o600);
   });
 
+  test("serializes app-server generations that share Codex credentials", async () => {
+    const first = createFakeAppServer();
+    const second = createFakeAppServer();
+    spawnMock.mockReturnValueOnce(first.child).mockReturnValueOnce(second.child);
+    let finishFirstTool: (() => void) | undefined;
+    const firstTool = vi.fn<() => Promise<string>>(
+      () =>
+        new Promise<string>((resolve) => {
+          finishFirstTool = () => resolve("first-result");
+        }),
+    );
+
+    const firstGeneration = generateWithCodexAppServer({
+      system: "System",
+      prompt: "First",
+      tools: { lookupValue: { inputSchema: z.object({}), execute: firstTool } },
+    });
+    await vi.waitFor(() => expect(firstTool).toHaveBeenCalledOnce());
+    const secondGeneration = generateWithCodexAppServer({ system: "System", prompt: "Second" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(spawnMock).toHaveBeenCalledOnce();
+
+    finishFirstTool?.();
+    await firstGeneration;
+    await secondGeneration;
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+  });
+
   test("removes the isolated Codex home when credential persistence fails", async () => {
     const sourceCodexHome = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
     temporaryDirectories.push(sourceCodexHome);

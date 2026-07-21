@@ -94,7 +94,8 @@ cwd を作成し、元の `CODEX_HOME` からは `auth.json` だけをコピー�
 応答に instruction source が含まれる場合や cwd が一時 workspace と一致しない場合は
 fail closed とする。さらに `mcpServerStatus/list` で effective MCP server が空であることを
 turn 前に確認する。認証 refresh で一時 `auth.json` が更新された場合は、元 credential が
-同時更新されていないことを確認してから戻し、完了時に一時ディレクトリを削除する。
+同時更新されていないことを確認してから戻す。複数 group の generation も credential の
+copy から永続化まで process 内で直列化し、完了時に一時ディレクトリを削除する。
 system prompt は `developerInstructions`、
 取引情報などの untrusted input は turn の user message として分離する。
 既存の Zod output schema は `outputSchema`、
