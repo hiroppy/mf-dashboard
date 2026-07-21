@@ -117,6 +117,13 @@ describe("createFinancialTools", () => {
     expect(getYearToDateSummary).toHaveBeenCalledWith({ year: 2024, groupId }, mockDb);
   });
 
+  it.each([0, -1, 2026.5, 1899, 2101])("rejects invalid calendar year %s", (year) => {
+    const schema = createFinancialTools(mockDb, groupId).getYearToDateSummary
+      .inputSchema as ZodType;
+
+    expect(schema.safeParse({ year }).success).toBe(false);
+  });
+
   it("should pass period to getCategoryChangesForPeriod", async () => {
     const tools = createFinancialTools(mockDb, groupId);
     await tools.getCategoryChangesForPeriod.execute!({ period: "weekly" }, execOpts);

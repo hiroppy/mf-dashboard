@@ -14,6 +14,11 @@ const excludedChatFinancialTools = new Set([
   "getAvailableMonths",
   "getAssetHistory",
   "getAssetHistoryWithCategories",
+  "getAccountsWithAssets",
+  "getAccountsGroupedByCategory",
+  "getHoldingsWithLatestValues",
+  "getHoldingsWithDailyChange",
+  "getHoldingsByAccountId",
 ]);
 const execOptions = {
   toolCallId: "test",
@@ -63,7 +68,7 @@ describe("createChatTools", () => {
         getMonthlySummaryByMonth: expect.any(Object),
         getMonthlyCategoryTotals: expect.any(Object),
         getAssetBreakdownByCategory: expect.any(Object),
-        getHoldingsWithLatestValues: expect.any(Object),
+        getLatestTotalAssets: expect.any(Object),
         getFinancialMetrics: expect.any(Object),
         analyzeMoMTrend: expect.any(Object),
         analyzeSpendingComparison: expect.any(Object),

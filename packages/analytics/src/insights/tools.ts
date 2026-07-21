@@ -28,6 +28,7 @@ import { tool } from "ai";
 import { z } from "zod";
 
 const yearMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+const calendarYearSchema = z.number().int().min(1900).max(2100);
 
 export function createFinancialTools(db: Db, groupId: string) {
   return {
@@ -94,7 +95,7 @@ export function createFinancialTools(db: Db, groupId: string) {
     getYearToDateSummary: tool({
       description: "年初来の収支サマリーを取得",
       inputSchema: z.object({
-        year: z.number().optional().describe("対象年（省略時は今年）"),
+        year: calendarYearSchema.optional().describe("対象年（省略時は今年）"),
       }),
       execute: async ({ year }) => await getYearToDateSummary({ year, groupId }, db),
     }),

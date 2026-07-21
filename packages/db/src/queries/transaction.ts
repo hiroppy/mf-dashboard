@@ -5,7 +5,8 @@ import { transformTransferToIncome } from "../shared/transfer";
 
 export const SEARCH_TRANSACTIONS_DEFAULT_LIMIT = 50;
 export const SEARCH_TRANSACTIONS_MAX_LIMIT = 100;
-export const SEARCH_TRANSACTIONS_MAX_OFFSET = 10_000;
+export const SEARCH_TRANSACTIONS_MAX_OFFSET = 900;
+export const SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS = 1_000;
 
 export interface SearchTransactionsOptions {
   groupId: string;
@@ -338,7 +339,7 @@ export async function searchTransactions(options: SearchTransactionsOptions, db:
   let batchOffset = 0;
   let remainingOffset = offset;
 
-  while (page.length < limit) {
+  while (page.length < limit && batchOffset < SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS) {
     const batch = await fetchBatch(batchOffset);
     const transferLookups = await loadTransferLookups(batch);
 

@@ -7,6 +7,7 @@ import {
   getTransactionsByAccountId,
   SEARCH_TRANSACTIONS_DEFAULT_LIMIT,
   SEARCH_TRANSACTIONS_MAX_LIMIT,
+  SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS,
   searchTransactions,
 } from "./transaction";
 
@@ -655,6 +656,44 @@ describe("searchTransactions", () => {
     expect(await searchTransactions({ groupId: TEST_GROUP_ID, category: "食費" }, db)).toEqual([
       expect.objectContaining({ amount: 5000, category: "食費" }),
     ]);
+  });
+
+  it("走査上限より古い一致結果まで全履歴を走査しない", async () => {
+    const accountId = await createTestAccount("Card A");
+    const now = new Date().toISOString();
+    const transactions = Array.from(
+      { length: SEARCH_TRANSACTIONS_MAX_SCANNED_ROWS },
+      (_, index) => ({
+        mfId: `scan-${index}`,
+        date: "2025-06-01",
+        accountId,
+        category: "交通費",
+        subCategory: null,
+        description: "移動費",
+        amount: index,
+        type: "expense" as const,
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+        transferTargetAccountId: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    for (let index = 0; index < transactions.length; index += 50) {
+      await db
+        .insert(schema.transactions)
+        .values(transactions.slice(index, index + 50))
+        .run();
+    }
+    await createTransaction({
+      accountId,
+      date: "2025-05-01",
+      amount: 5_000,
+      type: "expense",
+      category: "食費",
+    });
+
+    expect(await searchTransactions({ groupId: TEST_GROUP_ID, category: "食費" }, db)).toEqual([]);
   });
 
   it("明示されたgroupIdのアカウントだけを検索する", async () => {
