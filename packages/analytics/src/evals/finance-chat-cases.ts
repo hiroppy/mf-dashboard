@@ -10,6 +10,8 @@ export interface FinanceChatEvaluationCase {
   expectedCardTypes: readonly FinanceChatCard["type"][];
   requireActionableInsight?: boolean;
   requireParallelDataTools?: boolean;
+  requiredCategory?: string;
+  summaryAmountSource?: "requestedCategory" | "transactionTotal";
 }
 
 export interface FinanceChatToolExpectation {
@@ -51,6 +53,8 @@ export function createFinanceChatEvaluationCases(
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "categoryBreakdown", "transactionList"],
       requireParallelDataTools: true,
+      requiredCategory: "食費",
+      summaryAmountSource: "requestedCategory",
     },
     {
       id: "daily-expense",
@@ -59,6 +63,7 @@ export function createFinanceChatEvaluationCases(
       allowedDataTools: ["searchTransactions"],
       navigationInput: { page: "cashFlow", month },
       expectedCardTypes: ["summary", "transactionList", "action"],
+      summaryAmountSource: "transactionTotal",
     },
     {
       id: "total-assets",

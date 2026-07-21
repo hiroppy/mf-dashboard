@@ -44,10 +44,16 @@ describe("FINANCE_CHAT_EVALUATION_CASES", () => {
   });
 
   it("requires independent category tools to run in parallel", () => {
+    const categoryExpense = FINANCE_CHAT_EVALUATION_CASES.find(
+      ({ id }) => id === "category-expense",
+    );
+
+    expect(categoryExpense?.requireParallelDataTools).toBe(true);
+    expect(categoryExpense?.requiredCategory).toBe("食費");
+    expect(categoryExpense?.summaryAmountSource).toBe("requestedCategory");
     expect(
-      FINANCE_CHAT_EVALUATION_CASES.find(({ id }) => id === "category-expense")
-        ?.requireParallelDataTools,
-    ).toBe(true);
+      FINANCE_CHAT_EVALUATION_CASES.find(({ id }) => id === "daily-expense")?.summaryAmountSource,
+    ).toBe("transactionTotal");
   });
 
   it("uses Asia/Tokyo for relative dates across a UTC month boundary", () => {

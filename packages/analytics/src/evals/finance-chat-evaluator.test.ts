@@ -762,6 +762,24 @@ describe("evaluateFinanceChatTrace", () => {
     );
   });
 
+  it("rejects bare and autolink URLs not returned by navigation", () => {
+    const bare = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "詳細: https://example.com" }),
+    );
+    const autolink = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "詳細: <https://example.com>" }),
+    );
+
+    expect(bare.violations).toContain(
+      "ナビゲーションツール未検証の本文リンク: https://example.com",
+    );
+    expect(autolink.violations).toContain(
+      "ナビゲーションツール未検証の本文リンク: https://example.com",
+    );
+  });
+
   it("preserves transaction record associations", () => {
     const transactionCase: FinanceChatEvaluationCase = {
       ...categoryEvaluationCase,
@@ -1036,6 +1054,164 @@ describe("evaluateFinanceChatTrace", () => {
     expect(result.passed).toBe(true);
   });
 
+  it("binds category summaries and breakdowns to the requested aggregate", () => {
+    const aggregateCase: FinanceChatEvaluationCase = {
+      ...categoryEvaluationCase,
+      toolStrategies: [
+        [
+          {
+            name: "searchTransactions",
+            input: { month: "2026-07", category: "食費", type: "expense" },
+          },
+          { name: "getMonthlyCategoryTotals", input: { month: "2026-07" } },
+        ],
+      ],
+      allowedDataTools: ["searchTransactions", "getMonthlyCategoryTotals"],
+      expectedCardTypes: ["summary", "categoryBreakdown"],
+      requireParallelDataTools: true,
+      requiredCategory: "食費",
+      summaryAmountSource: "requestedCategory",
+    };
+    const createAggregateCards = (summaryAmount: number, category: string) => [
+      {
+        type: "summary" as const,
+        title: "カテゴリ支出",
+        metrics: [{ label: "支出", amount: summaryAmount, amountType: "expense" as const }],
+        href,
+      },
+      {
+        type: "categoryBreakdown" as const,
+        title: "カテゴリ別支出",
+        categories: [
+          { name: category, amount: 1_000, amountType: "expense" as const, percentage: 50 },
+        ],
+      },
+    ];
+    const base = createTrace();
+    const evaluateCards = (aggregateCards: FinanceChatCard[]) =>
+      evaluateFinanceChatTrace(aggregateCase, {
+        text: "カテゴリ支出です。",
+        steps: [
+          {
+            toolCalls: [
+              {
+                toolCallId: "transactions",
+                toolName: "searchTransactions",
+                input: { month: "2026-07", category: "食費", type: "expense" },
+              },
+              {
+                toolCallId: "totals",
+                toolName: "getMonthlyCategoryTotals",
+                input: { month: "2026-07" },
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "transactions",
+                toolName: "searchTransactions",
+                output: [
+                  { id: 1, category: "食費", amount: 400, type: "expense" },
+                  { id: 2, category: "食費", amount: 600, type: "expense" },
+                ],
+              },
+              {
+                toolCallId: "totals",
+                toolName: "getMonthlyCategoryTotals",
+                output: [
+                  { category: "食費", totalAmount: 1_000, type: "expense" },
+                  { category: "交通費", totalAmount: 1_000, type: "expense" },
+                ],
+              },
+            ],
+          },
+          base.steps[1]!,
+          {
+            toolCalls: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                input: { cards: aggregateCards },
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "presentation",
+                toolName: "presentFinanceCards",
+                output: aggregateCards,
+              },
+            ],
+          },
+        ],
+      });
+
+    expect(evaluateCards(createAggregateCards(1_000, "食費")).passed).toBe(true);
+    expect(evaluateCards(createAggregateCards(400, "食費")).passed).toBe(false);
+    expect(evaluateCards(createAggregateCards(1_000, "交通費")).passed).toBe(false);
+  });
+
+  it("binds daily summaries to the transaction total", () => {
+    const dailyCase: FinanceChatEvaluationCase = {
+      ...evaluationCase,
+      id: "daily-expense",
+      toolStrategies: [[{ name: "searchTransactions", input: { date: "2026-07-10" } }]],
+      allowedDataTools: ["searchTransactions"],
+      expectedCardTypes: ["summary"],
+      summaryAmountSource: "transactionTotal",
+    };
+    const dailyCards = [
+      {
+        type: "summary" as const,
+        title: "日別支出",
+        metrics: [{ label: "支出", amount: 400, amountType: "expense" as const }],
+        href,
+      },
+    ];
+    const base = createTrace();
+    const result = evaluateFinanceChatTrace(dailyCase, {
+      text: "日別支出です。",
+      steps: [
+        {
+          toolCalls: [
+            {
+              toolCallId: "transactions",
+              toolName: "searchTransactions",
+              input: { date: "2026-07-10" },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "transactions",
+              toolName: "searchTransactions",
+              output: [
+                { id: 1, amount: 400, type: "expense" },
+                { id: 2, amount: 600, type: "expense" },
+              ],
+            },
+          ],
+        },
+        base.steps[1]!,
+        {
+          toolCalls: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              input: { cards: dailyCards },
+            },
+          ],
+          toolResults: [
+            {
+              toolCallId: "presentation",
+              toolName: "presentFinanceCards",
+              output: dailyCards,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.passed).toBe(false);
+  });
+
   it("rejects summary amounts assigned to the wrong financial type or label", () => {
     const base = createTrace();
     const wrongTypeCards = cards.map((card) =>
@@ -1215,6 +1391,35 @@ describe("evaluateFinanceChatTrace", () => {
     );
   });
 
+  it("infers financial meaning that follows a claim", () => {
+    const result = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "300,000円の支出です。" }),
+    );
+
+    expect(result.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+  });
+
+  it("recognizes full-width yen and magnitude shorthand", () => {
+    const fullWidth = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "支出は￥900万です。" }),
+    );
+    const shorthand = evaluateFinanceChatTrace(
+      evaluationCase,
+      createTrace({ text: "支出は900万です。" }),
+    );
+
+    expect(fullWidth.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+    expect(shorthand.violations).toContain(
+      "最終回答に取得結果またはカードと一致しない金融 claim が含まれる",
+    );
+  });
+
   it("requires actionable spending-review content and grounds byCategory amounts", () => {
     const spendingCase: FinanceChatEvaluationCase = {
       ...evaluationCase,
@@ -1226,7 +1431,12 @@ describe("evaluateFinanceChatTrace", () => {
       requireActionableInsight: true,
     };
     const base = createTrace();
-    const evaluateDescription = (description: string, amount = 50_000) => {
+    const evaluateDescription = (
+      description: string,
+      amount = 50_000,
+      includeAnomaly = true,
+      actionLabel = "内訳を確認",
+    ) => {
       const insightCards = [
         {
           type: "insight" as const,
@@ -1235,7 +1445,7 @@ describe("evaluateFinanceChatTrace", () => {
           amount,
           amountLabel: "見直し候補額",
           amountType: "balance" as const,
-          action: { label: "内訳を確認", href },
+          action: { label: actionLabel, href },
         },
       ];
       return evaluateFinanceChatTrace(spendingCase, {
@@ -1248,8 +1458,16 @@ describe("evaluateFinanceChatTrace", () => {
                 toolCallId: "data",
                 toolName: "getFinancialMetrics",
                 output: {
-                  spending: { byCategory: { 食費: 50_000 } },
+                  spending: {
+                    byCategory: { 食費: 50_000 },
+                    anomalies: includeAnomaly
+                      ? [{ category: "食費", amount: 50_000, deviation: 2 }]
+                      : [],
+                  },
                   savings: { totalAssets: 9_000_000 },
+                  liability: {
+                    byCategory: [{ category: "ローン", amount: 50_000, pct: 100 }],
+                  },
                 },
               },
             ],
@@ -1282,6 +1500,28 @@ describe("evaluateFinanceChatTrace", () => {
     expect(
       evaluateDescription("今月の食費は前月平均より高いため、変動要因を確認しましょう。", 9_000_000)
         .passed,
+    ).toBe(false);
+    expect(
+      evaluateDescription(
+        "今月の食費は前月平均より高いため、変動要因を確認しましょう。",
+        50_000,
+        false,
+      ).passed,
+    ).toBe(false);
+    expect(
+      evaluateDescription("今月のローンは前月平均より高いため、変動要因を確認しましょう。").passed,
+    ).toBe(false);
+    expect(
+      evaluateDescription("今月の食費は前月平均より高いため、変動要因を確認しましょう。", 100_000)
+        .passed,
+    ).toBe(false);
+    expect(
+      evaluateDescription(
+        "今月の食費は前月平均より高いため、変動要因を確認しましょう。",
+        50_000,
+        true,
+        "詳細を確認",
+      ).passed,
     ).toBe(false);
   });
 
