@@ -6,6 +6,7 @@ import {
   getHoldingsWithDailyChange,
   getFinancialMetrics,
   getAvailableMonths,
+  isInvestmentCategory,
 } from "@mf-dashboard/db";
 import { tool } from "ai";
 import { z } from "zod";
@@ -55,15 +56,17 @@ export function createAnalysisTools(db: Db, groupId: string) {
         const holdingsRaw = await getHoldingsWithLatestValues(groupId, db);
         const dailyChangeRaw = await getHoldingsWithDailyChange(groupId, db);
         const metrics = await getFinancialMetrics(groupId, db);
+        const isInvestmentHolding = (holding: { categoryName: string | null }) =>
+          holding.categoryName !== null && isInvestmentCategory(holding.categoryName);
 
-        const holdings = holdingsRaw.map((h) => ({
+        const holdings = holdingsRaw.filter(isInvestmentHolding).map((h) => ({
           name: h.name,
           amount: h.amount ?? 0,
           unrealizedGain: h.unrealizedGain ?? 0,
           unrealizedGainPct: h.unrealizedGainPct ?? 0,
         }));
 
-        const dailyChanges = dailyChangeRaw.map((h) => ({
+        const dailyChanges = dailyChangeRaw.filter(isInvestmentHolding).map((h) => ({
           name: h.name,
           dailyChange: h.dailyChange,
         }));

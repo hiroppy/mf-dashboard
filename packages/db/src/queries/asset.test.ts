@@ -522,6 +522,8 @@ describe("getDailyAssetChange", () => {
     const result = await getDailyAssetChange(undefined, db);
 
     expect(result).toEqual({
+      currentDate: "2025-04-15",
+      previousDate: "2025-04-14",
       today: 1200000,
       yesterday: 1000000,
       change: 200000,
@@ -543,9 +545,24 @@ describe("getDailyAssetChange", () => {
     const result = await getDailyAssetChange(undefined, db);
 
     expect(result).toEqual({
+      currentDate: "2025-04-15",
+      previousDate: "2025-04-14",
       today: 900000,
       yesterday: 1000000,
       change: -100000,
+    });
+  });
+
+  it("比較対象の実際の日付を返す", async () => {
+    await createAssetHistory({ date: "2025-04-11", totalAssets: 1000000 });
+    await createAssetHistory({ date: "2025-04-14", totalAssets: 1100000 });
+
+    const result = await getDailyAssetChange(undefined, db);
+
+    expect(result).toMatchObject({
+      currentDate: "2025-04-14",
+      previousDate: "2025-04-11",
+      change: 100000,
     });
   });
 
