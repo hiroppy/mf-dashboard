@@ -267,6 +267,55 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "未許可の可視金額: -5683100" });
   });
 
+  it("treats a unitless マイナス-prefixed amount as negative", () => {
+    const negativeAmountOutput = JSON.stringify({
+      text: "総資産はマイナス5683100です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negativeAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("prefers a complete monetary label over its substring", () => {
+    const netIncomeOutput = JSON.stringify({
+      text: "純収入は93,341円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(netIncomeOutput, {
+        config: {
+          allowedVisibleAmounts: [93341, 313235],
+          visibleAmountClaims: [
+            { label: "収入", amount: 313235 },
+            { label: "純収入", amount: 93341 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
@@ -703,6 +752,40 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: "明細件数 不一致: expected=1 actual=99" });
+  });
+
+  it("excludes transaction row dates from card heading date validation", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2026年7月31日時点の食費",
+          metrics: [{ label: "食費", amount: 3435, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+        {
+          type: "transactionList",
+          title: "食費明細",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: { allowedCardHeadingDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects a transaction with the wrong amount type", () => {
@@ -1204,6 +1287,32 @@ describe("assertFinanceResponse", () => {
           type: "insight",
           title: "支出比較",
           description: "2026年6月と2026年7月を比較すると、衣服・美容は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("accepts a chronological comparison with yearless months", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "衣服・美容：6月と7月の比較",
+          description: "2026年7月の衣服・美容は前月より増加しました。",
           action: { label: "内訳を見る", href: "/0/cf/2026-07" },
         },
       ],

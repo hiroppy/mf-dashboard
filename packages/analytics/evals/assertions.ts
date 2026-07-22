@@ -52,6 +52,7 @@ interface TransactionGroupExpectation {
 interface AssertionContext {
   config?: {
     allowedInsightMetrics?: InsightMetricAllowance[];
+    allowedCardHeadingDates?: string[];
     allowedVisibleAmounts?: number[];
     allowedVisibleDates?: string[];
     allowedVisibleMonths?: string[];
@@ -239,11 +240,15 @@ function collectBareVisibleAmountMatches(
           ),
         ),
         (match) => ({
-          amount: Number(
-            String(match[1])
-              .replaceAll(",", "")
-              .replace(/[▲△▼▽−]/, "-"),
-          ),
+          amount:
+            Number(
+              String(match[1])
+                .replaceAll(",", "")
+                .replace(/[▲△▼▽−]/, "-"),
+            ) *
+            (/マイナス\s*$/.test(match[0].slice(0, match[0].lastIndexOf(String(match[1]))))
+              ? -1
+              : 1),
           endIndex: match.index + match[0].length,
           index: match.index + match[0].lastIndexOf(String(match[1])),
           text,
@@ -307,13 +312,16 @@ function collectMislabeledVisibleAmounts(
         const beforeIndex = text.lastIndexOf(label, index);
         const afterIndex = text.indexOf(label, index);
         const distance = Math.min(
-          beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
-          afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
+          beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - (beforeIndex + label.length),
+          afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - endIndex,
         );
         return { claim, distance };
       })
       .filter(({ distance }) => distance <= 20)
-      .sort((left, right) => left.distance - right.distance);
+      .sort(
+        (left, right) =>
+          left.distance - right.distance || right.claim.label.length - left.claim.label.length,
+      );
     const nearestLabel = nearbyClaims[0]?.claim.label;
     if (nearestLabel === undefined) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
     const claimsForLabel = nearbyClaims
@@ -379,8 +387,8 @@ function collectVisibleTransactionCounts(output: EvaluationOutput): number[] {
   );
 }
 
-function collectVisibleDates(output: EvaluationOutput): string[] {
-  return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
+function collectDates(rawTexts: string[]): string[] {
+  return rawTexts.flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), ([date]) => date),
@@ -401,6 +409,19 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
       ),
     ];
   });
+}
+
+function collectVisibleDates(output: EvaluationOutput): string[] {
+  return collectDates([output.text, ...collectFacts(output.cards)]);
+}
+
+function collectCardHeadingDates(output: EvaluationOutput): string[] {
+  return collectDates(
+    output.cards.flatMap((card) => [
+      card.title,
+      "description" in card && typeof card.description === "string" ? card.description : "",
+    ]),
+  );
 }
 
 function collectVisibleMonths(output: EvaluationOutput): string[] {
@@ -443,11 +464,9 @@ function collectMislabeledVisibleMonths(
               : `*-${String(match[5]).padStart(2, "0")}`,
       }),
     );
-    const latestVisibleMonth = monthMatches
-      .map(({ month }) => month)
-      .filter((month) => !month.startsWith("*-"))
-      .sort()
-      .at(-1);
+    const latestVisibleMonthNumber = Math.max(
+      ...monthMatches.map(({ month }) => Number(month.slice(-2))),
+    );
 
     return monthMatches.flatMap((monthMatch, monthIndex) => {
       const adjacentRoleContext = `${text.slice(Math.max(0, monthMatch.index - 8), monthMatch.index)} ${
@@ -456,7 +475,9 @@ function collectMislabeledVisibleMonths(
         )?.[0] ?? ""
       }`;
       const roleContext = `${adjacentRoleContext} ${
-        monthMatches.length > 1 && monthMatch.month !== latestVisibleMonth ? "比較" : ""
+        monthMatches.length > 1 && Number(monthMatch.month.slice(-2)) < latestVisibleMonthNumber
+          ? "比較"
+          : ""
       }`;
       const roleSpecificClaims = expectedClaims.filter(
         ({ rolePattern }) =>
@@ -499,13 +520,18 @@ function collectMislabeledVisiblePercentages(
         return {
           claim,
           distance: Math.min(
-            beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
-            afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
+            beforeIndex === -1
+              ? Number.POSITIVE_INFINITY
+              : index - (beforeIndex + claim.label.length),
+            afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - endIndex,
           ),
         };
       })
       .filter(({ distance }) => distance <= 20)
-      .sort((left, right) => left.distance - right.distance);
+      .sort(
+        (left, right) =>
+          left.distance - right.distance || right.claim.label.length - left.claim.label.length,
+      );
     if (nearbyClaims.length === 0) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
     const nearestLabel = nearbyClaims[0]?.claim.label;
     const claimsForLabel = nearbyClaims
@@ -546,6 +572,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : collectVisibleDates(parsed).filter(
           (actualDate) =>
             !config.allowedVisibleDates?.some(
+              (allowedDate) =>
+                actualDate === allowedDate || actualDate === `*-${allowedDate.slice(5)}`,
+            ),
+        );
+  const unexpectedCardHeadingDates =
+    config.allowedCardHeadingDates === undefined
+      ? []
+      : collectCardHeadingDates(parsed).filter(
+          (actualDate) =>
+            !config.allowedCardHeadingDates?.some(
               (allowedDate) =>
                 actualDate === allowedDate || actualDate === `*-${allowedDate.slice(5)}`,
             ),
@@ -719,6 +755,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unexpectedVisibleDates.length > 0
       ? `未許可の可視日付: ${[...new Set(unexpectedVisibleDates)].join(",")}`
+      : undefined,
+    unexpectedCardHeadingDates.length > 0
+      ? `未許可のカード見出し日付: ${[...new Set(unexpectedCardHeadingDates)].join(",")}`
       : undefined,
     unexpectedVisibleMonths.length > 0
       ? `未許可の可視月: ${[...new Set(unexpectedVisibleMonths)].join(",")}`

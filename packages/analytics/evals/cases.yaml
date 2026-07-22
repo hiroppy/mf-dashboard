@@ -12,6 +12,7 @@
         allowedVisibleAmounts: [313235, 219894, 93341]
         allowedVisibleDates: ["2026-07-31"]
         allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: [29.8, 30]
         visibleAmountClaims:
           - { label: 収入, amount: 313235 }
           - { label: 支出, amount: 219894 }
@@ -20,6 +21,10 @@
           - { label: プラス, amount: 93341 }
           - { label: 余剰, amount: 93341 }
           - { label: 手残り, amount: 93341 }
+          - { label: 純収入, amount: 93341 }
+        visiblePercentageClaims:
+          - { label: 貯蓄率, amount: 29.8 }
+          - { label: 貯蓄率, amount: 30 }
         allowedInsightMetrics:
           - { amount: 93341, amountType: balance, labelPattern: (黒字|収支|余剰|手残り) }
         expectedCardTextFacts:
@@ -80,7 +85,7 @@
             761,
           ]
         allowedVisibleMonths: ["2026-07"]
-        allowedVisibleDates: ["2026-07-31"]
+        allowedCardHeadingDates: ["2026-07-31"]
         allowedVisiblePercentages: [19, 19.03]
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
@@ -89,6 +94,10 @@
           - { label: 食費, amount: 19 }
           - { label: 食費, amount: 19.03 }
         expectedCardFacts: [食費]
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: 食費 }
+          - { cardType: categoryBreakdown, pattern: 食費 }
+          - { cardType: transactionList, pattern: 食費 }
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }
         expectedCategories:
