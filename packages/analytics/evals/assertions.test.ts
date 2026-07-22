@@ -5916,6 +5916,57 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
   });
 
+  it("does not treat unrelated existence prose as a transaction description", () => {
+    const proseOutput = JSON.stringify({
+      text: "明細を確認しました。改善余地があります。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(proseOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("preserves spaces in a grounded fallback transaction description", () => {
+    const spacedDescriptionOutput = JSON.stringify({
+      text: "明細には7月10日の東京ガス ガス代があります。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(spacedDescriptionOutput, {
+        config: {
+          expectedTransactions: [
+            {
+              ids: ["tx-a"],
+              date: "2026-07-10",
+              description: "東京ガス ガス代",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+          requireTransactionToolGrounding: true,
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "transactions 不一致" });
+  });
+
   it.each(["月初", "月末"])("rejects an ambiguous standalone month boundary: %s", (boundary) => {
     const boundaryOutput = JSON.stringify({
       text: `${boundary}時点の総資産は5,683,100円です。`,

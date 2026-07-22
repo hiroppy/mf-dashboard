@@ -1701,24 +1701,32 @@ export default function assertFinanceResponse(output: string, context: Assertion
       )
     : [];
   const unsupportedTextTransactionDescriptions = config.requireTransactionToolGrounding
-    ? Array.from(
-        parsed.text.matchAll(/([\p{L}・ー]{2,20})(?:があります|がありました)/gu),
-        ([, description]) => description.replace(/^(?:日の|には?)/u, ""),
-      ).filter(
-        (description) =>
-          /(?:明細|取引)/u.test(parsed.text) &&
-          ![
-            ...(config.expectedTransactions ?? []),
-            ...(config.expectedTransactionGroup?.allowedTransactions ?? []),
-          ].some((transaction) => normalize(transaction.description) === normalize(description)) &&
-          !retrievedTransactionRows.some(
-            (transaction) =>
-              typeof transaction === "object" &&
-              transaction !== null &&
-              "description" in transaction &&
-              normalize(String(transaction.description)) === normalize(description),
+    ? parsed.text
+        .split(/[。！？\n]/u)
+        .flatMap((sentence) =>
+          Array.from(
+            sentence.matchAll(
+              /(?:明細|取引)(?:には|に|は)?(?:\d{1,2}月\d{1,2}日の)?(.+?)(?:があります|がありました)/gu,
+            ),
+            ([, description]) => description.trim(),
           ),
-      )
+        )
+        .filter(
+          (description) =>
+            ![
+              ...(config.expectedTransactions ?? []),
+              ...(config.expectedTransactionGroup?.allowedTransactions ?? []),
+            ].some(
+              (transaction) => normalize(transaction.description) === normalize(description),
+            ) &&
+            !retrievedTransactionRows.some(
+              (transaction) =>
+                typeof transaction === "object" &&
+                transaction !== null &&
+                "description" in transaction &&
+                normalize(String(transaction.description)) === normalize(description),
+            ),
+        )
     : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
