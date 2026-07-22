@@ -123,8 +123,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
     expectedTypes.length > 0 &&
     (actualTypes.length !== expectedTypes.length ||
       actualTypes.some((actual, index) => actual !== expectedTypes[index]));
-  const routeMissing =
-    config.expectedRoute && !collectRoutes(parsed.cards).includes(config.expectedRoute);
+  const actualRoutes = collectRoutes(parsed.cards);
+  const routeMismatch =
+    config.expectedRoute &&
+    (actualRoutes.length === 0 || actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
     missingFacts.length > 0 ? `不足 facts: ${missingFacts.join(", ")}` : undefined,
@@ -140,7 +142,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     cardTypesMismatch
       ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`
       : undefined,
-    routeMissing ? `不足 route: ${config.expectedRoute}` : undefined,
+    routeMismatch
+      ? `route 不一致: expected=${config.expectedRoute} actual=${actualRoutes.join(",") || "none"}`
+      : undefined,
   ].filter(Boolean);
 
   return failures.length === 0

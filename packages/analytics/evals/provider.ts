@@ -19,7 +19,10 @@ interface CallContext {
 
 export interface ChatResponse {
   text: string;
-  steps: Array<{ toolResults: Array<{ toolName: string; output: unknown }> }>;
+  steps: Array<{
+    text?: string;
+    toolResults: Array<{ toolName: string; output: unknown }>;
+  }>;
 }
 
 export interface ProviderDependencies {
@@ -76,7 +79,12 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   );
 
   return {
-    text: sanitizeFinanceChatLinks(response.text, allowedHrefs),
+    text: sanitizeFinanceChatLinks(
+      response.steps.some(({ text }) => text !== undefined)
+        ? response.steps.map(({ text }) => text ?? "").join("")
+        : response.text,
+      allowedHrefs,
+    ),
     cards: presentations[0],
   };
 }

@@ -90,6 +90,21 @@ describe("toEvaluationOutput", () => {
       "[詳細](/test-group/cf/2026-07) 外部",
     );
   });
+
+  it("keeps visible text from every generation step in order", () => {
+    const response: ChatResponse = {
+      text: "最終回答",
+      steps: [
+        { text: "途中回答。", toolResults: [] },
+        {
+          text: "最終回答",
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").text).toBe("途中回答。最終回答");
+  });
 });
 
 describe("FinanceChatProvider", () => {

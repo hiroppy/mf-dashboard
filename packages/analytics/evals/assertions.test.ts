@@ -48,7 +48,7 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("不足 facts: 未記載");
     expect(result.reason).toContain("不足 summary metrics: 収支=123");
     expect(result.reason).toContain("card types 不一致: expected=insight actual=summary");
-    expect(result.reason).toContain("不足 route: /bs");
+    expect(result.reason).toContain("route 不一致: expected=/bs actual=/0/cf/2026-07");
   });
 
   it("does not satisfy a summary metric with an unrelated card amount", () => {
@@ -144,6 +144,35 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({
       pass: false,
       reason: "card types 不一致: expected=summary,action actual=action,summary",
+    });
+  });
+
+  it("rejects an unexpected route on any card", () => {
+    const mixedRouteOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+        {
+          type: "insight",
+          title: "補足",
+          description: "補足情報です。",
+          action: { label: "資産を見る", href: "/0/bs" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(mixedRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
     });
   });
 });
