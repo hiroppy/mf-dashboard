@@ -11,6 +11,19 @@ const output = JSON.stringify({
     },
   ],
   text: "2026年7月の収支です。",
+  textEvidence: [
+    {
+      text: "2026年7月の収支です。",
+      allowedHrefs: ["/0/cf/2026-07"],
+      dataToolResults: [
+        {
+          toolName: "getMonthlySummaryByMonth",
+          input: { month: "2026-07" },
+          output: { month: "2026-07", netIncome: 93341 },
+        },
+      ],
+    },
+  ],
   cards: [
     {
       type: "summary",
@@ -61,6 +74,24 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({
       pass: false,
       reason: "不足 data tool facts: getMonthlySummaryByMonth:$.netIncome",
+    });
+  });
+
+  it("requires ordered text evidence when data-tool facts are evaluated", () => {
+    const missingTextEvidence = JSON.parse(output);
+    delete missingTextEvidence.textEvidence;
+
+    expect(
+      assertFinanceResponse(JSON.stringify(missingTextEvidence), {
+        config: {
+          expectedDataToolFacts: [
+            { toolName: "getMonthlySummaryByMonth", path: "$.netIncome", value: 93341 },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "textEvidence が欠落または最終テキストと不一致です。",
     });
   });
 
@@ -1958,6 +1989,60 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("rejects a disclosed source count that was not returned by the transaction tool", () => {
+    const transaction = {
+      id: "tx-a",
+      date: "2026-07-10",
+      description: "店舗 A",
+      category: "食費",
+      amount: 3435,
+      type: "expense",
+    };
+    const transactionOutput = JSON.stringify({
+      text: "全2件中1件を表示します。",
+      dataToolResults: [
+        {
+          toolName: "searchTransactions",
+          input: { month: "2026-07", category: "食費", limit: 1 },
+          output: { transactions: [transaction], truncated: true },
+        },
+      ],
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細（全2件中1件を表示）",
+          href: "/0/cf/2026-07",
+          transactions: [{ ...transaction, amountType: "expense" }],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [2],
+          requireTransactionToolGrounding: true,
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("2") });
+  });
+
   it("rejects an arbitrary allowed row instead of the deterministic truncated prefix", () => {
     const transactionOutput = JSON.stringify({
       text: "全2件中1件を表示します。",
@@ -3453,6 +3538,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "未許可の可視日付: relative-2日前" });
   });
 
+  it("rejects a 分-qualified relative day in fallback text", () => {
+    const relativeDateOutput = JSON.stringify({
+      text: "昨日分の支出は6,587円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "7月10日の支出",
+          metrics: [{ label: "支出", amount: 6587, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeDateOutput, {
+        config: {
+          allowedVisibleAmounts: [6587],
+          allowedFallbackTextDates: ["2026-07-10"],
+          visibleAmountClaims: [{ label: "支出", amount: 6587 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の回答本文日付: relative-昨日" });
+  });
+
   it("rejects a snapshot labeled as tomorrow", () => {
     const futureSnapshotOutput = JSON.stringify({
       text: "回答",
@@ -4614,6 +4723,29 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("rejects an allowlisted percentage whose configured label is negated before the value", () => {
+    const negatedOutput = JSON.stringify({
+      text: "貯蓄率ではなく税率は29.8%です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "貯蓄率", amount: 29.8, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "誤ラベルの可視割合: 貯蓄率=29.8(否定)" });
   });
 
   it("accepts a percentage delta with a directional claim", () => {

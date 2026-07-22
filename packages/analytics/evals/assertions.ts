@@ -824,11 +824,11 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=の|は|が|時点|現在)/g),
+        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=分|の|は|が|時点|現在)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
-        text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)日(?:前|後)(?=の|は|が|時点|現在)/g),
+        text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)日(?:前|後)(?=分|の|は|が|時点|現在)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
@@ -1228,6 +1228,15 @@ function collectMislabeledVisiblePercentages(
         : hasDirectionalSuffix
           ? []
           : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+    const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
+    if (
+      labelBeforeIndex >= clauseStart &&
+      /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
+        text.slice(labelBeforeIndex + nearestLabel.length, index),
+      )
+    ) {
+      return [`${nearestLabel}=${amount}(否定)`];
+    }
     if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
       return [`${nearestLabel}=${amount}(否定)`];
     }
@@ -1336,6 +1345,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
   );
   const cardFacts = collectFacts(parsed.cards);
   const expectedDataToolFacts = config.expectedDataToolFacts ?? [];
+  const textEvidenceMismatch =
+    expectedDataToolFacts.length > 0 &&
+    (parsed.textEvidence.length === 0 ||
+      parsed.textEvidence.map(({ text }) => text).join("") !== parsed.text);
   const missingDataToolFacts = expectedDataToolFacts.filter(
     (expected) => !parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
   );
@@ -1490,6 +1503,22 @@ export default function assertFinanceResponse(output: string, context: Assertion
     : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
+  const retrievedGroupTransactionCount =
+    expectedTransactionGroup === undefined
+      ? 0
+      : retrievedTransactionRows.filter(
+          (transaction) =>
+            typeof transaction === "object" &&
+            transaction !== null &&
+            "date" in transaction &&
+            typeof transaction.date === "string" &&
+            transaction.date.startsWith(`${expectedTransactionGroup.month}-`) &&
+            "category" in transaction &&
+            normalize(String(transaction.category)) ===
+              normalize(expectedTransactionGroup.category) &&
+            "type" in transaction &&
+            transaction.type === expectedTransactionGroup.amountType,
+        ).length;
   const expectedVisibleTransactionCount =
     expectedTransactions.length > 0
       ? expectedTransactions.length
@@ -1501,6 +1530,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
     text,
   }: (typeof visibleTransactionCounts)[number]) =>
     config.allowedVisibleTransactionCounts?.includes(count) === true &&
+    (config.requireTransactionToolGrounding !== true || retrievedGroupTransactionCount >= count) &&
     (/^\s*中\s*\d+\s*件/u.test(text.slice(endIndex)) || /^\s*の?うち/u.test(text.slice(endIndex)));
   const unexpectedVisibleTransactionCounts =
     expectedVisibleTransactionCount === undefined
@@ -1582,6 +1612,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
+    textEvidenceMismatch ? "textEvidence が欠落または最終テキストと不一致です。" : undefined,
     unexpectedVisibleAmounts.length > 0
       ? `未許可の可視金額: ${[...new Set(unexpectedVisibleAmounts.map(({ amount }) => amount))].join(",")}`
       : undefined,
