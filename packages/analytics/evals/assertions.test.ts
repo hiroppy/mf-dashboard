@@ -24,6 +24,7 @@ const output = JSON.stringify({
       ],
     },
   ],
+  unauthorizedLinks: [],
   cards: [
     {
       type: "summary",
@@ -105,8 +106,23 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({
       pass: false,
-      reason: "textEvidence が欠落または最終テキストと不一致です。",
+      reason: expect.stringContaining("textEvidence が欠落または最終テキストと不一致です。"),
     });
+  });
+
+  it("fails closed when a security evidence field is missing", () => {
+    const missingSecurityEvidence = JSON.parse(output);
+    delete missingSecurityEvidence.unauthorizedLinks;
+
+    expect(
+      assertFinanceResponse(JSON.stringify(missingSecurityEvidence), {
+        config: {
+          expectedDataToolFacts: [
+            { toolName: "getMonthlySummaryByMonth", path: "$.netIncome", value: 93341 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "評価証跡フィールドが欠落または不正です。" });
   });
 
   it("matches data-tool evidence by tool, input, path, and exact value", () => {
@@ -934,11 +950,38 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(reversedOutput, {
         config: {
           forbiddenVisiblePatterns: [
-            "((支出|出費).{0,12}(収入|所得).{0,12}(上回|超え|多い)|(収入|所得).{0,12}(支出|出費).{0,12}(下回|少ない))",
+            "((支出|出費).{0,12}(収入|所得).{0,12}(上回(?!っていません|っていない|らない)|超え(?!ていません|ていない|ない)|多い(?!わけではありません|わけではない|とは限りません|とは限らない))|(収入|所得).{0,12}(支出|出費).{0,12}(下回(?!っていません|っていない|らない)|少ない(?!わけではありません|わけではない|とは限りません|とは限らない)))",
           ],
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("accepts an explicitly negated reversed income-expense comparison", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "支出は収入を上回っていません。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [
+            { label: "収入", amount: 313235, amountType: "income" },
+            { label: "支出", amount: 219894, amountType: "expense" },
+          ],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((支出|出費).{0,12}(収入|所得).{0,12}(上回(?!っていません|っていない|らない)|超え(?!ていません|ていない|ない)|多い(?!わけではありません|わけではない|とは限りません|とは限らない))|(収入|所得).{0,12}(支出|出費).{0,12}(下回(?!っていません|っていない|らない)|少ない(?!わけではありません|わけではない|とは限りません|とは限らない)))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it.each(["給与", "手取り"])(
@@ -3749,7 +3792,9 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({
       pass: false,
-      reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+      reason: expect.stringContaining(
+        "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+      ),
     });
   });
 
@@ -3833,7 +3878,9 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({
       pass: false,
-      reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+      reason: expect.stringContaining(
+        "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+      ),
     });
   });
 
@@ -3856,7 +3903,9 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({
       pass: false,
-      reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+      reason: expect.stringContaining(
+        "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+      ),
     });
   });
 

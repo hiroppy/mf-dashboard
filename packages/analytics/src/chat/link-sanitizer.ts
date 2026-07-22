@@ -17,13 +17,26 @@ function resolveAllowedHref(destination: string, allowedHrefs: Set<string>): str
   }
 }
 
+function splitBareUrl(url: string) {
+  const match = /^(.*?)([.,!?;:。、，！？；：]+)$/u.exec(url);
+  let destination = match?.[1] ?? url;
+  let trailingText = match?.[2] ?? "";
+  const adjacentJapaneseText = new RegExp(
+    `^((?:https?:\\/\\/|\\/\\/)[A-Za-z0-9\\-._~:/?#[\\]@!$&'*+,;=%]+)([\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Han}]+)$`,
+    "iu",
+  ).exec(destination);
+  if (adjacentJapaneseText) {
+    destination = adjacentJapaneseText[1];
+    trailingText = `${adjacentJapaneseText[2]}${trailingText}`;
+  }
+  return { destination, trailingText };
+}
+
 function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
-  const match = /^(.*?)([.,!?;:]+)$/.exec(url);
-  const destination = match?.[1] ?? url;
-  const trailingPunctuation = match?.[2] ?? "";
+  const { destination, trailingText } = splitBareUrl(url);
   const href = resolveAllowedHref(destination, allowedHrefs);
 
-  return href ? `${href}${trailingPunctuation}` : trailingPunctuation;
+  return href ? `${href}${trailingText}` : trailingText;
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
@@ -35,8 +48,25 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     },
   );
 
-  return withoutInvalidMarkdownLinks.replace(
-    /(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/gi,
-    (url) => sanitizeBareUrl(url, allowedHrefs),
+  const withoutInvalidAutolinks = withoutInvalidMarkdownLinks.replace(
+    /<((?:https?:\/\/|\/\/)[^>\s]+)>/giu,
+    (_match, url: string) => sanitizeBareUrl(url, allowedHrefs),
   );
+
+  return withoutInvalidAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
+    sanitizeBareUrl(url, allowedHrefs),
+  );
+}
+
+export function collectFinanceChatLinks(text: string): string[] {
+  return [
+    ...Array.from(
+      text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
+      ([, href]) => href,
+    ),
+    ...Array.from(
+      text.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
+      ([href]) => splitBareUrl(href).destination,
+    ),
+  ];
 }

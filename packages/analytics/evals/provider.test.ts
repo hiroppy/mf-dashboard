@@ -170,6 +170,23 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it("records and removes a Unicode-host URL before evaluation", () => {
+    const response: ChatResponse = {
+      text: "https://例.exampleです。",
+      steps: [
+        {
+          text: "https://例.exampleです。",
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "。",
+      unauthorizedLinks: ["https://例.exampleです"],
+    });
+  });
+
   it("records a bare unauthorized URL before sanitizing visible text", () => {
     const response: ChatResponse = {
       text: "https://evil.example",

@@ -100,6 +100,7 @@ interface AssertionContext {
 interface EvaluationOutput {
   allowedHrefs: string[];
   dataToolResults: DataToolResult[];
+  evidenceShapeValid: boolean;
   text: string;
   textEvidence: Array<{ text: string; allowedHrefs: string[]; dataToolResults: DataToolResult[] }>;
   unauthorizedLinks: string[];
@@ -164,6 +165,11 @@ function parseOutput(output: string): EvaluationOutput | undefined {
         ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
         : [],
       dataToolResults: parseDataToolResults(value.dataToolResults),
+      evidenceShapeValid:
+        Array.isArray(value.allowedHrefs) &&
+        Array.isArray(value.dataToolResults) &&
+        Array.isArray(value.textEvidence) &&
+        Array.isArray(value.unauthorizedLinks),
       text: value.text,
       unauthorizedLinks: Array.isArray(value.unauthorizedLinks)
         ? value.unauthorizedLinks.filter((link): link is string => typeof link === "string")
@@ -1659,6 +1665,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       allowedHrefs: [],
       cards: [],
       dataToolResults: evidence.dataToolResults,
+      evidenceShapeValid: true,
       text: evidence.text,
       textEvidence: [],
       unauthorizedLinks: [],
@@ -1791,6 +1798,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       allowedHrefs: evidence.allowedHrefs,
       cards: [],
       dataToolResults: evidence.dataToolResults,
+      evidenceShapeValid: true,
       text: evidence.text,
       textEvidence: [],
       unauthorizedLinks: [],
@@ -2052,6 +2060,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
       actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
+    (expectedDataToolFacts.length > 0 || config.expectedRoute !== undefined) &&
+    !parsed.evidenceShapeValid
+      ? "評価証跡フィールドが欠落または不正です。"
+      : undefined,
     parsed.unauthorizedLinks.length > 0
       ? `未承認の生成リンク: ${parsed.unauthorizedLinks.join(",")}`
       : undefined,

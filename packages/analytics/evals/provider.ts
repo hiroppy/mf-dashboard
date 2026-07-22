@@ -6,7 +6,7 @@ import { generateText, stepCountIs } from "ai";
 import MockDate from "mockdate";
 import { z } from "zod";
 import { buildFinanceChatHref, financeChatHrefSchema } from "../src/chat/cards";
-import { sanitizeFinanceChatLinks } from "../src/chat/link-sanitizer";
+import { collectFinanceChatLinks, sanitizeFinanceChatLinks } from "../src/chat/link-sanitizer";
 import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
@@ -25,19 +25,6 @@ export interface ChatResponse {
     text?: string;
     toolResults: Array<{ toolName: string; input?: unknown; output: unknown }>;
   }>;
-}
-
-function collectGeneratedLinks(text: string): string[] {
-  return [
-    ...Array.from(
-      text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
-      ([, href]) => href,
-    ),
-    ...Array.from(
-      text.matchAll(/(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/gi),
-      ([href]) => href.replace(/[.,!?;:]+$/, ""),
-    ),
-  ];
 }
 
 function isAllowedGeneratedLink(destination: string, allowedHrefs: Set<string>) {
@@ -122,7 +109,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     if (step.text !== undefined) {
       hasStepText = true;
       unauthorizedLinks.push(
-        ...collectGeneratedLinks(step.text).filter(
+        ...collectFinanceChatLinks(step.text).filter(
           (link) => !isAllowedGeneratedLink(link, allowedHrefs),
         ),
       );
@@ -168,7 +155,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     : sanitizeFinanceChatLinks(response.text, allowedHrefs);
   if (!hasStepText) {
     unauthorizedLinks.push(
-      ...collectGeneratedLinks(response.text).filter(
+      ...collectFinanceChatLinks(response.text).filter(
         (link) => !isAllowedGeneratedLink(link, allowedHrefs),
       ),
     );
