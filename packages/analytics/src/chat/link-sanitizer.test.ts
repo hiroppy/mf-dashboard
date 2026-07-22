@@ -52,6 +52,13 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("メール");
   });
 
+  it.each([
+    ['<a href="mailto:evil@example.com">メール', "メール"],
+    ['<a href="javascript:alert(1)"/>メール', "メール"],
+  ])("removes a malformed raw HTML anchor: %s", (text, expected) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(expected);
+  });
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {
@@ -84,5 +91,12 @@ describe("collectFinanceChatLinks", () => {
     expect(collectFinanceChatLinks('<a href="mailto:evil@example.com">メール</a>')).toContain(
       "mailto:evil@example.com",
     );
+  });
+
+  it.each([
+    ['<a href="mailto:evil@example.com">メール', "mailto:evil@example.com"],
+    ['<a href="javascript:alert(1)"/>メール', "javascript:alert(1)"],
+  ])("collects a malformed raw HTML anchor destination: %s", (text, expected) => {
+    expect(collectFinanceChatLinks(text)).toContain(expected);
   });
 });

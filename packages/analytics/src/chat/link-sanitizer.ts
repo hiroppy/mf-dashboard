@@ -45,14 +45,17 @@ function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
-  const withoutHtmlLinks = text.replace(
-    /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)<\/a>/gisu,
-    (_match, doubleQuoted: string, singleQuoted: string, unquoted: string, label: string) => {
-      const destination = doubleQuoted ?? singleQuoted ?? unquoted;
-      const href = resolveAllowedHref(destination, allowedHrefs);
-      return href ? `[${label}](${href})` : label;
-    },
-  );
+  const withoutHtmlLinks = text
+    .replace(
+      /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)<\/a>/gisu,
+      (_match, doubleQuoted: string, singleQuoted: string, unquoted: string, label: string) => {
+        const destination = doubleQuoted ?? singleQuoted ?? unquoted;
+        const href = resolveAllowedHref(destination, allowedHrefs);
+        return href ? `[${label}](${href})` : label;
+      },
+    )
+    .replace(/<a\b[^>]*\bhref\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>/gisu, "")
+    .replace(/<\/a\s*>/giu, "");
   const referenceDefinitions = new Map(
     Array.from(
       withoutHtmlLinks.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
@@ -93,7 +96,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 export function collectFinanceChatLinks(text: string): string[] {
   return [
     ...Array.from(
-      text.matchAll(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>.*?<\/a>/gisu),
+      text.matchAll(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/gisu),
       ([, doubleQuoted, singleQuoted, unquoted]) => doubleQuoted ?? singleQuoted ?? unquoted,
     ),
     ...Array.from(

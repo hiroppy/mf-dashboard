@@ -192,6 +192,26 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it.each([
+    ['<a href="mailto:evil@example.com">メール', "mailto:evil@example.com"],
+    ['<a href="javascript:alert(1)"/>メール', "javascript:alert(1)"],
+  ])("records and removes a malformed raw HTML link: %s", (text, unauthorizedLink) => {
+    const response: ChatResponse = {
+      text,
+      steps: [
+        {
+          text,
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "メール",
+      unauthorizedLinks: [unauthorizedLink],
+    });
+  });
+
   it("records and removes a non-route reference-style link before evaluation", () => {
     const response: ChatResponse = {
       text: "[メール][ref]\n\n[ref]: mailto:evil@example.com",
