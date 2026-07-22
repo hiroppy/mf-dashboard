@@ -504,6 +504,29 @@ describe("assertFinanceResponse", () => {
     },
   );
 
+  it("rejects a foreign-currency amount even when its number is allowlisted", () => {
+    const foreignCurrencyOutput = JSON.stringify({
+      text: "総資産は$5,683,100です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(foreignCurrencyOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
       text: `収支は${amount}です。`,
@@ -2717,6 +2740,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("recognizes a relative previous month followed by 分", () => {
+    const relativeComparisonOutput = JSON.stringify({
+      text: "先月分の食費は41,837円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
+  });
+
   it("validates an era-qualified month in its configured role", () => {
     const eraMonthOutput = JSON.stringify({
       text: "回答",
@@ -3904,6 +3951,35 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it.each([
+    ["3割強", false],
+    ["3割弱", true],
+  ])("validates the strength-qualified percentage %s", (percentage, pass) => {
+    const percentageOutput = JSON.stringify({
+      text: `貯蓄率は${percentage}です。`,
+      cards: [
+        {
+          type: "insight",
+          title: "家計状況",
+          description: "貯蓄率を確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(percentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8, 30],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 29.8 },
+            { label: "貯蓄率", amount: 30 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass });
   });
 
   it("rejects swapped current and comparison-period percentages", () => {

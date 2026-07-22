@@ -899,7 +899,7 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:先月|前月|来月|翌月)(?=末|の|時点|現在|\s|$)/g),
+        text.matchAll(/(?:先月|前月|来月|翌月)(?=末|分|の|時点|現在|\s|$)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(
@@ -1058,6 +1058,7 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
           endIndex: match.index + match[0].length,
           index: match.index,
           isPoint: match[10] !== undefined,
+          strength: /^\s*(強|弱)/u.exec(text.slice(match.index + match[0].length))?.[1],
           text,
         }),
       ).filter(
@@ -1078,6 +1079,7 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
               : (parseJapaneseInteger(match[2]) / parseJapaneseInteger(match[1])) * 100,
           endIndex: match.index + match[0].length,
           index: match.index,
+          strength: undefined,
           text,
         }),
       ).filter(
@@ -1230,9 +1232,12 @@ export default function assertFinanceResponse(output: string, context: Assertion
     config.allowedVisiblePercentages === undefined
       ? []
       : collectVisiblePercentageMatches(parsed).filter(
-          ({ amount }) =>
+          ({ amount, strength }) =>
             !config.allowedVisiblePercentages?.some(
-              (allowed) => Math.abs(allowed - amount) <= 0.01,
+              (allowed) =>
+                (strength === "強" && allowed > amount && allowed - amount <= 1) ||
+                (strength === "弱" && allowed < amount && amount - allowed <= 1) ||
+                (strength === undefined && Math.abs(allowed - amount) <= 0.01),
             ),
         );
   const mislabeledVisiblePercentages = collectMislabeledVisiblePercentages(
@@ -1240,6 +1245,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
     config.visiblePercentageClaims ?? [],
   );
   const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n");
+  const foreignCurrencyClaims = [
+    ...visibleText.matchAll(
+      /(?:[$＄€£]\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:米?ドル|ユーロ|ポンド|USD|EUR|GBP))/giu,
+    ),
+  ].map(([claim]) => claim);
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
@@ -1491,6 +1501,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     matchedForbiddenVisiblePatterns.length > 0
       ? `禁止された可視表現: ${matchedForbiddenVisiblePatterns.join(",")}`
+      : undefined,
+    foreignCurrencyClaims.length > 0
+      ? `外貨建ての可視金額: ${[...new Set(foreignCurrencyClaims)].join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingDataToolFacts.length > 0
