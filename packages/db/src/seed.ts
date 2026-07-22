@@ -93,7 +93,6 @@ if (period && !/^\d{4}-\d{2}$/.test(period)) {
 const currentDate = new Date();
 const YEAR_END = period ? Number(period.split("-")[0]) : currentDate.getFullYear();
 const MONTH_END = period ? Number(period.split("-")[1]) : currentDate.getMonth() + 1;
-const today = new Date(dateStr(YEAR_END, MONTH_END, FIXED_DAY));
 fixedTimestamp = `${dateStr(YEAR_END, MONTH_END, FIXED_DAY)}T00:00:00.000Z`;
 const range = {
   yearStart: YEAR_START,
@@ -229,7 +228,7 @@ console.log(
   `資産合計: ¥${totalAssets.toLocaleString()} / 負債合計: ¥${totalLiabilities.toLocaleString()} / 純資産: ¥${netAssets.toLocaleString()}`,
 );
 
-const snapshotDate = dateStr(YEAR_END, MONTH_END, today.getDate());
+const snapshotDate = dateStr(YEAR_END, MONTH_END, FIXED_DAY);
 const snapshotResult = await db
   .insert(schema.dailySnapshots)
   .values({
