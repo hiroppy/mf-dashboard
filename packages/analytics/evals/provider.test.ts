@@ -51,7 +51,7 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
 }
 
 describe("toEvaluationOutput", () => {
-  it("keeps final output and successful data-tool evidence", () => {
+  it("keeps final output without retroactively synthesizing ordered text evidence", () => {
     const response: ChatResponse = {
       text: "回答",
       steps: [
@@ -80,19 +80,7 @@ describe("toEvaluationOutput", () => {
         },
       ],
       text: "回答",
-      textEvidence: [
-        {
-          text: "回答",
-          allowedHrefs: [],
-          dataToolResults: [
-            {
-              toolName: "getMonthlySummaryByMonth",
-              input: { month: "2026-07" },
-              output: { income: 100 },
-            },
-          ],
-        },
-      ],
+      textEvidence: [],
       unauthorizedLinks: [],
       cards: [{ type: "summary" }],
     });

@@ -165,15 +165,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     dataToolResults: dataToolResultsAtPresentation,
     text,
     unauthorizedLinks: [...new Set(unauthorizedLinks)],
-    textEvidence: hasStepText
-      ? textEvidence
-      : [
-          {
-            text,
-            allowedHrefs: allowedHrefsAtPresentation,
-            dataToolResults: dataToolResultsAtPresentation,
-          },
-        ],
+    textEvidence: hasStepText ? textEvidence : [],
     cards: presentations[0],
   };
 }
