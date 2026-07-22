@@ -154,7 +154,7 @@ describe("POST /api/chat", () => {
       "日付別支出には、expenseを検索し、summary、transactionList、action",
     );
     expect(systemPrompt).toContain("月次状況には、対象月の収支を取得し、summaryとinsight");
-    expect(systemPrompt).toContain("カテゴリ合計だけを取得し、summary、categoryBreakdown");
+    expect(systemPrompt).toContain("カテゴリ合計と月次収支を取得し、summary、categoryBreakdown");
     expect(systemPrompt).toContain(
       "明細、取引、詳細を明示的に求めた場合だけ対象取引を検索し、transactionList",
     );

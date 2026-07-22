@@ -49,8 +49,9 @@ export function splitCompleteFinanceChatText(text: string): {
     id.toLowerCase(),
   );
   const definedReferenceIds = new Set(
-    Array.from(text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:\s+.*)?$/gimu), ([, id]) =>
-      id.toLowerCase(),
+    Array.from(
+      text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu),
+      ([, id]) => id.toLowerCase(),
     ),
   );
   if (referenceIds.some((id) => !definedReferenceIds.has(id))) {

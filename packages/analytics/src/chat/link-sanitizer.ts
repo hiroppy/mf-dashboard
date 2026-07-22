@@ -42,7 +42,7 @@ function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
   const referenceDefinitions = new Map(
     Array.from(
-      text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:\s+.*)?$/gimu),
+      text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
       ([, id, destination]) => [id.toLowerCase(), destination] as const,
     ),
   );
@@ -63,7 +63,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     },
   );
   const withoutReferenceDefinitions = withoutReferenceLinks.replace(
-    /^[ \t]*\[[^\]]+\]\s*:\s*[^\s]+(?:\s+.*)?(?:\r?\n|$)/gimu,
+    /^[ \t]*\[[^\]]+\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?(?:\r?\n|$)/gimu,
     "",
   );
 
@@ -84,7 +84,7 @@ export function collectFinanceChatLinks(text: string): string[] {
       ([, href]) => href,
     ),
     ...Array.from(
-      text.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:\s+.*)?$/gimu),
+      text.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
       ([, href]) => href,
     ),
     ...Array.from(

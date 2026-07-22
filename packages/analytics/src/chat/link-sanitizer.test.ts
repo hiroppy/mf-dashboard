@@ -35,6 +35,15 @@ describe("sanitizeFinanceChatLinks", () => {
     );
   });
 
+  it("preserves prose following a reference definition", () => {
+    expect(
+      sanitizeFinanceChatLinks(
+        "[詳細][route]\n[route]: /0/cf/2026-07\nこのページで確認できます。",
+        allowedHrefs,
+      ),
+    ).toBe("[詳細](/0/cf/2026-07)\nこのページで確認できます。");
+  });
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {

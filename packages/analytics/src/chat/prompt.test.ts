@@ -16,7 +16,7 @@ describe("finance chat prompt", () => {
     const prompt = getFinanceChatSystemPrompt();
 
     expect(prompt).toContain(
-      "カテゴリ合計の質問には、対象月のカテゴリ合計だけを取得し、summary、categoryBreakdownを提示してください。個別取引は取得しないでください。",
+      "カテゴリ合計の質問には、対象月のカテゴリ合計と月次収支を取得し、summary、categoryBreakdownを提示してください。個別取引は取得しないでください。",
     );
   });
 

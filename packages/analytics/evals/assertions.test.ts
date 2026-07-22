@@ -1020,6 +1020,33 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
   });
 
+  it("accepts an explicitly negated income-expense equality claim", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "収入と支出は同額ではありません。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [
+            { label: "収入", amount: 313235, amountType: "income" },
+            { label: "支出", amount: 219894, amountType: "expense" },
+          ],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((収入|所得).{0,12}(支出|出費)|(支出|出費).{0,12}(収入|所得)).{0,12}(同額(?!s*(?:では|じゃ)(?:ありません|ない|なく))|同じ(?:くらい|程度)?(?!s*(?:では|じゃ)(?:ありません|ない|なく))|等しい(?!s*(?:とは|わけでは)?(?:ありません|ない))|ほぼ同額(?!s*(?:では|じゃ)(?:ありません|ない))|ほぼ同じ(?!s*(?:では|じゃ)(?:ありません|ない))|大差(?:が)?ない|差(?:が)?ない)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it.each(["給与", "手取り"])(
     "rejects a unitless unsupported amount after the %s income synonym",
     (label) => {
@@ -5482,6 +5509,66 @@ describe("assertFinanceResponse", () => {
         config: {
           forbiddenVisiblePatterns: [
             "(総資産|保有資産|資産).{0,20}(大半|過半|半分以上|主に|中心|多く).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it.each([
+    [
+      "現金が多めです。",
+      "(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が|は).{0,8}(多め|少なめ|中心|主体|主要|最大|最小|多い|少ない)",
+    ],
+    [
+      "資産構成は現金中心です。",
+      "(資産構成|ポートフォリオ).{0,16}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産).{0,8}(中心|主体|主要|多め|少なめ|多い|少ない)",
+    ],
+    [
+      "総資産は以前より伸びています。",
+      "(総資産|保有資産|資産).{0,32}(伸びています|伸びました|伸長しています|伸長しました)",
+    ],
+    [
+      "最大の資産カテゴリは不動産です。",
+      "((最大|最小|最多|最少|一番(?:多い|少ない|大きい|小さい)).{0,12}(資産|カテゴリ)|(資産|カテゴリ).{0,12}(最大|最小|最多|最少|一番(?:多い|少ない|大きい|小さい))).{0,12}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)",
+    ],
+  ])("rejects another unsupported scalar asset claim: %s", (text, pattern) => {
+    expect(
+      assertFinanceResponse(
+        JSON.stringify({
+          text,
+          cards: [
+            {
+              type: "summary",
+              title: "総資産",
+              metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+              href: "/0/bs",
+            },
+          ],
+        }),
+        { config: { forbiddenVisiblePatterns: [pattern] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("rejects a reversed qualitative food-spending trend", () => {
+    const trendOutput = JSON.stringify({
+      text: "食費も前月より増加しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容は前月より増加したため見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(trendOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((食費).{0,30}(前月|先月).{0,20}|(前月|先月).{0,20}(食費).{0,20})(増加|上回)(?!\\s*.{0,10}(していない|していません|ではなく|ではない|ではありません|でない|わけではない|訳ではない))",
           ],
         },
       }),
