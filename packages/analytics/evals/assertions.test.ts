@@ -984,6 +984,42 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it.each([
+    [
+      "収入と支出は同額です。",
+      "((収入|所得).{0,12}(支出|出費)|(支出|出費).{0,12}(収入|所得)).{0,12}(同額|同じ(?:くらい|程度)?|等しい|ほぼ同額|ほぼ同じ|大差(?:が)?ない|差(?:が)?ない)",
+    ],
+    [
+      "今月は貯蓄できていません。",
+      "(貯蓄|積立).{0,12}(できていません|できていない|できません|できない|していません|していない|ありません|ない|なし|ゼロ)",
+    ],
+    [
+      "支出は予算内です。",
+      "((支出|出費).{0,12}予算.{0,8}(内|範囲内|以下|超過|オーバー|上回|下回)|予算.{0,12}(内|範囲内|以下|超過|オーバー|上回|下回).{0,8}(支出|出費))",
+    ],
+  ])("rejects an unsupported monthly qualitative claim: %s", (text, pattern) => {
+    const qualitativeOutput = JSON.stringify({
+      text,
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [
+            { label: "収入", amount: 313235, amountType: "income" },
+            { label: "支出", amount: 219894, amountType: "expense" },
+          ],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(qualitativeOutput, {
+        config: { forbiddenVisiblePatterns: [pattern] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
   it.each(["給与", "手取り"])(
     "rejects a unitless unsupported amount after the %s income synonym",
     (label) => {
@@ -5422,6 +5458,30 @@ describe("assertFinanceResponse", () => {
         config: {
           forbiddenVisiblePatterns: [
             "(総資産|保有資産|資産).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("rejects an unsupported majority asset-composition claim from a scalar snapshot", () => {
+    const compositionOutput = JSON.stringify({
+      text: "総資産の大半は現金です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(compositionOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(総資産|保有資産|資産).{0,20}(大半|過半|半分以上|主に|中心|多く).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)",
           ],
         },
       }),
