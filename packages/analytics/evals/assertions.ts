@@ -955,11 +955,24 @@ function collectDates(rawTexts: string[]): string[] {
         ([, year, boundary]) => `${year}-${boundary === "初" ? "01-01" : "12-31"}`,
       ),
       ...Array.from(
+        text.matchAll(/(\d{4})年度(初|末)(?=の|は|が|時点|現在)/g),
+        ([, year, boundary]) => (boundary === "初" ? `${year}-04-01` : `${Number(year) + 1}-03-31`),
+      ),
+      ...Array.from(
         text.matchAll(
           /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(初|末)(?=の|は|が|時点|現在)/g,
         ),
         ([, era, eraYear, boundary]) =>
           `${toGregorianYear(era, eraYear)}-${boundary === "初" ? "01-01" : "12-31"}`,
+      ),
+      ...Array.from(
+        text.matchAll(
+          /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年度(初|末)(?=の|は|が|時点|現在)/g,
+        ),
+        ([, era, eraYear, boundary]) => {
+          const year = Number(toGregorianYear(era, eraYear));
+          return boundary === "初" ? `${year}-04-01` : `${year + 1}-03-31`;
+        },
       ),
       ...Array.from(
         text.matchAll(/(\d{4})年(\d{1,2})月(初|末)(?=の|は|が|時点|現在)/g),
@@ -1607,6 +1620,22 @@ export default function assertFinanceResponse(output: string, context: Assertion
       );
     })
     .map(([claim]) => claim);
+  const unsupportedBareAmountUnits = collectBareVisibleAmountMatches(
+    parsed,
+    config.visibleAmountClaims ?? [],
+  ).flatMap(({ amount, endIndex, text }) => {
+    const suffix = /^\s*([\p{L}]+)/u.exec(text.slice(endIndex))?.[1];
+    if (
+      suffix === undefined ||
+      /(?:ではなく|でなく|ではない|でない|じゃない|ではありません|じゃありません)/u.test(suffix) ||
+      /^(?:です|でした|である|だ|とな|が|は|に(?:増|減|上昇|低下)|の(?:増|減|上昇|低下)|を(?:上回|下回)|より(?:多|少)|ほど|程度|くらい|ぐらい)/u.test(
+        suffix,
+      )
+    ) {
+      return [];
+    }
+    return [`${amount}${suffix}`];
+  });
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
@@ -1970,6 +1999,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unsupportedQualitativeDominanceClaims.length > 0
       ? `未根拠の定性的支出構成: ${[...new Set(unsupportedQualitativeDominanceClaims)].join(",")}`
+      : undefined,
+    unsupportedBareAmountUnits.length > 0
+      ? `非金銭単位付き可視金額: ${[...new Set(unsupportedBareAmountUnits)].join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingDataToolFacts.length > 0

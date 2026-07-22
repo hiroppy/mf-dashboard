@@ -123,6 +123,44 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects transaction evidence retrieved with an unbounded input", () => {
+    const transaction = {
+      date: "2026-07-10",
+      description: "Test Store",
+      category: "食費",
+      type: "expense",
+    };
+    const unboundedResult = {
+      toolName: "searchTransactions",
+      input: {},
+      output: { transactions: [transaction] },
+    };
+    const unboundedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [unboundedResult],
+      text: "対象日の明細です。",
+      textEvidence: [{ text: "対象日の明細です。", dataToolResults: [unboundedResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(unboundedOutput, {
+        config: {
+          expectedDataToolFacts: [
+            {
+              toolName: "searchTransactions",
+              input: { date: "2026-07-10", type: "expense" },
+              path: "$.transactions.*",
+              value: transaction,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("不足 data tool facts: searchTransactions"),
+    });
+  });
+
   it("rejects a visible amount stated before its supporting tool result", () => {
     const earlyClaimOutput = JSON.stringify({
       ...JSON.parse(output),
@@ -596,6 +634,32 @@ describe("assertFinanceResponse", () => {
     });
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("未許可の可視金額: 999999");
+  });
+
+  it("rejects a bare amount followed by a nonmonetary unit", () => {
+    const shareCountOutput = JSON.stringify({
+      text: "総資産は5,683,100株です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(shareCountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("非金銭単位付き可視金額: 5683100株です"),
+    });
   });
 
   it("rejects a bare unsupported amount stated before its finance label", () => {
@@ -4642,6 +4706,9 @@ describe("assertFinanceResponse", () => {
     ["2026年初", "2026-01-01"],
     ["2026年末", "2026-12-31"],
     ["令和8年末", "2026-12-31"],
+    ["2026年度初", "2026-04-01"],
+    ["2026年度末", "2027-03-31"],
+    ["令和8年度末", "2027-03-31"],
   ])("maps a year boundary to a concrete date: %s", (boundary, expectedDate) => {
     const boundaryOutput = JSON.stringify({
       text: `${boundary}時点の総資産は5,683,100円です。`,

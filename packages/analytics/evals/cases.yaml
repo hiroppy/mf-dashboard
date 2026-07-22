@@ -140,6 +140,7 @@
             }
           - {
               toolName: searchTransactions,
+              input: { month: "2026-07", category: 食費, type: expense },
               path: $.transactions.*,
               value: { description: すき家, category: 食費, type: expense },
             }
@@ -418,6 +419,7 @@
         expectedDataToolFacts:
           - {
               toolName: searchTransactions,
+              input: { date: "2026-07-10", type: expense },
               path: $.transactions.*,
               value:
                 {
@@ -429,6 +431,7 @@
             }
           - {
               toolName: searchTransactions,
+              input: { date: "2026-07-10", type: expense },
               path: $.transactions.*,
               value: { date: "2026-07-10", description: 成城石井, category: 食費, type: expense },
             }
