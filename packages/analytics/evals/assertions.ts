@@ -218,6 +218,19 @@ function collectVisibleAmounts(output: EvaluationOutput): number[] {
   return collectVisibleAmountMatches(output).map(({ amount }) => amount);
 }
 
+function collectVisibleClaimTexts(output: EvaluationOutput): string[] {
+  return [
+    output.text,
+    ...output.cards.flatMap((card) => {
+      const description =
+        "description" in card && typeof card.description === "string" ? card.description : "";
+      const headingText = [card.title, description].filter(Boolean).join(": ");
+      const headingFields = new Set([card.title, description]);
+      return [headingText, ...collectFacts(card).filter((fact) => !headingFields.has(fact))];
+    }),
+  ];
+}
+
 function collectBareVisibleAmountMatches(
   output: EvaluationOutput,
   expectedClaims: VisibleAmountClaim[],
@@ -257,11 +270,9 @@ function collectBareVisibleAmountMatches(
 }
 
 function collectVisibleAmountMatches(output: EvaluationOutput) {
-  const visibleTexts = [output.text, ...collectFacts(output.cards)].map((text) =>
-    text.normalize("NFKC"),
-  );
-  return visibleTexts.flatMap((text) =>
-    Array.from(
+  const visibleTexts = collectVisibleClaimTexts(output).map((text) => text.normalize("NFKC"));
+  return visibleTexts.flatMap((text) => [
+    ...Array.from(
       text.matchAll(
         /(?:([+＋\-−▲△▼▽]?)\s*[¥￥]\s*([+＋\-−▲△▼▽]?)\s*([\d,.]+)|([+＋\-−▲△▼▽]?)\s*((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g,
       ),
@@ -278,7 +289,59 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
         text,
       }),
     ),
-  );
+    ...Array.from(
+      text.matchAll(/(?<![\d,.])[〇零一二三四五六七八九十百千万億兆]+\s*円/g),
+      (match) => ({
+        amount:
+          parseKanjiAmount(match[0].replace(/\s*円$/, "")) *
+          (/マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index)) ? -1 : 1),
+        endIndex: match.index + match[0].length,
+        index: match.index,
+        text,
+      }),
+    ),
+  ]);
+}
+
+function parseKanjiAmount(value: string): number {
+  const digits: Record<string, number> = {
+    〇: 0,
+    零: 0,
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  const parseSection = (section: string) => {
+    let result = 0;
+    let digit = 0;
+    for (const character of section) {
+      if (character in digits) {
+        digit = digits[character]!;
+      } else {
+        result += (digit || 1) * { 十: 10, 百: 100, 千: 1000 }[character as "十" | "百" | "千"];
+        digit = 0;
+      }
+    }
+    return result + digit;
+  };
+  let total = 0;
+  let section = "";
+  for (const character of value) {
+    if (character === "兆" || character === "億" || character === "万") {
+      total +=
+        parseSection(section) * { 兆: 1_000_000_000_000, 億: 100_000_000, 万: 10_000 }[character];
+      section = "";
+    } else {
+      section += character;
+    }
+  }
+  return total + parseSection(section);
 }
 
 function isAccountingParenthesizedAmount(text: string, startIndex: number, endIndex: number) {
@@ -492,6 +555,10 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
+        text.matchAll(/(?:昨日|一昨日|前日)(?=の|時点|現在)/g),
+        ([relativeDay]) => `relative-${relativeDay}`,
+      ),
+      ...Array.from(
         text.matchAll(/(令和|平成|昭和)(元|\d+)年(\d{1,2})月(\d{1,2})日/g),
         ([, era, eraYear, month, day]) =>
           `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
@@ -596,7 +663,7 @@ function collectMislabeledVisibleMonths(
         index: match.index,
         month:
           match[1] !== undefined
-            ? `${match[1]}-${match[2]}`
+            ? `${match[1]}-${String(match[2]).padStart(2, "0")}`
             : match[3] !== undefined
               ? `${match[3]}-${String(match[4]).padStart(2, "0")}`
               : `*-${String(match[5]).padStart(2, "0")}`,
@@ -633,7 +700,7 @@ function collectMislabeledVisibleMonths(
 }
 
 function collectVisiblePercentageMatches(output: EvaluationOutput) {
-  return [output.text, ...collectFacts(output.cards)]
+  return collectVisibleClaimTexts(output)
     .map((text) => text.normalize("NFKC"))
     .flatMap((text) =>
       Array.from(

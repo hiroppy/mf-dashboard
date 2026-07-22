@@ -293,6 +293,53 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects an unallowlisted kanji monetary claim", () => {
+    const kanjiAmountOutput = JSON.stringify({
+      text: "総資産は五百万円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(kanjiAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("associates a card title label with its description amount", () => {
+    const splitClaimOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          description: "5,683,100円です。",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(splitClaimOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("treats a マイナス-prefixed amount as negative", () => {
     const negativeAmountOutput = JSON.stringify({
       text: "総資産はマイナス5,683,100円です。",
@@ -1584,7 +1631,11 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(unpaddedMonthOutput, {
-        config: { expectedInsightFacts: ["2026-07"] },
+        config: {
+          allowedVisibleMonths: ["2026-07"],
+          expectedInsightFacts: ["2026-07"],
+          visibleMonthClaims: [{ month: "2026-07" }],
+        },
       }),
     ).toMatchObject({ pass: true });
   });
@@ -1873,6 +1924,26 @@ describe("assertFinanceResponse", () => {
           allowedVisibleDates: ["2026-07-31"],
           allowedVisibleMonths: ["2026-07"],
         },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a snapshot labeled as yesterday", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "昨日の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: { allowedVisibleDates: ["2026-07-31"] },
       }),
     ).toMatchObject({ pass: false });
   });
