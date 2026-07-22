@@ -201,7 +201,7 @@ function findMarkdownInlineLinks(text: string): MarkdownInlineLink[] {
   for (let index = 0; index < text.length; index += 1) {
     const image = text[index] === "!" && text[index + 1] === "[";
     const labelStart = image ? index + 1 : index;
-    if (text[labelStart] !== "[" || (labelStart > 0 && text[labelStart - 1] === "\\")) continue;
+    if (text[labelStart] !== "[" || isEscaped(text, labelStart)) continue;
     let labelDepth = 1;
     let labelEnd = labelStart + 1;
     for (; labelEnd < text.length && labelDepth > 0; labelEnd += 1) {

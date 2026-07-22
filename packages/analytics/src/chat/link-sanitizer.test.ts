@@ -50,6 +50,14 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toContain("https://evil.example");
   });
 
+  it.each([
+    ["\\[外部](https://example.com)", "\\[外部]()"],
+    ["\\\\[外部](https://example.com)", "\\\\外部"],
+  ])("uses backslash parity before a Markdown link: %s", (text, expected) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(expected);
+    expect(collectFinanceChatLinks(text)).toContain("https://example.com");
+  });
+
   it.each(["https://例.exampleです。", "<https://例.example/path>。"])(
     "removes a Unicode-host bare or autolink URL: %s",
     (text) => {
