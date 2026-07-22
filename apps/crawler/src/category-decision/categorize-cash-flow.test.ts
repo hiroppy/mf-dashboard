@@ -114,6 +114,27 @@ describe("categorizeCashFlowMonth", () => {
     ).toBe("latest-new");
   });
 
+  test("未分類表示の振替はカテゴリ決定の対象にしない", async () => {
+    const transfer = item("transfer-new");
+    transfer.type = "transfer";
+    transfer.isTransfer = true;
+    transfer.isExcludedFromCalculation = true;
+    const initialCashFlow = cashFlow("2025-04", [transfer]);
+    vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set());
+
+    const result = await categorizeCashFlowMonth({
+      page: {} as Page,
+      db: {} as Parameters<typeof categorizeCashFlowMonth>[0]["db"],
+      cashFlow: initialCashFlow,
+      config,
+      usage: { llmCallsUsed: 0 },
+    });
+
+    expect(result).toBe(initialCashFlow);
+    expect(scrapeCashFlowMonth).not.toHaveBeenCalled();
+    expect(applyCategoryDecisions).not.toHaveBeenCalled();
+  });
+
   test("カテゴリ反映後の再スクレイプ失敗時は反映カテゴリをローカル適用して返す", async () => {
     const initialCashFlow = cashFlow("2026-06", [item("initial-new")]);
     const latestCashFlow = cashFlow("2026-06", [item("latest-new")]);

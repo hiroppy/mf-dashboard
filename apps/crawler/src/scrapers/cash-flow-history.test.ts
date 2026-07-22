@@ -1,6 +1,16 @@
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { buildMonthRange, scrapeCashFlowMonth } from "./cash-flow-history.js";
+import { buildMonthRange, parseDetailRow, scrapeCashFlowMonth } from "./cash-flow-history.js";
+
+let browser: Browser;
+
+beforeAll(async () => {
+  browser = await chromium.launch();
+});
+
+afterAll(async () => {
+  await browser.close();
+});
 
 describe("buildMonthRange", () => {
   test.each([
@@ -15,19 +25,8 @@ describe("buildMonthRange", () => {
 });
 
 describe("scrapeCashFlowMonth", () => {
-  let browser: Browser;
-  let page: Page;
-
-  beforeAll(async () => {
-    browser = await chromium.launch();
-  });
-
-  afterAll(async () => {
-    await browser.close();
-  });
-
   test("指定月範囲のURLへ遷移して収支テーブル表示後に抽出する", async () => {
-    page = await browser.newPage();
+    const page = await browser.newPage();
     try {
       let requestedUrl: string | null = null;
       await page.route("https://moneyforward.com/cf?**", async (route) => {
@@ -70,6 +69,48 @@ describe("scrapeCashFlowMonth", () => {
         totalExpense: 0,
         balance: 0,
         items: [],
+      });
+    } finally {
+      await page.close();
+    }
+  });
+});
+
+describe("parseDetailRow", () => {
+  test("振替口座がある行はカテゴリ表示があっても振替として扱う", async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent(`
+        <table>
+          <tbody>
+            <tr id="js-transaction-transfer-1" class="mf-grayout">
+              <td></td>
+              <td>4/15</td>
+              <td>Internal transfer</td>
+              <td>-1,200</td>
+              <td>
+                <div>Account A</div>
+                <div class="transfer_account_box">Account B</div>
+              </td>
+              <td>未分類</td>
+              <td>未分類</td>
+              <td></td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      `);
+
+      const result = await parseDetailRow(page.locator("tr"), 0, 2025);
+
+      expect(result).toMatchObject({
+        mfId: "transfer-1",
+        type: "transfer",
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+        accountName: "Account B",
+        transferTarget: "Account A",
       });
     } finally {
       await page.close();

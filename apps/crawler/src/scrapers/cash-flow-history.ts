@@ -112,8 +112,9 @@ async function detectMonth(page: Page): Promise<{ year: number; month: number }>
 async function detectTransactionType(
   amountCell: ReturnType<Page["locator"]>,
   categoryText: string,
+  hasTransferBox: boolean,
 ): Promise<"income" | "expense" | "transfer"> {
-  if (categoryText === "") return "transfer";
+  if (hasTransferBox || categoryText === "") return "transfer";
 
   // 並列取得
   const [amountClass, amountStyle, amountHtml] = await Promise.all([
@@ -169,7 +170,11 @@ export async function parseDetailRow(
 
   const isExcludedFromCalculation = (rowClass ?? "").includes("mf-grayout");
 
-  const type = await detectTransactionType(cells.nth(DETAIL_COLUMNS.AMOUNT), categoryText);
+  const type = await detectTransactionType(
+    cells.nth(DETAIL_COLUMNS.AMOUNT),
+    categoryText,
+    hasTransferBox,
+  );
   const isTransfer = type === "transfer";
 
   let accountName: string | undefined;
