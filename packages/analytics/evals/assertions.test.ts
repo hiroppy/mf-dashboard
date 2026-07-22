@@ -433,6 +433,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a lexical zero monetary claim", () => {
+    const zeroAmountOutput = JSON.stringify({
+      text: "総資産はゼロ円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(zeroAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -2555,6 +2578,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects denial of a required spending-improvement candidate", () => {
+    const denialOutput = JSON.stringify({
+      text: "削れそうな支出はありません。",
+      cards: [
+        {
+          type: "insight",
+          title: "衣服・美容の支出改善",
+          description: "衣服・美容は前月より高いため見直せそうです。",
+          action: { label: "衣服・美容の内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(削れそうな支出|改善候補|見直し候補).{0,10}(ありません|ない|なし)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("allows an explicitly negated deficit claim", () => {
     const surplusOutput = JSON.stringify({
       text: "赤字ではなく、93,341円の黒字です。",
@@ -3010,6 +3057,29 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(pointOutput, {
         config: {
           allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("validates a word-based fractional percentage claim", () => {
+    const fractionOutput = JSON.stringify({
+      text: "貯蓄率は半分です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fractionOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8, 30],
           visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
         },
       }),

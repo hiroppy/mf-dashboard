@@ -359,6 +359,12 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
         text,
       }),
     ),
+    ...Array.from(text.matchAll(/ゼロ\s*円/g), (match) => ({
+      amount: 0,
+      endIndex: match.index + match[0].length,
+      index: match.index,
+      text,
+    })),
   ]);
 }
 
@@ -831,8 +837,8 @@ function collectMislabeledVisibleMonths(
 function collectVisiblePercentageMatches(output: EvaluationOutput) {
   return collectVisibleClaimTexts(output)
     .map((text) => text.normalize("NFKC"))
-    .flatMap((text) =>
-      Array.from(
+    .flatMap((text) => [
+      ...Array.from(
         text.matchAll(
           /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?|([〇零一二三四五六七八九十百]+)\s*パーセント|([〇零一二三四五六七八九十]+)\s*割(?:\s*([〇零一二三四五六七八九十]+)\s*分)?(?:\s*([〇零一二三四五六七八九十]+)\s*厘)?|([\d,.]+)\s*ポイント)/g,
         ),
@@ -865,7 +871,26 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
             .slice(Math.max(0, match.index - 16), match.endIndex + 8)
             .match(/(?:率|前月比|前年比|比較|増減|差|上昇|低下|増加|減少)/u) !== null,
       ),
-    );
+      ...Array.from(
+        text.matchAll(
+          /(?:半分|([\d]+|[〇零一二三四五六七八九十]+)分の([\d]+|[〇零一二三四五六七八九十]+))/g,
+        ),
+        (match) => ({
+          amount:
+            match[1] === undefined
+              ? 50
+              : (parseJapaneseInteger(match[2]) / parseJapaneseInteger(match[1])) * 100,
+          endIndex: match.index + match[0].length,
+          index: match.index,
+          text,
+        }),
+      ).filter(
+        (match) =>
+          match.text
+            .slice(Math.max(0, match.index - 16), match.endIndex + 8)
+            .match(/(?:率|割合|比率|パーセント)/u) !== null,
+      ),
+    ]);
 }
 
 function collectMislabeledVisiblePercentages(
