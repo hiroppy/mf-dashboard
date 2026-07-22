@@ -131,6 +131,32 @@ describe("toEvaluationOutput", () => {
 
     expect(toEvaluationOutput(response, "test-group").text).toBe("詳細");
   });
+
+  it("does not prove a card route returned after card presentation", () => {
+    const response: ChatResponse = {
+      text: "回答",
+      steps: [
+        {
+          toolResults: [
+            {
+              toolName: "presentFinanceCards",
+              output: [{ type: "summary", href: "/test-group/cf/2026-07" }],
+            },
+          ],
+        },
+        {
+          toolResults: [
+            {
+              toolName: "getFinanceDashboardRoute",
+              output: { href: "/test-group/cf/2026-07" },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").allowedHrefs).toEqual([]);
+  });
 });
 
 describe("FinanceChatProvider", () => {

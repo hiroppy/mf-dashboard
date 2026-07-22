@@ -56,6 +56,7 @@ interface AssertionContext {
     allowedVisibleMonths?: string[];
     allowedVisiblePercentages?: number[];
     expectedCardFacts?: string[];
+    expectedCardHeadingFacts?: CardTextFactExpectation[];
     expectedCardTextFacts?: CardTextFactExpectation[];
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
@@ -67,6 +68,7 @@ interface AssertionContext {
     expectedTransactions?: TransactionExpectation[];
     forbiddenVisiblePatterns?: string[];
     requiredInsightPatterns?: string[];
+    requireInsightMetric?: boolean;
     visibleAmountClaims?: VisibleAmountClaim[];
     visibleMonthClaims?: VisibleMonthClaim[];
     visiblePercentageClaims?: VisibleAmountClaim[];
@@ -228,7 +230,7 @@ function collectBareVisibleAmountMatches(
       return Array.from(
         text.matchAll(
           new RegExp(
-            `${escapedLabel}.{0,8}?([+\\-−▲▼]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日))`,
+            `${escapedLabel}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日))`,
             "g",
           ),
         ),
@@ -236,7 +238,7 @@ function collectBareVisibleAmountMatches(
           amount: Number(
             String(match[1])
               .replaceAll(",", "")
-              .replace(/[▲▼−]/, "-"),
+              .replace(/[▲△▼▽−]/, "-"),
           ),
           endIndex: match.index + match[0].length,
           index: match.index + match[0].lastIndexOf(String(match[1])),
@@ -254,12 +256,12 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
   return visibleTexts.flatMap((text) =>
     Array.from(
       text.matchAll(
-        /(?:([+＋\-−▲▼]?)\s*[¥￥]\s*([+＋\-−▲▼]?)\s*([\d,.]+)|([+＋\-−▲▼]?)\s*((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g,
+        /(?:([+＋\-−▲△▼▽]?)\s*[¥￥]\s*([+＋\-−▲△▼▽]?)\s*([\d,.]+)|([+＋\-−▲△▼▽]?)\s*((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g,
       ),
       (match) => ({
         amount:
           parseVisibleAmount(match[3], match[5]) *
-          (/[-−▲▼]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
+          (/[-−▲△▼▽]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,
@@ -340,14 +342,14 @@ function collectClaimContext(text: string, startIndex: number, endIndex: number)
     followingBoundaries.length === 0 ? text.length : endIndex + Math.min(...followingBoundaries);
   const clausePrefix = text.slice(clauseStart + 1, startIndex);
   const precedingClaims = Array.from(
-    clausePrefix.matchAll(/[+\-−▲▼]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/g),
+    clausePrefix.matchAll(/[+\-−▲△▼▽]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/g),
   );
   const precedingClaim = precedingClaims.at(-1);
   if (precedingClaim?.index !== undefined) {
     return text.slice(clauseStart + 1 + precedingClaim.index + precedingClaim[0].length, endIndex);
   }
   const followingClause = text.slice(endIndex, clauseEnd);
-  const nextClaim = /[+\-−▲▼]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/.exec(
+  const nextClaim = /[+\-−▲△▼▽]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/.exec(
     followingClause,
   );
   if (nextClaim?.index !== undefined) {
@@ -468,8 +470,8 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
   return [output.text, ...collectFacts(output.cards)]
     .map((text) => text.normalize("NFKC"))
     .flatMap((text) =>
-      Array.from(text.matchAll(/([+＋\-−▲▼]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
-        amount: Number(match[2]?.replaceAll(",", "")) * (/[-−▲▼]/.test(match[1] ?? "") ? -1 : 1),
+      Array.from(text.matchAll(/([+＋\-−▲△▼▽]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
+        amount: Number(match[2]?.replaceAll(",", "")) * (/[-−▲△▼▽]/.test(match[1] ?? "") ? -1 : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,
@@ -581,6 +583,17 @@ export default function assertFinanceResponse(output: string, context: Assertion
           card.type === cardType && new RegExp(pattern, "u").test(collectFacts(card).join("\n")),
       ),
   );
+  const missingCardHeadingFacts = (config.expectedCardHeadingFacts ?? []).filter(
+    ({ cardType, pattern }) =>
+      !parsed.cards.some((card) => {
+        if (card.type !== cardType) return false;
+        const headingText = [
+          card.title,
+          "description" in card && typeof card.description === "string" ? card.description : "",
+        ].join("\n");
+        return new RegExp(pattern, "u").test(headingText);
+      }),
+  );
   const summaryMetrics = parsed.cards.flatMap((card) =>
     card.type === "summary" ? card.metrics : [],
   );
@@ -623,7 +636,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const expectedTransactionGroup = config.expectedTransactionGroup;
   const transactionGroupMismatch =
     expectedTransactionGroup !== undefined &&
-    (transactionRows.length === 0 ||
+    (transactionRows.length !== expectedTransactionGroup.allowedTransactions.length ||
       transactionRows.some(
         (transaction) =>
           !transaction.date.startsWith(`${expectedTransactionGroup.month}-`) ||
@@ -647,15 +660,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const allowedInsightMetrics = config.allowedInsightMetrics;
   const insightMetricsMismatch =
     allowedInsightMetrics !== undefined &&
-    insightMetrics.some(
-      (actual) =>
-        !allowedInsightMetrics.some(
-          (allowed) =>
-            actual.amount === allowed.amount &&
-            actual.amountType === allowed.amountType &&
-            new RegExp(allowed.labelPattern, "u").test(actual.label),
-        ),
-    );
+    ((config.requireInsightMetric === true && insightMetrics.length === 0) ||
+      insightMetrics.some(
+        (actual) =>
+          !allowedInsightMetrics.some(
+            (allowed) =>
+              actual.amount === allowed.amount &&
+              actual.amountType === allowed.amountType &&
+              new RegExp(allowed.labelPattern, "u").test(actual.label),
+          ),
+      ));
   const expectedInsightActionPattern = config.expectedInsightActionPattern;
   const insightActionMismatch =
     expectedInsightActionPattern !== undefined &&
@@ -706,6 +720,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
+      : undefined,
+    missingCardHeadingFacts.length > 0
+      ? `不足 card heading facts: ${missingCardHeadingFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
       : undefined,
     summaryMetricsMismatch
       ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`

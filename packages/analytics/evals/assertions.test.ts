@@ -181,25 +181,28 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("未許可の可視金額: -93341");
   });
 
-  it("treats a triangle-prefixed monetary claim as negative", () => {
-    const triangleAmountOutput = JSON.stringify({
-      text: "収支は▲93,341円です。",
-      cards: [
-        {
-          type: "summary",
-          title: "月次収支",
-          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
-          href: "/0/cf/2026-07",
-        },
-      ],
-    });
+  it.each(["▲", "△", "▼", "▽"])(
+    "treats a triangle-prefixed monetary claim as negative: %s",
+    (marker) => {
+      const triangleAmountOutput = JSON.stringify({
+        text: `収支は${marker}93,341円です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
 
-    expect(
-      assertFinanceResponse(triangleAmountOutput, {
-        config: { allowedVisibleAmounts: [93341] },
-      }),
-    ).toMatchObject({ pass: false, reason: "未許可の可視金額: -93341" });
-  });
+      expect(
+        assertFinanceResponse(triangleAmountOutput, {
+          config: { allowedVisibleAmounts: [93341] },
+        }),
+      ).toMatchObject({ pass: false, reason: "未許可の可視金額: -93341" });
+    },
+  );
 
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
@@ -676,7 +679,7 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "transactions 不一致" });
   });
 
-  it("accepts a truncated transaction group when every visible row matches", () => {
+  it("rejects a truncated transaction group", () => {
     const transactionOutput = JSON.stringify({
       text: "回答",
       cards: [
@@ -714,11 +717,19 @@ describe("assertFinanceResponse", () => {
                 amount: 3435,
                 amountType: "expense",
               },
+              {
+                ids: ["tx-b"],
+                date: "2026-07-11",
+                description: "店舗 B",
+                category: "食費",
+                amount: 2000,
+                amountType: "expense",
+              },
             ],
           },
         },
       }),
-    ).toMatchObject({ pass: true });
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects a fabricated row in a transaction group", () => {
@@ -1090,6 +1101,28 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("does not satisfy a heading fact with a metric label", () => {
+    const misleadingHeadingOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "総負債",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(misleadingHeadingOutput, {
+        config: {
+          expectedCardHeadingFacts: [{ cardType: "summary", pattern: "総資産" }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects a displayed month that contradicts the monthly fixture", () => {
     const wrongMonthOutput = JSON.stringify({
       text: "回答",
@@ -1386,6 +1419,31 @@ describe("assertFinanceResponse", () => {
     });
 
     expect(assertFinanceResponse(insightOutput)).toMatchObject({ pass: true });
+  });
+
+  it("requires a grounded insight metric when configured", () => {
+    const qualitativeInsightOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026-07は衣服・美容が前月より高いため見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(qualitativeInsightOutput, {
+        config: {
+          allowedInsightMetrics: [
+            { amount: 19475, amountType: "balance", labelPattern: "衣服・美容" },
+          ],
+          requireInsightMetric: true,
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "insight metrics 不一致" });
   });
 
   it("rejects an insight metric with a disallowed semantic amount type", () => {

@@ -71,20 +71,10 @@ export function isDemoDatabasePath(databasePath: string) {
 }
 
 export function toEvaluationOutput(response: ChatResponse, groupId: string) {
-  const presentations = response.steps.flatMap(({ toolResults }) =>
-    toolResults
-      .filter(({ toolName }) => toolName === "presentFinanceCards")
-      .map(({ output }) => output),
-  );
-
-  if (presentations.length !== 1 || !Array.isArray(presentations[0])) {
-    throw new Error(
-      `presentFinanceCards の成功結果は1件必要です（実際: ${presentations.length}件）。`,
-    );
-  }
-
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
   const allowedHrefs = new Set<string>();
+  let allowedHrefsAtPresentation: string[] = [];
+  const presentations: unknown[] = [];
   const visibleText: string[] = [];
   let hasStepText = false;
 
@@ -105,11 +95,21 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
           allowedHrefs.add(route.data);
         }
       }
+      if (toolName === "presentFinanceCards") {
+        presentations.push(output);
+        allowedHrefsAtPresentation = [...allowedHrefs];
+      }
     }
   }
 
+  if (presentations.length !== 1 || !Array.isArray(presentations[0])) {
+    throw new Error(
+      `presentFinanceCards の成功結果は1件必要です（実際: ${presentations.length}件）。`,
+    );
+  }
+
   return {
-    allowedHrefs: [...allowedHrefs],
+    allowedHrefs: allowedHrefsAtPresentation,
     text: hasStepText
       ? visibleText.join("")
       : sanitizeFinanceChatLinks(response.text, allowedHrefs),

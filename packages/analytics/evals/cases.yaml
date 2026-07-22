@@ -369,6 +369,8 @@
           - { label: 総資産, amount: 5683100 }
         expectedMetrics:
           - { label: 総資産, amount: 5683100, amountType: balance }
+        expectedCardHeadingFacts:
+          - { cardType: summary, pattern: 総資産 }
         expectedCardTypes: [summary]
         expectedRoute: /0/bs
 
@@ -412,6 +414,7 @@
         allowedInsightMetrics:
           - { amount: 19475, amountType: balance, labelPattern: (衣服・美容|衣服) }
           - { amount: 7364, amountType: balance, labelPattern: (衣服・美容|衣服) }
+        requireInsightMetric: true
         expectedInsightFacts: [2026-07]
         requiredInsightPatterns:
           - 衣服・美容
