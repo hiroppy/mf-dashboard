@@ -21,13 +21,18 @@ function splitBareUrl(url: string) {
   const match = /^(.*?)([.,!?;:。、，！？；：]+)$/u.exec(url);
   let destination = match?.[1] ?? url;
   let trailingText = match?.[2] ?? "";
+  const adjacentJapaneseTextAfterIdn = new RegExp(
+    `^((?:https?:\\/\\/|\\/\\/)(?:[^\\s./]+\\.)+[A-Za-z0-9-]+(?:[/?#][A-Za-z0-9\\-._~:/?#[\\]@!$&'*+,;=%]*)?)([\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Han}]+)$`,
+    "iu",
+  ).exec(destination);
   const adjacentJapaneseText = new RegExp(
     `^((?:https?:\\/\\/|\\/\\/)[A-Za-z0-9\\-._~:/?#[\\]@!$&'*+,;=%]+)([\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Han}]+)$`,
     "iu",
   ).exec(destination);
-  if (adjacentJapaneseText) {
-    destination = adjacentJapaneseText[1];
-    trailingText = `${adjacentJapaneseText[2]}${trailingText}`;
+  const adjacentText = adjacentJapaneseTextAfterIdn ?? adjacentJapaneseText;
+  if (adjacentText) {
+    destination = adjacentText[1];
+    trailingText = `${adjacentText[2]}${trailingText}`;
   }
   return { destination, trailingText };
 }
@@ -40,13 +45,21 @@ function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
+  const withoutHtmlLinks = text.replace(
+    /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)<\/a>/gisu,
+    (_match, doubleQuoted: string, singleQuoted: string, unquoted: string, label: string) => {
+      const destination = doubleQuoted ?? singleQuoted ?? unquoted;
+      const href = resolveAllowedHref(destination, allowedHrefs);
+      return href ? `[${label}](${href})` : label;
+    },
+  );
   const referenceDefinitions = new Map(
     Array.from(
-      text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
+      withoutHtmlLinks.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
       ([, id, destination]) => [id.toLowerCase(), destination] as const,
     ),
   );
-  const withoutInvalidMarkdownLinks = text.replace(
+  const withoutInvalidMarkdownLinks = withoutHtmlLinks.replace(
     /(?<!!)\[([^\]]+)]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g,
     (_match, label: string, destination: string) => {
       const href = resolveAllowedHref(destination, allowedHrefs);
@@ -79,6 +92,10 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 
 export function collectFinanceChatLinks(text: string): string[] {
   return [
+    ...Array.from(
+      text.matchAll(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>.*?<\/a>/gisu),
+      ([, doubleQuoted, singleQuoted, unquoted]) => doubleQuoted ?? singleQuoted ?? unquoted,
+    ),
     ...Array.from(
       text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
       ([, href]) => href,

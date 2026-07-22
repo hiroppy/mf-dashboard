@@ -19,7 +19,9 @@ describe("sanitizeFinanceChatLinks", () => {
   it.each(["https://例.exampleです。", "<https://例.example/path>。"])(
     "removes a Unicode-host bare or autolink URL: %s",
     (text) => {
-      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("。");
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(
+        text.startsWith("<") ? "。" : "です。",
+      );
     },
   );
 
@@ -44,6 +46,12 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("[詳細](/0/cf/2026-07)\nこのページで確認できます。");
   });
 
+  it("removes raw HTML link markup with an unauthorized destination", () => {
+    expect(
+      sanitizeFinanceChatLinks('<a href="mailto:evil@example.com">メール</a>', allowedHrefs),
+    ).toBe("メール");
+  });
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {
@@ -60,7 +68,7 @@ describe("sanitizeFinanceChatLinks", () => {
 
 describe("collectFinanceChatLinks", () => {
   it.each([
-    ["https://例.exampleです。", "https://例.exampleです"],
+    ["https://例.exampleです。", "https://例.example"],
     ["<https://例.example/path>。", "https://例.example/path"],
   ])("collects a Unicode-host bare or autolink URL: %s", (text, expected) => {
     expect(collectFinanceChatLinks(text)).toContain(expected);
@@ -68,6 +76,12 @@ describe("collectFinanceChatLinks", () => {
 
   it("collects a non-route reference definition", () => {
     expect(collectFinanceChatLinks("[メール][ref]\n\n[ref]: mailto:evil@example.com")).toContain(
+      "mailto:evil@example.com",
+    );
+  });
+
+  it("collects a raw HTML link destination", () => {
+    expect(collectFinanceChatLinks('<a href="mailto:evil@example.com">メール</a>')).toContain(
       "mailto:evil@example.com",
     );
   });

@@ -170,8 +170,25 @@ describe("toEvaluationOutput", () => {
     };
 
     expect(toEvaluationOutput(response, "test-group")).toMatchObject({
-      text: "。",
-      unauthorizedLinks: ["https://例.exampleです"],
+      text: "です。",
+      unauthorizedLinks: ["https://例.example"],
+    });
+  });
+
+  it("records and removes a raw HTML link before evaluation", () => {
+    const response: ChatResponse = {
+      text: '<a href="mailto:evil@example.com">メール</a>',
+      steps: [
+        {
+          text: '<a href="mailto:evil@example.com">メール</a>',
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "メール",
+      unauthorizedLinks: ["mailto:evil@example.com"],
     });
   });
 
