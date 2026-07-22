@@ -368,6 +368,10 @@ function isApproximateAmountClaim(text: string, index: number, endIndex: number)
   );
 }
 
+function hasNegativeWordPrefix(value: string): boolean {
+  return /(?:マイナス(?:\s*の)?|負\s*の)\s*$/u.test(value);
+}
+
 function collectVisibleClaimTexts(output: EvaluationOutput): string[] {
   return [
     output.text,
@@ -409,7 +413,7 @@ function collectBareVisibleAmountMatches(
                   .replaceAll(",", "")
                   .replace(/[▲△▼▽−]/, "-"),
               ) *
-              (/マイナス\s*$/.test(match[0].slice(0, match[0].lastIndexOf(String(match[1]))))
+              (hasNegativeWordPrefix(match[0].slice(0, match[0].lastIndexOf(String(match[1]))))
                 ? -1
                 : 1),
             endIndex: match.index + match[0].length,
@@ -428,7 +432,7 @@ function collectBareVisibleAmountMatches(
             amount:
               parseVisibleAmount(undefined, match[2]) *
               (/[-−▲△▼▽]/u.test(match[1] ?? "") ||
-              /マイナス\s*$/u.test(text.slice(Math.max(0, match.index - 8), match.index))
+              hasNegativeWordPrefix(text.slice(Math.max(0, match.index - 8), match.index))
                 ? -1
                 : 1),
             endIndex: match.index + match[0].length,
@@ -446,7 +450,7 @@ function collectBareVisibleAmountMatches(
           (match) => ({
             amount:
               parseKanjiAmount(match[1]) *
-              (/マイナス\s*$/u.test(match[0].slice(0, match[0].lastIndexOf(match[1]))) ? -1 : 1),
+              (hasNegativeWordPrefix(match[0].slice(0, match[0].lastIndexOf(match[1]))) ? -1 : 1),
             endIndex: match.index + match[0].length,
             index: match.index + match[0].lastIndexOf(match[1]),
             text,
@@ -505,7 +509,7 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
           parseVisibleAmount(match[3], match[5]) *
           (/[-−▲△▼▽]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ||
           isAccountingParenthesizedAmount(text, match.index, match.index + match[0].length) ||
-          /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
+          hasNegativeWordPrefix(text.slice(Math.max(0, match.index - 8), match.index))
             ? -1
             : 1),
         endIndex: match.index + match[0].length,
@@ -518,7 +522,7 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
       (match) => ({
         amount:
           parseKanjiAmount(match[0].replace(/\s*円$/, "")) *
-          (/マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index)) ? -1 : 1),
+          (hasNegativeWordPrefix(text.slice(Math.max(0, match.index - 8), match.index)) ? -1 : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,
@@ -877,11 +881,11 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=分|の|は|が|時点|現在)/g),
+        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
-        text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)日(?:前|後)(?=分|の|は|が|時点|現在)/g),
+        text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)日(?:前|後)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
@@ -1200,7 +1204,7 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
                       parseKanjiAmount(match[9] ?? "") / 10
                     : Number(match[10]?.replaceAll(",", ""))) *
             (/[-−▲△▼▽]/.test(match[1] ?? "") ||
-            /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
+            hasNegativeWordPrefix(text.slice(Math.max(0, match.index - 8), match.index))
               ? -1
               : 1),
           endIndex: match.index + match[0].length,

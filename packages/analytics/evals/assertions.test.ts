@@ -1243,6 +1243,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "未許可の可視金額: -5683100" });
   });
 
+  it.each(["マイナスの", "負の"])("treats a particle-qualified %s amount as negative", (prefix) => {
+    const negativeOutput = JSON.stringify({
+      text: `総資産は${prefix}5,683,100円です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negativeOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("-5683100") });
+  });
+
   it("treats a unitless マイナス-prefixed amount as negative", () => {
     const negativeAmountOutput = JSON.stringify({
       text: "総資産はマイナス5683100です。",
@@ -3756,6 +3779,30 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: "未許可の回答本文日付: relative-昨日" });
+  });
+
+  it("rejects a relative day followed by an additional particle", () => {
+    const relativeDateOutput = JSON.stringify({
+      text: "昨日も総資産は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeDateOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-昨日") });
   });
 
   it("rejects a negated expected date", () => {
