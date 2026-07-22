@@ -1176,6 +1176,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("1200") });
   });
 
+  it("rejects a multiplicative qualifier after an allowlisted amount", () => {
+    const multipliedOutput = JSON.stringify({
+      text: "総資産は5,683,100円の2倍です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(multipliedOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("否定") });
+  });
+
   it("allows a suffix-qualified approximate rounded monetary claim", () => {
     const approximateOutput = JSON.stringify({
       text: "総資産は568万円ほどです。",
@@ -4097,6 +4120,55 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(createSnapshotOutput("末"), context)).toMatchObject({
       pass: true,
     });
+  });
+
+  it("maps a yearless month boundary to a concrete wildcard date", () => {
+    const boundaryOutput = JSON.stringify({
+      text: "7月初時点の総資産は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(boundaryOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("*-07-01") });
+  });
+
+  it("rejects a standalone relative-year claim", () => {
+    const relativeYearOutput = JSON.stringify({
+      text: "去年の総資産は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeYearOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-去年") });
   });
 
   it("requires action facts in the visible action label", () => {

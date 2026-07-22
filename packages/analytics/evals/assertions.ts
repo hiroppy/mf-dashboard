@@ -727,7 +727,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
-  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|以下|以上|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
+  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|以下|以上|(?:の\s*)?\d+(?:\.\d+)?\s*倍|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
     text.slice(endIndex, clauseEnd),
   );
 }
@@ -915,6 +915,15 @@ function collectDates(rawTexts: string[]): string[] {
         },
       ),
       ...Array.from(
+        text.matchAll(/(?<!\d)(\d{1,2})月(初|末)(?=の|は|が|時点|現在)/g),
+        ([, month, boundary]) => {
+          const numericMonth = Number(month);
+          const day =
+            boundary === "初" ? 1 : new Date(Date.UTC(2001, numericMonth, 0)).getUTCDate();
+          return `*-${String(numericMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        },
+      ),
+      ...Array.from(
         text.matchAll(
           /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月(\d{1,2}|[〇零一二三四五六七八九十]+)日/g,
         ),
@@ -1059,6 +1068,10 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     return [
+      ...Array.from(
+        text.matchAll(/(?:昨年|去年|前年|来年|翌年)/g),
+        ([relativeYear]) => `relative-${relativeYear}`,
+      ),
       ...Array.from(
         text.matchAll(/(?:先々月|昨々月|先月|前月|来月|翌月)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
