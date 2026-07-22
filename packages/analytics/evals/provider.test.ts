@@ -175,6 +175,23 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it("records and removes a non-route reference-style link before evaluation", () => {
+    const response: ChatResponse = {
+      text: "[メール][ref]\n\n[ref]: mailto:evil@example.com",
+      steps: [
+        {
+          text: "[メール][ref]\n\n[ref]: mailto:evil@example.com",
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "メール\n\n",
+      unauthorizedLinks: ["mailto:evil@example.com"],
+    });
+  });
+
   it("records a bare unauthorized URL before sanitizing visible text", () => {
     const response: ChatResponse = {
       text: "https://evil.example",

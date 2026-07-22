@@ -40,6 +40,12 @@ function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
+  const referenceDefinitions = new Map(
+    Array.from(
+      text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:\s+.*)?$/gimu),
+      ([, id, destination]) => [id.toLowerCase(), destination] as const,
+    ),
+  );
   const withoutInvalidMarkdownLinks = text.replace(
     /(?<!!)\[([^\]]+)]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g,
     (_match, label: string, destination: string) => {
@@ -47,14 +53,28 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
       return href ? `[${label}](${href})` : label;
     },
   );
+  const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(
+    /(?<!!)\[([^\]]+)\]\[([^\]]+)\]/gu,
+    (match, label: string, id: string) => {
+      const destination = referenceDefinitions.get(id.toLowerCase());
+      if (destination === undefined) return match;
+      const href = resolveAllowedHref(destination, allowedHrefs);
+      return href ? `[${label}](${href})` : label;
+    },
+  );
+  const withoutReferenceDefinitions = withoutReferenceLinks.replace(
+    /^[ \t]*\[[^\]]+\]\s*:\s*[^\s]+(?:\s+.*)?(?:\r?\n|$)/gimu,
+    "",
+  );
 
-  const withoutInvalidAutolinks = withoutInvalidMarkdownLinks.replace(
-    /<((?:https?:\/\/|\/\/)[^>\s]+)>/giu,
+  const withoutInvalidAutolinks = withoutReferenceDefinitions.replace(
+    /<((?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+)>/giu,
     (_match, url: string) => sanitizeBareUrl(url, allowedHrefs),
   );
 
-  return withoutInvalidAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
-    sanitizeBareUrl(url, allowedHrefs),
+  return withoutInvalidAutolinks.replace(
+    /(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:\/\/|[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^\s<>()[\]{}"']+/giu,
+    (url) => sanitizeBareUrl(url, allowedHrefs),
   );
 }
 
@@ -65,7 +85,13 @@ export function collectFinanceChatLinks(text: string): string[] {
       ([, href]) => href,
     ),
     ...Array.from(
-      text.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
+      text.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:\s+.*)?$/gimu),
+      ([, href]) => href,
+    ),
+    ...Array.from(
+      text.matchAll(
+        /(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:\/\/|[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^\s<>()[\]{}"']+/giu,
+      ),
       ([href]) => splitBareUrl(href).destination,
     ),
   ];

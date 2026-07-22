@@ -22,6 +22,19 @@ describe("sanitizeFinanceChatLinks", () => {
       expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("。");
     },
   );
+
+  it("removes a reference-style link with a non-route URI", () => {
+    expect(
+      sanitizeFinanceChatLinks("[メール][ref]\n\n[ref]: mailto:evil@example.com", allowedHrefs),
+    ).toBe("メール\n\n");
+  });
+
+  it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
+    "removes a non-HTTP URI autolink: %s",
+    (text) => {
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("");
+    },
+  );
 });
 
 describe("collectFinanceChatLinks", () => {
@@ -30,5 +43,11 @@ describe("collectFinanceChatLinks", () => {
     ["<https://例.example/path>。", "https://例.example/path"],
   ])("collects a Unicode-host bare or autolink URL: %s", (text, expected) => {
     expect(collectFinanceChatLinks(text)).toContain(expected);
+  });
+
+  it("collects a non-route reference definition", () => {
+    expect(collectFinanceChatLinks("[メール][ref]\n\n[ref]: mailto:evil@example.com")).toContain(
+      "mailto:evil@example.com",
+    );
   });
 });
