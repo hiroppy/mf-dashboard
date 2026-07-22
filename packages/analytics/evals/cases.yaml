@@ -10,12 +10,17 @@
       value: file://./assertions.ts
       config:
         allowedVisibleAmounts: [313235, 219894, 93341]
+        allowedVisibleMonths: ["2026-07"]
         visibleAmountClaims:
           - { label: 収入, amount: 313235 }
           - { label: 支出, amount: 219894 }
           - { label: 収支, amount: 93341 }
         allowedInsightMetrics:
           - { amount: 93341, amountType: balance, labelPattern: (黒字|収支|余剰|手残り) }
+        expectedCardTextFacts:
+          - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
+        forbiddenVisiblePatterns:
+          - (赤字|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -383,12 +388,8 @@
           - { label: 貯蓄率, amount: 64.48, rolePattern: (前月|先月|比較) }
           - { label: 貯蓄率, amount: 64.5, rolePattern: (前月|先月|比較) }
         allowedInsightMetrics:
-          - { amount: 41837, amountType: balance, labelPattern: (見直し|候補|支出|食費) }
           - { amount: 19475, amountType: balance, labelPattern: (見直し|候補|支出|衣服) }
-          - { amount: 11198, amountType: balance, labelPattern: (見直し|候補|支出|日用品) }
-          - { amount: 8085, amountType: balance, labelPattern: (差額|変化|減少|削減) }
           - { amount: 7364, amountType: balance, labelPattern: (差額|変化|増加|削減) }
-          - { amount: 297, amountType: balance, labelPattern: (差額|変化|減少|削減) }
         expectedInsightFacts: [2026-07]
         requiredInsightPatterns:
           - 衣服・美容

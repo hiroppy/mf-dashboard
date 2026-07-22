@@ -48,6 +48,7 @@ interface AssertionContext {
     allowedInsightMetrics?: InsightMetricAllowance[];
     allowedVisibleAmounts?: number[];
     allowedVisibleDates?: string[];
+    allowedVisibleMonths?: string[];
     allowedVisiblePercentages?: number[];
     expectedCardFacts?: string[];
     expectedCardTextFacts?: CardTextFactExpectation[];
@@ -59,6 +60,7 @@ interface AssertionContext {
     expectedRoute?: string;
     expectedTransactionGroup?: TransactionGroupExpectation;
     expectedTransactions?: TransactionExpectation[];
+    forbiddenVisiblePatterns?: string[];
     requiredInsightPatterns?: string[];
     visibleAmountClaims?: VisibleAmountClaim[];
     visiblePercentageClaims?: VisibleAmountClaim[];
@@ -180,7 +182,9 @@ function collectVisibleAmounts(output: EvaluationOutput): number[] {
 }
 
 function collectVisibleAmountMatches(output: EvaluationOutput) {
-  const visibleTexts = [output.text, ...collectFacts(output.cards)];
+  const visibleTexts = [output.text, ...collectFacts(output.cards)].map((text) =>
+    text.normalize("NFKC"),
+  );
   return visibleTexts.flatMap((text) =>
     Array.from(
       text.matchAll(
@@ -190,6 +194,7 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
         amount:
           parseVisibleAmount(match[3], match[5]) *
           (/[-−]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
+        endIndex: match.index + match[0].length,
         index: match.index,
         text,
       }),
@@ -215,7 +220,7 @@ function collectMislabeledVisibleAmounts(
   output: EvaluationOutput,
   expectedClaims: VisibleAmountClaim[],
 ): string[] {
-  return collectVisibleAmountMatches(output).flatMap(({ amount, index, text }) => {
+  return collectVisibleAmountMatches(output).flatMap(({ amount, endIndex, index, text }) => {
     const nearbyClaims = expectedClaims
       .map((claim) => {
         const { label } = claim;
@@ -234,7 +239,7 @@ function collectMislabeledVisibleAmounts(
     const claimsForLabel = nearbyClaims
       .filter(({ claim }) => claim.label === nearestLabel)
       .map(({ claim }) => claim);
-    const context = text.slice(Math.max(0, index - 30), index + 30);
+    const context = collectClaimContext(text, index, endIndex);
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
@@ -252,37 +257,73 @@ function collectMislabeledVisibleAmounts(
   });
 }
 
+function collectClaimContext(text: string, startIndex: number, endIndex: number): string {
+  const precedingText = text.slice(0, startIndex);
+  const followingText = text.slice(endIndex);
+  const clauseStart = Math.max(
+    ...["、", "。", "，", "．", "\n"].map((separator) => precedingText.lastIndexOf(separator)),
+  );
+  const followingBoundaries = ["、", "。", "，", "．", "\n"]
+    .map((separator) => followingText.indexOf(separator))
+    .filter((boundary) => boundary !== -1);
+  const clauseEnd =
+    followingBoundaries.length === 0 ? text.length : endIndex + Math.min(...followingBoundaries);
+  return text.slice(clauseStart + 1, clauseEnd);
+}
+
 function collectVisibleDates(output: EvaluationOutput): string[] {
-  return [output.text, ...collectFacts(output.cards)].flatMap((text) => [
-    ...Array.from(text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), ([date]) => date),
-    ...Array.from(
-      text.matchAll(/(?<!\d)(?:(\d{4})\/)?(\d{1,2})\/(\d{1,2})(?!\d)/g),
-      ([, year, month, day]) =>
-        `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    ),
-    ...Array.from(
-      text.matchAll(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g),
-      ([, year, month, day]) =>
-        `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    ),
-  ]);
+  return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
+    const text = rawText.normalize("NFKC");
+    return [
+      ...Array.from(text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), ([date]) => date),
+      ...Array.from(
+        text.matchAll(/(?<!\d)(?:(\d{4})\/)?(\d{1,2})\/(\d{1,2})(?!\d)/g),
+        ([, year, month, day]) =>
+          `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g),
+        ([, year, month, day]) =>
+          `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+    ];
+  });
+}
+
+function collectVisibleMonths(output: EvaluationOutput): string[] {
+  return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
+    const text = rawText.normalize("NFKC");
+    return [
+      ...Array.from(
+        text.matchAll(/\b(\d{4})[-/](\d{2})\b/g),
+        ([, year, month]) => `${year}-${month}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(\d{4})年(\d{1,2})月/g),
+        ([, year, month]) => `${year}-${String(month).padStart(2, "0")}`,
+      ),
+    ];
+  });
 }
 
 function collectVisiblePercentageMatches(output: EvaluationOutput) {
-  return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
-    Array.from(text.matchAll(/([+＋\-−]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
-      amount: Number(match[2]?.replaceAll(",", "")) * (/[-−]/.test(match[1] ?? "") ? -1 : 1),
-      index: match.index,
-      text,
-    })),
-  );
+  return [output.text, ...collectFacts(output.cards)]
+    .map((text) => text.normalize("NFKC"))
+    .flatMap((text) =>
+      Array.from(text.matchAll(/([+＋\-−]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
+        amount: Number(match[2]?.replaceAll(",", "")) * (/[-−]/.test(match[1] ?? "") ? -1 : 1),
+        endIndex: match.index + match[0].length,
+        index: match.index,
+        text,
+      })),
+    );
 }
 
 function collectMislabeledVisiblePercentages(
   output: EvaluationOutput,
   expectedClaims: VisibleAmountClaim[],
 ): string[] {
-  return collectVisiblePercentageMatches(output).flatMap(({ amount, index, text }) => {
+  return collectVisiblePercentageMatches(output).flatMap(({ amount, endIndex, index, text }) => {
     const nearbyClaims = expectedClaims
       .map((claim) => {
         const beforeIndex = text.lastIndexOf(claim.label, index);
@@ -302,7 +343,7 @@ function collectMislabeledVisiblePercentages(
     const claimsForLabel = nearbyClaims
       .filter(({ claim }) => claim.label === nearestLabel)
       .map(({ claim }) => claim);
-    const context = text.slice(Math.max(0, index - 30), index + 30);
+    const context = collectClaimContext(text, index, endIndex);
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
@@ -338,6 +379,12 @@ export default function assertFinanceResponse(output: string, context: Assertion
                 actualDate === allowedDate || actualDate === `*-${allowedDate.slice(5)}`,
             ),
         );
+  const unexpectedVisibleMonths =
+    config.allowedVisibleMonths === undefined
+      ? []
+      : collectVisibleMonths(parsed).filter(
+          (month) => !config.allowedVisibleMonths?.includes(month),
+        );
   const unexpectedVisiblePercentages =
     config.allowedVisiblePercentages === undefined
       ? []
@@ -350,6 +397,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const mislabeledVisiblePercentages = collectMislabeledVisiblePercentages(
     parsed,
     config.visiblePercentageClaims ?? [],
+  );
+  const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n");
+  const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
+    (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
   const cardFacts = collectFacts(parsed.cards);
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
@@ -460,11 +511,17 @@ export default function assertFinanceResponse(output: string, context: Assertion
     unexpectedVisibleDates.length > 0
       ? `未許可の可視日付: ${[...new Set(unexpectedVisibleDates)].join(",")}`
       : undefined,
+    unexpectedVisibleMonths.length > 0
+      ? `未許可の可視月: ${[...new Set(unexpectedVisibleMonths)].join(",")}`
+      : undefined,
     unexpectedVisiblePercentages.length > 0
       ? `未許可の可視割合: ${[...new Set(unexpectedVisiblePercentages.map(({ amount }) => amount))].join(",")}`
       : undefined,
     mislabeledVisiblePercentages.length > 0
       ? `誤ラベルの可視割合: ${[...new Set(mislabeledVisiblePercentages)].join(",")}`
+      : undefined,
+    matchedForbiddenVisiblePatterns.length > 0
+      ? `禁止された可視表現: ${matchedForbiddenVisiblePatterns.join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingCardTextFacts.length > 0

@@ -187,6 +187,56 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("accepts nearby current, comparison, and delta claims in separate clauses", () => {
+    const compactComparisonOutput = JSON.stringify({
+      text: "食費は41,837円、前月の食費は49,922円、食費の差額は8,085円減少です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "食費を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(compactComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837, 49922, 8085],
+          visibleAmountClaims: [
+            { label: "食費", amount: 41837 },
+            { label: "食費", amount: 49922, rolePattern: "(前月|先月|比較)" },
+            { label: "食費", amount: 8085, rolePattern: "(差額|差|減少)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("normalizes full-width digits in visible monetary claims", () => {
+    const fullWidthAmountOutput = JSON.stringify({
+      text: "支出は９９９，９９９円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "支出", amount: 219894, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fullWidthAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [219894],
+          visibleAmountClaims: [{ label: "支出", amount: 219894 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("reports every missing expectation", () => {
     const result = assertFinanceResponse(output, {
       config: {
@@ -722,6 +772,50 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a displayed month that contradicts the monthly fixture", () => {
+    const wrongMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2026-06月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    const result = assertFinanceResponse(wrongMonthOutput, {
+      config: {
+        allowedVisibleMonths: ["2026-07"],
+        expectedCardTextFacts: [{ cardType: "summary", pattern: "(2026[-/]07|2026年7月|7月)" }],
+      },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("未許可の可視月: 2026-06");
+  });
+
+  it("rejects a contradictory visible deficit claim", () => {
+    const deficitOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2026年7月の収支",
+          description: "今月は赤字です。",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(deficitOutput, {
+        config: { forbiddenVisiblePatterns: ["(赤字|収支.{0,10}マイナス)"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects conflicting visible dates outside transaction rows", () => {
     const conflictingDateOutput = JSON.stringify({
       text: "回答",
@@ -926,6 +1020,34 @@ describe("assertFinanceResponse", () => {
         config: {
           allowedInsightMetrics: [
             { amount: 41837, amountType: "balance", labelPattern: "(見直し|候補)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "insight metrics 不一致" });
+  });
+
+  it("binds the insight amount to the recommended category", () => {
+    const inconsistentInsightOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容が前月より増加したため見直せそうです。",
+          amount: 41837,
+          amountLabel: "食費の見直し候補",
+          amountType: "balance",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(inconsistentInsightOutput, {
+        config: {
+          allowedInsightMetrics: [
+            { amount: 19475, amountType: "balance", labelPattern: "(衣服|見直し|候補)" },
+            { amount: 7364, amountType: "balance", labelPattern: "(衣服|差額|増加)" },
           ],
         },
       }),
