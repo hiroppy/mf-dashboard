@@ -75,9 +75,12 @@
             761,
           ]
         allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: [19.03]
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
           - { label: 支出, amount: 219894 }
+        visiblePercentageClaims:
+          - { label: 食費, amount: 19.03 }
         expectedCardFacts: [食費]
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }

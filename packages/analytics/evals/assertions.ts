@@ -104,6 +104,20 @@ function collectFacts(value: unknown): string[] {
 }
 
 function includesFact(actualFacts: string[], expected: string): boolean {
+  const expectedMonth = /^(\d{4})-(\d{2})$/.exec(expected);
+  if (expectedMonth) {
+    const [, year, month] = expectedMonth;
+    const numericMonth = String(Number(month));
+    const acceptedFormats = [
+      `${year}-${month}`,
+      `${year}/${month}`,
+      `${year}年${month}月`,
+      `${year}年${numericMonth}月`,
+    ];
+    return actualFacts.some((actual) =>
+      acceptedFormats.some((format) => normalize(actual).includes(normalize(format))),
+    );
+  }
   return actualFacts.some((actual) => normalize(actual).includes(normalize(expected)));
 }
 
@@ -163,13 +177,17 @@ function transactionsAreAllowedSubset(
   return true;
 }
 
-function collectRoutes(output: EvaluationOutput): string[] {
-  const cardRoutes = output.cards.flatMap((card) => {
+function collectCardRoutes(output: EvaluationOutput): string[] {
+  return output.cards.flatMap((card) => {
     const routes: string[] = [];
     if ("href" in card && card.href) routes.push(card.href);
     if ("action" in card && card.action) routes.push(card.action.href);
     return routes;
   });
+}
+
+function collectRoutes(output: EvaluationOutput): string[] {
+  const cardRoutes = collectCardRoutes(output);
   const textRoutes = [output.text, ...collectFacts(output.cards)].flatMap((text) => [
     ...Array.from(
       text.matchAll(/(?<![\w:/])\/[A-Za-z0-9%._~!$&'*+,;=:@/?#-]+/g),
@@ -299,7 +317,23 @@ function collectClaimContext(text: string, startIndex: number, endIndex: number)
     .filter((boundary) => boundary !== -1);
   const clauseEnd =
     followingBoundaries.length === 0 ? text.length : endIndex + Math.min(...followingBoundaries);
+  const clausePrefix = text.slice(clauseStart + 1, startIndex);
+  const precedingClaims = Array.from(
+    clausePrefix.matchAll(/[+\-−▲▼]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/g),
+  );
+  const precedingClaim = precedingClaims.at(-1);
+  if (precedingClaim?.index !== undefined) {
+    return text.slice(clauseStart + 1 + precedingClaim.index + precedingClaim[0].length, endIndex);
+  }
   return text.slice(clauseStart + 1, clauseEnd);
+}
+
+function collectVisibleTransactionCounts(output: EvaluationOutput): number[] {
+  return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
+    Array.from(text.normalize("NFKC").matchAll(/(?<![\d,])([\d,]+)\s*件/g), ([, count]) =>
+      Number(count?.replaceAll(",", "")),
+    ),
+  );
 }
 
 function collectVisibleDates(output: EvaluationOutput): string[] {
@@ -482,6 +516,12 @@ export default function assertFinanceResponse(output: string, context: Assertion
     card.type === "transactionList" ? card.transactions : [],
   );
   const expectedTransactions = config.expectedTransactions ?? [];
+  const unexpectedVisibleTransactionCounts =
+    expectedTransactions.length === 0
+      ? []
+      : collectVisibleTransactionCounts(parsed).filter(
+          (count) => count !== expectedTransactions.length,
+        );
   const transactionsMismatch =
     expectedTransactions.length > 0 &&
     !transactionsMatchExactly(transactionRows, expectedTransactions);
@@ -536,9 +576,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (actualTypes.length !== expectedTypes.length ||
       actualTypes.some((actual, index) => actual !== expectedTypes[index]));
   const actualRoutes = collectRoutes(parsed);
+  const cardRoutes = collectCardRoutes(parsed);
   const routeMismatch =
     config.expectedRoute &&
-    (actualRoutes.length === 0 || actualRoutes.some((route) => route !== config.expectedRoute));
+    (!cardRoutes.includes(config.expectedRoute) ||
+      actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
     unexpectedVisibleAmounts.length > 0
@@ -573,6 +615,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       ? `categories 不一致: expected=${expectedCategories.map(({ label, amount, percentage }) => `${label}=${amount}/${percentage}%`).join(",")}`
       : undefined,
     transactionsMismatch ? "transactions 不一致" : undefined,
+    unexpectedVisibleTransactionCounts.length > 0
+      ? `明細件数 不一致: expected=${expectedTransactions.length} actual=${[...new Set(unexpectedVisibleTransactionCounts)].join(",")}`
+      : undefined,
     transactionGroupMismatch
       ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.amountType}`
       : undefined,

@@ -257,6 +257,33 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("scopes a period marker to its adjacent amount in one clause", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "衣服・美容は前月12,111円から19,475円に増加しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475, 7364],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+            { label: "衣服・美容", amount: 7364, rolePattern: "(差額|差|増加)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("normalizes full-width digits in visible monetary claims", () => {
     const fullWidthAmountOutput = JSON.stringify({
       text: "支出は９９９，９９９円です。",
@@ -449,6 +476,44 @@ describe("assertFinanceResponse", () => {
       pass: false,
       reason: "transactions 不一致",
     });
+  });
+
+  it("rejects a visible transaction count that contradicts the rows", () => {
+    const transactionOutput = JSON.stringify({
+      text: "3件の支出です。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "支出明細 3件",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactions: [
+            {
+              ids: ["tx-a"],
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "明細件数 不一致: expected=1 actual=3" });
   });
 
   it("rejects a transaction with the wrong amount type", () => {
@@ -681,6 +746,25 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("requires the expected route on a structured card", () => {
+    const fallbackRouteOutput = JSON.stringify({
+      text: "詳細は /0/cf/2026-07 で確認できます。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fallbackRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects an unexpected route rendered in card text", () => {
     const cardTextRouteOutput = JSON.stringify({
       text: "回答",
@@ -792,6 +876,26 @@ describe("assertFinanceResponse", () => {
       pass: false,
       reason: "不足 insight facts: 2026-07",
     });
+  });
+
+  it("accepts a Japanese month format for an expected insight month", () => {
+    const localizedMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026年7月の衣服・美容は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(localizedMonthOutput, {
+        config: { expectedInsightFacts: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("requires insight patterns to appear in the description", () => {
