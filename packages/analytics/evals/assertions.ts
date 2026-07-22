@@ -83,6 +83,7 @@ interface AssertionContext {
     forbiddenVisiblePatterns?: string[];
     requiredInsightPatterns?: string[];
     requireInsightMetric?: boolean;
+    requireTransactionToolGrounding?: boolean;
     visibleAmountClaims?: VisibleAmountClaim[];
     visibleMonthClaims?: VisibleMonthClaim[];
     visiblePercentageClaims?: VisibleAmountClaim[];
@@ -272,8 +273,8 @@ function collectRoutes(output: EvaluationOutput): string[] {
   return [...new Set([...cardRoutes, ...textRoutes])];
 }
 
-function collectVisibleAmounts(output: EvaluationOutput): number[] {
-  return collectVisibleAmountMatches(output).map(({ amount }) => amount);
+function isApproximateAmountClaim(text: string, index: number): boolean {
+  return /(?:約|およそ|概ね|だいたい)\s*$/u.test(text.slice(Math.max(0, index - 8), index));
 }
 
 function collectVisibleClaimTexts(output: EvaluationOutput): string[] {
@@ -541,7 +542,12 @@ function collectMislabeledVisibleAmounts(
     }
     if (
       applicableClaims.length === 0 ||
-      applicableClaims.some((claim) => claim.amount === amount)
+      applicableClaims.some(
+        (claim) =>
+          claim.amount === amount ||
+          (isApproximateAmountClaim(text, index) &&
+            Math.abs(amount - claim.amount) <= Math.max(1000, Math.abs(claim.amount) * 0.01)),
+      )
     ) {
       return [];
     }
@@ -1021,11 +1027,17 @@ export default function assertFinanceResponse(output: string, context: Assertion
 
   const config = context.config ?? {};
   const unexpectedVisibleAmounts = [
-    ...collectVisibleAmounts(parsed),
-    ...collectBareVisibleAmountMatches(parsed, config.visibleAmountClaims ?? []).map(
-      ({ amount }) => amount,
-    ),
-  ].filter((amount) => !(config.allowedVisibleAmounts ?? []).includes(amount));
+    ...collectVisibleAmountMatches(parsed),
+    ...collectBareVisibleAmountMatches(parsed, config.visibleAmountClaims ?? []),
+  ].filter(
+    ({ amount, index, text }) =>
+      !(config.allowedVisibleAmounts ?? []).some(
+        (allowed) =>
+          amount === allowed ||
+          (isApproximateAmountClaim(text, index) &&
+            Math.abs(amount - allowed) <= Math.max(1000, Math.abs(allowed) * 0.01)),
+      ),
+  );
   const mislabeledVisibleAmounts = collectMislabeledVisibleAmounts(
     parsed,
     config.visibleAmountClaims ?? [],
@@ -1176,6 +1188,28 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const transactionRows = parsed.cards.flatMap((card) =>
     card.type === "transactionList" ? card.transactions : [],
   );
+  const retrievedTransactionRows = parsed.dataToolResults.flatMap((result) =>
+    result.toolName === "searchTransactions"
+      ? collectValuesAtPath(result.output, "$.transactions.*")
+      : [],
+  );
+  const ungroundedTransactionRows = config.requireTransactionToolGrounding
+    ? transactionRows.filter(
+        (transaction) =>
+          !retrievedTransactionRows.some(
+            (retrieved) =>
+              typeof retrieved === "object" &&
+              retrieved !== null &&
+              matchesPartial(retrieved, {
+                amount: transaction.amount,
+                category: transaction.category,
+                date: transaction.date,
+                description: transaction.description,
+                type: transaction.amountType,
+              }),
+          ),
+      )
+    : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
   const expectedVisibleTransactionCount =
@@ -1270,7 +1304,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
 
   const failures = [
     unexpectedVisibleAmounts.length > 0
-      ? `未許可の可視金額: ${[...new Set(unexpectedVisibleAmounts)].join(",")}`
+      ? `未許可の可視金額: ${[...new Set(unexpectedVisibleAmounts.map(({ amount }) => amount))].join(",")}`
       : undefined,
     mislabeledVisibleAmounts.length > 0
       ? `誤ラベルの可視金額: ${[...new Set(mislabeledVisibleAmounts)].join(",")}`
@@ -1322,6 +1356,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       ? `categories 不一致: expected=${expectedCategories.map(({ label, amount, percentage }) => `${label}=${amount}/${percentage}%`).join(",")}`
       : undefined,
     transactionsMismatch ? "transactions 不一致" : undefined,
+    ungroundedTransactionRows.length > 0
+      ? `tool未取得の明細: ${ungroundedTransactionRows.map(({ description }) => description).join(", ")}`
+      : undefined,
     unexpectedVisibleTransactionCounts.length > 0
       ? `明細件数 不一致: expected=${expectedVisibleTransactionCount} actual=${[
           ...new Set(unexpectedVisibleTransactionCounts.map(({ count }) => count)),

@@ -545,6 +545,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("allows an explicitly approximate rounded monetary claim", () => {
+    const approximateOutput = JSON.stringify({
+      text: "総資産は約568万円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(approximateOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -1756,6 +1779,60 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("requires every displayed transaction to be retrieved before presentation", () => {
+    const transactionOutput = JSON.stringify({
+      dataToolResults: [
+        {
+          toolName: "searchTransactions",
+          input: { month: "2026-07", category: "食費" },
+          output: {
+            transactions: [
+              {
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 1000,
+                type: "expense",
+              },
+            ],
+          },
+        },
+      ],
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 1000,
+              amountType: "expense",
+            },
+            {
+              id: "tx-b",
+              date: "2026-07-11",
+              description: "店舗 B",
+              category: "食費",
+              amount: 2000,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({ pass: false, reason: "tool未取得の明細: 店舗 B" });
+  });
+
   it("rejects cards in the wrong presentation order", () => {
     const reversedOutput = JSON.stringify({
       text: "回答",
@@ -2781,6 +2858,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a negated monthly savings recommendation", () => {
+    const denialOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "黒字の家計",
+          description: "黒字ですが、貯蓄や予算の見直しは不要です。",
+          action: { label: "家計の詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(貯蓄|積立|予算|見直し).{0,12}(不要|必要ありません|必要ない|しなくてよい|しなくてもよい)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("allows a noun-qualified denial of the opposite spending direction", () => {
     const denialOutput = JSON.stringify({
       text: "回答",
@@ -3264,6 +3365,37 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("allows a grounded savings-rate point change", () => {
+    const pointOutput = JSON.stringify({
+      text: "貯蓄率は前月から34.68ポイント低下しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(pointOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8, 34.68, 64.48],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 29.8 },
+            { label: "貯蓄率", amount: 64.48, rolePattern: "(前月|先月|比較)" },
+            {
+              label: "貯蓄率",
+              amount: 34.68,
+              rolePattern: "(ポイント|差|変化|低下|減少)",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("validates a word-based fractional percentage claim", () => {

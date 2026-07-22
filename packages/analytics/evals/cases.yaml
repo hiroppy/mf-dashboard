@@ -34,6 +34,7 @@
         forbiddenVisiblePatterns:
           - (赤字(?!\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
           - (黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|ではなく|でない|ではありません)
+          - (貯蓄|積立|予算|見直し).{0,12}(不要|必要ありません|必要ない|しなくてよい|しなくてもよい)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -355,6 +356,7 @@
                 amountType: expense,
                 category: 食費,
               }
+        requireTransactionToolGrounding: true
         expectedCardTypes: [summary, categoryBreakdown, transactionList]
         expectedRoute: /0/cf/2026-07
 
@@ -405,6 +407,7 @@
               amountType: expense,
               category: 食費,
             }
+        requireTransactionToolGrounding: true
         expectedDataToolFacts:
           - {
               toolName: searchTransactions,
@@ -468,7 +471,7 @@
       config:
         allowedVisibleAmounts: [41837, 19475, 11198, 49922, 12111, 11495, 8085, 7364, 297]
         allowedVisibleDates: ["2026-06-30", "2026-07-31"]
-        allowedVisiblePercentages: [29.8, 30, 64, 64.48, 64.5]
+        allowedVisiblePercentages: [29.8, 30, 34.2, 34.68, 34.7, 64, 64.48, 64.5]
         allowedVisibleMonths: ["2026-06", "2026-07"]
         allowedCardHeadingDates: ["2026-07-31"]
         visibleMonthClaims:
@@ -494,6 +497,9 @@
           - { label: 貯蓄率, amount: 64, rolePattern: (前月|先月|比較) }
           - { label: 貯蓄率, amount: 64.48, rolePattern: (前月|先月|比較) }
           - { label: 貯蓄率, amount: 64.5, rolePattern: (前月|先月|比較) }
+          - { label: 貯蓄率, amount: 34.2, rolePattern: (ポイント|差|変化|低下|減少) }
+          - { label: 貯蓄率, amount: 34.68, rolePattern: (ポイント|差|変化|低下|減少) }
+          - { label: 貯蓄率, amount: 34.7, rolePattern: (ポイント|差|変化|低下|減少) }
         allowedInsightMetrics:
           - { amount: 19475, amountType: balance, labelPattern: (衣服・美容|衣服) }
           - {
