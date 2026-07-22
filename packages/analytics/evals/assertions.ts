@@ -1919,13 +1919,13 @@ function collectInvalidMonthlySummaryTrends(text: string, results: DataToolResul
     const matches = [
       ...text.matchAll(
         new RegExp(
-          `(?:${pattern})(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?\\s*(上昇|増加|改善|増え|上が|低下|減少|悪化|減り|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)`,
+          `(?:${pattern})(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|と|より|から|比|を)?(?:も)?\\s*(上昇|増加|改善|増え|上が|上回|低下|減少|悪化|減り|下が|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)`,
           "gu",
         ),
       ),
       ...text.matchAll(
         new RegExp(
-          `(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?.{0,12}(?:${pattern})(?:は|が)?\\s*(上昇|増加|改善|増え|上が|低下|減少|悪化|減り|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)`,
+          `(?:前月|先月)(?:と比べて|と|より|から|比|を)?(?:も)?.{0,12}(?:${pattern})(?:は|が)?\\s*(上昇|増加|改善|増え|上が|上回|低下|減少|悪化|減り|下が|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)`,
           "gu",
         ),
       ),
@@ -1946,12 +1946,22 @@ function collectInvalidMonthlySummaryTrends(text: string, results: DataToolResul
       const previous = rows.find((row) => row.month === previousCalendarMonth(current.month));
       if (previous === undefined) return [match[0]];
       const claimsUnchanged = /(?:横ばい|変化|同額|同じ)/u.test(match[1]);
-      const claimsIncrease = /(?:上昇|増加|改善|増え|上が)/u.test(match[1]);
+      const claimsImprovement = /改善/u.test(match[1]);
+      const claimsWorsening = /悪化/u.test(match[1]);
+      const claimsIncrease = /(?:上昇|増加|増え|上が|上回)/u.test(match[1]);
       const isValid = claimsUnchanged
         ? current[metric] === previous[metric]
-        : claimsIncrease
-          ? current[metric] > previous[metric]
-          : current[metric] < previous[metric];
+        : claimsImprovement
+          ? metric === "expense"
+            ? current[metric] < previous[metric]
+            : current[metric] > previous[metric]
+          : claimsWorsening
+            ? metric === "expense"
+              ? current[metric] > previous[metric]
+              : current[metric] < previous[metric]
+            : claimsIncrease
+              ? current[metric] > previous[metric]
+              : current[metric] < previous[metric];
       return isValid ? [] : [match[0]];
     });
   });
@@ -2510,14 +2520,25 @@ export default function assertFinanceResponse(output: string, context: Assertion
           (derivedClaim) =>
             Math.abs(derivedClaim.amount - value) <= 0.01 &&
             derivedClaim.sourceValues.every((sourceValue) =>
-              expectedDataToolFacts.some(
-                (expected) =>
-                  factSupportsVisibleScope(expected, visibleScopeMonths, visibleScopeDates) &&
+              expectedDataToolFacts.some((expected) => {
+                const expectedInput =
+                  typeof expected.input === "object" && expected.input !== null
+                    ? (expected.input as Record<string, unknown>)
+                    : {};
+                const comparisonMonths =
+                  visibleScopeMonths.length === 1
+                    ? [visibleScopeMonths[0], previousCalendarMonth(visibleScopeMonths[0])]
+                    : [];
+                const supportsDerivedScope =
+                  (typeof expectedInput.month === "string" &&
+                    comparisonMonths.includes(expectedInput.month)) ||
+                  factSupportsVisibleScope(expected, visibleScopeMonths, visibleScopeDates);
+                return (
+                  supportsDerivedScope &&
                   collectNumericValues(expected.value).includes(sourceValue) &&
-                  evidence.dataToolResults.some((result) =>
-                    dataToolResultMatches(result, expected),
-                  ),
-              ),
+                  evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected))
+                );
+              }),
             ),
         );
         const hasEvidence = hasDirectEvidence || hasDerivedEvidence;
@@ -2782,6 +2803,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
             `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が|の(?:ほう|方)が)?\\s*(安い|高い|少ない|多い)`,
             "gu",
           ),
+          new RegExp(
+            `${subjectPattern}(?:と|、)${comparisonPattern}(?:は|が)?\\s*(同額|同じ金額)`,
+            "gu",
+          ),
         ];
         return patterns.flatMap((pattern) =>
           Array.from(text.matchAll(pattern)).flatMap((match) => {
@@ -2795,10 +2820,13 @@ export default function assertFinanceResponse(output: string, context: Assertion
             ) {
               return [];
             }
+            const claimsEquality = /(?:同額|同じ金額)/u.test(match[1]);
             const claimsLower = /(?:安い|少ない)/u.test(match[1]);
-            const comparisonIsValid = claimsLower
-              ? subject.amount < comparison.amount
-              : subject.amount > comparison.amount;
+            const comparisonIsValid = claimsEquality
+              ? subject.amount === comparison.amount
+              : claimsLower
+                ? subject.amount < comparison.amount
+                : subject.amount > comparison.amount;
             return comparisonIsValid ? [] : [match[0]];
           }),
         );

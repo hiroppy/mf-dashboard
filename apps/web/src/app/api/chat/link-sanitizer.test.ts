@@ -150,6 +150,13 @@ describe("splitCompleteFinanceChatText", () => {
       expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
     },
   );
+
+  it.each(['`<a href="/0/cf">` はHTMLタグ例です。', '```html\n<a href="/0/cf">\n```\n続き。'])(
+    "streams a raw anchor literal inside Markdown code: %s",
+    (text) => {
+      expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+    },
+  );
 });
 
 describe("createFinanceChatLinkSanitizer", () => {

@@ -489,6 +489,57 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=7364" });
   });
 
+  it("allows a dated delta supported by the current and previous calendar months", () => {
+    const dataToolResults = [
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-07" },
+        output: [{ category: "衣服・美容", type: "expense", totalAmount: 19475 }],
+      },
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-06" },
+        output: [{ category: "衣服・美容", type: "expense", totalAmount: 12111 }],
+      },
+    ];
+    const text = "2026年7月の衣服・美容は前月より7,364円増加しました。";
+    const derivedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults,
+      text,
+      textEvidence: [{ text, dataToolResults }],
+    });
+
+    expect(
+      assertFinanceResponse(derivedOutput, {
+        config: {
+          allowedVisibleAmounts: [7364],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+          derivedVisibleClaims: [{ amount: 7364, sourceValues: [19475, 12111] }],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "衣服・美容", totalAmount: 19475 },
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-06" },
+              path: "$.*",
+              value: { category: "衣服・美容", totalAmount: 12111 },
+            },
+          ],
+          visibleAmountClaims: [{ label: "衣服・美容", amount: 7364, rolePattern: "(前月|増加)" }],
+        },
+      }),
+    ).toMatchObject({ pass: true, reason: "期待する最終応答です。" });
+  });
+
   it("allows direct values as each supporting tool fact becomes available", () => {
     const incomeResult = {
       toolName: "getMonthlySummaryByMonth",
@@ -1971,6 +2022,14 @@ describe("assertFinanceResponse", () => {
     ["支出は前月より減少しました。", true, true],
     ["支出は前月より増加しました。", true, false],
     ["収支は前月より減少しました。", true, true],
+    ["支出は前月より改善しました。", true, true],
+    ["支出は前月より悪化しました。", true, false],
+    ["収入は前月より改善しました。", true, false],
+    ["収入は前月より悪化しました。", true, true],
+    ["収支は前月より改善しました。", true, false],
+    ["収支は前月より悪化しました。", true, true],
+    ["収入は前月を上回りました。", true, false],
+    ["収入は前月を下回りました。", true, true],
   ])("validates a monthly summary trend: %s", (text, includePrevious, pass) => {
     const juneResult = {
       toolName: "getMonthlySummaryByMonth",
@@ -8271,6 +8330,7 @@ describe("assertFinanceResponse", () => {
     ["東京ガス ガス代は成城石井より高いです。", true],
     ["成城石井より東京ガス ガス代の方が安いです。", false],
     ["成城石井より東京ガス ガス代の方が高いです。", true],
+    ["東京ガス ガス代と成城石井は同額です。", false],
   ])("validates a pairwise transaction comparison: %s", (text, pass) => {
     const searchResult = {
       toolName: "searchTransactions",
@@ -8342,6 +8402,34 @@ describe("assertFinanceResponse", () => {
       reason: expect.stringContaining("誤った明細属性: 成城石井:カテゴリ=水道・光熱費"),
     });
   });
+
+  it.each(["総資産は横ばいです。", "総資産は変化なしです。", "総資産は同額です。"])(
+    "rejects an unsupported unchanged total-assets claim: %s",
+    (text) => {
+      expect(
+        assertFinanceResponse(
+          JSON.stringify({
+            text,
+            cards: [
+              {
+                type: "summary",
+                title: "総資産",
+                metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+                href: "/0/bs",
+              },
+            ],
+          }),
+          {
+            config: {
+              forbiddenVisiblePatterns: [
+                "(総資産|保有資産|資産).{0,16}(横ばい|変化(?:は|が)?(?:なし|ない)|同額|同じ)(?:です|でした|である|だ)",
+              ],
+            },
+          },
+        ),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+    },
+  );
 
   it("rejects a transaction attribute asserted before its retrieval evidence", () => {
     const searchResult = {

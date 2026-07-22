@@ -52,11 +52,28 @@ interface RawHtmlAnchor {
   start: number;
 }
 
+function isInsideMarkdownCode(text: string, targetIndex: number): boolean {
+  let delimiterLength = 0;
+  for (let index = 0; index < targetIndex; index += 1) {
+    if (text[index] !== "`") continue;
+    let runLength = 1;
+    while (text[index + runLength] === "`") runLength += 1;
+    if (delimiterLength === 0) {
+      delimiterLength = runLength >= 3 ? runLength : 1;
+    } else if (runLength >= delimiterLength) {
+      delimiterLength = 0;
+    }
+    index += runLength - 1;
+  }
+  return delimiterLength > 0;
+}
+
 function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
   const anchors: RawHtmlAnchor[] = [];
   const openingPattern = /<a\b/giu;
   let openingMatch: RegExpExecArray | null;
   while ((openingMatch = openingPattern.exec(text)) !== null) {
+    if (isInsideMarkdownCode(text, openingMatch.index)) continue;
     let quote: '"' | "'" | undefined;
     let openingEnd: number | undefined;
     for (let index = openingMatch.index + openingMatch[0].length; index < text.length; index += 1) {

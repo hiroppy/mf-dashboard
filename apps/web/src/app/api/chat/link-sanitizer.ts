@@ -29,6 +29,7 @@ export function splitCompleteFinanceChatText(
   const boundaries = new Set(["\n", "。", "！", "？"]);
   let labelStart = -1;
   let destinationDepth = 0;
+  let codeDelimiterLength = 0;
   let htmlAnchorOpen = false;
   let lastBoundary = -1;
 
@@ -36,8 +37,21 @@ export function splitCompleteFinanceChatText(
     const character = text[index];
     const escaped = index > 0 && text[index - 1] === "\\";
 
+    if (!escaped && character === "`") {
+      let runLength = 1;
+      while (text[index + runLength] === "`") runLength += 1;
+      if (codeDelimiterLength === 0) {
+        codeDelimiterLength = runLength >= 3 ? runLength : 1;
+      } else if (runLength >= codeDelimiterLength) {
+        codeDelimiterLength = 0;
+      }
+      index += runLength - 1;
+      continue;
+    }
+
     if (
       !escaped &&
+      codeDelimiterLength === 0 &&
       !htmlAnchorOpen &&
       /^<a\b/iu.test(text.slice(index)) &&
       hasCompleteRawHtmlAnchorOpening(text, index)

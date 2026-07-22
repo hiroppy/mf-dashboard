@@ -89,6 +89,14 @@ describe("sanitizeFinanceChatLinks", () => {
     },
   );
 
+  it.each([
+    '`<a href="javascript:alert(1)">` はHTMLタグ例です。',
+    '```html\n<a href="javascript:alert(1)">\n```',
+  ])("preserves a raw anchor literal inside Markdown code: %s", (text) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+    expect(collectFinanceChatLinks(text)).toEqual([]);
+  });
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {
