@@ -227,6 +227,21 @@ function collectNumericValues(value: unknown): number[] {
   return [];
 }
 
+function dataToolFactSupportsLabel(expected: DataToolFactExpectation, label: string): boolean {
+  const factText = `${expected.toolName} ${expected.path} ${JSON.stringify(expected.value)}`;
+  if (/^(?:収入|給与|給料|所得|手取り|売上|報酬|賃金|年収|月収)$/u.test(label)) {
+    return /(?:totalIncome|income)/iu.test(factText) && !/netIncome/iu.test(factText);
+  }
+  if (/^(?:支出|出費)$/u.test(label)) return /(?:totalExpense|expense)/iu.test(factText);
+  if (/^(?:収支|黒字|赤字|余剰|手残り|純収入|プラス)$/u.test(label)) {
+    return /netIncome/iu.test(factText);
+  }
+  if (/^(?:総資産|保有資産|資産)$/u.test(label)) {
+    return /(?:getLatestTotalAssets|totalAssets)/iu.test(factText);
+  }
+  return normalize(factText).includes(normalize(label));
+}
+
 function includesFact(actualFacts: string[], expected: string): boolean {
   const expectedMonth = /^(\d{4})-(\d{2})$/.exec(expected);
   if (expectedMonth) {
@@ -609,9 +624,10 @@ function collectMislabeledVisibleAmounts(
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
-    const hasDirectionalSuffix = /^\s*(?:の\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
-      text.slice(endIndex, clauseEnd),
-    );
+    const hasDirectionalSuffix =
+      /^\s*(?:(?:の|から|より)\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
+        text.slice(endIndex, clauseEnd),
+      );
     const applicableClaims =
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
@@ -1158,7 +1174,7 @@ function collectMislabeledVisiblePercentages(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
     const hasDirectionalSuffix =
-      /^\s*(?:ポイント)?(?:の)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
+      /^\s*(?:ポイント)?(?:(?:の|から|より)\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
         text.slice(endIndex, clauseEnd),
       );
     const applicableClaims =
@@ -1289,19 +1305,33 @@ export default function assertFinanceResponse(output: string, context: Assertion
     const amounts = [
       ...collectVisibleAmountMatches(evidenceOutput),
       ...collectBareVisibleAmountMatches(evidenceOutput, config.visibleAmountClaims ?? []),
-    ].map(({ amount }) => ({ label: `金額=${amount}`, value: amount }));
+    ].map(({ amount }) => ({
+      claimLabels: (config.visibleAmountClaims ?? [])
+        .filter((claim) => claim.amount === amount)
+        .map(({ label }) => label),
+      label: `金額=${amount}`,
+      value: amount,
+    }));
     const percentages = collectVisiblePercentageMatches(evidenceOutput).map(({ amount }) => ({
+      claimLabels: (config.visiblePercentageClaims ?? [])
+        .filter((claim) => Math.abs(claim.amount - amount) <= 0.01)
+        .map(({ label }) => label),
       label: `割合=${amount}`,
       value: amount,
     }));
-    return [...amounts, ...percentages].flatMap(({ label, value }) => {
-      const directSupportingFacts = expectedDataToolFacts.filter((expected) =>
+    return [...amounts, ...percentages].flatMap(({ claimLabels, label, value }) => {
+      const numericSupportingFacts = expectedDataToolFacts.filter((expected) =>
         collectNumericValues(expected.value).some(
           (expectedValue) =>
             value === expectedValue ||
             Math.abs(value - expectedValue) <= Math.max(0.01, Math.abs(expectedValue) * 0.001),
         ),
       );
+      const labelSupportingFacts = numericSupportingFacts.filter((expected) =>
+        claimLabels.some((claimLabel) => dataToolFactSupportsLabel(expected, claimLabel)),
+      );
+      const directSupportingFacts =
+        labelSupportingFacts.length > 0 ? labelSupportingFacts : numericSupportingFacts;
       const hasEvidence =
         directSupportingFacts.length > 0
           ? directSupportingFacts.some((expected) =>

@@ -234,6 +234,48 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("does not ground an income claim with an unrelated same-number fact", () => {
+    const incomeResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalIncome: 313235 },
+    };
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [{ category: "その他", type: "expense", totalAmount: 313235 }],
+    };
+    const earlyClaimOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [incomeResult, categoryResult],
+      text: "収入は313,235円です。",
+      textEvidence: [{ text: "収入は313,235円です。", dataToolResults: [categoryResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(earlyClaimOutput, {
+        config: {
+          allowedVisibleAmounts: [313235],
+          visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalIncome",
+              value: 313235,
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "その他", totalAmount: 313235 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=313235" });
+  });
+
   it("requires identity fields and values on the same data-tool row", () => {
     const splitEvidenceOutput = JSON.stringify({
       ...JSON.parse(output),
@@ -1397,28 +1439,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
-  it("rejects a directional use of an amount configured only as a level", () => {
-    const directionalOutput = JSON.stringify({
-      text: "総資産は5,683,100円減少しました。",
-      cards: [
-        {
-          type: "summary",
-          title: "総資産",
-          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
-          href: "/0/bs",
-        },
-      ],
-    });
+  it.each(["から", "より"])(
+    "rejects a %s-directional use of an amount configured only as a level",
+    (particle) => {
+      const directionalOutput = JSON.stringify({
+        text: `総資産は5,683,100円${particle}減少しました。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
 
-    expect(
-      assertFinanceResponse(directionalOutput, {
-        config: {
-          allowedVisibleAmounts: [5683100],
-          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
-        },
-      }),
-    ).toMatchObject({ pass: false });
-  });
+      expect(
+        assertFinanceResponse(directionalOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it("scopes a period marker to its adjacent amount in one clause", () => {
     const comparisonOutput = JSON.stringify({
@@ -4168,6 +4213,32 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false });
   });
+
+  it.each(["から", "より"])(
+    "rejects a percentage %s-direction as a configured level",
+    (particle) => {
+      const directionalOutput = JSON.stringify({
+        text: `貯蓄率は29.8%${particle}減少しました。`,
+        cards: [
+          {
+            type: "insight",
+            title: "家計状況",
+            description: "貯蓄率を確認します。",
+            action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(directionalOutput, {
+          config: {
+            allowedVisiblePercentages: [29.8],
+            visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it("validates a directional percentage-point claim", () => {
     const pointOutput = JSON.stringify({
