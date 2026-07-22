@@ -545,6 +545,33 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("classifies a monetary value with an 増 suffix as a delta", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "衣服・美容は前月より増加し、前月比7,364円増のため見直します。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475, 7364],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+            { label: "衣服・美容", amount: 7364, rolePattern: "(差額|差|増減|増)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("scopes a period marker to its adjacent amount in one clause", () => {
     const comparisonOutput = JSON.stringify({
       text: "衣服・美容は前月12,111円から19,475円に増加しました。",
@@ -1013,6 +1040,29 @@ describe("assertFinanceResponse", () => {
           title: "2026年7月31日時点の食費",
           metrics: [{ label: "食費", amount: 3435, amountType: "expense" }],
           href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(partialMonthOutput, {
+        config: { allowedCardHeadingDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("validates insight action label dates with card heading dates", () => {
+    const partialMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "2026年7月31日時点の衣服・美容",
+          description: "前月より増加しました。",
+          action: {
+            label: "7月10日時点の衣服・美容の内訳",
+            href: "/0/cf/2026-07",
+          },
         },
       ],
     });
@@ -1817,6 +1867,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("does not bind a later cautious statement to an affirmed increase", () => {
+    const cautiousOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "衣服・美容の支出改善",
+          description:
+            "2026年7月の衣服・美容は前月より増加しましたが、高すぎるとは言えません。見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(cautiousOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(増加|上回|高い|多い)(していない|していません|とは限りません|とは言えません|とは認められません|[がは]?確認できません|ではない|でない|ではありません|対象外)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("rejects conflicting visible dates outside transaction rows", () => {
     const conflictingDateOutput = JSON.stringify({
       text: "回答",
@@ -1926,6 +2001,55 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it.each(["貯蓄率は9割です。", "貯蓄率は99パーセントです。"])(
+    "recognizes a written percentage unit in %s",
+    (text) => {
+      const percentageOutput = JSON.stringify({
+        text,
+        cards: [
+          {
+            type: "insight",
+            title: "支出改善",
+            description: "衣服・美容を見直せそうです。",
+            action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(percentageOutput, {
+          config: {
+            allowedVisiblePercentages: [29.8],
+            visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
+
+  it("converts compound 割分厘 notation to a percentage", () => {
+    const percentageOutput = JSON.stringify({
+      text: "貯蓄率は2割9分8厘です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(percentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("treats a triangle-prefixed percentage as negative", () => {

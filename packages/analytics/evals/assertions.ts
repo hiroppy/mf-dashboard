@@ -519,6 +519,7 @@ function collectCardHeadingDates(output: EvaluationOutput): string[] {
     ...output.cards.flatMap((card) => [
       card.title,
       "description" in card && typeof card.description === "string" ? card.description : "",
+      "action" in card && card.action !== undefined ? card.action.label : "",
     ]),
   ]);
 }
@@ -597,17 +598,24 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
   return [output.text, ...collectFacts(output.cards)]
     .map((text) => text.normalize("NFKC"))
     .flatMap((text) =>
-      Array.from(text.matchAll(/([+＋\-−▲△▼▽]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
-        amount:
-          Number(match[2]?.replaceAll(",", "")) *
-          (/[-−▲△▼▽]/.test(match[1] ?? "") ||
-          /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
-            ? -1
-            : 1),
-        endIndex: match.index + match[0].length,
-        index: match.index,
-        text,
-      })),
+      Array.from(
+        text.matchAll(
+          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?)/g,
+        ),
+        (match) => ({
+          amount:
+            (match[2] !== undefined
+              ? Number(match[2].replaceAll(",", ""))
+              : Number(match[3]) * 10 + Number(match[4] ?? 0) + Number(match[5] ?? 0) / 10) *
+            (/[-−▲△▼▽]/.test(match[1] ?? "") ||
+            /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
+              ? -1
+              : 1),
+          endIndex: match.index + match[0].length,
+          index: match.index,
+          text,
+        }),
+      ),
     );
 }
 

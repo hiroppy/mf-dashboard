@@ -382,7 +382,7 @@
           - { label: 総資産, amount: 5683100 }
         expectedMetrics:
           - { label: 総資産, amount: 5683100, amountType: balance }
-        expectedCardHeadingFacts:
+        expectedCardTitleFacts:
           - { cardType: summary, pattern: 総資産 }
         expectedCardTypes: [summary]
         expectedRoute: /0/bs
@@ -412,13 +412,13 @@
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
           - { label: 食費, amount: 49922, rolePattern: (前月|先月|比較) }
-          - { label: 食費, amount: 8085, rolePattern: (差額|差|増減|変化|減少|下回) }
+          - { label: 食費, amount: 8085, rolePattern: (差額|差|増減|変化|減少|下回|減) }
           - { label: 衣服・美容, amount: 19475 }
           - { label: 衣服・美容, amount: 12111, rolePattern: (前月|先月|比較) }
-          - { label: 衣服・美容, amount: 7364, rolePattern: (差額|差|増減|変化|増加|上回) }
+          - { label: 衣服・美容, amount: 7364, rolePattern: (差額|差|増減|変化|増加|上回|増) }
           - { label: 日用品, amount: 11198 }
           - { label: 日用品, amount: 11495, rolePattern: (前月|先月|比較) }
-          - { label: 日用品, amount: 297, rolePattern: (差額|差|増減|変化|減少|下回) }
+          - { label: 日用品, amount: 297, rolePattern: (差額|差|増減|変化|減少|下回|減) }
         visiblePercentageClaims:
           - { label: 貯蓄率, amount: 29.8 }
           - { label: 貯蓄率, amount: 30 }
@@ -438,6 +438,6 @@
           - (ため|ので|理由|高い|多い|増加|上回)
         expectedInsightActionPattern: ^(?!.*(食費|日用品)).*(内訳|支出|衣服・美容|衣服)
         forbiddenVisiblePatterns:
-          - (増加|上回|高い|多い).{0,16}(とは限りません|限りません|確認できません|認められません|言えません|していない|ではない|でない|ありません|対象外)
+          - (増加|上回|高い|多い)(していない|していません|とは限りません|とは言えません|とは認められません|[がは]?確認できません|ではない|でない|ではありません|対象外)
         expectedCardTypes: [insight]
         expectedRoute: /0/cf/2026-07
