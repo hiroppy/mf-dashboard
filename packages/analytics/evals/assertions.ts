@@ -960,6 +960,18 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
   return collectDates([output.text, ...collectFacts(output.cards)]);
 }
 
+function collectNegatedTemporalClaims(output: EvaluationOutput): string[] {
+  return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
+    const text = rawText.normalize("NFKC");
+    return Array.from(
+      text.matchAll(
+        /((?:(?:\d{4}年)?\d{1,2}月(?:\d{1,2}日|初|末)?|\d{4}[-/.]\d{1,2}(?:[-/.]\d{1,2})?|(?:昨日|一昨日|前日|明日|明後日|翌日|先月|前月|来月|翌月)))(?:時点|現在|分)?\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|でない)/g,
+      ),
+      ([, claim]) => claim,
+    );
+  });
+}
+
 function collectCardHeadingDates(output: EvaluationOutput): string[] {
   return collectDates(
     output.cards.flatMap((card) => [
@@ -1314,6 +1326,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
                 ))
             ),
         );
+  const negatedTemporalClaims =
+    config.allowedVisibleDates !== undefined || config.allowedVisibleMonths !== undefined
+      ? collectNegatedTemporalClaims(parsed)
+      : [];
   const mislabeledVisibleMonths = collectMislabeledVisibleMonths(
     parsed,
     config.visibleMonthClaims ?? [],
@@ -1503,40 +1519,51 @@ export default function assertFinanceResponse(output: string, context: Assertion
     : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
-  const retrievedGroupTransactionCount =
+  const retrievedGroupTransactionIds =
     expectedTransactionGroup === undefined
-      ? 0
-      : retrievedTransactionRows.filter(
-          (transaction) =>
-            typeof transaction === "object" &&
-            transaction !== null &&
-            "date" in transaction &&
-            typeof transaction.date === "string" &&
-            transaction.date.startsWith(`${expectedTransactionGroup.month}-`) &&
-            "category" in transaction &&
-            normalize(String(transaction.category)) ===
-              normalize(expectedTransactionGroup.category) &&
-            "type" in transaction &&
-            transaction.type === expectedTransactionGroup.amountType,
-        ).length;
+      ? []
+      : retrievedTransactionRows.flatMap((transaction) =>
+          typeof transaction === "object" &&
+          transaction !== null &&
+          "id" in transaction &&
+          (typeof transaction.id === "string" || typeof transaction.id === "number") &&
+          "date" in transaction &&
+          typeof transaction.date === "string" &&
+          transaction.date.startsWith(`${expectedTransactionGroup.month}-`) &&
+          "category" in transaction &&
+          normalize(String(transaction.category)) ===
+            normalize(expectedTransactionGroup.category) &&
+          "type" in transaction &&
+          transaction.type === expectedTransactionGroup.amountType
+            ? [String(transaction.id)]
+            : [],
+        );
+  const retrievedGroupTransactionCount = new Set(retrievedGroupTransactionIds).size;
   const expectedVisibleTransactionCount =
     expectedTransactions.length > 0
       ? expectedTransactions.length
       : expectedTransactionGroup?.expectedCount;
   const visibleTransactionCounts = collectVisibleTransactionCounts(parsed);
-  const isExplicitSourceTotal = ({
-    count,
-    endIndex,
-    text,
-  }: (typeof visibleTransactionCounts)[number]) =>
-    config.allowedVisibleTransactionCounts?.includes(count) === true &&
-    (config.requireTransactionToolGrounding !== true || retrievedGroupTransactionCount >= count) &&
-    (/^\s*中\s*\d+\s*件/u.test(text.slice(endIndex)) || /^\s*の?うち/u.test(text.slice(endIndex)));
+  const isNegatedVisibleCount = ({ endIndex, text }: (typeof visibleTransactionCounts)[number]) => {
+    const { clauseEnd } = collectClauseBounds(text, endIndex, endIndex);
+    return hasNegatedSuffix(text, endIndex, clauseEnd);
+  };
+  const isExplicitSourceTotal = (visibleCount: (typeof visibleTransactionCounts)[number]) => {
+    const { count, endIndex, text } = visibleCount;
+    return (
+      !isNegatedVisibleCount(visibleCount) &&
+      config.allowedVisibleTransactionCounts?.includes(count) === true &&
+      (config.requireTransactionToolGrounding !== true ||
+        retrievedGroupTransactionCount >= count) &&
+      (/^\s*中\s*\d+\s*件/u.test(text.slice(endIndex)) || /^\s*の?うち/u.test(text.slice(endIndex)))
+    );
+  };
   const unexpectedVisibleTransactionCounts =
     expectedVisibleTransactionCount === undefined
       ? []
       : visibleTransactionCounts.filter((visibleCount) => {
           const { count } = visibleCount;
+          if (isNegatedVisibleCount(visibleCount)) return true;
           if (count === expectedVisibleTransactionCount) return false;
           return !isExplicitSourceTotal(visibleCount);
         });
@@ -1545,7 +1572,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
     config.allowedVisibleTransactionCounts?.some(
       (sourceCount) => sourceCount > expectedVisibleTransactionCount,
     ) === true &&
-    (!visibleTransactionCounts.some(({ count }) => count === expectedVisibleTransactionCount) ||
+    (!visibleTransactionCounts.some(
+      (visibleCount) =>
+        visibleCount.count === expectedVisibleTransactionCount &&
+        !isNegatedVisibleCount(visibleCount),
+    ) ||
       !visibleTransactionCounts.some(isExplicitSourceTotal));
   const transactionsMismatch =
     expectedTransactions.length > 0 &&
@@ -1630,6 +1661,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unexpectedVisibleMonths.length > 0
       ? `未許可の可視月: ${[...new Set(unexpectedVisibleMonths)].join(",")}`
+      : undefined,
+    negatedTemporalClaims.length > 0
+      ? `否定された可視日付・月: ${[...new Set(negatedTemporalClaims)].join(",")}`
       : undefined,
     mislabeledVisibleMonths.length > 0
       ? `誤役割の可視月: ${[...new Set(mislabeledVisibleMonths)].join(",")}`

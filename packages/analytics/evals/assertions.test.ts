@@ -2043,6 +2043,103 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("2") });
   });
 
+  it("does not count duplicate retrieved transaction IDs toward a disclosed source total", () => {
+    const transaction = {
+      id: "tx-a",
+      date: "2026-07-10",
+      description: "店舗 A",
+      category: "食費",
+      amount: 3435,
+      type: "expense",
+    };
+    const result = {
+      toolName: "searchTransactions",
+      input: { month: "2026-07", category: "食費" },
+      output: { transactions: [transaction], truncated: true },
+    };
+    const transactionOutput = JSON.stringify({
+      text: "全2件中1件を表示します。",
+      dataToolResults: [result, result],
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細（全2件中1件を表示）",
+          transactions: [{ ...transaction, amountType: "expense" }],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [2],
+          requireTransactionToolGrounding: true,
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a negated displayed transaction count", () => {
+    const transactionOutput = JSON.stringify({
+      text: "1件ではありません。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects an arbitrary allowed row instead of the deterministic truncated prefix", () => {
     const transactionOutput = JSON.stringify({
       text: "全2件中1件を表示します。",
@@ -3560,6 +3657,29 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: "未許可の回答本文日付: relative-昨日" });
+  });
+
+  it("rejects a negated expected date", () => {
+    const negatedDateOutput = JSON.stringify({
+      text: "対象日は7月10日ではありません。",
+      cards: [
+        {
+          type: "summary",
+          title: "7月10日の支出",
+          metrics: [{ label: "支出", amount: 6587, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedDateOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-10"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "否定された可視日付・月: 7月10日" });
   });
 
   it("rejects a snapshot labeled as tomorrow", () => {
