@@ -5261,6 +5261,50 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects an unsupported total-assets trend from a single snapshot", () => {
+    const snapshotResult = {
+      toolName: "getLatestTotalAssets",
+      output: 5683100,
+    };
+    const trendOutput = JSON.stringify({
+      allowedHrefs: ["/0/bs"],
+      dataToolResults: [snapshotResult],
+      text: "2026年7月31日の総資産は5,683,100円です。以前より増えています。",
+      textEvidence: [
+        {
+          text: "2026年7月31日の総資産は5,683,100円です。以前より増えています。",
+          allowedHrefs: ["/0/bs"],
+          dataToolResults: [snapshotResult],
+        },
+      ],
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          description: "2026年7月31日",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(trendOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          expectedDataToolFacts: [{ toolName: "getLatestTotalAssets", path: "$", value: 5683100 }],
+          forbiddenVisiblePatterns: [
+            "(総資産|保有資産|資産).{0,32}(以前|過去|前回|前月|先月|前年|増え|減っ|増加|減少|上昇|低下|改善|悪化|変化|上回|下回)",
+            "(以前|過去|前回|前月|先月|前年|比較).{0,24}(増え|減っ|増加|減少|上昇|低下|改善|悪化|変化|上回|下回)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
   it("rejects denial of a required spending-improvement candidate", () => {
     const denialOutput = JSON.stringify({
       text: "削れそうな支出はありません。",
