@@ -60,6 +60,7 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
+const PATH_LIST_ENV_KEYS = new Set(["PATH", "SSL_CERT_DIR"]);
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -146,15 +147,14 @@ function getCodexEnv(tempDir: string): NodeJS.ProcessEnv {
   for (const key of ALLOWED_ENV_KEYS) {
     const value = process.env[key];
     if (value === undefined) continue;
-    inheritedEnv[key] =
-      key === "SSL_CERT_DIR"
-        ? value
-            .split(delimiter)
-            .map((path) => resolve(path))
-            .join(delimiter)
-        : key === "SSL_CERT_FILE"
-          ? resolve(value)
-          : value;
+    inheritedEnv[key] = PATH_LIST_ENV_KEYS.has(key)
+      ? value
+          .split(delimiter)
+          .map((path) => resolve(path))
+          .join(delimiter)
+      : key === "SSL_CERT_FILE"
+        ? resolve(value)
+        : value;
   }
   return {
     ...inheritedEnv,

@@ -380,6 +380,19 @@ describe("generateWithCodexExec", () => {
     );
   });
 
+  test("normalizes relative PATH entries before changing the child cwd", async () => {
+    process.env.PATH = ["./bin", "/usr/bin"].join(delimiter);
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    expect(spawnMock.mock.calls[3]?.[2]?.env?.PATH).toBe(
+      [resolve("./bin"), "/usr/bin"].join(delimiter),
+    );
+  });
+
   test("waits for isolated credential cleanup when auth copying is aborted", async () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "50";
     const originalWriteFile = writeFileMock.getMockImplementation()!;
