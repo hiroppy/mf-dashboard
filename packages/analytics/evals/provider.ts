@@ -1,11 +1,7 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  getCurrentGroup,
-  getDemoFixtureFingerprint,
-  getDb,
-  isDatabaseAvailable,
-} from "@mf-dashboard/db";
+import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
+import { isDemoFixtureDatabase as matchesDemoFixture } from "@mf-dashboard/db/query/demo-fixture";
 import { generateText, stepCountIs } from "ai";
 import MockDate from "mockdate";
 import { z } from "zod";
@@ -84,42 +80,8 @@ export function isDemoDatabasePath(databasePath: string) {
 }
 
 async function isDemoFixtureDatabase(db: ReturnType<typeof getDb>) {
-  return (
-    JSON.stringify(await getDemoFixtureFingerprint(db)) ===
-    JSON.stringify(EXPECTED_DEMO_FIXTURE_FINGERPRINT)
-  );
+  return matchesDemoFixture(db);
 }
-
-const EXPECTED_DEMO_FIXTURE_FINGERPRINT = {
-  accountCount: 14,
-  assetHistoryCount: 1638,
-  groups: [
-    { id: "0", isCurrent: true, name: "グループ選択なし" },
-    { id: "demo_group_001", isCurrent: false, name: "投資" },
-    { id: "demo_group_002", isCurrent: false, name: "生活" },
-  ],
-  nonDemoAccountCount: 0,
-  nonDemoTransactionCount: 0,
-  sentinels: [
-    {
-      amount: 2744,
-      category: "食費",
-      date: "2026-07-29",
-      description: "大戸屋",
-      mfId: "demo_001279",
-      type: "expense",
-    },
-    {
-      amount: 2638,
-      category: "食費",
-      date: "2026-07-31",
-      description: "すき家",
-      mfId: "demo_001281",
-      type: "expense",
-    },
-  ],
-  transactionCount: 1294,
-};
 
 export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });

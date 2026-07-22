@@ -1,60 +1,58 @@
-import { count, inArray, notLike } from "drizzle-orm";
-import { getDb, type Db, schema } from "../index";
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { getDb, type Db } from "../index";
 
+const APPLICATION_TABLES = [
+  "account_statuses",
+  "accounts",
+  "analytics_reports",
+  "asset_categories",
+  "asset_history",
+  "asset_history_categories",
+  "daily_snapshots",
+  "group_accounts",
+  "groups",
+  "holding_values",
+  "holdings",
+  "institution_categories",
+  "spending_targets",
+  "transactions",
+] as const;
+
+const DEMO_FIXTURE_FINGERPRINT = "a5983439e7cab409efe707937f3d0357116804251502197146d0ec636283c98c";
+
+interface TableColumn {
+  name: string;
+}
+
+function quoteIdentifier(identifier: string) {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+/** Returns a deterministic digest of every application row in the demo fixture. */
 export async function getDemoFixtureFingerprint(db: Db = getDb()) {
-  const [
-    groups,
-    accountCount,
-    nonDemoAccountCount,
-    transactionCount,
-    nonDemoTransactionCount,
-    assetHistoryCount,
-    sentinels,
-  ] = await Promise.all([
-    db
-      .select({
-        id: schema.groups.id,
-        isCurrent: schema.groups.isCurrent,
-        name: schema.groups.name,
-      })
-      .from(schema.groups)
-      .orderBy(schema.groups.id)
-      .all(),
-    db.select({ value: count() }).from(schema.accounts).get(),
-    db
-      .select({ value: count() })
-      .from(schema.accounts)
-      .where(notLike(schema.accounts.mfId, "demo_%"))
-      .get(),
-    db.select({ value: count() }).from(schema.transactions).get(),
-    db
-      .select({ value: count() })
-      .from(schema.transactions)
-      .where(notLike(schema.transactions.mfId, "demo_%"))
-      .get(),
-    db.select({ value: count() }).from(schema.assetHistory).get(),
-    db
-      .select({
-        amount: schema.transactions.amount,
-        category: schema.transactions.category,
-        date: schema.transactions.date,
-        description: schema.transactions.description,
-        mfId: schema.transactions.mfId,
-        type: schema.transactions.type,
-      })
-      .from(schema.transactions)
-      .where(inArray(schema.transactions.mfId, ["demo_001279", "demo_001281"]))
-      .orderBy(schema.transactions.mfId)
-      .all(),
-  ]);
+  const hash = createHash("sha256");
 
-  return {
-    accountCount: accountCount?.value ?? 0,
-    assetHistoryCount: assetHistoryCount?.value ?? 0,
-    groups,
-    nonDemoAccountCount: nonDemoAccountCount?.value ?? 0,
-    nonDemoTransactionCount: nonDemoTransactionCount?.value ?? 0,
-    sentinels,
-    transactionCount: transactionCount?.value ?? 0,
-  };
+  for (const table of APPLICATION_TABLES) {
+    const columns = await db.all<TableColumn>(
+      sql.raw(`PRAGMA table_info(${quoteIdentifier(table)})`),
+    );
+    if (columns.length === 0) {
+      throw new Error(`Demo fixture table is missing: ${table}`);
+    }
+
+    const columnNames = columns.map(({ name }) => name);
+    const orderBy = columnNames.map(quoteIdentifier).join(", ");
+    const rows = await db.all<Record<string, unknown>>(
+      sql.raw(`SELECT * FROM ${quoteIdentifier(table)} ORDER BY ${orderBy}`),
+    );
+
+    hash.update(JSON.stringify({ columns: columnNames, rows, table }));
+  }
+
+  return hash.digest("hex");
+}
+
+export async function isDemoFixtureDatabase(db: Db = getDb()) {
+  return (await getDemoFixtureFingerprint(db)) === DEMO_FIXTURE_FINGERPRINT;
 }

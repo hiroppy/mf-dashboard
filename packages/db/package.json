@@ -17,6 +17,7 @@
     "./repository/holdings": "./src/repositories/holdings.ts",
     "./repository/spending-targets": "./src/repositories/spending-targets.ts",
     "./repository/analytics": "./src/repositories/analytics.ts",
+    "./query/demo-fixture": "./src/queries/demo-fixture.ts",
     "./types": "./src/types.ts",
     "./utils": "./src/utils.ts",
     "./test-helpers": "./src/test-helpers.ts"
