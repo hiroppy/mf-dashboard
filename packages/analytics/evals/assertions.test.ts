@@ -106,6 +106,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "summary metrics 不一致: expected=収支=93341" });
   });
 
+  it("rejects unexpected category rows", () => {
+    const extraCategoryOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "categoryBreakdown",
+          title: "支出内訳",
+          href: "/0/cf/2026-07",
+          categories: [
+            { name: "食費", amount: 41837, amountType: "expense", percentage: 80 },
+            { name: "未確認", amount: 9999, amountType: "expense", percentage: 20 },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(extraCategoryOutput, {
+        config: {
+          expectedCategories: [{ label: "食費", amount: 41837, amountType: "expense" }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "categories 不一致: expected=食費=41837" });
+  });
+
   it("rejects extra transaction rows outside the expected date", () => {
     const transactionOutput = JSON.stringify({
       text: "回答",

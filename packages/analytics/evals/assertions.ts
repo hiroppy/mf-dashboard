@@ -113,9 +113,13 @@ export default function assertFinanceResponse(output: string, context: Assertion
         }))
       : [],
   );
-  const missingCategories = (config.expectedCategories ?? []).filter(
-    (expected) => !categoryRows.some((actual) => metricMatches(actual, expected)),
-  );
+  const expectedCategories = config.expectedCategories ?? [];
+  const categoriesMismatch =
+    expectedCategories.length > 0 &&
+    (categoryRows.length !== expectedCategories.length ||
+      expectedCategories.some(
+        (expected) => !categoryRows.some((actual) => metricMatches(actual, expected)),
+      ));
   const transactionRows = parsed.cards.flatMap((card) =>
     card.type === "transactionList" ? card.transactions : [],
   );
@@ -163,8 +167,8 @@ export default function assertFinanceResponse(output: string, context: Assertion
     summaryMetricsMismatch
       ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,
-    missingCategories.length > 0
-      ? `不足 categories: ${missingCategories.map(({ label, amount }) => `${label}=${amount}`).join(", ")}`
+    categoriesMismatch
+      ? `categories 不一致: expected=${expectedCategories.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,
     transactionsMismatch
       ? `transactions 不一致: expected=${expectedTransactions.map(({ date, amount }) => `${date}=${amount}`).join(",")}`
