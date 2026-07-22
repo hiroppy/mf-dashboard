@@ -40,8 +40,15 @@ jobs:
       - run: docker compose build ${{ matrix.app }}
   e2e-web:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.0-noble
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
       - uses: actions/checkout@v6.0.3
+        with:
+          persist-credentials: false
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: ./.github/actions/setup-node
       - run: pnpm test:e2e:web
       - if: ${{ !cancelled() }}
