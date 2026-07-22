@@ -53,6 +53,7 @@ interface AssertionContext {
   config?: {
     allowedInsightMetrics?: InsightMetricAllowance[];
     allowedCardHeadingDates?: string[];
+    allowedFallbackTextDates?: string[];
     allowedVisibleAmounts?: number[];
     allowedVisibleDates?: string[];
     allowedVisibleMonths?: string[];
@@ -486,6 +487,11 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
+        text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月(\d{1,2})日/g),
+        ([, month, day]) =>
+          `last-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g),
         ([, year, month, day]) =>
           `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
@@ -703,6 +709,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
                 actualDate === allowedDate || actualDate === `*-${allowedDate.slice(5)}`,
             ),
         );
+  const unexpectedFallbackTextDates =
+    config.allowedFallbackTextDates === undefined
+      ? []
+      : collectDates([parsed.text]).filter(
+          (actualDate) =>
+            !config.allowedFallbackTextDates?.some(
+              (allowedDate) =>
+                actualDate === allowedDate || actualDate === `*-${allowedDate.slice(5)}`,
+            ),
+        );
   const unexpectedCardHeadingDates =
     config.allowedCardHeadingDates === undefined
       ? []
@@ -887,6 +903,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unexpectedVisibleDates.length > 0
       ? `未許可の可視日付: ${[...new Set(unexpectedVisibleDates)].join(",")}`
+      : undefined,
+    unexpectedFallbackTextDates.length > 0
+      ? `未許可の回答本文日付: ${[...new Set(unexpectedFallbackTextDates)].join(",")}`
       : undefined,
     unexpectedCardHeadingDates.length > 0
       ? `未許可のカード見出し日付: ${[...new Set(unexpectedCardHeadingDates)].join(",")}`

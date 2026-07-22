@@ -1051,6 +1051,35 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("validates fallback text dates independently from transaction rows", () => {
+    const partialMonthOutput = JSON.stringify({
+      text: "2026年7月10日時点の食費です。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "2026年7月31日時点の食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-03",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(partialMonthOutput, {
+        config: { allowedFallbackTextDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の回答本文日付: 2026-07-10" });
+  });
+
   it("validates insight action label dates as visible dates", () => {
     const partialMonthOutput = JSON.stringify({
       text: "回答",
@@ -1676,6 +1705,29 @@ describe("assertFinanceResponse", () => {
         {
           type: "summary",
           title: "2025-7-31時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a snapshot date qualified as last year", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "昨年7月31日時点の総資産",
           metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
           href: "/0/bs",
         },

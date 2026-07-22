@@ -86,6 +86,7 @@
           ]
         allowedVisibleMonths: ["2026-07"]
         allowedCardHeadingDates: ["2026-07-31"]
+        allowedFallbackTextDates: ["2026-07-31"]
         allowedVisiblePercentages: [19, 19.03]
         allowedVisibleTransactionCounts: [26]
         visibleAmountClaims:
@@ -344,6 +345,8 @@
         expectedCardTextFacts:
           - { cardType: summary, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
           - { cardType: transactionList, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
+          - { cardType: action, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
+          - { cardType: action, pattern: "(支出|明細|内訳)" }
         expectedTransactions:
           - {
               ids: ["1229", demo_001260],
