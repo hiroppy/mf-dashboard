@@ -1593,6 +1593,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a stale unpadded hyphenated snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2025-7-31時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("requires insight patterns to appear in the description", () => {
     const fallbackOnlyOutput = JSON.stringify({
       text: "食費は前月より高いため見直せそうです。",
@@ -1952,6 +1975,80 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("carries a percentage subject across comparison clauses", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "貯蓄率は29.8%、前月は64%です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8, 64],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 29.8 },
+            { label: "貯蓄率", amount: 64, rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a percentage delta as a configured percentage level", () => {
+    const directionalOutput = JSON.stringify({
+      text: "黒字ですが、貯蓄率は29.8%減のため貯蓄を見直します。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(directionalOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("accepts a percentage delta with a directional claim", () => {
+    const directionalOutput = JSON.stringify({
+      text: "貯蓄率は29.8%減です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(directionalOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 29.8, rolePattern: "(増|減|上昇|低下)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects undeclared insight amounts and generic actions", () => {

@@ -339,20 +339,8 @@ function collectMislabeledVisibleAmounts(
           right.claim.label.length - left.claim.label.length,
       );
     const clauseText = text.slice(clauseStart + 1, clauseEnd);
-    if (
-      nearbyClaims.length === 0 &&
-      (text[clauseStart] === "、" || text[clauseStart] === "，") &&
-      /^(?:前月|先月|比較|差額|差|増減|変化)/u.test(clauseText.trimStart())
-    ) {
-      const sentenceStart = Math.max(
-        ...["。", "．", "\n"].map((separator) => text.lastIndexOf(separator, clauseStart - 1)),
-      );
-      const carriedLabel = expectedClaims
-        .map(({ label }) => ({ label, index: text.lastIndexOf(label, clauseStart - 1) }))
-        .filter(({ index }) => index > sentenceStart)
-        .sort(
-          (left, right) => right.index - left.index || right.label.length - left.label.length,
-        )[0]?.label;
+    if (nearbyClaims.length === 0) {
+      const carriedLabel = collectCarriedClaimLabel(text, clauseStart, clauseText, expectedClaims);
       if (carriedLabel !== undefined) {
         nearbyClaims = expectedClaims
           .filter(({ label }) => label === carriedLabel)
@@ -380,6 +368,40 @@ function collectMislabeledVisibleAmounts(
     }
     return [`${nearestLabel}=${amount}`];
   });
+}
+
+function isSentenceSeparator(text: string, index: number): boolean {
+  const character = text[index];
+  if (character === ".") {
+    return !(/\d/u.test(text[index - 1] ?? "") && /\d/u.test(text[index + 1] ?? ""));
+  }
+  return character === "。" || character === "!" || character === "?" || character === "\n";
+}
+
+function collectCarriedClaimLabel<T extends { label: string }>(
+  text: string,
+  clauseStart: number,
+  clauseText: string,
+  expectedClaims: T[],
+): string | undefined {
+  if (
+    (text[clauseStart] !== "、" && text[clauseStart] !== ",") ||
+    !/^(?:前月|先月|比較|差額|差|増減|変化)/u.test(clauseText.trimStart())
+  ) {
+    return undefined;
+  }
+  let sentenceStart = -1;
+  for (let index = clauseStart - 1; index >= 0; index -= 1) {
+    if (isSentenceSeparator(text, index)) {
+      sentenceStart = index;
+      break;
+    }
+  }
+  return expectedClaims
+    .map(({ label }) => ({ label, index: text.lastIndexOf(label, clauseStart - 1) }))
+    .filter(({ index }) => index > sentenceStart)
+    .sort((left, right) => right.index - left.index || right.label.length - left.label.length)[0]
+    ?.label;
 }
 
 function collectClaimContext(text: string, startIndex: number, endIndex: number): string {
@@ -457,7 +479,11 @@ function collectDates(rawTexts: string[]): string[] {
   return rawTexts.flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     return [
-      ...Array.from(text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), ([date]) => date),
+      ...Array.from(
+        text.matchAll(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g),
+        ([, year, month, day]) =>
+          `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
       ...Array.from(
         text.matchAll(/(?<!\d)(?:(\d{4})\/)?(\d{1,2})\/(\d{1,2})(?!\d)/g),
         ([, year, month, day]) =>
@@ -496,8 +522,8 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/\b(\d{4})[-/.](\d{2})\b/g),
-        ([, year, month]) => `${year}-${month}`,
+        text.matchAll(/\b(\d{4})[-/.](\d{1,2})\b/g),
+        ([, year, month]) => `${year}-${String(month).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/(\d{4})年(\d{1,2})月/g),
@@ -519,7 +545,7 @@ function collectMislabeledVisibleMonths(
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     const monthMatches = Array.from(
-      text.matchAll(/\b(\d{4})[-/.](\d{2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g),
+      text.matchAll(/\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g),
       (match) => ({
         endIndex: match.index + match[0].length,
         index: match.index,
@@ -585,7 +611,7 @@ function collectMislabeledVisiblePercentages(
 ): string[] {
   return collectVisiblePercentageMatches(output).flatMap(({ amount, endIndex, index, text }) => {
     const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
-    const nearbyClaims = expectedClaims
+    let nearbyClaims = expectedClaims
       .map((claim) => {
         const foundBeforeIndex = text.lastIndexOf(claim.label, index);
         const foundAfterIndex = text.indexOf(claim.label, endIndex);
@@ -607,6 +633,15 @@ function collectMislabeledVisiblePercentages(
         (left, right) =>
           left.distance - right.distance || right.claim.label.length - left.claim.label.length,
       );
+    if (nearbyClaims.length === 0) {
+      const clauseText = text.slice(clauseStart + 1, clauseEnd);
+      const carriedLabel = collectCarriedClaimLabel(text, clauseStart, clauseText, expectedClaims);
+      if (carriedLabel !== undefined) {
+        nearbyClaims = expectedClaims
+          .filter(({ label }) => label === carriedLabel)
+          .map((claim) => ({ claim, distance: 0 }));
+      }
+    }
     if (nearbyClaims.length === 0) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
     const nearestLabel = nearbyClaims[0]?.claim.label;
     const claimsForLabel = nearbyClaims
@@ -616,10 +651,15 @@ function collectMislabeledVisiblePercentages(
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
+    const hasDirectionalSuffix = /^\s*(?:ポイント)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
+      text.slice(endIndex, clauseEnd),
+    );
     const applicableClaims =
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
-        : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+        : hasDirectionalSuffix
+          ? []
+          : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
     return applicableClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
       ? []
       : [`${nearestLabel}=${amount}`];
