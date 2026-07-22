@@ -632,10 +632,10 @@ function collectDates(rawTexts: string[]): string[] {
       ),
       ...Array.from(
         text.matchAll(
-          /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2})月(\d{1,2})日/g,
+          /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月(\d{1,2}|[〇零一二三四五六七八九十]+)日/g,
         ),
         ([, era, eraYear, month, day]) =>
-          `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+          `${toGregorianYear(era, eraYear)}-${String(parseJapaneseInteger(month)).padStart(2, "0")}-${String(parseJapaneseInteger(day)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g),
@@ -706,6 +706,10 @@ function toGregorianYear(era: string, rawYear: string): number {
   return startYears[era]! + eraYear;
 }
 
+function parseJapaneseInteger(value: string): number {
+  return /^\d+$/u.test(value) ? Number(value) : parseKanjiAmount(value);
+}
+
 function collectVisibleDates(output: EvaluationOutput): string[] {
   return collectDates([output.text, ...collectFacts(output.cards)]);
 }
@@ -728,9 +732,11 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(
-        text.matchAll(/(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2})月/g),
+        text.matchAll(
+          /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月/g,
+        ),
         ([, era, eraYear, month]) =>
-          `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}`,
+          `${toGregorianYear(era, eraYear)}-${String(parseJapaneseInteger(month)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/([〇零一二三四五六七八九十]+)月/g),
@@ -828,7 +834,7 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
     .flatMap((text) =>
       Array.from(
         text.matchAll(
-          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?|([〇零一二三四五六七八九十百]+)\s*パーセント|([〇零一二三四五六七八九十]+)\s*割(?:\s*([〇零一二三四五六七八九十]+)\s*分)?(?:\s*([〇零一二三四五六七八九十]+)\s*厘)?|([\d,.]+)\s*ポイント(?=\s*(?:上昇|低下|増|減)))/g,
+          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?|([〇零一二三四五六七八九十百]+)\s*パーセント|([〇零一二三四五六七八九十]+)\s*割(?:\s*([〇零一二三四五六七八九十]+)\s*分)?(?:\s*([〇零一二三四五六七八九十]+)\s*厘)?|([\d,.]+)\s*ポイント)/g,
         ),
         (match) => ({
           amount:
@@ -849,8 +855,15 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
               : 1),
           endIndex: match.index + match[0].length,
           index: match.index,
+          isPoint: match[10] !== undefined,
           text,
         }),
+      ).filter(
+        (match) =>
+          !match.isPoint ||
+          match.text
+            .slice(Math.max(0, match.index - 16), match.endIndex + 8)
+            .match(/(?:率|前月比|前年比|比較|増減|差|上昇|低下|増加|減少)/u) !== null,
       ),
     );
 }

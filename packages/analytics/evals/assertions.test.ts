@@ -2382,6 +2382,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("preserves an era year on a kanji-written snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "令和九年七月三十一日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("requires insight patterns to appear in the description", () => {
     const fallbackOnlyOutput = JSON.stringify({
       text: "食費は前月より高いため見直せそうです。",
@@ -2950,6 +2973,29 @@ describe("assertFinanceResponse", () => {
   it("validates a directional percentage-point claim", () => {
     const pointOutput = JSON.stringify({
       text: "貯蓄率は前月から99ポイント上昇しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(pointOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("validates a comparison-qualified percentage-point claim", () => {
+    const pointOutput = JSON.stringify({
+      text: "貯蓄率は前月比99ポイントです。",
       cards: [
         {
           type: "insight",
