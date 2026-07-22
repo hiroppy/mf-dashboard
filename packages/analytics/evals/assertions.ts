@@ -1591,22 +1591,29 @@ function collectCategoryGroups(results: DataToolResult[]) {
   );
 }
 
+function collectTemporalMonthScope(text: string): string | undefined {
+  const explicitYearMonth =
+    /(?<year>\d{4})(?:[-/]0?(?<numericMonth>\d{1,2})|年0?(?<japaneseMonth>\d{1,2})月)/u.exec(text);
+  if (explicitYearMonth?.groups) {
+    return `${explicitYearMonth.groups.year}-${String(
+      Number(explicitYearMonth.groups.numericMonth ?? explicitYearMonth.groups.japaneseMonth),
+    ).padStart(2, "0")}`;
+  }
+  const yearlessMonth = /(?<!\d)(\d{1,2})月/u.exec(text)?.[1];
+  return yearlessMonth === undefined
+    ? undefined
+    : `*-${String(Number(yearlessMonth)).padStart(2, "0")}`;
+}
+
 function categoryGroupMatchesTemporalScope(
   text: string,
   group: ReturnType<typeof collectCategoryGroups>[number],
 ): boolean {
-  const explicitYearMonth =
-    /(?<year>\d{4})(?:[-/]0?(?<numericMonth>\d{1,2})|年0?(?<japaneseMonth>\d{1,2})月)/u.exec(text);
-  if (explicitYearMonth?.groups) {
-    const scopedMonth = `${explicitYearMonth.groups.year}-${String(
-      Number(explicitYearMonth.groups.numericMonth ?? explicitYearMonth.groups.japaneseMonth),
-    ).padStart(2, "0")}`;
-    return group.month === scopedMonth;
-  }
-  const yearlessMonth = /(?<!\d)(\d{1,2})月/u.exec(text)?.[1];
+  const scope = collectTemporalMonthScope(text);
   return (
-    yearlessMonth === undefined ||
-    group.month?.endsWith(`-${String(Number(yearlessMonth)).padStart(2, "0")}`) === true
+    scope === undefined ||
+    group.month === scope ||
+    (scope.startsWith("*-") && group.month?.endsWith(scope.slice(1)) === true)
   );
 }
 
@@ -1765,8 +1772,16 @@ function collectInvalidCategoryTrendClaims(
         }))
         .filter((row): row is { amount: number; month: string } => row.amount !== undefined)
         .sort((left, right) => left.month.localeCompare(right.month));
-      const previous = amounts.at(-2);
-      const current = amounts.at(-1);
+      const scope = collectTemporalMonthScope(text);
+      const currentIndex =
+        scope === undefined
+          ? amounts.length - 1
+          : amounts.findIndex(
+              ({ month }) =>
+                month === scope || (scope.startsWith("*-") && month.endsWith(scope.slice(1))),
+            );
+      const previous = amounts[currentIndex - 1];
+      const current = amounts[currentIndex];
       if (previous === undefined || current === undefined) return [match[0]];
       const claimsIncrease = /(?:増加|上昇|増え|上が)/u.test(match[1]);
       const trendIsValid = claimsIncrease
@@ -1836,13 +1851,6 @@ function collectMonthlySavingsRates(results: DataToolResult[]) {
 }
 
 function collectInvalidSavingsRateDirections(text: string, results: DataToolResult[]): string[] {
-  const rates = [
-    ...new Map(collectMonthlySavingsRates(results).map((rate) => [rate.month, rate])).values(),
-  ].sort((left, right) => left.month.localeCompare(right.month));
-  if (rates.length < 2) return [];
-  const previous = rates.at(-2);
-  const current = rates.at(-1);
-  if (previous === undefined || current === undefined) return [];
   const directionMatches = [
     ...text.matchAll(
       /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
@@ -1850,14 +1858,23 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
     ...text.matchAll(
       /(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?.{0,12}貯蓄率(?:は|が)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
     ),
-  ];
-  return directionMatches.flatMap((match) => {
+  ].filter((match) => {
     const endIndex = match.index + match[0].length;
-    if (
-      hasNegatedSuffix(text, endIndex, collectClauseBounds(text, match.index, endIndex).clauseEnd)
-    ) {
-      return [];
-    }
+    return !hasNegatedSuffix(
+      text,
+      endIndex,
+      collectClauseBounds(text, match.index, endIndex).clauseEnd,
+    );
+  });
+  if (directionMatches.length === 0) return [];
+  const rates = [
+    ...new Map(collectMonthlySavingsRates(results).map((rate) => [rate.month, rate])).values(),
+  ].sort((left, right) => left.month.localeCompare(right.month));
+  if (rates.length < 2) return directionMatches.map(([claim]) => claim);
+  const previous = rates.at(-2);
+  const current = rates.at(-1);
+  if (previous === undefined || current === undefined) return [];
+  return directionMatches.flatMap((match) => {
     const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);
     const directionIsValid = claimsIncrease
       ? current.rate > previous.rate
@@ -2491,7 +2508,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
           sentence.matchAll(
             /^(?!.*(?:\d{1,2}月\d{1,2}日|\d{4}[-/]\d{1,2}[-/]\d{1,2}日?))\s*([^、,]{1,80}?)(?:で|にて)(?:支払いました|支払っています|購入しました|買いました|利用しました)/gu,
           ),
-          ([, description]) => description.trim(),
+          ([, description]) =>
+            description
+              .trim()
+              .replace(/^(?:(?:当日|その日|同日|当月|今月)(?:は|に)|この日は)\s*/u, ""),
         ),
       ]);
   const transactionDescriptionIsRetrieved = (description: string, results: DataToolResult[]) =>

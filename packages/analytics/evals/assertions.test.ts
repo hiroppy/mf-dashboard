@@ -1720,6 +1720,27 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(trendOutput).pass).toBe(pass);
   });
 
+  it("binds a category trend to its explicitly claimed month", () => {
+    const results = [
+      ["2026-05", 100],
+      ["2026-06", 80],
+      ["2026-07", 120],
+    ].map(([month, totalAmount]) => ({
+      toolName: "getMonthlyCategoryTotals",
+      input: { month },
+      output: [{ category: "食費", type: "expense", totalAmount }],
+    }));
+    const text = "2026年6月の食費は減少しました。";
+    const trendOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(trendOutput)).toMatchObject({ pass: true });
+  });
+
   it.each([
     ["食費は予算を超過しています。", false],
     ["食費は予算を超過しているとは限りません。", true],
@@ -1765,6 +1786,26 @@ describe("assertFinanceResponse", () => {
     const result = assertFinanceResponse(directionOutput);
     expect(result.pass).toBe(pass);
     expect(result.reason).toContain(expectedReason);
+  });
+
+  it("rejects a savings-rate trend when only one month was retrieved", () => {
+    const julyResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { month: "2026-07", totalIncome: 313235, netIncome: 93341 },
+    };
+    const text = "貯蓄率は前月より上昇しました。";
+    const directionOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [julyResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [julyResult] }],
+    });
+
+    expect(assertFinanceResponse(directionOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤った貯蓄率方向"),
+    });
   });
 
   it("rejects a liability-absence claim for the demo fixture", () => {
@@ -7678,6 +7719,37 @@ describe("assertFinanceResponse", () => {
       });
     },
   );
+
+  it("accepts a retrieved merchant after an inherited-date prefix", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+        ],
+      },
+    };
+    const text = "当日は成城石井で支払いました。";
+    const paymentOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [searchResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(paymentOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({ pass: true });
+  });
 
   it("validates a transaction superlative against retrieved rows", () => {
     const searchResult = {
