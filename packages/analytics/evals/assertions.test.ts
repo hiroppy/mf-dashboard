@@ -546,6 +546,30 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("未許可の可視金額: 999999");
   });
 
+  it("rejects a bare unsupported amount stated before its finance label", () => {
+    const bareAmountOutput = JSON.stringify({
+      text: "999999が今月の収入です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収入", amount: 313235, amountType: "income" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    const result = assertFinanceResponse(bareAmountOutput, {
+      config: {
+        allowedVisibleAmounts: [313235],
+        visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("未許可の可視金額: 999999");
+  });
+
   it("does not treat a month duration as a bare monetary claim", () => {
     const durationOutput = JSON.stringify({
       text: "総資産を3か月ごとに確認しましょう。",

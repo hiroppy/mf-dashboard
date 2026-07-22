@@ -1,42 +1,54 @@
-import { copyFileSync, mkdirSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
-import { createClient, type Client } from "@libsql/client";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/libsql";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "../schema/schema";
-import { isDemoFixtureDatabase } from "./demo-fixture";
+import { closeTestDb, createTestDb } from "../test-helpers";
+import { getDemoFixtureFingerprint, matchesDemoFixtureFingerprint } from "./demo-fixture";
 
-const temporaryDirectory = resolve(import.meta.dirname, ".demo-fixture-test");
-const temporaryDatabase = resolve(temporaryDirectory, "demo.db");
-const demoDatabase = resolve(import.meta.dirname, "../../../../data/demo.db");
+type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
-describe("getDemoFixtureFingerprint", () => {
-  let client: Client | undefined;
+describe("demo fixture fingerprint", () => {
+  let db: TestDb;
+  let holdingId: number;
 
-  afterEach(() => {
-    client?.close();
-    rmSync(temporaryDirectory, { force: true, recursive: true });
+  beforeAll(async () => {
+    db = await createTestDb();
+    const now = "2026-07-01T00:00:00.000Z";
+    await db.insert(schema.accounts).values({
+      createdAt: now,
+      mfId: "demo_account_001",
+      name: "Demo Bank",
+      type: "自動連携",
+      updatedAt: now,
+    });
+    const account = await db
+      .select({ id: schema.accounts.id })
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "demo_account_001"))
+      .get();
+    const [holding] = await db
+      .insert(schema.holdings)
+      .values({
+        accountId: account!.id,
+        createdAt: now,
+        name: "Demo Holding",
+        type: "asset",
+        updatedAt: now,
+      })
+      .returning({ id: schema.holdings.id });
+    holdingId = holding!.id;
   });
 
-  it("rejects the fixture when a holding changes", async () => {
-    mkdirSync(temporaryDirectory);
-    copyFileSync(demoDatabase, temporaryDatabase);
-    client = createClient({ url: `file:${temporaryDatabase}` });
-    const db = drizzle(client, { schema });
-    await expect(isDemoFixtureDatabase(db)).resolves.toBe(true);
-    const holding = await db
-      .select({ id: schema.holdings.id })
-      .from(schema.holdings)
-      .limit(1)
-      .get();
+  afterAll(() => closeTestDb(db));
 
-    expect(holding).toBeDefined();
+  it("rejects a matching fixture fingerprint after a holding changes", async () => {
+    const expectedFingerprint = await getDemoFixtureFingerprint(db);
+    await expect(matchesDemoFixtureFingerprint(expectedFingerprint, db)).resolves.toBe(true);
+
     await db
       .update(schema.holdings)
-      .set({ name: "改変されたデモ銘柄" })
-      .where(eq(schema.holdings.id, holding!.id));
+      .set({ name: "Changed Demo Holding" })
+      .where(eq(schema.holdings.id, holdingId));
 
-    await expect(isDemoFixtureDatabase(db)).resolves.toBe(false);
+    await expect(matchesDemoFixtureFingerprint(expectedFingerprint, db)).resolves.toBe(false);
   });
 });

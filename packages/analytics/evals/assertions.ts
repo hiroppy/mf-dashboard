@@ -425,6 +425,24 @@ function collectBareVisibleAmountMatches(
         ...Array.from(
           text.matchAll(
             new RegExp(
+              `(?<![./\\d-])([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|か月|ヶ月|ケ月|箇月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))(?=[^。！？\\n]{0,12}?${labelPattern})`,
+              "gu",
+            ),
+          ),
+          (match) => ({
+            amount: Number(
+              String(match[1])
+                .replaceAll(",", "")
+                .replace(/[▲△▼▽−]/, "-"),
+            ),
+            endIndex: match.index + match[0].length,
+            index: match.index,
+            text,
+          }),
+        ),
+        ...Array.from(
+          text.matchAll(
+            new RegExp(
               `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?)\\s*((?:[\\d,.]+\\s*(?:億|万|千)\\s*)+)(?![\\d,.]|\\s*(?:億|万|千|円))`,
               "gu",
             ),

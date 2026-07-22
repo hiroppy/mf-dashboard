@@ -53,6 +53,10 @@ export async function getDemoFixtureFingerprint(db: Db = getDb()) {
   return hash.digest("hex");
 }
 
+export async function matchesDemoFixtureFingerprint(expectedFingerprint: string, db: Db = getDb()) {
+  return (await getDemoFixtureFingerprint(db)) === expectedFingerprint;
+}
+
 export async function isDemoFixtureDatabase(db: Db = getDb()) {
-  return (await getDemoFixtureFingerprint(db)) === DEMO_FIXTURE_FINGERPRINT;
+  return matchesDemoFixtureFingerprint(DEMO_FIXTURE_FINGERPRINT, db);
 }
