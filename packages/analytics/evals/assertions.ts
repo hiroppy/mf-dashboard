@@ -1554,7 +1554,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n");
   const foreignCurrencyClaims = [
     ...visibleText.matchAll(
-      /(?:[$＄€£]\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|USD|EUR|GBP))/giu,
+      /(?:[$＄€£]\s*[\d０-９]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|USD|EUR|GBP)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|USD|EUR|GBP))/giu,
     ),
   ].map(([claim]) => claim);
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
