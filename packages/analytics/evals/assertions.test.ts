@@ -522,6 +522,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a finance-labelled lexical zero without 円", () => {
+    const zeroAmountOutput = JSON.stringify({
+      text: "総資産はゼロです。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(zeroAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -2079,6 +2102,96 @@ describe("assertFinanceResponse", () => {
           visibleMonthClaims: [
             { month: "2026-07" },
             { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("accepts a relative previous month in a configured comparison role", () => {
+    const relativeComparisonOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026年7月の衣服・美容は前月の12,111円から19,475円に増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("validates an era-qualified month in its configured role", () => {
+    const eraMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description:
+            "2026年7月の衣服・美容は前月より増加しました。令和8年6月の衣服・美容は19,475円です。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(eraMonthOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("carries an amount label into an explicit current-month clause", () => {
+    const currentMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description:
+            "衣服・美容は前月より増加しました。衣服・美容の前月（2026年6月）は12,111円、2026年7月は19,475円です。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(currentMonthOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
           ],
         },
       }),

@@ -359,6 +359,15 @@ function collectBareVisibleAmountMatches(
             text,
           }),
         ),
+        ...Array.from(
+          text.matchAll(new RegExp(`${labelPattern}.{0,8}?(ゼロ)(?!\\s*円)`, "gu")),
+          (match) => ({
+            amount: 0,
+            endIndex: match.index + match[0].length,
+            index: match.index + match[0].lastIndexOf(match[1]),
+            text,
+          }),
+        ),
       ];
     }),
   );
@@ -562,7 +571,9 @@ function collectCarriedClaimLabel<T extends { label: string }>(
 ): string | undefined {
   if (
     (text[clauseStart] !== "、" && text[clauseStart] !== ",") ||
-    !/^(?:前月|先月|比較|差額|差|増減|変化)/u.test(clauseText.trimStart())
+    !/^(?:前月|先月|比較|差額|差|増減|変化|今月|当月|\d{4}(?:年\d{1,2}月|[-/.]\d{1,2}))/u.test(
+      clauseText.trimStart(),
+    )
   ) {
     return undefined;
   }
@@ -828,19 +839,28 @@ function collectMislabeledVisibleMonths(
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     const monthMatches = Array.from(
-      text.matchAll(/\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g),
+      text.matchAll(
+        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g,
+      ),
       (match) => ({
         endIndex: match.index + match[0].length,
         index: match.index,
         month:
           match[1] !== undefined
-            ? `${match[1]}-${String(match[2]).padStart(2, "0")}`
-            : match[3] !== undefined
-              ? `${match[3]}-${String(match[4]).padStart(2, "0")}`
-              : `*-${String(match[5]).padStart(2, "0")}`,
+            ? `${toGregorianYear(match[1], match[2])}-${String(parseJapaneseInteger(match[3])).padStart(2, "0")}`
+            : match[4] !== undefined
+              ? `${match[4]}-${String(match[5]).padStart(2, "0")}`
+              : match[6] !== undefined
+                ? `${match[6]}-${String(match[7]).padStart(2, "0")}`
+                : `*-${String(match[8]).padStart(2, "0")}`,
       }),
     );
     return monthMatches.flatMap((monthMatch, monthIndex) => {
+      const { clauseEnd, clauseStart } = collectClauseBounds(
+        text,
+        monthMatch.index,
+        monthMatch.endIndex,
+      );
       const adjacentRoleContext = `${text.slice(Math.max(0, monthMatch.index - 8), monthMatch.index)} ${
         /^\s*[（(]?(前月|先月)/.exec(
           text.slice(monthMatch.endIndex, monthMatch.endIndex + 8),
@@ -852,7 +872,9 @@ function collectMislabeledVisibleMonths(
           (monthMatch.month === month || monthMatch.month === `*-${month.slice(5)}`),
       );
       const roleContext = `${adjacentRoleContext} ${
-        monthMatches.length > 1 && isExpectedComparisonMonth ? "比較" : ""
+        isExpectedComparisonMonth && /比較/u.test(text.slice(clauseStart + 1, clauseEnd))
+          ? "比較"
+          : ""
       }`;
       const roleSpecificClaims = expectedClaims.filter(
         ({ rolePattern }) =>
@@ -1043,8 +1065,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
       ? []
       : collectVisibleMonths(parsed).filter(
           (month) =>
-            !config.allowedVisibleMonths?.some(
-              (allowedMonth) => month === allowedMonth || month === `*-${allowedMonth.slice(5)}`,
+            !(
+              config.allowedVisibleMonths?.some(
+                (allowedMonth) => month === allowedMonth || month === `*-${allowedMonth.slice(5)}`,
+              ) ||
+              (month.startsWith("relative-") &&
+                config.visibleMonthClaims?.some(
+                  ({ rolePattern }) =>
+                    rolePattern !== undefined &&
+                    new RegExp(rolePattern, "u").test(month.slice("relative-".length)),
+                ))
             ),
         );
   const mislabeledVisibleMonths = collectMislabeledVisibleMonths(
