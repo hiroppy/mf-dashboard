@@ -36,6 +36,20 @@ const output = JSON.stringify({
 });
 
 describe("assertFinanceResponse", () => {
+  it("rejects unauthorized links recorded before sanitization", () => {
+    const sanitizedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "",
+      textEvidence: [{ text: "", allowedHrefs: [], dataToolResults: [] }],
+      unauthorizedLinks: ["https://evil.example"],
+    });
+
+    expect(assertFinanceResponse(sanitizedOutput)).toMatchObject({
+      pass: false,
+      reason: "未承認の生成リンク: https://evil.example",
+    });
+  });
+
   it("accepts expected facts, card types, and routes", () => {
     expect(
       assertFinanceResponse(output, {
@@ -373,6 +387,49 @@ describe("assertFinanceResponse", () => {
               value: 219894,
             },
           ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("grounds a derived transaction total from preceding row amounts", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          { description: "Test Utility", amount: 3435, type: "expense" },
+          { description: "Test Store", amount: 3152, type: "expense" },
+        ],
+      },
+    };
+    const totalOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [searchResult],
+      text: "7月10日の支出は6,587円です。",
+      textEvidence: [{ text: "7月10日の支出は6,587円です。", dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(totalOutput, {
+        config: {
+          allowedVisibleAmounts: [6587],
+          derivedVisibleClaims: [{ amount: 6587, sourceValues: [3435, 3152] }],
+          expectedDataToolFacts: [
+            {
+              toolName: "searchTransactions",
+              input: { date: "2026-07-10", type: "expense" },
+              path: "$.transactions.*",
+              value: { description: "Test Utility", amount: 3435, type: "expense" },
+            },
+            {
+              toolName: "searchTransactions",
+              input: { date: "2026-07-10", type: "expense" },
+              path: "$.transactions.*",
+              value: { description: "Test Store", amount: 3152, type: "expense" },
+            },
+          ],
+          visibleAmountClaims: [{ label: "支出", amount: 6587 }],
         },
       }),
     ).toMatchObject({ pass: true });
@@ -6454,7 +6511,10 @@ describe("assertFinanceResponse", () => {
           requireTransactionToolGrounding: true,
         },
       }),
-    ).toMatchObject({ pass: false, reason: "transactions 不一致" });
+    ).toMatchObject({
+      pass: false,
+      reason: "transactions 不一致 / 本文中の未取得明細: 東京ガス ガス代",
+    });
   });
 
   it("rejects an amount whose configured label is explicitly excluded", () => {
@@ -6545,6 +6605,61 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
   });
+
+  it("rejects transaction prose emitted before its search evidence", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "Test Store",
+            category: "食費",
+            amount: 3152,
+            type: "expense",
+          },
+        ],
+      },
+    };
+    const earlyProseOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "明細には7月10日のTest Storeがあります。",
+      textEvidence: [{ text: "明細には7月10日のTest Storeがあります。", dataToolResults: [] }],
+      dataToolResults: [searchResult],
+    });
+
+    expect(
+      assertFinanceResponse(earlyProseOutput, {
+        config: {
+          requireTransactionToolGrounding: true,
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("本文中の未取得明細: Test Store"),
+    });
+  });
+
+  it.each(["今月の食費や明細はありません。", "7月10日の取引はありません。"])(
+    "rejects a textual no-data claim when fixture rows exist: %s",
+    (text) => {
+      const noDataOutput = JSON.stringify({
+        ...JSON.parse(output),
+        text,
+      });
+
+      expect(
+        assertFinanceResponse(noDataOutput, {
+          config: {
+            forbiddenVisiblePatterns: [
+              "(食費|7月10日|明細|取引).{0,16}(ありません|ない|なし|見つかりません|ゼロ)",
+            ],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+    },
+  );
 
   it.each(["豪ドル", "NZドル", "カナダドル"])(
     "rejects a prefixed foreign currency: %s",

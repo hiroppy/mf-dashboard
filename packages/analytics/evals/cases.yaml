@@ -142,7 +142,7 @@
               toolName: searchTransactions,
               input: { month: "2026-07", category: 食費, type: expense },
               path: $.transactions.*,
-              value: { description: すき家, category: 食費, type: expense },
+              value: { description: すき家, category: 食費, type: expense, amount: 2638 },
             }
           - {
               toolName: getMonthlySummaryByMonth,
@@ -365,6 +365,8 @@
                 category: 食費,
               }
         requireTransactionToolGrounding: true
+        forbiddenVisiblePatterns:
+          - (食費|明細|取引).{0,16}(ありません|ない|なし|見つかりません|ゼロ)
         expectedCardTypes: [summary, categoryBreakdown, transactionList]
         expectedRoute: /0/cf/2026-07
 
@@ -427,14 +429,26 @@
                   description: 東京ガス ガス代,
                   category: 水道・光熱費,
                   type: expense,
+                  amount: 3435,
                 },
             }
           - {
               toolName: searchTransactions,
               input: { date: "2026-07-10", type: expense },
               path: $.transactions.*,
-              value: { date: "2026-07-10", description: 成城石井, category: 食費, type: expense },
+              value:
+                {
+                  date: "2026-07-10",
+                  description: 成城石井,
+                  category: 食費,
+                  type: expense,
+                  amount: 3152,
+                },
             }
+        derivedVisibleClaims:
+          - { amount: 6587, sourceValues: [3435, 3152] }
+        forbiddenVisiblePatterns:
+          - (7月10日|2026[-/]07[-/]10|支出|明細|取引).{0,16}(ありません|ない|なし|見つかりません|ゼロ)
         expectedCardTypes: [summary, transactionList, action]
         expectedRoute: /0/cf/2026-07
 

@@ -93,6 +93,7 @@ describe("toEvaluationOutput", () => {
           ],
         },
       ],
+      unauthorizedLinks: [],
       cards: [{ type: "summary" }],
     });
   });
@@ -140,6 +141,24 @@ describe("toEvaluationOutput", () => {
     expect(toEvaluationOutput(response, "test-group")).toMatchObject({
       allowedHrefs: ["/test-group/cf/2026-07"],
       text: "[詳細](/test-group/cf/2026-07) 外部",
+      unauthorizedLinks: ["https://example.com"],
+    });
+  });
+
+  it("records a bare unauthorized URL before sanitizing visible text", () => {
+    const response: ChatResponse = {
+      text: "https://evil.example",
+      steps: [
+        {
+          text: "https://evil.example",
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "",
+      unauthorizedLinks: ["https://evil.example"],
     });
   });
 

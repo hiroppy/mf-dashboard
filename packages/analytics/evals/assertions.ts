@@ -102,6 +102,7 @@ interface EvaluationOutput {
   dataToolResults: DataToolResult[];
   text: string;
   textEvidence: Array<{ text: string; allowedHrefs: string[]; dataToolResults: DataToolResult[] }>;
+  unauthorizedLinks: string[];
   cards: FinanceChatCard[];
 }
 
@@ -164,6 +165,9 @@ function parseOutput(output: string): EvaluationOutput | undefined {
         : [],
       dataToolResults: parseDataToolResults(value.dataToolResults),
       text: value.text,
+      unauthorizedLinks: Array.isArray(value.unauthorizedLinks)
+        ? value.unauthorizedLinks.filter((link): link is string => typeof link === "string")
+        : [],
       textEvidence: Array.isArray(value.textEvidence)
         ? value.textEvidence.flatMap((evidence) =>
             typeof evidence === "object" &&
@@ -1657,6 +1661,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       dataToolResults: evidence.dataToolResults,
       text: evidence.text,
       textEvidence: [],
+      unauthorizedLinks: [],
     };
     const amounts = [
       ...collectVisibleAmountMatches(evidenceOutput),
@@ -1715,6 +1720,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       dataToolResults: evidence.dataToolResults,
       text: evidence.text,
       textEvidence: [],
+      unauthorizedLinks: [],
     };
     return collectRoutes(evidenceOutput).filter((route) => !evidence.allowedHrefs.includes(route));
   });
@@ -1806,33 +1812,46 @@ export default function assertFinanceResponse(output: string, context: Assertion
           ),
       )
     : [];
-  const unsupportedTextTransactionDescriptions = config.requireTransactionToolGrounding
-    ? collectVisibleClaimTexts(parsed)
-        .flatMap((text) => text.split(/[。！？\n]/u))
-        .flatMap((sentence) =>
-          Array.from(
-            sentence.matchAll(
-              /(?:明細|取引)(?:には|に|は)?(?:\d{1,2}月\d{1,2}日の)?(.+?)(?:があります|がありました|が含まれます|が含まれています|を含みます|が記載されています|が載っています)/gu,
-            ),
-            ([, description]) => description.trim(),
+  const collectClaimedTransactionDescriptions = (texts: string[]) =>
+    texts
+      .flatMap((text) => text.split(/[。！？\n]/u))
+      .flatMap((sentence) =>
+        Array.from(
+          sentence.matchAll(
+            /(?:明細|取引)(?:には|に|は)?(?:\d{1,2}月\d{1,2}日の)?(.+?)(?:があります|がありました|が含まれます|が含まれています|を含みます|が記載されています|が載っています)/gu,
           ),
-        )
-        .filter(
-          (description) =>
-            ![
-              ...(config.expectedTransactions ?? []),
-              ...(config.expectedTransactionGroup?.allowedTransactions ?? []),
-            ].some(
-              (transaction) => normalize(transaction.description) === normalize(description),
-            ) &&
-            !retrievedTransactionRows.some(
-              (transaction) =>
-                typeof transaction === "object" &&
-                transaction !== null &&
-                "description" in transaction &&
-                normalize(String(transaction.description)) === normalize(description),
-            ),
-        )
+          ([, description]) => description.trim(),
+        ),
+      );
+  const transactionDescriptionIsRetrieved = (description: string, results: DataToolResult[]) =>
+    results
+      .flatMap((result) =>
+        result.toolName === "searchTransactions"
+          ? collectValuesAtPath(result.output, "$.transactions.*")
+          : [],
+      )
+      .some(
+        (transaction) =>
+          typeof transaction === "object" &&
+          transaction !== null &&
+          "description" in transaction &&
+          normalize(String(transaction.description)) === normalize(description),
+      );
+  const unsupportedTextTransactionDescriptions = config.requireTransactionToolGrounding
+    ? [
+        ...(parsed.textEvidence.length > 0
+          ? parsed.textEvidence
+          : [{ text: parsed.text, allowedHrefs: [], dataToolResults: [] }]
+        ).flatMap((evidence) =>
+          collectClaimedTransactionDescriptions([evidence.text]).filter(
+            (description) =>
+              !transactionDescriptionIsRetrieved(description, evidence.dataToolResults),
+          ),
+        ),
+        ...collectClaimedTransactionDescriptions(collectFacts(parsed.cards)).filter(
+          (description) => !transactionDescriptionIsRetrieved(description, parsed.dataToolResults),
+        ),
+      ]
     : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
@@ -1960,6 +1979,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
+    parsed.unauthorizedLinks.length > 0
+      ? `未承認の生成リンク: ${parsed.unauthorizedLinks.join(",")}`
+      : undefined,
     textEvidenceMismatch ? "textEvidence が欠落または最終テキストと不一致です。" : undefined,
     unexpectedVisibleAmounts.length > 0
       ? `未許可の可視金額: ${[...new Set(unexpectedVisibleAmounts.map(({ amount }) => amount))].join(",")}`

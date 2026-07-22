@@ -27,6 +27,29 @@ export interface ChatResponse {
   }>;
 }
 
+function collectGeneratedLinks(text: string): string[] {
+  return [
+    ...Array.from(
+      text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
+      ([, href]) => href,
+    ),
+    ...Array.from(
+      text.matchAll(/(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/gi),
+      ([href]) => href.replace(/[.,!?;:]+$/, ""),
+    ),
+  ];
+}
+
+function isAllowedGeneratedLink(destination: string, allowedHrefs: Set<string>) {
+  try {
+    const pathname =
+      new URL(destination, "https://invalid.local").pathname.replace(/\/$/, "") || "/";
+    return [...allowedHrefs].some((href) => (href.replace(/\/$/, "") || "/") === pathname);
+  } catch {
+    return false;
+  }
+}
+
 interface DataToolResult {
   toolName: string;
   input: unknown;
@@ -96,6 +119,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     allowedHrefs: string[];
     dataToolResults: DataToolResult[];
   }> = [];
+  const unauthorizedLinks: string[] = [];
   let hasStepText = false;
 
   for (const step of response.steps) {
@@ -103,6 +127,11 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     const dataToolResultsBeforeStep = [...dataToolResults];
     if (step.text !== undefined) {
       hasStepText = true;
+      unauthorizedLinks.push(
+        ...collectGeneratedLinks(step.text).filter(
+          (link) => !isAllowedGeneratedLink(link, allowedHrefs),
+        ),
+      );
       const text = sanitizeFinanceChatLinks(step.text, allowedHrefs);
       visibleText.push(text);
       textEvidence.push({
@@ -143,10 +172,18 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const text = hasStepText
     ? visibleText.join("")
     : sanitizeFinanceChatLinks(response.text, allowedHrefs);
+  if (!hasStepText) {
+    unauthorizedLinks.push(
+      ...collectGeneratedLinks(response.text).filter(
+        (link) => !isAllowedGeneratedLink(link, allowedHrefs),
+      ),
+    );
+  }
   return {
     allowedHrefs: allowedHrefsAtPresentation,
     dataToolResults: dataToolResultsAtPresentation,
     text,
+    unauthorizedLinks: [...new Set(unauthorizedLinks)],
     textEvidence: hasStepText
       ? textEvidence
       : [
