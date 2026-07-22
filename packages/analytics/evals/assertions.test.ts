@@ -5883,4 +5883,61 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
   });
+
+  it("rejects an unsupported fallback transaction with expectedTransactions", () => {
+    const fabricatedTransactionOutput = JSON.stringify({
+      text: "明細には7月10日の架空店があります。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedTransactionOutput, {
+        config: {
+          expectedTransactions: [
+            {
+              ids: ["tx-a"],
+              date: "2026-07-10",
+              description: "成城石井",
+              amount: 3435,
+              amountType: "expense",
+              category: "食費",
+            },
+          ],
+          requireTransactionToolGrounding: true,
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
+  });
+
+  it.each(["月初", "月末"])("rejects an ambiguous standalone month boundary: %s", (boundary) => {
+    const boundaryOutput = JSON.stringify({
+      text: `${boundary}時点の総資産は5,683,100円です。`,
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/bs" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(boundaryOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining(`relative-${boundary}`) });
+  });
 });
