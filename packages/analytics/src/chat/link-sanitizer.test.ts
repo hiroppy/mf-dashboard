@@ -97,6 +97,7 @@ describe("sanitizeFinanceChatLinks", () => {
 
   it.each([
     '`<a href="javascript:alert(1)">` はHTMLタグ例です。',
+    '`` `<a href="javascript:alert(1)">` `` はHTMLタグ例です。',
     '```html\n<a href="javascript:alert(1)">\n```',
   ])("preserves a raw anchor literal inside Markdown code: %s", (text) => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);

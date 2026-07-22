@@ -31,6 +31,7 @@ export function splitCompleteFinanceChatText(
   let destinationDepth = 0;
   let codeDelimiterLength = 0;
   let htmlAnchorOpen = false;
+  let htmlAnchorQuote: '"' | "'" | undefined;
   let lastBoundary = -1;
 
   for (let index = 0; index < text.length; index += 1) {
@@ -41,7 +42,7 @@ export function splitCompleteFinanceChatText(
       let runLength = 1;
       while (text[index + runLength] === "`") runLength += 1;
       if (codeDelimiterLength === 0) {
-        codeDelimiterLength = runLength >= 3 ? runLength : 1;
+        codeDelimiterLength = runLength;
       } else if (runLength >= codeDelimiterLength) {
         codeDelimiterLength = 0;
       }
@@ -54,13 +55,22 @@ export function splitCompleteFinanceChatText(
       codeDelimiterLength === 0 &&
       !htmlAnchorOpen &&
       /^<a\b/iu.test(text.slice(index)) &&
-      hasCompleteRawHtmlAnchorOpening(text, index)
+      (hasCompleteRawHtmlAnchorOpening(text, index) ||
+        /^<a\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=/iu.test(text.slice(index)))
     ) {
       htmlAnchorOpen = true;
       continue;
     }
 
     if (htmlAnchorOpen) {
+      if (htmlAnchorQuote !== undefined) {
+        if (!escaped && character === htmlAnchorQuote) htmlAnchorQuote = undefined;
+        continue;
+      }
+      if (!escaped && (character === '"' || character === "'")) {
+        htmlAnchorQuote = character;
+        continue;
+      }
       const closingAnchor = /^<\/a\s*>/iu.exec(text.slice(index));
       if (!escaped && closingAnchor) {
         htmlAnchorOpen = false;

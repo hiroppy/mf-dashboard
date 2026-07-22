@@ -1814,6 +1814,8 @@ describe("assertFinanceResponse", () => {
     ["食費は増加しました。", false, false],
     ["食費は増加しました。", true, false],
     ["食費は減少しました。", true, true],
+    ["食費は前月を上回りました。", true, false],
+    ["食費は前月を下回りました。", true, true],
   ])("validates a qualitative category trend: %s", (text, includePreviousMonth, pass) => {
     const julyResult = {
       toolName: "getMonthlyCategoryTotals",
@@ -1976,6 +1978,8 @@ describe("assertFinanceResponse", () => {
     ["前月より貯蓄率が低下しました。", true, "期待する最終応答です。"],
     ["貯蓄率は前月と同じです。", false, "誤った貯蓄率方向"],
     ["貯蓄率は前月から横ばいです。", false, "誤った貯蓄率方向"],
+    ["貯蓄率は前月を上回りました。", false, "誤った貯蓄率方向"],
+    ["貯蓄率は前月を下回りました。", true, "期待する最終応答です。"],
   ])("validates a qualitative savings-rate direction: %s", (text, pass, expectedReason) => {
     const juneResult = {
       toolName: "getMonthlySummaryByMonth",

@@ -1761,13 +1761,13 @@ function collectInvalidCategoryTrendClaims(
     const trendMatches = [
       ...text.matchAll(
         new RegExp(
-          `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,12}(増加|減少|上昇|低下|増え|減り|上が|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
+          `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,12}(増加|減少|上昇|低下|増え|減り|上が|下が|上回|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
           "gu",
         ),
       ),
       ...text.matchAll(
         new RegExp(
-          `(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
+          `(?:前月|先月)(?:と比べて|より|から|比|を)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が|上回|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
           "gu",
         ),
       ),
@@ -1801,7 +1801,7 @@ function collectInvalidCategoryTrendClaims(
       const previous = amounts.find(({ month }) => month === previousCalendarMonth(current.month));
       if (previous === undefined) return [match[0]];
       const claimsUnchanged = /(?:横ばい|変化|同額)/u.test(match[1]);
-      const claimsIncrease = /(?:増加|上昇|増え|上が)/u.test(match[1]);
+      const claimsIncrease = /(?:増加|上昇|増え|上が|上回)/u.test(match[1]);
       const trendIsValid = claimsUnchanged
         ? current.amount === previous.amount
         : claimsIncrease
@@ -1970,10 +1970,10 @@ function collectInvalidMonthlySummaryTrends(text: string, results: DataToolResul
 function collectInvalidSavingsRateDirections(text: string, results: DataToolResult[]): string[] {
   const directionMatches = [
     ...text.matchAll(
-      /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)/gu,
+      /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|と|より|から|比|を)?(?:も)?\s*(上昇|増加|改善|上が|上回|低下|減少|悪化|下が|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)/gu,
     ),
     ...text.matchAll(
-      /(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?.{0,12}貯蓄率(?:は|が)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)/gu,
+      /(?:前月|先月)(?:と比べて|と|より|から|比|を)?(?:も)?.{0,12}貯蓄率(?:は|が)?\s*(上昇|増加|改善|上が|上回|低下|減少|悪化|下が|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)/gu,
     ),
   ].filter((match) => {
     const endIndex = match.index + match[0].length;
@@ -2004,7 +2004,7 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
     const previous = rates.find((rate) => rate.month === previousCalendarMonth(current.month));
     if (previous === undefined) return [match[0]];
     const claimsUnchanged = /(?:横ばい|変化|同額|同じ)/u.test(match[1]);
-    const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);
+    const claimsIncrease = /(?:上昇|増加|改善|上が|上回)/u.test(match[1]);
     const directionIsValid = claimsUnchanged
       ? current.rate === previous.rate
       : claimsIncrease

@@ -59,7 +59,7 @@ function isInsideMarkdownCode(text: string, targetIndex: number): boolean {
     let runLength = 1;
     while (text[index + runLength] === "`") runLength += 1;
     if (delimiterLength === 0) {
-      delimiterLength = runLength >= 3 ? runLength : 1;
+      delimiterLength = runLength;
     } else if (runLength >= delimiterLength) {
       delimiterLength = 0;
     }
