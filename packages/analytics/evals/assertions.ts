@@ -986,12 +986,12 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:先月|前月|来月|翌月)(?=末|分|の|時点|現在|\s|$)/g),
+        text.matchAll(/(?:先月|前月|来月|翌月)(?=末|分|の|は|が|時点|現在|\s|$)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(
         text.matchAll(
-          /(\d+|[〇零一二三四五六七八九十百]+)\s*(?:か月|ヶ月|ケ月|箇月)(?:前|後)(?=末|分|の|時点|現在|\s|$)/g,
+          /(\d+|[〇零一二三四五六七八九十百]+)\s*(?:か月|ヶ月|ケ月|箇月)(?:前|後)(?=末|分|の|は|が|時点|現在|\s|$)/g,
         ),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),

@@ -3229,6 +3229,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
   });
 
+  it("recognizes a relative previous month followed by a topic particle", () => {
+    const relativeComparisonOutput = JSON.stringify({
+      text: "先月は食費41,837円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
+  });
+
   it("rejects a numeric relative month outside the allowed month", () => {
     const relativeComparisonOutput = JSON.stringify({
       text: "2か月前の食費は41,837円です。",
