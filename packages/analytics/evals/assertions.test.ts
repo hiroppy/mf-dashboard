@@ -1542,6 +1542,26 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("accepts an unpadded numeric month for an expected insight month", () => {
+    const unpaddedMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026-7の衣服・美容は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unpaddedMonthOutput, {
+        config: { expectedInsightFacts: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("binds visible months to current and comparison roles", () => {
     const reversedMonthsOutput = JSON.stringify({
       text: "回答",
@@ -1979,6 +1999,35 @@ describe("assertFinanceResponse", () => {
           allowedVisibleAmounts: [93341],
           forbiddenVisiblePatterns: [
             "(赤字(?!\\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)",
+          ],
+          visibleAmountClaims: [
+            { label: "収支", amount: 93341 },
+            { label: "黒字", amount: 93341 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("allows a future-period surplus disclaimer", () => {
+    const cautiousOutput = JSON.stringify({
+      text: "7月は93,341円の黒字です。来月も黒字になるとは限りません。",
+      cards: [
+        {
+          type: "summary",
+          title: "2026年7月の収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(cautiousOutput, {
+        config: {
+          allowedVisibleAmounts: [93341],
+          forbiddenVisiblePatterns: [
+            "(黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|でない|ではありません)",
           ],
           visibleAmountClaims: [
             { label: "収支", amount: 93341 },

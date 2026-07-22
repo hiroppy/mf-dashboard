@@ -128,15 +128,11 @@ function includesFact(actualFacts: string[], expected: string): boolean {
   if (expectedMonth) {
     const [, year, month] = expectedMonth;
     const numericMonth = String(Number(month));
-    const acceptedFormats = [
-      `${year}-${month}`,
-      `${year}/${month}`,
-      `${year}年${month}月`,
-      `${year}年${numericMonth}月`,
-    ];
-    return actualFacts.some((actual) =>
-      acceptedFormats.some((format) => normalize(actual).includes(normalize(format))),
+    const monthPattern = new RegExp(
+      `${year}(?:[-/]0?${numericMonth}(?!\\d)|年0?${numericMonth}月)`,
+      "u",
     );
+    return actualFacts.some((actual) => monthPattern.test(normalize(actual)));
   }
   return actualFacts.some((actual) => normalize(actual).includes(normalize(expected)));
 }

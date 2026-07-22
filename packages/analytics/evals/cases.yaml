@@ -31,7 +31,7 @@
           - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
         forbiddenVisiblePatterns:
           - (赤字(?!\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
-          - (黒字|プラス|余剰|手残り).{0,12}(とは言えません|とは限りません|ではない|でない|ありません|ない)
+          - (黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|でない|ではありません)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -384,6 +384,7 @@
         allowedVisibleAmounts: [5683100]
         allowedVisibleDates: ["2026-07-31"]
         allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: []
         visibleAmountClaims:
           - { label: 総資産, amount: 5683100 }
         expectedMetrics:
