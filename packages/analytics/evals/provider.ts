@@ -109,6 +109,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   }
 
   return {
+    allowedHrefs: [...allowedHrefs],
     text: hasStepText
       ? visibleText.join("")
       : sanitizeFinanceChatLinks(response.text, allowedHrefs),

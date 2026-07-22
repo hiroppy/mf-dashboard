@@ -62,6 +62,7 @@ describe("toEvaluationOutput", () => {
     };
 
     expect(toEvaluationOutput(response, "test-group")).toEqual({
+      allowedHrefs: [],
       text: "回答",
       cards: [{ type: "summary" }],
     });
@@ -89,9 +90,10 @@ describe("toEvaluationOutput", () => {
       ],
     };
 
-    expect(toEvaluationOutput(response, "test-group").text).toBe(
-      "[詳細](/test-group/cf/2026-07) 外部",
-    );
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      allowedHrefs: ["/test-group/cf/2026-07"],
+      text: "[詳細](/test-group/cf/2026-07) 外部",
+    });
   });
 
   it("keeps visible text from every generation step in order", () => {

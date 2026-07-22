@@ -74,6 +74,7 @@ interface AssertionContext {
 }
 
 interface EvaluationOutput {
+  allowedHrefs: string[];
   text: string;
   cards: FinanceChatCard[];
 }
@@ -85,7 +86,13 @@ function parseOutput(output: string): EvaluationOutput | undefined {
     const value = JSON.parse(output) as Partial<EvaluationOutput>;
     const cards = financeChatCardsSchema.safeParse(value.cards);
     if (typeof value.text !== "string" || !cards.success) return undefined;
-    return { text: value.text, cards: cards.data };
+    return {
+      allowedHrefs: Array.isArray(value.allowedHrefs)
+        ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
+        : [],
+      text: value.text,
+      cards: cards.data,
+    };
   } catch {
     return undefined;
   }
@@ -221,7 +228,7 @@ function collectBareVisibleAmountMatches(
       return Array.from(
         text.matchAll(
           new RegExp(
-            `${escapedLabel}.{0,8}?([+\\-−▲▼]?[\\d,]{3,})(?![\\d,]|\\s*(?:円|億|万|千|[%％]|年|月|日))`,
+            `${escapedLabel}.{0,8}?([+\\-−▲▼]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日))`,
             "g",
           ),
         ),
@@ -338,6 +345,18 @@ function collectClaimContext(text: string, startIndex: number, endIndex: number)
   const precedingClaim = precedingClaims.at(-1);
   if (precedingClaim?.index !== undefined) {
     return text.slice(clauseStart + 1 + precedingClaim.index + precedingClaim[0].length, endIndex);
+  }
+  const followingClause = text.slice(endIndex, clauseEnd);
+  const nextClaim = /[+\-−▲▼]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/.exec(
+    followingClause,
+  );
+  if (nextClaim?.index !== undefined) {
+    const textBeforeNextClaim = followingClause.slice(0, nextClaim.index);
+    const nextRoleMarker = /(前月|先月|比較|差額|増減|変化|増加|減少|上回|下回)/.exec(
+      textBeforeNextClaim,
+    );
+    const contextEnd = endIndex + (nextRoleMarker?.index ?? nextClaim.index);
+    return text.slice(clauseStart + 1, contextEnd);
   }
   return text.slice(clauseStart + 1, clauseEnd);
 }
@@ -656,6 +675,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const routeMismatch =
     config.expectedRoute &&
     (!cardRoutes.includes(config.expectedRoute) ||
+      !parsed.allowedHrefs.includes(config.expectedRoute) ||
       actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [

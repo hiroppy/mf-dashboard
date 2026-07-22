@@ -15,6 +15,10 @@
           - { label: 収入, amount: 313235 }
           - { label: 支出, amount: 219894 }
           - { label: 収支, amount: 93341 }
+          - { label: 黒字, amount: 93341 }
+          - { label: プラス, amount: 93341 }
+          - { label: 余剰, amount: 93341 }
+          - { label: 手残り, amount: 93341 }
         allowedInsightMetrics:
           - { amount: 93341, amountType: balance, labelPattern: (黒字|収支|余剰|手残り) }
         expectedCardTextFacts:

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import assertFinanceResponse from "./assertions";
 
 const output = JSON.stringify({
+  allowedHrefs: ["/0/cf/2026-07"],
   text: "2026年7月の収支です。",
   cards: [
     {
@@ -132,6 +133,29 @@ describe("assertFinanceResponse", () => {
     });
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("未許可の可視金額: 999999");
+  });
+
+  it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
+    const bareAmountOutput = JSON.stringify({
+      text: `収支は${amount}です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(bareAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [93341],
+          visibleAmountClaims: [{ label: "収支", amount: 93341 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("preserves the sign of visible monetary claims", () => {
@@ -305,6 +329,32 @@ describe("assertFinanceResponse", () => {
             { label: "衣服・美容", amount: 19475 },
             { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
             { label: "衣服・美容", amount: 7364, rolePattern: "(差額|差|増加)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("does not apply a later role marker to a current amount", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "衣服・美容は19,475円で前月比7,364円増加しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [19475, 7364],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 7364, rolePattern: "(差額|差|前月比|増加)" },
           ],
         },
       }),
@@ -787,6 +837,27 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(fallbackRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a card route that was not returned by the route tool", () => {
+    const fabricatedRouteOutput = JSON.stringify({
+      allowedHrefs: [],
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedRouteOutput, {
         config: { expectedRoute: "/0/cf/2026-07" },
       }),
     ).toMatchObject({ pass: false });
