@@ -104,6 +104,14 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toEqual([]);
   });
 
+  it.each([
+    '`<a href="javascript:alert(1)">click</a>',
+    '``<a href="javascript:alert(1)">click</a>`',
+  ])("sanitizes a raw anchor after an unmatched code delimiter: %s", (text) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).not.toContain("<a");
+    expect(collectFinanceChatLinks(text)).toContain("javascript:alert(1)");
+  });
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {

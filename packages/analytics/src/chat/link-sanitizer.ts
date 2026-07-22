@@ -65,7 +65,15 @@ function isInsideMarkdownCode(text: string, targetIndex: number): boolean {
     }
     index += runLength - 1;
   }
-  return delimiterLength > 0;
+  if (delimiterLength === 0) return false;
+  for (let index = targetIndex; index < text.length; index += 1) {
+    if (text[index] !== "`") continue;
+    let runLength = 1;
+    while (text[index + runLength] === "`") runLength += 1;
+    if (runLength >= delimiterLength) return true;
+    index += runLength - 1;
+  }
+  return false;
 }
 
 function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
