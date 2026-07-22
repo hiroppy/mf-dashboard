@@ -877,6 +877,48 @@ describe("assertFinanceResponse", () => {
     },
   );
 
+  it.each(["支出の大半は食費ではありません。", "食費は支出の過半数ではありません。"])(
+    "accepts an explicitly denied qualitative dominance claim: %s",
+    (text) => {
+      const deniedOutput = JSON.stringify({
+        text,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [{ label: "支出", amount: 219894, amountType: "expense" }],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(assertFinanceResponse(deniedOutput)).toMatchObject({ pass: true });
+    },
+  );
+
+  it("accepts an explicitly denied foreign-currency amount followed by yen", () => {
+    const deniedOutput = JSON.stringify({
+      text: "総資産は5,683,100スイスフランではなく、5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(deniedOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
       text: `収支は${amount}です。`,

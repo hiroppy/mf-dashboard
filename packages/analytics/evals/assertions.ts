@@ -796,7 +796,12 @@ function collectCarriedClaimLabel<T extends { label: string }>(
   const isTopicContinuation = /^\s*(?:は|が)\s*$/u.test(
     text.slice(previousClaim.index + previousClaim.label.length, clauseStart),
   );
-  return isComparisonContinuation || isTopicContinuation ? previousClaim.label : undefined;
+  const isCorrectionContinuation = /(?:ではなく|でなく)\s*$/u.test(
+    text.slice(previousClaim.index + previousClaim.label.length, clauseStart),
+  );
+  return isComparisonContinuation || isTopicContinuation || isCorrectionContinuation
+    ? previousClaim.label
+    : undefined;
 }
 
 function collectClaimContext(text: string, startIndex: number, endIndex: number): string {
@@ -1566,16 +1571,33 @@ export default function assertFinanceResponse(output: string, context: Assertion
       /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*[A-Z]{3})/gu,
     ),
   ]
+    .filter((match) => {
+      const endIndex = match.index + match[0].length;
+      return !hasNegatedSuffix(
+        visibleText,
+        endIndex,
+        collectClauseBounds(visibleText, match.index, endIndex).clauseEnd,
+      );
+    })
     .map(([claim]) => claim)
     .filter((claim) => !/JPY/u.test(claim));
   const unsupportedQualitativeDominanceClaims = [
     ...visibleText.matchAll(
-      /(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)(?:は|が)[^。！？\n]{1,16}/gu,
+      /(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
     ),
     ...visibleText.matchAll(
       /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)/gu,
     ),
-  ].map(([claim]) => claim);
+  ]
+    .filter((match) => {
+      const endIndex = match.index + match[0].length;
+      return !hasNegatedSuffix(
+        visibleText,
+        endIndex,
+        collectClauseBounds(visibleText, match.index, endIndex).clauseEnd,
+      );
+    })
+    .map(([claim]) => claim);
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
