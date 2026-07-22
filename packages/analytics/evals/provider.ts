@@ -22,7 +22,7 @@ export interface ChatResponse {
   text: string;
   steps: Array<{
     text?: string;
-    toolResults: Array<{ toolName: string; output: unknown }>;
+    toolResults: Array<{ toolName: string; input?: unknown; output: unknown }>;
   }>;
 }
 
@@ -74,8 +74,12 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
   const allowedHrefs = new Set<string>();
   let allowedHrefsAtPresentation: string[] = [];
-  const dataToolResults: Array<{ toolName: string; output: unknown }> = [];
-  let dataToolResultsAtPresentation: Array<{ toolName: string; output: unknown }> = [];
+  const dataToolResults: Array<{ toolName: string; input: unknown; output: unknown }> = [];
+  let dataToolResultsAtPresentation: Array<{
+    toolName: string;
+    input: unknown;
+    output: unknown;
+  }> = [];
   const presentations: unknown[] = [];
   const visibleText: string[] = [];
   let hasStepText = false;
@@ -88,9 +92,9 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
       visibleText.push(sanitizeFinanceChatLinks(step.text, allowedHrefs));
     }
 
-    for (const { toolName, output } of step.toolResults) {
+    for (const { toolName, input, output } of step.toolResults) {
       if (toolName !== "getFinanceDashboardRoute" && toolName !== "presentFinanceCards") {
-        dataToolResults.push({ toolName, output });
+        dataToolResults.push({ toolName, input, output });
       }
       if (toolName === "getFinanceDashboardRoute") {
         const route = financeChatHrefSchema.safeParse(

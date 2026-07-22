@@ -3,7 +3,13 @@ import assertFinanceResponse from "./assertions";
 
 const output = JSON.stringify({
   allowedHrefs: ["/0/cf/2026-07"],
-  dataToolResults: [{ toolName: "getMonthlySummaryByMonth", output: { balance: 93341 } }],
+  dataToolResults: [
+    {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { month: "2026-07", netIncome: 93341 },
+    },
+  ],
   text: "2026年7月の収支です。",
   cards: [
     {
@@ -22,7 +28,14 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(output, {
         config: {
           expectedCardFacts: ["2026年7月"],
-          expectedDataToolFacts: [93341],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.netIncome",
+              value: 93341,
+            },
+          ],
           expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
           expectedCardTypes: ["summary"],
           expectedRoute: "/0/cf/2026-07",
@@ -39,22 +52,75 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(fabricatedOutput, {
-        config: { expectedDataToolFacts: [93341] },
+        config: {
+          expectedDataToolFacts: [
+            { toolName: "getMonthlySummaryByMonth", path: "$.netIncome", value: 93341 },
+          ],
+        },
       }),
-    ).toMatchObject({ pass: false, reason: "不足 data tool facts: 93341" });
+    ).toMatchObject({
+      pass: false,
+      reason: "不足 data tool facts: getMonthlySummaryByMonth:$.netIncome",
+    });
   });
 
-  it("matches numeric data-tool evidence as an exact typed leaf", () => {
+  it("matches data-tool evidence by tool, input, path, and exact value", () => {
     const wrongEvidenceOutput = JSON.stringify({
       ...JSON.parse(output),
-      dataToolResults: [{ toolName: "getFinancialMetrics", output: { amount: 1297 } }],
+      dataToolResults: [
+        {
+          toolName: "getUnrelatedTool",
+          input: { month: "2026-06" },
+          output: { previousMonth: { unrelated: 93341 }, amount: 1297 },
+        },
+      ],
     });
 
     expect(
       assertFinanceResponse(wrongEvidenceOutput, {
-        config: { expectedDataToolFacts: [297] },
+        config: {
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.netIncome",
+              value: 93341,
+            },
+          ],
+        },
       }),
-    ).toMatchObject({ pass: false, reason: "不足 data tool facts: 297" });
+    ).toMatchObject({ pass: false });
+  });
+
+  it("requires identity fields and values on the same data-tool row", () => {
+    const splitEvidenceOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [
+        {
+          toolName: "getMonthlyCategoryTotals",
+          input: { month: "2026-07" },
+          output: [
+            { category: "食費", type: "expense", totalAmount: 999 },
+            { category: "日用品", type: "expense", totalAmount: 41837 },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(splitEvidenceOutput, {
+        config: {
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "食費", type: "expense", totalAmount: 41837 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects malformed evaluation output", () => {

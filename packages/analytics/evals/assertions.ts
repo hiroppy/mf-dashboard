@@ -32,6 +32,13 @@ interface CardTextFactExpectation {
   pattern: string;
 }
 
+interface DataToolFactExpectation {
+  input?: unknown;
+  path: string;
+  toolName: string;
+  value: unknown;
+}
+
 interface TransactionExpectation {
   ids: string[];
   date: string;
@@ -66,7 +73,7 @@ interface AssertionContext {
     expectedCardTitleFacts?: CardTextFactExpectation[];
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
-    expectedDataToolFacts?: Array<string | number>;
+    expectedDataToolFacts?: DataToolFactExpectation[];
     expectedInsightActionPattern?: string;
     expectedInsightFacts?: string[];
     expectedMetrics?: MetricExpectation[];
@@ -84,7 +91,7 @@ interface AssertionContext {
 
 interface EvaluationOutput {
   allowedHrefs: string[];
-  dataToolResults: Array<{ toolName: string; output: unknown }>;
+  dataToolResults: Array<{ toolName: string; input: unknown; output: unknown }>;
   text: string;
   cards: FinanceChatCard[];
 }
@@ -101,14 +108,16 @@ function parseOutput(output: string): EvaluationOutput | undefined {
         ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
         : [],
       dataToolResults: Array.isArray(value.dataToolResults)
-        ? value.dataToolResults.filter(
-            (result): result is { toolName: string; output: unknown } =>
-              typeof result === "object" &&
-              result !== null &&
-              "toolName" in result &&
-              typeof result.toolName === "string" &&
-              "output" in result,
-          )
+        ? value.dataToolResults
+            .filter(
+              (result): result is { toolName: string; input: unknown; output: unknown } =>
+                typeof result === "object" &&
+                result !== null &&
+                "toolName" in result &&
+                typeof result.toolName === "string" &&
+                "output" in result,
+            )
+            .map((result) => ({ ...result, input: "input" in result ? result.input : undefined }))
         : [],
       text: value.text,
       cards: cards.data,
@@ -136,13 +145,40 @@ function collectFacts(value: unknown): string[] {
   return [];
 }
 
-function collectTypedLeaves(value: unknown): Array<string | number> {
-  if (typeof value === "string" || typeof value === "number") return [value];
-  if (Array.isArray(value)) return value.flatMap(collectTypedLeaves);
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value).flatMap(collectTypedLeaves);
+function matchesPartial(actual: unknown, expected: unknown): boolean {
+  if (typeof expected !== "object" || expected === null) return actual === expected;
+  if (typeof actual !== "object" || actual === null) return false;
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(actual) && expected.every((item, index) => matchesPartial(actual[index], item))
+    );
   }
-  return [];
+  return Object.entries(expected).every(([key, value]) =>
+    matchesPartial((actual as Record<string, unknown>)[key], value),
+  );
+}
+
+function collectValuesAtPath(value: unknown, path: string): unknown[] {
+  const segments = path === "$" ? [] : path.replace(/^\$\.?/u, "").split(".");
+  return segments.reduce<unknown[]>(
+    (values, segment) => {
+      if (segment === "*") {
+        return values.flatMap((item) =>
+          Array.isArray(item)
+            ? item
+            : typeof item === "object" && item !== null
+              ? Object.values(item)
+              : [],
+        );
+      }
+      return values.flatMap((item) =>
+        typeof item === "object" && item !== null && segment in item
+          ? [(item as Record<string, unknown>)[segment]]
+          : [],
+      );
+    },
+    [value],
+  );
 }
 
 function includesFact(actualFacts: string[], expected: string): boolean {
@@ -1033,11 +1069,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
   const cardFacts = collectFacts(parsed.cards);
-  const dataToolEvidence = parsed.dataToolResults.flatMap(({ output }) =>
-    collectTypedLeaves(output),
-  );
   const missingDataToolFacts = (config.expectedDataToolFacts ?? []).filter(
-    (fact) => !dataToolEvidence.some((actual) => typeof actual === typeof fact && actual === fact),
+    (expected) =>
+      !parsed.dataToolResults.some(
+        (result) =>
+          result.toolName === expected.toolName &&
+          (expected.input === undefined || matchesPartial(result.input, expected.input)) &&
+          collectValuesAtPath(result.output, expected.path).some((actual) =>
+            matchesPartial(actual, expected.value),
+          ),
+      ),
   );
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
@@ -1230,7 +1271,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingDataToolFacts.length > 0
-      ? `不足 data tool facts: ${missingDataToolFacts.join(", ")}`
+      ? `不足 data tool facts: ${missingDataToolFacts.map(({ toolName, path }) => `${toolName}:${path}`).join(", ")}`
       : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`

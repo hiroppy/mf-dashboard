@@ -53,7 +53,13 @@ describe("toEvaluationOutput", () => {
       text: "回答",
       steps: [
         {
-          toolResults: [{ toolName: "getMonthlySummaryByMonth", output: { income: 100 } }],
+          toolResults: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              output: { income: 100 },
+            },
+          ],
         },
         {
           toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
@@ -63,7 +69,13 @@ describe("toEvaluationOutput", () => {
 
     expect(toEvaluationOutput(response, "test-group")).toEqual({
       allowedHrefs: [],
-      dataToolResults: [{ toolName: "getMonthlySummaryByMonth", output: { income: 100 } }],
+      dataToolResults: [
+        {
+          toolName: "getMonthlySummaryByMonth",
+          input: { month: "2026-07" },
+          output: { income: 100 },
+        },
+      ],
       text: "回答",
       cards: [{ type: "summary" }],
     });
