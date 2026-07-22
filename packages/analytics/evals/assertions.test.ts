@@ -5346,12 +5346,38 @@ describe("assertFinanceResponse", () => {
           visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
           expectedDataToolFacts: [{ toolName: "getLatestTotalAssets", path: "$", value: 5683100 }],
           forbiddenVisiblePatterns: [
-            "(総資産|保有資産|資産).{0,32}(以前|過去|前回|前月|先月|前年|増え|減っ|増加|減少|上昇|低下|改善|悪化|変化|上回|下回)",
-            "(以前|過去|前回|前月|先月|前年|比較).{0,24}(増え|減っ|増加|減少|上昇|低下|改善|悪化|変化|上回|下回)",
+            "(総資産|保有資産|資産).{0,32}(増えています|増えました|減っています|減りました|増加(?:しています|しました|傾向です)|減少(?:しています|しました|傾向です)|上昇(?:しています|しました|傾向です)|低下(?:しています|しました|傾向です)|改善(?:しています|しました)|悪化(?:しています|しました)|上回っています|下回っています)",
+            "(以前|過去|前回|前月|先月|前年|比較).{0,24}(増えています|増えました|減っています|減りました|増加(?:しています|しました|傾向です)|減少(?:しています|しました|傾向です)|上昇(?:しています|しました|傾向です)|低下(?:しています|しました|傾向です)|改善(?:しています|しました)|悪化(?:しています|しました)|上回っています|下回っています)",
           ],
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("accepts an explicit total-assets trend uncertainty from a single snapshot", () => {
+    const uncertaintyOutput = JSON.stringify({
+      text: "前月との比較データがないため、総資産の増減は判断できません。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          description: "比較データなし",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(uncertaintyOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(総資産|保有資産|資産).{0,32}(増えています|増えました|減っています|減りました|増加(?:しています|しました|傾向です)|減少(?:しています|しました|傾向です)|上昇(?:しています|しました|傾向です)|低下(?:しています|しました|傾向です)|改善(?:しています|しました)|悪化(?:しています|しました)|上回っています|下回っています)",
+            "(以前|過去|前回|前月|先月|前年|比較).{0,24}(増えています|増えました|減っています|減りました|増加(?:しています|しました|傾向です)|減少(?:しています|しました|傾向です)|上昇(?:しています|しました|傾向です)|低下(?:しています|しました|傾向です)|改善(?:しています|しました)|悪化(?:しています|しました)|上回っています|下回っています)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects denial of a required spending-improvement candidate", () => {
