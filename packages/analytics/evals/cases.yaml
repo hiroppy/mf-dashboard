@@ -41,6 +41,7 @@
         requiredInsightPatterns:
           - (黒字|プラス|余剰|手残り)
           - (貯蓄|積立|予算|見直し|確保)
+        expectedInsightActionPattern: (家計|収支|月次|予算|支出|内訳|詳細)
         expectedCardTypes: [summary, insight]
         expectedRoute: /0/cf/2026-07
 

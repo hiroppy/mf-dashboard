@@ -1948,6 +1948,26 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a stale yearless hyphenated snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "7-30時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: { allowedVisibleDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("converts a Japanese era snapshot date before validation", () => {
     const staleSnapshotOutput = JSON.stringify({
       text: "回答",
@@ -2343,7 +2363,7 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
-  it.each(["貯蓄率は9割です。", "貯蓄率は99パーセントです。"])(
+  it.each(["貯蓄率は9割です。", "貯蓄率は99パーセントです。", "貯蓄率は九割です。"])(
     "recognizes a written percentage unit in %s",
     (text) => {
       const percentageOutput = JSON.stringify({
@@ -2372,6 +2392,29 @@ describe("assertFinanceResponse", () => {
   it("converts compound 割分厘 notation to a percentage", () => {
     const percentageOutput = JSON.stringify({
       text: "貯蓄率は2割9分8厘です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(percentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("converts kanji compound 割分厘 notation to a percentage", () => {
+    const percentageOutput = JSON.stringify({
+      text: "貯蓄率は二割九分八厘です。",
       cards: [
         {
           type: "insight",

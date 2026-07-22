@@ -579,6 +579,10 @@ function collectDates(rawTexts: string[]): string[] {
           `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(/(?<![\d-])(\d{1,2})-(\d{1,2})(?=\s*(?:時点|現在|の))/g),
+        ([, month, day]) => `*-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/(?<!\d)(?:(\d{4})\/)?(\d{1,2})\/(\d{1,2})(?!\d)/g),
         ([, year, month, day]) =>
           `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
@@ -705,13 +709,19 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
     .flatMap((text) =>
       Array.from(
         text.matchAll(
-          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?)/g,
+          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?|([〇零一二三四五六七八九十百]+)\s*パーセント|([〇零一二三四五六七八九十]+)\s*割(?:\s*([〇零一二三四五六七八九十]+)\s*分)?(?:\s*([〇零一二三四五六七八九十]+)\s*厘)?)/g,
         ),
         (match) => ({
           amount:
             (match[2] !== undefined
               ? Number(match[2].replaceAll(",", ""))
-              : Number(match[3]) * 10 + Number(match[4] ?? 0) + Number(match[5] ?? 0) / 10) *
+              : match[3] !== undefined
+                ? Number(match[3]) * 10 + Number(match[4] ?? 0) + Number(match[5] ?? 0) / 10
+                : match[6] !== undefined
+                  ? parseKanjiAmount(match[6])
+                  : parseKanjiAmount(match[7] ?? "") * 10 +
+                    parseKanjiAmount(match[8] ?? "") +
+                    parseKanjiAmount(match[9] ?? "") / 10) *
             (/[-−▲△▼▽]/.test(match[1] ?? "") ||
             /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
               ? -1
