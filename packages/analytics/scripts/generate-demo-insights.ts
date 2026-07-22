@@ -18,7 +18,7 @@ const db = getDb();
 const results: Record<string, Record<string, string | null>> = {};
 for (const groupId of GROUP_IDS) {
   console.log(`Generating insights for group: ${groupId}`);
-  results[groupId] = await generateInsights(db, groupId);
+  results[groupId] = (await generateInsights(db, groupId)).insights;
   console.log(`Done: ${groupId}`);
 }
 

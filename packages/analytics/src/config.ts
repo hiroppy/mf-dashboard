@@ -3,6 +3,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 
 type Provider = "openai" | "anthropic" | "google";
+export type AIBackend = "ai-sdk" | "codex";
 
 const providers: Record<Provider, () => ReturnType<typeof createOpenAI>> = {
   openai: () => createOpenAI({ apiKey: process.env.AI_API_KEY }),
@@ -17,7 +18,17 @@ const providers: Record<Provider, () => ReturnType<typeof createOpenAI>> = {
 };
 
 export function isLLMEnabled(): boolean {
-  return !!(process.env.AI_PROVIDER && process.env.AI_MODEL);
+  const backend = getAIBackend();
+  if (!process.env.AI_MODEL) return false;
+  return backend === "codex" || !!process.env.AI_PROVIDER;
+}
+
+export function getAIBackend(): AIBackend {
+  const backend = process.env.AI_BACKEND ?? "ai-sdk";
+  if (backend !== "ai-sdk" && backend !== "codex") {
+    throw new Error(`Unknown AI backend: ${backend}`);
+  }
+  return backend;
 }
 
 export function getModel() {

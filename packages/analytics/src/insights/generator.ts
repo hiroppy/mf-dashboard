@@ -4,9 +4,8 @@ import {
   shiftYearMonthKey,
 } from "@mf-dashboard/date-utils";
 import type { Db } from "@mf-dashboard/db";
-import { generateText, Output, stepCountIs } from "ai";
 import { z } from "zod";
-import { getModel } from "../config.js";
+import { generate } from "../generation.js";
 import type { AnalyticsInsights } from "../types.js";
 import { createAnalysisTools } from "./analysis-tools.js";
 import { createFinancialTools } from "./tools.js";
@@ -165,7 +164,12 @@ const STAGE2_SYSTEM_PROMPT = `あなたはプロの個人財務アドバイザ�
 - 増加なのに「減少」、減少なのに「増加」と記述する矛盾
 - 英語の技術用語（netIncome, savingsRate 等）をそのまま出力すること。必ず日本語（純収入、貯蓄率 等）に置き換える`;
 
-export async function generateInsights(db: Db, groupId: string): Promise<AnalyticsInsights> {
+export interface GeneratedInsights {
+  insights: AnalyticsInsights;
+  model: string;
+}
+
+export async function generateInsights(db: Db, groupId: string): Promise<GeneratedInsights> {
   const dbTools = createFinancialTools(db, groupId);
   const analysisTools = createAnalysisTools(db, groupId);
   const allTools = { ...dbTools, ...analysisTools };
@@ -182,41 +186,50 @@ export async function generateInsights(db: Db, groupId: string): Promise<Analyti
     .replaceAll("${previousMonth}", previousMonth);
 
   // Stage 1: Data collection + analysis memo
-  const stage1 = await generateText({
-    model: getModel(),
+  const stage1 = await generate({
     tools: allTools,
-    stopWhen: stepCountIs(10),
+    maxSteps: 10,
+    preloadTools: [
+      "getFinancialMetrics",
+      "analyzeMoMTrend",
+      "analyzeSpendingComparison",
+      "analyzePortfolioRisk",
+      "analyzeSavingsTrajectory",
+      "analyzeIncomeStability",
+      "getLiabilityBreakdownByCategory",
+    ],
     system: stage1System,
     prompt: `今日は${today}です。財務データを収集・分析し、詳細な分析メモを作成してください。`,
   });
 
-  const stage1ToolCalls = stage1.steps.flatMap((step) => step.toolCalls.map((tc) => tc.toolName));
   console.log(
-    `[analytics] Stage 1 - Steps: ${stage1.steps.length}, Tool calls: ${stage1ToolCalls.length > 0 ? stage1ToolCalls.join(", ") : "none"}`,
+    `[analytics] Stage 1 - Tool calls: ${stage1.toolNames.length > 0 ? stage1.toolNames.join(", ") : "none"}`,
   );
 
   const analysisMemo = stage1.text;
 
   // Stage 2: Structured insight generation from memo
-  const stage2 = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: insightsSchema }),
+  const stage2 = await generate({
+    schema: insightsSchema,
     system: STAGE2_SYSTEM_PROMPT,
     prompt: `以下の分析メモを元に、各分野のインサイトを生成してください。\n\n${analysisMemo}`,
   });
 
-  console.log(`[analytics] Stage 2 - Steps: ${stage2.steps.length}`);
+  console.log("[analytics] Stage 2 - Complete");
 
   if (!stage2.output) {
     throw new Error("LLM did not produce structured output");
   }
 
   return {
-    summary: stage2.output.summary,
-    savingsInsight: stage2.output.savingsInsight,
-    investmentInsight: stage2.output.investmentInsight,
-    spendingInsight: stage2.output.spendingInsight,
-    balanceInsight: stage2.output.balanceInsight,
-    liabilityInsight: stage2.output.liabilityInsight,
+    insights: {
+      summary: stage2.output.summary,
+      savingsInsight: stage2.output.savingsInsight,
+      investmentInsight: stage2.output.investmentInsight,
+      spendingInsight: stage2.output.spendingInsight,
+      balanceInsight: stage2.output.balanceInsight,
+      liabilityInsight: stage2.output.liabilityInsight,
+    },
+    model: stage2.model,
   };
 }

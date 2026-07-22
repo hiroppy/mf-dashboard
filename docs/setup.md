@@ -286,7 +286,39 @@ cp data/category-rules.example.json data/category-rules.json
 
 #### LLMによる推論
 
-固定ルールに一致しなかった取引だけをLLMで推論する場合は、`llm.enabled`を`true`へ変更し、`.env`に`AI_PROVIDER`、`AI_MODEL`、`AI_API_KEY`を設定する。
+固定ルールに一致しなかった取引だけをLLMで推論する場合は、`llm.enabled`を`true`へ変更する。
+
+API provider を使う既定経路:
+
+```env
+AI_BACKEND=ai-sdk
+AI_PROVIDER=openai
+AI_MODEL=gpt-5.4
+AI_API_KEY=...
+```
+
+ChatGPT subscription でログインした Codex CLI を one-shot で使う経路:
+
+```env
+AI_BACKEND=codex
+AI_MODEL=gpt-5.4
+CODEX_EXEC_PATH=/absolute/path/to/codex
+CODEX_HOME=/absolute/path/to/.codex
+CODEX_EXEC_TIMEOUT_MS=120000
+```
+
+`CODEX_HOME` は file-backed credential が必要なため、事前に
+`codex login --config 'cli_auth_credentials_store="file"'` を実行する。
+`CODEX_EXEC_PATH` には `command -v codex` で確認した repository 外の absolute path を指定する。
+symlink は実体へ解決し、group / world-writable な executable は credential copy 前に拒否する。
+child の `PATH` は Codex launcher、現在の Node runtime、OS system directory だけに限定する。
+
+Codex 経路は canonical credential を一時 `CODEX_HOME` へ snapshot し、clean cwd、read-only
+filesystem、MCP 無効、bundled skill 無効、bounded I/O、process timeout で実行する。isolated credential
+が refresh された場合は canonical へ自動 copy-back せず fail closed になるため、host で再ログインする。
+`tools.view_image=false` を strict config として認識しない Codex CLI は workspace 外の画像を読み得る状態で
+実行せず、generation 前に fail closed する。現在の CLI がこの設定を未対応の場合は、対応版へ更新するまで
+`AI_BACKEND=ai-sdk` を利用する。
 
 - Money Forward MEから取得した候補カテゴリの中から選択し、カテゴリIDは生成しない
 - 1回の実行件数は`llm.maxPerRun`で制限する。既定値は`5`

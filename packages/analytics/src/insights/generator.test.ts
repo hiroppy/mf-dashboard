@@ -2,19 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 type AnyMock = (...args: any[]) => any;
 
-const mockGenerateText = vi.fn<AnyMock>();
+const mockGenerate = vi.fn<AnyMock>();
 
-vi.mock("ai", () => ({
-  generateText: (...args: any[]) => mockGenerateText(...args),
-  Output: {
-    object: vi.fn<AnyMock>(({ schema }: any) => ({ type: "object", schema })),
-  },
-  stepCountIs: vi.fn<AnyMock>((n: number) => ({ type: "stepCount", count: n })),
-  tool: vi.fn<AnyMock>((def: any) => def),
-}));
-
-vi.mock("../config.js", () => ({
-  getModel: vi.fn<AnyMock>(() => "mock-model"),
+vi.mock("../generation.js", () => ({
+  generate: (...args: any[]) => mockGenerate(...args),
 }));
 
 vi.mock("./tools.js", () => ({
@@ -44,15 +35,18 @@ const validOutput = {
 function mockStage1Result(text: string, toolCalls: string[] = []) {
   return {
     text,
-    steps:
-      toolCalls.length > 0 ? [{ toolCalls: toolCalls.map((name) => ({ toolName: name })) }] : [],
+    model: "mock-stage-1-model",
+    output: undefined,
+    toolNames: toolCalls,
   };
 }
 
 function mockStage2Result(output: any) {
   return {
+    text: JSON.stringify(output),
+    model: "mock-stage-2-model",
     output,
-    steps: [{ toolCalls: [] }],
+    toolNames: [],
   };
 }
 
@@ -66,7 +60,7 @@ describe("generateInsights", () => {
   });
 
   it("should call createFinancialTools and createAnalysisTools with db and groupId", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("analysis memo", ["getFinancialMetrics"]))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
@@ -75,77 +69,78 @@ describe("generateInsights", () => {
     expect(createAnalysisTools).toHaveBeenCalledWith(mockDb, groupId);
   });
 
-  it("should call generateText twice (2-stage)", async () => {
-    mockGenerateText
+  it("should call generate twice (2-stage)", async () => {
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("analysis memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
-    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+    expect(mockGenerate).toHaveBeenCalledTimes(2);
   });
 
   it("should pass both dbTools and analysisTools to Stage 1", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
-    const stage1Args = mockGenerateText.mock.calls[0][0];
+    const stage1Args = mockGenerate.mock.calls[0][0];
     expect(stage1Args.tools).toEqual({
       dbTool1: {},
       dbTool2: {},
       analysisTool1: {},
       analysisTool2: {},
     });
-    expect(stage1Args).toHaveProperty("stopWhen");
+    expect(stage1Args.maxSteps).toBe(10);
+    expect(stage1Args.preloadTools).toContain("getFinancialMetrics");
     expect(stage1Args).toHaveProperty("system");
   });
 
   it("should pass Stage 1 memo in Stage 2 prompt", async () => {
     const memo = "Detailed financial analysis memo content";
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result(memo))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
-    const stage2Args = mockGenerateText.mock.calls[1][0];
+    const stage2Args = mockGenerate.mock.calls[1][0];
     expect(stage2Args.prompt).toContain(memo);
   });
 
   it("should not pass tools to Stage 2", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
-    const stage2Args = mockGenerateText.mock.calls[1][0];
+    const stage2Args = mockGenerate.mock.calls[1][0];
     expect(stage2Args.tools).toBeUndefined();
   });
 
   it("should pass output schema to Stage 2", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
-    const stage2Args = mockGenerateText.mock.calls[1][0];
-    expect(stage2Args).toHaveProperty("output");
+    const stage2Args = mockGenerate.mock.calls[1][0];
+    expect(stage2Args).toHaveProperty("schema");
     expect(stage2Args).toHaveProperty("system");
   });
 
   it("should use JST date context across UTC year boundary", async () => {
     vi.useFakeTimers({ now: new Date("2025-12-31T15:00:00.000Z") });
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
-    const stage1Args = mockGenerateText.mock.calls[0][0];
+    const stage1Args = mockGenerate.mock.calls[0][0];
     expect(stage1Args.prompt).toContain("今日は2026-01-01です");
     expect(stage1Args.system).toContain("今日は2026-01-01です");
     expect(stage1Args.system).toContain("当月2026-01");
@@ -154,16 +149,16 @@ describe("generateInsights", () => {
   });
 
   it("should return structured insights from Stage 2 output", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     const result = await generateInsights(mockDb, groupId);
-    expect(result).toEqual(validOutput);
+    expect(result).toEqual({ insights: validOutput, model: "mock-stage-2-model" });
   });
 
   it("should throw when Stage 2 output is null", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(null));
 
@@ -173,7 +168,7 @@ describe("generateInsights", () => {
   });
 
   it("should throw when Stage 2 output is undefined", async () => {
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(undefined));
 
@@ -185,29 +180,29 @@ describe("generateInsights", () => {
   it("should log Stage 1 and Stage 2 info", async () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo", ["getFinancialMetrics", "analyzeMoMTrend"]))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
     expect(consoleSpy).toHaveBeenCalledWith(
-      "[analytics] Stage 1 - Steps: 1, Tool calls: getFinancialMetrics, analyzeMoMTrend",
+      "[analytics] Stage 1 - Tool calls: getFinancialMetrics, analyzeMoMTrend",
     );
-    expect(consoleSpy).toHaveBeenCalledWith("[analytics] Stage 2 - Steps: 1");
+    expect(consoleSpy).toHaveBeenCalledWith("[analytics] Stage 2 - Complete");
     consoleSpy.mockRestore();
   });
 
   it("should log 'none' when Stage 1 has no tool calls", async () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    mockGenerateText
+    mockGenerate
       .mockResolvedValueOnce(mockStage1Result("memo"))
       .mockResolvedValueOnce(mockStage2Result(validOutput));
 
     await generateInsights(mockDb, groupId);
 
-    expect(consoleSpy).toHaveBeenCalledWith("[analytics] Stage 1 - Steps: 0, Tool calls: none");
+    expect(consoleSpy).toHaveBeenCalledWith("[analytics] Stage 1 - Tool calls: none");
     consoleSpy.mockRestore();
   });
 });

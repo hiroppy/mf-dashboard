@@ -47,12 +47,15 @@ describe("analyzeFinancialData", () => {
   it("should call generateInsights with db and groupId when LLM is enabled", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
     mockGenerateInsights.mockResolvedValue({
-      summary: "summary",
-      savingsInsight: "savings",
-      investmentInsight: null,
-      spendingInsight: null,
-      balanceInsight: null,
-      liabilityInsight: null,
+      insights: {
+        summary: "summary",
+        savingsInsight: "savings",
+        investmentInsight: null,
+        spendingInsight: null,
+        balanceInsight: null,
+        liabilityInsight: null,
+      },
+      model: "mock-model",
     });
 
     await analyzeFinancialData(mockDb, groupId);
@@ -70,7 +73,7 @@ describe("analyzeFinancialData", () => {
       balanceInsight: "balance",
       liabilityInsight: "liability",
     };
-    mockGenerateInsights.mockResolvedValue(insights);
+    mockGenerateInsights.mockResolvedValue({ insights, model: "actual-model" });
 
     const result = await analyzeFinancialData(mockDb, groupId);
 
@@ -79,7 +82,7 @@ describe("analyzeFinancialData", () => {
       groupId,
       date: "2025-06-15",
       insights,
-      model: null,
+      model: "actual-model",
     });
   });
 
@@ -94,7 +97,7 @@ describe("analyzeFinancialData", () => {
       balanceInsight: null,
       liabilityInsight: null,
     };
-    mockGenerateInsights.mockResolvedValue(insights);
+    mockGenerateInsights.mockResolvedValue({ insights, model: "mock-model" });
 
     await analyzeFinancialData(mockDb, groupId);
 
@@ -109,12 +112,15 @@ describe("analyzeFinancialData", () => {
   it("should return false when all insight values are null", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
     mockGenerateInsights.mockResolvedValue({
-      summary: null,
-      savingsInsight: null,
-      investmentInsight: null,
-      spendingInsight: null,
-      balanceInsight: null,
-      liabilityInsight: null,
+      insights: {
+        summary: null,
+        savingsInsight: null,
+        investmentInsight: null,
+        spendingInsight: null,
+        balanceInsight: null,
+        liabilityInsight: null,
+      },
+      model: "mock-model",
     });
 
     const result = await analyzeFinancialData(mockDb, groupId);
@@ -133,17 +139,19 @@ describe("analyzeFinancialData", () => {
     expect(mockSaveAnalyticsReport).not.toHaveBeenCalled();
   });
 
-  it("should use AI_MODEL env var for model field", async () => {
+  it("should save the model selected by the backend", async () => {
     mockIsLLMEnabled.mockReturnValue(true);
     mockGenerateInsights.mockResolvedValue({
-      summary: "summary",
-      savingsInsight: null,
-      investmentInsight: null,
-      spendingInsight: null,
-      balanceInsight: null,
-      liabilityInsight: null,
+      insights: {
+        summary: "summary",
+        savingsInsight: null,
+        investmentInsight: null,
+        spendingInsight: null,
+        balanceInsight: null,
+        liabilityInsight: null,
+      },
+      model: "codex-selected-model",
     });
-    process.env.AI_MODEL = "gpt-4o";
 
     const result = await analyzeFinancialData(mockDb, groupId);
 
@@ -151,10 +159,8 @@ describe("analyzeFinancialData", () => {
     expect(mockSaveAnalyticsReport).toHaveBeenCalledWith(
       mockDb,
       expect.objectContaining({
-        model: "gpt-4o",
+        model: "codex-selected-model",
       }),
     );
-
-    delete process.env.AI_MODEL;
   });
 });

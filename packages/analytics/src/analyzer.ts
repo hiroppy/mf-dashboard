@@ -6,9 +6,12 @@ import { generateInsights } from "./insights/generator.js";
 
 export async function analyzeFinancialData(db: Db, groupId: string): Promise<boolean> {
   let insights = null;
+  let model: string | null = null;
   if (isLLMEnabled()) {
     try {
-      insights = await generateInsights(db, groupId);
+      const generated = await generateInsights(db, groupId);
+      insights = generated.insights;
+      model = generated.model;
     } catch (error) {
       console.warn("[analytics] LLM insights generation failed:", error);
     }
@@ -25,7 +28,7 @@ export async function analyzeFinancialData(db: Db, groupId: string): Promise<boo
     groupId,
     date: today,
     insights,
-    model: process.env.AI_MODEL ?? null,
+    model,
   });
 
   console.log("[analytics] LLM insights saved");

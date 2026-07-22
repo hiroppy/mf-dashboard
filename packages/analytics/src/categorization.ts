@@ -1,6 +1,6 @@
-import { generateText, Output } from "ai";
 import { z } from "zod";
-import { getModel, isLLMEnabled } from "./config.js";
+import { isLLMEnabled } from "./config.js";
+import { generate } from "./generation.js";
 
 export interface CategoryCandidateForLLM {
   largeCategoryId: string;
@@ -47,9 +47,8 @@ export async function generateCategoryDecisionWithLLM(options: {
   const { transaction, candidates } = options;
   const candidateList = candidates.map(formatCandidate).join("\n");
 
-  const result = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: categoryDecisionSchema }),
+  const result = await generate({
+    schema: categoryDecisionSchema,
     system:
       "あなたはMoney Forwardの未分類取引を分類するアシスタントです。必ず候補カテゴリ一覧に存在するlargeCategoryId/middleCategoryIdの組み合わせだけを選んでください。カテゴリ名は出力しません。",
     prompt: `以下の未分類取引に最も適したカテゴリIDの組み合わせを候補カテゴリ一覧から1つ選んでください。
