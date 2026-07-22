@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -397,6 +397,26 @@ describe("generateWithCodexExec", () => {
     expect(childPath).toContain(dirname(process.execPath));
     expect(childPath).toContain("/usr/bin");
     expect(childPath).not.toContain(resolve("./bin"));
+  });
+
+  test("includes the trusted parent Node runtime in the sanitized PATH", async () => {
+    if (process.platform === "win32") return;
+
+    const executableRoot = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-launcher-test-"));
+    temporaryDirectories.push(executableRoot);
+    const executable = join(executableRoot, "codex");
+    await writeFile(executable, "#!/usr/bin/env node\n");
+    await chmod(executable, 0o700);
+    process.env.CODEX_EXEC_PATH = executable;
+    const mcp = createFakeCodex();
+    const fake = createFakeCodex();
+    mockCodexRun(mcp, fake);
+
+    await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
+
+    const childPath = spawnMock.mock.calls[3]?.[2]?.env?.PATH?.split(delimiter) ?? [];
+    expect(childPath).toContain(dirname(spawnMock.mock.calls[3]?.[0] as string));
+    expect(childPath).toContain(dirname(process.execPath));
   });
 
   test("waits for isolated credential cleanup when auth copying is aborted", async () => {

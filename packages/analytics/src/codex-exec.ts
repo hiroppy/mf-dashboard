@@ -170,9 +170,16 @@ function getCodexEnv(tempDir: string, executable: string): NodeJS.ProcessEnv {
   }
   return {
     ...inheritedEnv,
-    PATH: [...new Set([dirname(executable), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])].join(
-      delimiter,
-    ),
+    PATH: [
+      ...new Set([
+        dirname(executable),
+        dirname(process.execPath),
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+      ]),
+    ].join(delimiter),
     TEMP: tempDir,
     TMP: tempDir,
     TMPDIR: tempDir,
