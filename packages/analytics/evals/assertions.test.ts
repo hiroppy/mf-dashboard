@@ -1199,6 +1199,32 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("否定") });
   });
 
+  it.each(["と異なります", "とは違います"])(
+    "rejects a difference denial after an allowlisted amount: %s",
+    (suffix) => {
+      const denialOutput = JSON.stringify({
+        text: `総資産は5,683,100円${suffix}。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(denialOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("否定") });
+    },
+  );
+
   it("allows a suffix-qualified approximate rounded monetary claim", () => {
     const approximateOutput = JSON.stringify({
       text: "総資産は568万円ほどです。",
@@ -1261,6 +1287,29 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(splitClaimOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("carries a topic label across a comma before its amount", () => {
+    const punctuatedOutput = JSON.stringify({
+      text: "総資産は、5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(punctuatedOutput, {
         config: {
           allowedVisibleAmounts: [5683100],
           visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],

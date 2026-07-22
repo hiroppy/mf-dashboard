@@ -728,7 +728,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
-  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|以下|以上|(?:の\s*)?\d+(?:\.\d+)?\s*倍|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
+  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|と(?:は)?\s*(?:異なります|異なる|違います|違う)|でない|未満|以下|以上|(?:の\s*)?\d+(?:\.\d+)?\s*倍|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
     text.slice(endIndex, clauseEnd),
   );
 }
@@ -747,14 +747,7 @@ function collectCarriedClaimLabel<T extends { label: string }>(
   clauseText: string,
   expectedClaims: T[],
 ): string | undefined {
-  if (
-    (text[clauseStart] !== "、" && text[clauseStart] !== ",") ||
-    !/^(?:前月|先月|比較|差額|差|増減|変化|今月|当月|\d{4}(?:年\d{1,2}月|[-/.]\d{1,2}))/u.test(
-      clauseText.trimStart(),
-    )
-  ) {
-    return undefined;
-  }
+  if (text[clauseStart] !== "、" && text[clauseStart] !== ",") return undefined;
   let sentenceStart = -1;
   for (let index = clauseStart - 1; index >= 0; index -= 1) {
     if (isSentenceSeparator(text, index)) {
@@ -762,11 +755,19 @@ function collectCarriedClaimLabel<T extends { label: string }>(
       break;
     }
   }
-  return expectedClaims
+  const previousClaim = expectedClaims
     .map(({ label }) => ({ label, index: text.lastIndexOf(label, clauseStart - 1) }))
     .filter(({ index }) => index > sentenceStart)
-    .sort((left, right) => right.index - left.index || right.label.length - left.label.length)[0]
-    ?.label;
+    .sort((left, right) => right.index - left.index || right.label.length - left.label.length)[0];
+  if (previousClaim === undefined) return undefined;
+  const isComparisonContinuation =
+    /^(?:前月|先月|比較|差額|差|増減|変化|今月|当月|\d{4}(?:年\d{1,2}月|[-/.]\d{1,2}))/u.test(
+      clauseText.trimStart(),
+    );
+  const isTopicContinuation = /^\s*(?:は|が)\s*$/u.test(
+    text.slice(previousClaim.index + previousClaim.label.length, clauseStart),
+  );
+  return isComparisonContinuation || isTopicContinuation ? previousClaim.label : undefined;
 }
 
 function collectClaimContext(text: string, startIndex: number, endIndex: number): string {
