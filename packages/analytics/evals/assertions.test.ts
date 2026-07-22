@@ -2781,6 +2781,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("allows a noun-qualified denial of the opposite spending direction", () => {
+    const denialOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "衣服・美容の支出改善",
+          description: "衣服・美容は前月より減少傾向ではなく、増加しているため見直します。",
+          action: { label: "衣服・美容の内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((衣服・美容|衣服).{0,30}(前月|先月).{0,20}|(前月|先月).{0,20}(衣服・美容|衣服).{0,20})(減少|下回)(?!\\s*.{0,10}(していない|していません|ではなく|ではない|ではありません|でない|わけではない|訳ではない))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("allows an explicitly negated deficit claim", () => {
     const surplusOutput = JSON.stringify({
       text: "赤字ではなく、93,341円の黒字です。",
