@@ -7022,6 +7022,76 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("rejects a transaction attribute asserted before its retrieval evidence", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+        ],
+      },
+    };
+    const earlyClaimOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "成城石井のカテゴリは食費です。",
+      dataToolResults: [searchResult],
+      textEvidence: [{ text: "成城石井のカテゴリは食費です。", dataToolResults: [] }],
+    });
+
+    expect(
+      assertFinanceResponse(earlyClaimOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤った明細属性: 成城石井:カテゴリ=食費"),
+    });
+  });
+
+  it("accepts a transaction attribute when one same-description row matches", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { month: "2026-07", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+          {
+            date: "2026-07-20",
+            description: "成城石井",
+            category: "日用品",
+            type: "expense",
+            amount: 1200,
+          },
+        ],
+      },
+    };
+    const groundedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "成城石井のカテゴリは食費です。",
+      dataToolResults: [searchResult],
+      textEvidence: [{ text: "成城石井のカテゴリは食費です。", dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(groundedOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("rejects an unsupported fallback transaction with expectedTransactions", () => {
     const fabricatedTransactionOutput = JSON.stringify({
       text: "明細には7月10日の架空店があります。",
