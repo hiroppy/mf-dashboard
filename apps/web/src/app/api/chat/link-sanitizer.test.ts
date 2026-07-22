@@ -171,6 +171,41 @@ describe("splitCompleteFinanceChatText", () => {
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
+  it("buffers a raw anchor whose first attribute starts after a streamed newline", async () => {
+    const transform = createFinanceChatLinkSanitizer("group-a")({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: Array<{ type: string; text?: string }> = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({ type: "text-delta", id: "text-a", text: "<a\n" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: 'href="javascript:alert(1)">click</a>。',
+    });
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.text)
+        .join(""),
+    ).toBe("click。");
+  });
+
   it("preserves fenced-code state across streamed fragments", async () => {
     const transform = createFinanceChatLinkSanitizer("group-a")({
       stopStream: vi.fn<() => void>(),

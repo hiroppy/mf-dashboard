@@ -56,7 +56,8 @@ export function splitCompleteFinanceChatText(
       !htmlAnchorOpen &&
       /^<a\b/iu.test(text.slice(index)) &&
       (hasCompleteRawHtmlAnchorOpening(text, index) ||
-        /^<a\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=/iu.test(text.slice(index)))
+        /^<a\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=/iu.test(text.slice(index)) ||
+        /^<a\b\s*$/iu.test(text.slice(index)))
     ) {
       htmlAnchorOpen = true;
       continue;
