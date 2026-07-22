@@ -272,7 +272,7 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
         amount:
           parseVisibleAmount(match[3], match[5]) *
           (/[-−▲△▼▽]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ||
-          (text[match.index - 1] === "(" && text[match.index + match[0].length] === ")") ||
+          isAccountingParenthesizedAmount(text, match.index, match.index + match[0].length) ||
           /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
             ? -1
             : 1),
@@ -282,6 +282,12 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
       }),
     ),
   );
+}
+
+function isAccountingParenthesizedAmount(text: string, startIndex: number, endIndex: number) {
+  if (text[startIndex - 1] !== "(" || text[endIndex] !== ")") return false;
+  const openingIndex = startIndex - 1;
+  return openingIndex === 0 || /(?:は|が|では|なら)\s*$/u.test(text.slice(0, openingIndex));
 }
 
 function parseVisibleAmount(prefixedAmount?: string, japaneseAmount?: string): number {

@@ -247,6 +247,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "未許可の可視金額: -93341" });
   });
 
+  it("preserves a positive amount grouped in a heading", () => {
+    const groupedAmountOutput = JSON.stringify({
+      text: "7月の支出（219,894円）",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "支出", amount: 219894, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(groupedAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [219894],
+          visibleAmountClaims: [{ label: "支出", amount: 219894 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("treats a マイナス-prefixed amount as negative", () => {
     const negativeAmountOutput = JSON.stringify({
       text: "総資産はマイナス5,683,100円です。",
