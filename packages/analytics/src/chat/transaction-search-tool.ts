@@ -53,7 +53,11 @@ const transactionSearchInputSchema = z
       message: "最小金額は最大金額以下を指定してください",
       path: ["maxAmount"],
     },
-  );
+  )
+  .refine(({ type, includeTransfers }) => type !== "transfer" || includeTransfers !== false, {
+    message: "振替のみを検索する場合は振替を除外できません",
+    path: ["includeTransfers"],
+  });
 
 export function createTransactionSearchTool(db: Db, groupId: string) {
   return tool({
