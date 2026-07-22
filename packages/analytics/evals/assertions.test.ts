@@ -115,6 +115,32 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 食費=8085" });
   });
 
+  it("rejects swapped current and comparison-period amounts", () => {
+    const swappedPeriodOutput = JSON.stringify({
+      text: "前月の食費は41,837円、今月の食費は49,922円です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "食費を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(swappedPeriodOutput, {
+        config: {
+          allowedVisibleAmounts: [41837, 49922],
+          visibleAmountClaims: [
+            { label: "食費", amount: 41837 },
+            { label: "食費", amount: 49922, rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("reports every missing expectation", () => {
     const result = assertFinanceResponse(output, {
       config: {
