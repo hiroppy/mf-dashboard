@@ -9,12 +9,13 @@ interface MetricExpectation {
 interface TransactionExpectation {
   date: string;
   amount: number;
+  amountType: string;
 }
 
 interface TransactionGroupExpectation {
   category: string;
   month: string;
-  totalAmount: number;
+  amountType: string;
 }
 
 interface AssertionContext {
@@ -76,13 +77,18 @@ function metricMatches(actual: MetricExpectation, expected: MetricExpectation): 
   );
 }
 
-function collectRoutes(cards: FinanceChatCard[]): string[] {
-  return cards.flatMap((card) => {
+function collectRoutes(output: EvaluationOutput): string[] {
+  const cardRoutes = output.cards.flatMap((card) => {
     const routes: string[] = [];
     if ("href" in card && card.href) routes.push(card.href);
     if ("action" in card && card.action) routes.push(card.action.href);
     return routes;
   });
+  const textRoutes = Array.from(
+    output.text.matchAll(/(?<!!)\[[^\]]+]\((\/[^)\s]+)\)/g),
+    ([, route]) => String(route),
+  );
+  return [...cardRoutes, ...textRoutes];
 }
 
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
@@ -130,7 +136,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
       expectedTransactions.some(
         (expected) =>
           !transactionRows.some(
-            (actual) => actual.date === expected.date && actual.amount === expected.amount,
+            (actual) =>
+              actual.date === expected.date &&
+              actual.amount === expected.amount &&
+              actual.amountType === expected.amountType,
           ),
       ));
   const expectedTransactionGroup = config.expectedTransactionGroup;
@@ -138,12 +147,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
     expectedTransactionGroup !== undefined &&
     (transactionRows.length === 0 ||
       transactionRows.some(
-        ({ date, category }) =>
+        ({ date, category, amountType }) =>
           !date.startsWith(`${expectedTransactionGroup.month}-`) ||
-          normalize(category ?? "") !== normalize(expectedTransactionGroup.category),
-      ) ||
-      transactionRows.reduce((total, { amount }) => total + amount, 0) !==
-        expectedTransactionGroup.totalAmount);
+          normalize(category ?? "") !== normalize(expectedTransactionGroup.category) ||
+          amountType !== expectedTransactionGroup.amountType,
+      ));
   const insightText = parsed.cards
     .filter((card) => card.type === "insight")
     .map(({ title, description }) => `${title}\n${description}`)
@@ -157,7 +165,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
     expectedTypes.length > 0 &&
     (actualTypes.length !== expectedTypes.length ||
       actualTypes.some((actual, index) => actual !== expectedTypes[index]));
-  const actualRoutes = collectRoutes(parsed.cards);
+  const actualRoutes = collectRoutes(parsed);
   const routeMismatch =
     config.expectedRoute &&
     (actualRoutes.length === 0 || actualRoutes.some((route) => route !== config.expectedRoute));
@@ -171,10 +179,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
       ? `categories 不一致: expected=${expectedCategories.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,
     transactionsMismatch
-      ? `transactions 不一致: expected=${expectedTransactions.map(({ date, amount }) => `${date}=${amount}`).join(",")}`
+      ? `transactions 不一致: expected=${expectedTransactions.map(({ date, amount, amountType }) => `${date}=${amount}/${amountType}`).join(",")}`
       : undefined,
     transactionGroupMismatch
-      ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.totalAmount}`
+      ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.amountType}`
       : undefined,
     missingInsightPatterns.length > 0
       ? `不足 insight patterns: ${missingInsightPatterns.join(", ")}`

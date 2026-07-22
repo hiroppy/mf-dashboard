@@ -161,12 +161,82 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(transactionOutput, {
-        config: { expectedTransactions: [{ date: "2026-07-10", amount: 3435 }] },
+        config: {
+          expectedTransactions: [{ date: "2026-07-10", amount: 3435, amountType: "expense" }],
+        },
       }),
     ).toMatchObject({
       pass: false,
-      reason: "transactions 不一致: expected=2026-07-10=3435",
+      reason: "transactions 不一致: expected=2026-07-10=3435/expense",
     });
+  });
+
+  it("rejects a transaction with the wrong amount type", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "income",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactions: [{ date: "2026-07-10", amount: 3435, amountType: "expense" }],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "transactions 不一致: expected=2026-07-10=3435/expense",
+    });
+  });
+
+  it("accepts a truncated transaction group when every visible row matches", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+          },
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects cards in the wrong presentation order", () => {
@@ -218,6 +288,29 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(mixedRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+    });
+  });
+
+  it("rejects an unexpected route in a visible Markdown link", () => {
+    const textRouteOutput = JSON.stringify({
+      text: "[資産を見る](/0/bs)",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(textRouteOutput, {
         config: { expectedRoute: "/0/cf/2026-07" },
       }),
     ).toMatchObject({
