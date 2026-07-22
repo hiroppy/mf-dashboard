@@ -44,8 +44,21 @@ export function splitCompleteFinanceChatText(text: string): {
 
   if (lastBoundary < 0) return { complete: "", pending: text };
 
+  const complete = text.slice(0, lastBoundary + 1);
+  const referenceIds = Array.from(complete.matchAll(/(?<!!)\[[^\]]+\]\[([^\]]+)\]/gu), ([, id]) =>
+    id.toLowerCase(),
+  );
+  const definedReferenceIds = new Set(
+    Array.from(text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:\s+.*)?$/gimu), ([, id]) =>
+      id.toLowerCase(),
+    ),
+  );
+  if (referenceIds.some((id) => !definedReferenceIds.has(id))) {
+    return { complete: "", pending: text };
+  }
+
   return {
-    complete: text.slice(0, lastBoundary + 1),
+    complete,
     pending: text.slice(lastBoundary + 1),
   };
 }

@@ -55,9 +55,9 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
   );
   const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(
     /(?<!!)\[([^\]]+)\]\[([^\]]+)\]/gu,
-    (match, label: string, id: string) => {
+    (_match, label: string, id: string) => {
       const destination = referenceDefinitions.get(id.toLowerCase());
-      if (destination === undefined) return match;
+      if (destination === undefined) return label;
       const href = resolveAllowedHref(destination, allowedHrefs);
       return href ? `[${label}](${href})` : label;
     },
@@ -72,9 +72,8 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     (_match, url: string) => sanitizeBareUrl(url, allowedHrefs),
   );
 
-  return withoutInvalidAutolinks.replace(
-    /(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:\/\/|[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^\s<>()[\]{}"']+/giu,
-    (url) => sanitizeBareUrl(url, allowedHrefs),
+  return withoutInvalidAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
+    sanitizeBareUrl(url, allowedHrefs),
   );
 }
 
@@ -89,9 +88,11 @@ export function collectFinanceChatLinks(text: string): string[] {
       ([, href]) => href,
     ),
     ...Array.from(
-      text.matchAll(
-        /(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:\/\/|[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^\s<>()[\]{}"']+/giu,
-      ),
+      text.matchAll(/<((?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+)>/giu),
+      ([, href]) => href,
+    ),
+    ...Array.from(
+      text.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
       ([href]) => splitBareUrl(href).destination,
     ),
   ];

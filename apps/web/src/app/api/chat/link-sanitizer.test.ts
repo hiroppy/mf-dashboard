@@ -104,6 +104,17 @@ describe("splitCompleteFinanceChatText", () => {
       pending: "続き",
     });
   });
+
+  it("buffers a reference-style link until its definition arrives", () => {
+    expect(splitCompleteFinanceChatText("[詳細][route]\n")).toEqual({
+      complete: "",
+      pending: "[詳細][route]\n",
+    });
+    expect(splitCompleteFinanceChatText("[詳細][route]\n[route]: /group-a/cf/2026-07\n")).toEqual({
+      complete: "[詳細][route]\n[route]: /group-a/cf/2026-07\n",
+      pending: "",
+    });
+  });
 });
 
 describe("createFinanceChatLinkSanitizer", () => {

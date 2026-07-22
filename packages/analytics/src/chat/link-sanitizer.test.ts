@@ -29,12 +29,24 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("メール\n\n");
   });
 
+  it("resolves a reference-style link with an allowlisted route", () => {
+    expect(sanitizeFinanceChatLinks("[詳細][route]\n\n[route]: /0/cf/2026-07", allowedHrefs)).toBe(
+      "[詳細](/0/cf/2026-07)\n\n",
+    );
+  });
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {
       expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("");
     },
   );
+
+  it("preserves ordinary prose containing a colon", () => {
+    expect(sanitizeFinanceChatLinks("NISA:100万円です。Note:important", allowedHrefs)).toBe(
+      "NISA:100万円です。Note:important",
+    );
+  });
 });
 
 describe("collectFinanceChatLinks", () => {
