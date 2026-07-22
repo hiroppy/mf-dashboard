@@ -16,6 +16,12 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("[詳細](/0/cf/2026-07)");
   });
 
+  it("removes and records a destination with nested balanced parentheses", () => {
+    const text = "[x](javascript:alert((1)))";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("x");
+    expect(collectFinanceChatLinks(text)).toContain("javascript:alert((1))");
+  });
+
   it.each(["https://例.exampleです。", "<https://例.example/path>。"])(
     "removes a Unicode-host bare or autolink URL: %s",
     (text) => {

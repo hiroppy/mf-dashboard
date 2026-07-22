@@ -139,6 +139,70 @@ function collectRawHtmlAnchorDestinations(text: string): string[] {
   ]);
 }
 
+interface MarkdownInlineLink {
+  destination: string;
+  end: number;
+  image: boolean;
+  label: string;
+  start: number;
+}
+
+function findMarkdownInlineLinks(text: string): MarkdownInlineLink[] {
+  const links: MarkdownInlineLink[] = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const image = text[index] === "!" && text[index + 1] === "[";
+    const labelStart = image ? index + 1 : index;
+    if (text[labelStart] !== "[" || (labelStart > 0 && text[labelStart - 1] === "\\")) continue;
+    const labelEnd = text.indexOf("]", labelStart + 1);
+    if (labelEnd < 0 || text[labelEnd + 1] !== "(") continue;
+    let depth = 1;
+    let destinationEnd = labelEnd + 2;
+    for (; destinationEnd < text.length && depth > 0; destinationEnd += 1) {
+      if (text[destinationEnd] === "\\") {
+        destinationEnd += 1;
+      } else if (text[destinationEnd] === "(") {
+        depth += 1;
+      } else if (text[destinationEnd] === ")") {
+        depth -= 1;
+      }
+    }
+    if (depth !== 0) continue;
+    const content = text.slice(labelEnd + 2, destinationEnd - 1).trim();
+    let nestedDepth = 0;
+    let splitIndex = content.length;
+    for (let offset = 0; offset < content.length; offset += 1) {
+      if (content[offset] === "\\") offset += 1;
+      else if (content[offset] === "(") nestedDepth += 1;
+      else if (content[offset] === ")") nestedDepth -= 1;
+      else if (/\s/u.test(content[offset] ?? "") && nestedDepth === 0) {
+        splitIndex = offset;
+        break;
+      }
+    }
+    links.push({
+      destination: content.slice(0, splitIndex),
+      end: destinationEnd,
+      image,
+      label: text.slice(labelStart + 1, labelEnd),
+      start: index,
+    });
+    index = destinationEnd - 1;
+  }
+  return links;
+}
+
+function sanitizeMarkdownInlineLinks(text: string, allowedHrefs: Set<string>): string {
+  let cursor = 0;
+  let sanitized = "";
+  for (const link of findMarkdownInlineLinks(text)) {
+    sanitized += text.slice(cursor, link.start);
+    const href = link.image ? undefined : resolveAllowedHref(link.destination, allowedHrefs);
+    sanitized += href ? `[${link.label}](${href})` : link.label;
+    cursor = link.end;
+  }
+  return sanitized + text.slice(cursor);
+}
+
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
   const withoutHtmlLinks = sanitizeRawHtmlAnchors(text, allowedHrefs);
   const referenceDefinitions = new Map(
@@ -147,14 +211,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
       ([, id, destination]) => [id.toLowerCase(), destination] as const,
     ),
   );
-  const withoutInvalidMarkdownLinks = withoutHtmlLinks.replace(
-    /(!?)\[([^\]]+)]\(((?:[^()\s]+|\([^()\s]*\))+)(?:\s+["'][^)]*["'])?\)/g,
-    (_match, imageMarker: string, label: string, destination: string) => {
-      if (imageMarker) return label;
-      const href = resolveAllowedHref(destination, allowedHrefs);
-      return href ? `[${label}](${href})` : label;
-    },
-  );
+  const withoutInvalidMarkdownLinks = sanitizeMarkdownInlineLinks(withoutHtmlLinks, allowedHrefs);
   const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(
     /(!?)\[([^\]]+)\]\[([^\]]+)\]/gu,
     (_match, imageMarker: string, label: string, id: string) => {
@@ -189,10 +246,10 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 export function collectFinanceChatLinks(text: string): string[] {
   return [
     ...collectRawHtmlAnchorDestinations(text),
-    ...Array.from(
-      text.matchAll(/!?\[[^\]]+\]\(((?:[^()\s]+|\([^()\s]*\))+)(?:\s+["'][^)]*["'])?\)/g),
-      ([, href]) =>
-        /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
+    ...findMarkdownInlineLinks(text).map(({ destination }) =>
+      /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(destination)
+        ? `mailto:${destination}`
+        : destination,
     ),
     ...Array.from(
       text.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
