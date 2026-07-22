@@ -57,10 +57,18 @@ interface MarkdownCodeRange {
   start: number;
 }
 
+function isEscaped(text: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
+}
+
 function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
   const ranges: MarkdownCodeRange[] = [];
   for (let index = 0; index < text.length; index += 1) {
-    if (text[index] !== "`") continue;
+    if (text[index] !== "`" || isEscaped(text, index)) continue;
     let delimiterLength = 1;
     while (text[index + delimiterLength] === "`") delimiterLength += 1;
     let matched = false;
@@ -69,7 +77,7 @@ function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
       closingStart < text.length;
       closingStart += 1
     ) {
-      if (text[closingStart] !== "`") continue;
+      if (text[closingStart] !== "`" || isEscaped(text, closingStart)) continue;
       let closingLength = 1;
       while (text[closingStart + closingLength] === "`") closingLength += 1;
       if (closingLength === delimiterLength) {
@@ -301,7 +309,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 
   return restore(
     withoutImplicitAutolinks.replace(
-      /(?:https?:\/\/|\/\/)[^\s<>()[\]{}"'。、，！？；：]+/giu,
+      /(?:https?:\/\/|\/\/)[^\s<>()[\]{}"'`。、，！？；：]+/giu,
       (url) => sanitizeBareUrl(url, allowedHrefs),
     ),
   );
@@ -328,7 +336,7 @@ export function collectFinanceChatLinks(text: string): string[] {
         /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
     ),
     ...Array.from(
-      masked.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"'。、，！？；：]+/giu),
+      masked.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"'`。、，！？；：]+/giu),
       ([href]) => splitBareUrl(href).destination,
     ),
     ...Array.from(

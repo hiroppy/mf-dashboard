@@ -156,7 +156,7 @@ describe("assertFinanceResponse", () => {
     });
   });
 
-  it.each(["allowedHrefs", "unauthorizedLinks"])(
+  it.each(["allowedHrefs", "unauthorizedLinks", "textEvidence"])(
     "fails closed when top-level %s is omitted without configured facts",
     (field) => {
       const missingEvidence = JSON.parse(output);

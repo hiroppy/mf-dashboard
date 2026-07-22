@@ -192,7 +192,7 @@ function parseOutput(output: string): EvaluationOutput | undefined {
       securityEvidenceShapeValid:
         stringArrayIsValid(value.allowedHrefs) &&
         stringArrayIsValid(value.unauthorizedLinks) &&
-        (!Array.isArray(value.textEvidence) || textEvidenceIsValid),
+        textEvidenceIsValid,
       unauthorizedLinks: Array.isArray(value.unauthorizedLinks)
         ? value.unauthorizedLinks.filter((link): link is string => typeof link === "string")
         : [],

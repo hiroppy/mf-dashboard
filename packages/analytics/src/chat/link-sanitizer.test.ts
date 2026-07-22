@@ -44,6 +44,12 @@ describe("sanitizeFinanceChatLinks", () => {
     },
   );
 
+  it("does not treat an escaped backtick as a Markdown code delimiter", () => {
+    const text = "\\`https://evil.example``";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).not.toContain("evil.example");
+    expect(collectFinanceChatLinks(text)).toContain("https://evil.example");
+  });
+
   it.each(["https://例.exampleです。", "<https://例.example/path>。"])(
     "removes a Unicode-host bare or autolink URL: %s",
     (text) => {
