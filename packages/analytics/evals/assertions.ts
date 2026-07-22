@@ -541,12 +541,25 @@ function collectClauseBounds(text: string, startIndex: number, endIndex: number)
 function collectVisibleTransactionCounts(output: EvaluationOutput) {
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
-    return Array.from(text.matchAll(/(?<![\d,])([\d,]+)\s*件/g), (match) => ({
-      count: Number(match[1]?.replaceAll(",", "")),
-      endIndex: match.index + match[0].length,
-      index: match.index,
-      text,
-    }));
+    return [
+      ...Array.from(text.matchAll(/(?<![\d,])([\d,]+)\s*件/g), (match) => ({
+        count: Number(match[1]?.replaceAll(",", "")),
+        endIndex: match.index + match[0].length,
+        index: match.index,
+        text,
+      })),
+      ...Array.from(
+        text.matchAll(
+          /(?<![〇零一二三四五六七八九十百千万億兆])([〇零一二三四五六七八九十百千万億兆]+)\s*件/g,
+        ),
+        (match) => ({
+          count: parseKanjiAmount(match[1] ?? ""),
+          endIndex: match.index + match[0].length,
+          index: match.index,
+          text,
+        }),
+      ),
+    ];
   });
 }
 
@@ -555,7 +568,7 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:昨日|一昨日|前日)(?=の|時点|現在)/g),
+        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=の|時点|現在)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
@@ -709,7 +722,7 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
     .flatMap((text) =>
       Array.from(
         text.matchAll(
-          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?|([〇零一二三四五六七八九十百]+)\s*パーセント|([〇零一二三四五六七八九十]+)\s*割(?:\s*([〇零一二三四五六七八九十]+)\s*分)?(?:\s*([〇零一二三四五六七八九十]+)\s*厘)?)/g,
+          /([+＋\-−▲△▼▽]?)\s*(?:([\d,.]+)\s*(?:%|パーセント)|([\d.]+)\s*割(?:\s*(\d+)\s*分)?(?:\s*(\d+)\s*厘)?|([〇零一二三四五六七八九十百]+)\s*パーセント|([〇零一二三四五六七八九十]+)\s*割(?:\s*([〇零一二三四五六七八九十]+)\s*分)?(?:\s*([〇零一二三四五六七八九十]+)\s*厘)?|([\d,.]+)\s*ポイント(?=\s*(?:上昇|低下|増|減)))/g,
         ),
         (match) => ({
           amount:
@@ -719,9 +732,11 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
                 ? Number(match[3]) * 10 + Number(match[4] ?? 0) + Number(match[5] ?? 0) / 10
                 : match[6] !== undefined
                   ? parseKanjiAmount(match[6])
-                  : parseKanjiAmount(match[7] ?? "") * 10 +
-                    parseKanjiAmount(match[8] ?? "") +
-                    parseKanjiAmount(match[9] ?? "") / 10) *
+                  : match[7] !== undefined
+                    ? parseKanjiAmount(match[7]) * 10 +
+                      parseKanjiAmount(match[8] ?? "") +
+                      parseKanjiAmount(match[9] ?? "") / 10
+                    : Number(match[10]?.replaceAll(",", ""))) *
             (/[-−▲△▼▽]/.test(match[1] ?? "") ||
             /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
               ? -1

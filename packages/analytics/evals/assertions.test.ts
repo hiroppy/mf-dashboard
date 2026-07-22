@@ -1094,6 +1094,53 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("validates a kanji source transaction count", () => {
+    const transactionOutput = JSON.stringify({
+      text: "全九十九件中1件を表示します。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [26],
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("excludes transaction row dates from card heading date validation", () => {
     const transactionOutput = JSON.stringify({
       text: "回答",
@@ -1948,6 +1995,26 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a snapshot labeled as tomorrow", () => {
+    const futureSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "明日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(futureSnapshotOutput, {
+        config: { allowedVisibleDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects a stale yearless hyphenated snapshot date", () => {
     const staleSnapshotOutput = JSON.stringify({
       text: "回答",
@@ -2548,6 +2615,29 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(directionalOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("validates a directional percentage-point claim", () => {
+    const pointOutput = JSON.stringify({
+      text: "貯蓄率は前月から99ポイント上昇しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(pointOutput, {
         config: {
           allowedVisiblePercentages: [29.8],
           visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
