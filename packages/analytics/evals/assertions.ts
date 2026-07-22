@@ -10,6 +10,11 @@ interface CategoryExpectation extends MetricExpectation {
   percentage: number;
 }
 
+interface VisibleAmountClaim {
+  label: string;
+  amount: number;
+}
+
 interface TransactionExpectation {
   ids: string[];
   date: string;
@@ -40,6 +45,7 @@ interface AssertionContext {
     expectedTransactionGroup?: TransactionGroupExpectation;
     expectedTransactions?: TransactionExpectation[];
     requiredInsightPatterns?: string[];
+    visibleAmountClaims?: VisibleAmountClaim[];
   };
 }
 
@@ -147,21 +153,55 @@ function collectRoutes(output: EvaluationOutput): string[] {
     return routes;
   });
   const textRoutes = Array.from(
-    output.text.matchAll(
-      /(?<![\w:])\/(?:[A-Za-z0-9%._~-]+\/)*(?:accounts|bs|cf|insights|simulator)(?:\/[A-Za-z0-9%._~-]+)?\/?/g,
-    ),
+    output.text.matchAll(/(?<![\w:/])\/[A-Za-z0-9%._~!$&'*+,;=:@/?#-]+/g),
     ([route]) => route,
   );
   return [...new Set([...cardRoutes, ...textRoutes])];
 }
 
 function collectVisibleAmounts(output: EvaluationOutput): number[] {
-  const visibleText = [output.text, ...collectFacts(output.cards)].join("\n");
-  return Array.from(
-    visibleText.matchAll(/(?:[¥￥]\s*([\d,]+)|([\d,]+)\s*円)/g),
-    ([, prefixedAmount, suffixedAmount]) =>
-      Number(String(prefixedAmount ?? suffixedAmount).replaceAll(",", "")),
+  return collectVisibleAmountMatches(output).map(({ amount }) => amount);
+}
+
+function collectVisibleAmountMatches(output: EvaluationOutput) {
+  const visibleTexts = [output.text, ...collectFacts(output.cards)];
+  return visibleTexts.flatMap((text) =>
+    Array.from(text.matchAll(/(?:[¥￥]\s*([\d,]+)|([\d,]+)\s*円)/g), (match) => ({
+      amount: Number(String(match[1] ?? match[2]).replaceAll(",", "")),
+      index: match.index,
+      text,
+    })),
   );
+}
+
+function collectMislabeledVisibleAmounts(
+  output: EvaluationOutput,
+  expectedClaims: VisibleAmountClaim[],
+): string[] {
+  return collectVisibleAmountMatches(output).flatMap(({ amount, index, text }) => {
+    const nearbyLabels = expectedClaims
+      .map(({ label }) => {
+        const beforeIndex = text.lastIndexOf(label, index);
+        const afterIndex = text.indexOf(label, index);
+        const distance = Math.min(
+          beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
+          afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
+        );
+        return { label, distance };
+      })
+      .filter(({ distance }) => distance <= 20)
+      .sort((left, right) => left.distance - right.distance);
+    const nearestLabel = nearbyLabels[0]?.label;
+    if (
+      nearestLabel === undefined ||
+      expectedClaims.some(
+        ({ label, amount: expectedAmount }) => label === nearestLabel && expectedAmount === amount,
+      )
+    ) {
+      return [];
+    }
+    return [`${nearestLabel}=${amount}`];
+  });
 }
 
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
@@ -171,6 +211,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const config = context.config ?? {};
   const unexpectedVisibleAmounts = collectVisibleAmounts(parsed).filter(
     (amount) => !(config.allowedVisibleAmounts ?? []).includes(amount),
+  );
+  const mislabeledVisibleAmounts = collectMislabeledVisibleAmounts(
+    parsed,
+    config.visibleAmountClaims ?? [],
   );
   const cardFacts = collectFacts(parsed.cards);
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
@@ -261,6 +305,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const failures = [
     unexpectedVisibleAmounts.length > 0
       ? `未許可の可視金額: ${[...new Set(unexpectedVisibleAmounts)].join(",")}`
+      : undefined,
+    mislabeledVisibleAmounts.length > 0
+      ? `誤ラベルの可視金額: ${[...new Set(mislabeledVisibleAmounts)].join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     summaryMetricsMismatch

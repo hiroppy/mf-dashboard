@@ -59,6 +59,35 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "未許可の可視金額: 999999" });
   });
 
+  it("rejects an allowlisted amount assigned to the wrong metric label", () => {
+    const mislabeledAmountOutput = JSON.stringify({
+      text: "支出は313,235円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [
+            { label: "収入", amount: 313235, amountType: "income" },
+            { label: "支出", amount: 219894, amountType: "expense" },
+          ],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(mislabeledAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [313235, 219894],
+          visibleAmountClaims: [
+            { label: "収入", amount: 313235 },
+            { label: "支出", amount: 219894 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 支出=313235" });
+  });
+
   it("reports every missing expectation", () => {
     const result = assertFinanceResponse(output, {
       config: {
@@ -506,6 +535,29 @@ describe("assertFinanceResponse", () => {
       reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
     });
   });
+
+  it.each(["/0/cf/2026-07?wrong=1", "/0/cf/2026-07/extra", "/0"])(
+    "rejects the complete unexpected visible route: %s",
+    (visibleRoute) => {
+      const textRouteOutput = JSON.stringify({
+        text: `詳細は ${visibleRoute} です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(textRouteOutput, {
+          config: { expectedRoute: "/0/cf/2026-07" },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it("requires insight facts to appear in the insight card", () => {
     const fallbackOnlyOutput = JSON.stringify({
