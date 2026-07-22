@@ -218,15 +218,6 @@ function dataToolResultMatches(result: DataToolResult, expected: DataToolFactExp
   );
 }
 
-function collectNumericValues(value: unknown): number[] {
-  if (typeof value === "number") return [value];
-  if (Array.isArray(value)) return value.flatMap(collectNumericValues);
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value).flatMap(collectNumericValues);
-  }
-  return [];
-}
-
 function includesFact(actualFacts: string[], expected: string): boolean {
   const expectedMonth = /^(\d{4})-(\d{2})$/.exec(expected);
   if (expectedMonth) {
@@ -348,7 +339,7 @@ function collectBareVisibleAmountMatches(
   return visibleTexts.flatMap((text) => {
     const labelPatterns = [
       ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
-      "(?:収入|給与|給料|所得|支出|収支|総資産|保有資産|資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
+      "(?:収入|給与|給料|所得|手取り|売上|報酬|賃金|年収|月収|支出|収支|総資産|保有資産|資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
     ];
     const directMatches = labelPatterns.flatMap((labelPattern) => {
       return [
@@ -632,7 +623,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
-  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|超(?:です|である)?)/u.test(
+  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
     text.slice(endIndex, clauseEnd),
   );
 }
@@ -762,7 +753,7 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=の|時点|現在)/g),
+        text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=の|は|が|時点|現在)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
@@ -1248,7 +1239,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const missingDataToolFacts = expectedDataToolFacts.filter(
     (expected) => !parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
   );
-  const ungroundedTextAmounts = parsed.textEvidence.flatMap((evidence) => {
+  const ungroundedTextClaims = parsed.textEvidence.flatMap((evidence) => {
     const evidenceOutput: EvaluationOutput = {
       allowedHrefs: [],
       cards: [],
@@ -1259,22 +1250,15 @@ export default function assertFinanceResponse(output: string, context: Assertion
     const amounts = [
       ...collectVisibleAmountMatches(evidenceOutput),
       ...collectBareVisibleAmountMatches(evidenceOutput, config.visibleAmountClaims ?? []),
-    ];
-    return amounts.flatMap(({ amount }) => {
-      const supportingFacts = expectedDataToolFacts.filter((expected) =>
-        collectNumericValues(expected.value).some(
-          (expectedAmount) =>
-            amount === expectedAmount ||
-            Math.abs(amount - expectedAmount) <= Math.max(1_000, Math.abs(expectedAmount) * 0.01),
-        ),
-      );
-      return supportingFacts.length > 0 &&
-        !supportingFacts.some((expected) =>
-          evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
-        )
-        ? [amount]
-        : [];
-    });
+    ].map(({ amount }) => `金額=${amount}`);
+    const percentages = collectVisiblePercentageMatches(evidenceOutput).map(
+      ({ amount }) => `割合=${amount}`,
+    );
+    const hasMissingEvidence = expectedDataToolFacts.some(
+      (expected) =>
+        !evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+    );
+    return hasMissingEvidence ? [...amounts, ...percentages] : [];
   });
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
@@ -1489,8 +1473,8 @@ export default function assertFinanceResponse(output: string, context: Assertion
     missingDataToolFacts.length > 0
       ? `不足 data tool facts: ${missingDataToolFacts.map(({ toolName, path }) => `${toolName}:${path}`).join(", ")}`
       : undefined,
-    ungroundedTextAmounts.length > 0
-      ? `取得前に主張された可視金額: ${[...new Set(ungroundedTextAmounts)].join(",")}`
+    ungroundedTextClaims.length > 0
+      ? `取得前に主張された可視数値: ${[...new Set(ungroundedTextClaims)].join(",")}`
       : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`

@@ -114,7 +114,76 @@ describe("assertFinanceResponse", () => {
           ],
         },
       }),
-    ).toMatchObject({ pass: false, reason: "取得前に主張された可視金額: 93341" });
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=93341" });
+  });
+
+  it("rejects a visible percentage stated before its source tool result", () => {
+    const earlyClaimOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "貯蓄率は29.8%です。",
+      textEvidence: [{ text: "貯蓄率は29.8%です。", dataToolResults: [] }],
+    });
+
+    expect(
+      assertFinanceResponse(earlyClaimOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.netIncome",
+              value: 93341,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 割合=29.8" });
+  });
+
+  it("rejects a derived delta stated before all source tool results", () => {
+    const dataToolResults = [
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-07" },
+        output: [{ category: "衣服・美容", type: "expense", totalAmount: 19475 }],
+      },
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-06" },
+        output: [{ category: "衣服・美容", type: "expense", totalAmount: 12111 }],
+      },
+    ];
+    const earlyClaimOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults,
+      text: "衣服・美容は前月より7,364円増加です。",
+      textEvidence: [{ text: "衣服・美容は前月より7,364円増加です。", dataToolResults: [] }],
+    });
+
+    expect(
+      assertFinanceResponse(earlyClaimOutput, {
+        config: {
+          allowedVisibleAmounts: [7364],
+          visibleAmountClaims: [{ label: "衣服・美容", amount: 7364, rolePattern: "(前月|増加)" }],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "衣服・美容", totalAmount: 19475 },
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-06" },
+              path: "$.*",
+              value: { category: "衣服・美容", totalAmount: 12111 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=7364" });
   });
 
   it("requires identity fields and values on the same data-tool row", () => {
@@ -334,28 +403,58 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
-  it("rejects a unitless unsupported amount after an income synonym", () => {
-    const salaryOutput = JSON.stringify({
-      text: "給与は999999です。",
+  it("rejects a reversed income-expense comparison", () => {
+    const reversedOutput = JSON.stringify({
+      text: "支出が収入を上回っています。",
       cards: [
         {
           type: "summary",
           title: "月次収支",
-          metrics: [{ label: "収入", amount: 313235, amountType: "income" }],
+          metrics: [
+            { label: "収入", amount: 313235, amountType: "income" },
+            { label: "支出", amount: 219894, amountType: "expense" },
+          ],
           href: "/0/cf/2026-07",
         },
       ],
     });
 
     expect(
-      assertFinanceResponse(salaryOutput, {
+      assertFinanceResponse(reversedOutput, {
         config: {
-          allowedVisibleAmounts: [313235],
-          visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+          forbiddenVisiblePatterns: [
+            "((支出|出費).{0,12}(収入|所得).{0,12}(上回|超え|多い)|(収入|所得).{0,12}(支出|出費).{0,12}(下回|少ない))",
+          ],
         },
       }),
     ).toMatchObject({ pass: false });
   });
+
+  it.each(["給与", "手取り"])(
+    "rejects a unitless unsupported amount after the %s income synonym",
+    (label) => {
+      const salaryOutput = JSON.stringify({
+        text: `${label}は999999です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [{ label: "収入", amount: 313235, amountType: "income" }],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(salaryOutput, {
+          config: {
+            allowedVisibleAmounts: [313235],
+            visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
@@ -696,6 +795,32 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false });
   });
+
+  it.each(["を超えています", "より多いです", "より少ないです"])(
+    "rejects the strict boundary phrase %s at the grounded value",
+    (qualifier) => {
+      const boundedOutput = JSON.stringify({
+        text: `総資産は5,683,100円${qualifier}。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(boundedOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it("rejects a unitless zero after an asset synonym", () => {
     const denialOutput = JSON.stringify({
@@ -2883,25 +3008,28 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
-  it("rejects a snapshot labeled as yesterday", () => {
-    const staleSnapshotOutput = JSON.stringify({
-      text: "回答",
-      cards: [
-        {
-          type: "summary",
-          title: "昨日の総資産",
-          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
-          href: "/0/bs",
-        },
-      ],
-    });
+  it.each(["昨日の総資産", "昨日は総資産", "昨日が総資産"])(
+    "rejects a snapshot labeled as %s",
+    (title) => {
+      const staleSnapshotOutput = JSON.stringify({
+        text: "回答",
+        cards: [
+          {
+            type: "summary",
+            title,
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
 
-    expect(
-      assertFinanceResponse(staleSnapshotOutput, {
-        config: { allowedVisibleDates: ["2026-07-31"] },
-      }),
-    ).toMatchObject({ pass: false });
-  });
+      expect(
+        assertFinanceResponse(staleSnapshotOutput, {
+          config: { allowedVisibleDates: ["2026-07-31"] },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it("rejects a snapshot labeled as tomorrow", () => {
     const futureSnapshotOutput = JSON.stringify({
