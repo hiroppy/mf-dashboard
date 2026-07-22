@@ -1755,13 +1755,13 @@ function collectInvalidCategoryTrendClaims(
     const trendMatches = [
       ...text.matchAll(
         new RegExp(
-          `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,12}(増加|減少|上昇|低下|増え|減り|上が|下が)(?:しました|しています|ました|りました|っています|った|ったまま)?`,
+          `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,12}(増加|減少|上昇|低下|増え|減り|上が|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
           "gu",
         ),
       ),
       ...text.matchAll(
         new RegExp(
-          `(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が)(?:しました|しています|ました|りました|っています|った|ったまま)?`,
+          `(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
           "gu",
         ),
       ),
@@ -1793,10 +1793,13 @@ function collectInvalidCategoryTrendClaims(
       const previous = amounts[currentIndex - 1];
       const current = amounts[currentIndex];
       if (previous === undefined || current === undefined) return [match[0]];
+      const claimsUnchanged = /(?:横ばい|変化|同額)/u.test(match[1]);
       const claimsIncrease = /(?:増加|上昇|増え|上が)/u.test(match[1]);
-      const trendIsValid = claimsIncrease
-        ? current.amount > previous.amount
-        : current.amount < previous.amount;
+      const trendIsValid = claimsUnchanged
+        ? current.amount === previous.amount
+        : claimsIncrease
+          ? current.amount > previous.amount
+          : current.amount < previous.amount;
       return trendIsValid ? [] : [match[0]];
     });
   });
@@ -1907,6 +1910,23 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
   });
 }
 
+function resolveChartPointMonth(label: string, allowedVisibleMonths: string[]): string | undefined {
+  const explicitMonth = /(?:(\d{4})[-/]\s*|(\d{4})年)0?(\d{1,2})月?/u.exec(label);
+  if (explicitMonth) {
+    return `${explicitMonth[1] ?? explicitMonth[2]}-${String(Number(explicitMonth[3])).padStart(2, "0")}`;
+  }
+  const sortedMonths = allowedVisibleMonths.filter((month) => /^\d{4}-\d{2}$/u.test(month)).sort();
+  const yearlessMonth = /(?<!\d)(\d{1,2})月/u.exec(label)?.[1];
+  if (yearlessMonth !== undefined) {
+    const suffix = `-${String(Number(yearlessMonth)).padStart(2, "0")}`;
+    const matchingMonths = sortedMonths.filter((month) => month.endsWith(suffix));
+    return matchingMonths.length === 1 ? matchingMonths[0] : undefined;
+  }
+  if (/(?:今月|当月)/u.test(label)) return sortedMonths.at(-1);
+  if (/(?:前月|先月)/u.test(label)) return sortedMonths.at(-2);
+  return undefined;
+}
+
 function chartPointMatchesFactMonth(
   label: string,
   expected: DataToolFactExpectation,
@@ -1914,24 +1934,10 @@ function chartPointMatchesFactMonth(
 ): boolean {
   if (typeof expected.input !== "object" || expected.input === null) return true;
   const expectedMonth = (expected.input as Record<string, unknown>).month;
-  if (typeof expectedMonth !== "string") return true;
-  const explicitMonth = /(?:(\d{4})[-/]\s*|(\d{4})年)0?(\d{1,2})月?/u.exec(label);
-  if (explicitMonth) {
-    return (
-      expectedMonth ===
-      `${explicitMonth[1] ?? explicitMonth[2]}-${String(Number(explicitMonth[3])).padStart(2, "0")}`
-    );
-  }
-  const sortedMonths = allowedVisibleMonths.filter((month) => /^\d{4}-\d{2}$/u.test(month)).sort();
-  const yearlessMonth = /(?<!\d)(\d{1,2})月/u.exec(label)?.[1];
-  if (yearlessMonth !== undefined) {
-    const suffix = `-${String(Number(yearlessMonth)).padStart(2, "0")}`;
-    const matchingMonths = sortedMonths.filter((month) => month.endsWith(suffix));
-    return matchingMonths.length === 1 && expectedMonth === matchingMonths[0];
-  }
-  if (/(?:今月|当月)/u.test(label)) return expectedMonth === sortedMonths.at(-1);
-  if (/(?:前月|先月)/u.test(label)) return expectedMonth === sortedMonths.at(-2);
-  return false;
+  return (
+    typeof expectedMonth !== "string" ||
+    resolveChartPointMonth(label, allowedVisibleMonths) === expectedMonth
+  );
 }
 
 function collectCategorySuperlativeClaims(text: string): string[] {
@@ -2250,6 +2256,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
       /(?:\d{4}(?:[-/]\d{1,2}|年\d{1,2}月)|(?<!\d)\d{1,2}月|今月|当月|前月|先月)/u.test(label),
     );
     return isTimeSeries && card.chartType !== "line" ? [card.chartType] : [];
+  });
+  const duplicateTimeSeriesChartMonths = parsed.cards.flatMap((card) => {
+    if (card.type !== "chart" || card.data.length < 2) return [];
+    const resolvedMonths = card.data.map(({ label }) =>
+      resolveChartPointMonth(label, config.allowedVisibleMonths ?? []),
+    );
+    return resolvedMonths.every((month): month is string => month !== undefined) &&
+      new Set(resolvedMonths).size !== resolvedMonths.length
+      ? [resolvedMonths.join(",")]
+      : [];
   });
   const textEvidenceMismatch =
     expectedDataToolFacts.length > 0 &&
@@ -2648,7 +2664,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
             "gu",
           ),
           new RegExp(
-            `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(安い|高い|少ない|多い)`,
+            `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が|の(?:ほう|方)が)?\\s*(安い|高い|少ない|多い)`,
             "gu",
           ),
         ];
@@ -2996,6 +3012,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     invalidTimeSeriesChartTypes.length > 0
       ? `時系列 chart type 不一致: ${[...new Set(invalidTimeSeriesChartTypes)].join(",")}`
+      : undefined,
+    duplicateTimeSeriesChartMonths.length > 0
+      ? `時系列 chart の期間重複: ${[...new Set(duplicateTimeSeriesChartMonths)].join(",")}`
       : undefined,
     ungroundedTextClaims.length > 0
       ? `取得前に主張された可視数値: ${[...new Set(ungroundedTextClaims)].join(",")}`

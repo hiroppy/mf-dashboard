@@ -1752,6 +1752,30 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(trendOutput).pass).toBe(pass);
   });
 
+  it.each([
+    ["食費は前月から横ばいです。", 49922, false],
+    ["食費は前月から横ばいです。", 41837, true],
+    ["食費は前月から変化なしです。", 49922, false],
+    ["食費は前月と同額です。", 49922, false],
+  ])("validates an unchanged category trend: %s / previous=%s", (text, previous, pass) => {
+    const results = [
+      ["2026-06", previous],
+      ["2026-07", 41837],
+    ].map(([month, totalAmount]) => ({
+      toolName: "getMonthlyCategoryTotals",
+      input: { month },
+      output: [{ category: "食費", type: "expense", totalAmount }],
+    }));
+    const trendOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(trendOutput).pass).toBe(pass);
+  });
+
   it("binds a category trend to its explicitly claimed month", () => {
     const results = [
       ["2026-05", 100],
@@ -4780,6 +4804,62 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("未根拠の chart values") });
+  });
+
+  it("rejects duplicate temporal aliases in a time-series chart", () => {
+    const monthlyResults = [
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-06" },
+        output: [{ category: "衣服・美容", type: "expense", totalAmount: 12111 }],
+      },
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-07" },
+        output: [{ category: "衣服・美容", type: "expense", totalAmount: 19475 }],
+      },
+    ];
+    const chartOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "chart",
+          title: "衣服・美容",
+          chartType: "line",
+          href: "/0/cf/2026-07",
+          series: [{ name: "衣服・美容", amountType: "expense" }],
+          data: [
+            { label: "前月", values: [12111] },
+            { label: "先月", values: [12111] },
+          ],
+        },
+      ],
+      dataToolResults: monthlyResults,
+      textEvidence: [{ text: "回答", dataToolResults: monthlyResults }],
+    });
+
+    expect(
+      assertFinanceResponse(chartOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-06" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 12111 },
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 19475 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("時系列 chart の期間重複") });
   });
 
   it("rejects a composition chart type for a time series", () => {
@@ -8086,6 +8166,8 @@ describe("assertFinanceResponse", () => {
   it.each([
     ["東京ガス ガス代は成城石井より安いです。", false],
     ["東京ガス ガス代は成城石井より高いです。", true],
+    ["成城石井より東京ガス ガス代の方が安いです。", false],
+    ["成城石井より東京ガス ガス代の方が高いです。", true],
   ])("validates a pairwise transaction comparison: %s", (text, pass) => {
     const searchResult = {
       toolName: "searchTransactions",
