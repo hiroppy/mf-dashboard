@@ -1626,11 +1626,11 @@ function collectInvalidCategoryComparisons(
       const comparisonPattern = escapeRegExp(comparisonCategory);
       const patterns = [
         new RegExp(
-          `${subjectPattern}(?:は|が)${comparisonPattern}(?:より(?:も)?|を)\\s*(多い|少ない|高い|低い|大きい|小さい|上回(?:る|っています|っている|りました)|下回(?:る|っています|っている|りました))`,
+          `${subjectPattern}(?:は|が|の(?:ほう|方)が)${comparisonPattern}(?:より(?:も)?|を)\\s*(多い|少ない|高い|低い|大きい|小さい|上回(?:る|っています|っている|りました)|下回(?:る|っています|っている|りました))`,
           "gu",
         ),
         new RegExp(
-          `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(多い|少ない|高い|低い|大きい|小さい)`,
+          `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が|の(?:ほう|方)が)?\\s*(多い|少ない|高い|低い|大きい|小さい)`,
           "gu",
         ),
         new RegExp(`${subjectPattern}(?:は|が)${comparisonPattern}(以上|以下)`, "gu"),
@@ -1770,11 +1770,15 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
   const previous = rates.at(-2);
   const current = rates.at(-1);
   if (previous === undefined || current === undefined) return [];
-  return Array.from(
-    text.matchAll(
+  const directionMatches = [
+    ...text.matchAll(
       /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
     ),
-  ).flatMap((match) => {
+    ...text.matchAll(
+      /(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?.{0,12}貯蓄率(?:は|が)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
+    ),
+  ];
+  return directionMatches.flatMap((match) => {
     const endIndex = match.index + match[0].length;
     if (
       hasNegatedSuffix(text, endIndex, collectClauseBounds(text, match.index, endIndex).clauseEnd)
@@ -2390,6 +2394,12 @@ export default function assertFinanceResponse(output: string, context: Assertion
         ...Array.from(
           sentence.matchAll(
             /(?:\d{1,2}月\d{1,2}日|\d{4}[-/]\d{1,2}[-/]\d{1,2}日?)(?:は|に)\s*(.+?)(?:で|にて)(?:支払いました|支払っています|購入しました|買いました|利用しました)/gu,
+          ),
+          ([, description]) => description.trim(),
+        ),
+        ...Array.from(
+          sentence.matchAll(
+            /^(?!.*(?:\d{1,2}月\d{1,2}日|\d{4}[-/]\d{1,2}[-/]\d{1,2}日?))\s*([^、,]{1,80}?)(?:で|にて)(?:支払いました|支払っています|購入しました|買いました|利用しました)/gu,
           ),
           ([, description]) => description.trim(),
         ),

@@ -1284,6 +1284,29 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("recognizes a のほうが category comparison", () => {
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 41837 },
+        { category: "住宅費", type: "expense", totalAmount: 75000 },
+      ],
+    };
+    const text = "食費のほうが住宅費より多いです。";
+    const comparisonOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [categoryResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [categoryResult] }],
+    });
+
+    expect(assertFinanceResponse(comparisonOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤ったカテゴリ間比較"),
+    });
+  });
+
   it.each(["収入と支出は同額ではありません。", "収入と支出は同じくらいではありません。"])(
     "accepts an explicitly negated income-expense equality claim: %s",
     (text) => {
@@ -1674,6 +1697,8 @@ describe("assertFinanceResponse", () => {
   it.each([
     ["貯蓄率は前月より上昇しました。", false, "誤った貯蓄率方向"],
     ["貯蓄率は前月より低下しました。", true, "期待する最終応答です。"],
+    ["前月より貯蓄率が上昇しました。", false, "誤った貯蓄率方向"],
+    ["前月より貯蓄率が低下しました。", true, "期待する最終応答です。"],
   ])("validates a qualitative savings-rate direction: %s", (text, pass, expectedReason) => {
     const juneResult = {
       toolName: "getMonthlySummaryByMonth",
@@ -5833,6 +5858,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("accepts carrying a monthly surplus forward as an actionable next step", () => {
+    const carryForwardOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "黒字の活用",
+          description: "黒字分は来月へ繰り越しましょう。",
+          action: { label: "月次収支を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(carryForwardOutput, {
+        config: {
+          requiredInsightPatterns: [
+            "(黒字|プラス|余剰|手残り)",
+            "(貯蓄|積立|予算|見直し|確保|繰り越|繰越|持ち越|(?:翌月|来月).{0,8}(回す|充て|繰り))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("binds a spending comparison direction to its category", () => {
     const reversedDirectionOutput = JSON.stringify({
       text: "回答",
@@ -6052,6 +6102,29 @@ describe("assertFinanceResponse", () => {
           forbiddenVisiblePatterns: [
             "(総資産|保有資産|資産).{0,32}(増加(?:しています|しました|傾向(?:です|にあります)))",
           ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("rejects a historical asset extreme from a single snapshot", () => {
+    const extremeOutput = JSON.stringify({
+      text: "総資産は過去最高です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(extremeOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          forbiddenVisiblePatterns: ["(総資産|保有資産|資産).{0,16}(過去|史上)(?:最高|最低)"],
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
@@ -7485,36 +7558,41 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
   });
 
-  it("rejects an ordinary payment claim for an unretrieved merchant", () => {
-    const searchResult = {
-      toolName: "searchTransactions",
-      input: { date: "2026-07-10", type: "expense" },
-      output: {
-        transactions: [
-          {
-            date: "2026-07-10",
-            description: "成城石井",
-            category: "食費",
-            type: "expense",
-            amount: 3152,
-          },
-        ],
-      },
-    };
-    const text = "7月10日は架空店で支払いました。";
-    const fabricatedPaymentOutput = JSON.stringify({
-      ...JSON.parse(output),
-      text,
-      dataToolResults: [searchResult],
-      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
-    });
+  it.each(["7月10日は架空店で支払いました。", "架空店で支払いました。"])(
+    "rejects an ordinary payment claim for an unretrieved merchant: %s",
+    (text) => {
+      const searchResult = {
+        toolName: "searchTransactions",
+        input: { date: "2026-07-10", type: "expense" },
+        output: {
+          transactions: [
+            {
+              date: "2026-07-10",
+              description: "成城石井",
+              category: "食費",
+              type: "expense",
+              amount: 3152,
+            },
+          ],
+        },
+      };
+      const fabricatedPaymentOutput = JSON.stringify({
+        ...JSON.parse(output),
+        text,
+        dataToolResults: [searchResult],
+        textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
+      });
 
-    expect(
-      assertFinanceResponse(fabricatedPaymentOutput, {
-        config: { requireTransactionToolGrounding: true },
-      }),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
-  });
+      expect(
+        assertFinanceResponse(fabricatedPaymentOutput, {
+          config: { requireTransactionToolGrounding: true },
+        }),
+      ).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining("本文中の未取得明細: 架空店"),
+      });
+    },
+  );
 
   it("rejects a mismatched category asserted for a retrieved transaction", () => {
     const searchResult = {
