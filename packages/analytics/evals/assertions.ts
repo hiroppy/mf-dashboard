@@ -273,8 +273,11 @@ function collectRoutes(output: EvaluationOutput): string[] {
   return [...new Set([...cardRoutes, ...textRoutes])];
 }
 
-function isApproximateAmountClaim(text: string, index: number): boolean {
-  return /(?:約|およそ|概ね|だいたい)\s*$/u.test(text.slice(Math.max(0, index - 8), index));
+function isApproximateAmountClaim(text: string, index: number, endIndex: number): boolean {
+  return (
+    /(?:約|およそ|概ね|だいたい)\s*$/u.test(text.slice(Math.max(0, index - 8), index)) ||
+    /^\s*(?:ほど|程度|くらい|ぐらい)/u.test(text.slice(endIndex, endIndex + 8))
+  );
 }
 
 function collectVisibleClaimTexts(output: EvaluationOutput): string[] {
@@ -300,14 +303,14 @@ function collectBareVisibleAmountMatches(
   return visibleTexts.flatMap((text) => {
     const labelPatterns = [
       ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
-      "(?:収入|支出|収支|総資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
+      "(?:収入|支出|収支|総資産|保有資産|資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
     ];
     const directMatches = labelPatterns.flatMap((labelPattern) => {
       return [
         ...Array.from(
           text.matchAll(
             new RegExp(
-              `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|か月|ヶ月|ケ月|箇月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
+              `${labelPattern}.{0,8}?(?<![/\\d])([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|か月|ヶ月|ケ月|箇月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
               "gu",
             ),
           ),
@@ -573,7 +576,7 @@ function collectMislabeledVisibleAmounts(
       applicableClaims.some(
         (claim) =>
           claim.amount === amount ||
-          (isApproximateAmountClaim(text, index) &&
+          (isApproximateAmountClaim(text, index, endIndex) &&
             Math.abs(amount - claim.amount) <= Math.max(1000, Math.abs(claim.amount) * 0.01)),
       )
     ) {
@@ -1071,9 +1074,10 @@ function collectMislabeledVisiblePercentages(
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
-    const hasDirectionalSuffix = /^\s*(?:ポイント)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
-      text.slice(endIndex, clauseEnd),
-    );
+    const hasDirectionalSuffix =
+      /^\s*(?:ポイント)?(?:の)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
+        text.slice(endIndex, clauseEnd),
+      );
     const applicableClaims =
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
@@ -1098,11 +1102,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
     ...collectVisibleAmountMatches(parsed),
     ...collectBareVisibleAmountMatches(parsed, config.visibleAmountClaims ?? []),
   ].filter(
-    ({ amount, index, text }) =>
+    ({ amount, endIndex, index, text }) =>
       !(config.allowedVisibleAmounts ?? []).some(
         (allowed) =>
           amount === allowed ||
-          (isApproximateAmountClaim(text, index) &&
+          (isApproximateAmountClaim(text, index, endIndex) &&
             Math.abs(amount - allowed) <= Math.max(1000, Math.abs(allowed) * 0.01)),
       ),
   );

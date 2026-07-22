@@ -626,9 +626,59 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a unitless zero after an asset synonym", () => {
+    const denialOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          description: "現在保有している資産はゼロとなっています。",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          forbiddenVisiblePatterns: [
+            "(総資産|保有資産|資産).{0,12}(ありません|ない|なし|保有していません|ゼロ(?:です|となっています))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("allows an explicitly approximate rounded monetary claim", () => {
     const approximateOutput = JSON.stringify({
       text: "総資産は約568万円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(approximateOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("allows a suffix-qualified approximate rounded monetary claim", () => {
+    const approximateOutput = JSON.stringify({
+      text: "総資産は568万円ほどです。",
       cards: [
         {
           type: "summary",
@@ -3681,6 +3731,33 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("classifies a particle-qualified point change as a delta", () => {
+    const pointOutput = JSON.stringify({
+      text: "貯蓄率は30ポイントの上昇です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(pointOutput, {
+        config: {
+          allowedVisiblePercentages: [30, 64.48],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 30 },
+            { label: "貯蓄率", amount: 64.48, rolePattern: "(前月|先月|比較)" },
+            { label: "貯蓄率", amount: 34.68, rolePattern: "(低下|減少|下落)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects a savings-rate point change in the opposite direction", () => {

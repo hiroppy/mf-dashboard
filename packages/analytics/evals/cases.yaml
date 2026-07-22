@@ -108,8 +108,8 @@
             761,
           ]
         allowedVisibleMonths: ["2026-07"]
-        allowedCardHeadingDates: ["2026-07-31"]
-        allowedFallbackTextDates: ["2026-07-31"]
+        allowedCardHeadingDates: ["2026-07-01", "2026-07-31"]
+        allowedFallbackTextDates: ["2026-07-01", "2026-07-31"]
         allowedVisiblePercentages: [19, 19.03]
         allowedVisibleTransactionCounts: [26]
         visibleAmountClaims:
@@ -450,7 +450,7 @@
         expectedDataToolFacts:
           - { toolName: getLatestTotalAssets, path: $, value: 5683100 }
         forbiddenVisiblePatterns:
-          - (総資産|資産).{0,8}(ありません|ない|なし|保有していません|ゼロです)
+          - (総資産|保有資産|資産).{0,12}(ありません|ない|なし|保有していません|ゼロ(?:です|となっています))
         expectedCardTitleFacts:
           - { cardType: summary, pattern: 総資産 }
         expectedCardTypes: [summary]
