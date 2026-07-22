@@ -254,7 +254,28 @@ describe("FinanceChatProvider", () => {
       vars: { evaluationDate: "2026-07-31T03:00:00.000Z" },
     });
 
-    expect(Date.now()).toBeGreaterThanOrEqual(realNow);
+    expect(Math.abs(Date.now() - realNow)).toBeLessThan(1_000);
+    expect(new Date().toISOString()).not.toBe("2026-07-31T03:00:00.000Z");
+  });
+
+  it("restores the clock when generation fails", async () => {
+    const realNow = Date.now();
+    const providerDependencies = createDependencies({
+      generate: vi.fn<ProviderDependencies["generate"]>().mockImplementation(async () => {
+        expect(new Date().toISOString()).toBe("2026-07-31T03:00:00.000Z");
+        throw new Error("generation failed");
+      }),
+    });
+    const provider = new FinanceChatProvider({}, providerDependencies);
+
+    await expect(
+      provider.callApi("質問", {
+        vars: { evaluationDate: "2026-07-31T03:00:00.000Z" },
+      }),
+    ).resolves.toEqual({ error: "generation failed" });
+
+    expect(Math.abs(Date.now() - realNow)).toBeLessThan(1_000);
+    expect(new Date().toISOString()).not.toBe("2026-07-31T03:00:00.000Z");
   });
 
   it("explains missing model configuration", async () => {
