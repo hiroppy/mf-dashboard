@@ -81,6 +81,44 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "不足 summary metrics: 収支=93341" });
   });
 
+  it("rejects extra transaction rows outside the expected date", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+            {
+              id: "tx-b",
+              date: "2026-07-11",
+              description: "店舗 B",
+              amount: 100,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: { expectedTransactions: [{ date: "2026-07-10", amount: 3435 }] },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "transactions 不一致: expected=2026-07-10=3435",
+    });
+  });
+
   it("rejects cards in the wrong presentation order", () => {
     const reversedOutput = JSON.stringify({
       text: "回答",

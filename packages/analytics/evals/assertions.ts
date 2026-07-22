@@ -107,12 +107,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const transactionRows = parsed.cards.flatMap((card) =>
     card.type === "transactionList" ? card.transactions : [],
   );
-  const missingTransactions = (config.expectedTransactions ?? []).filter(
-    (expected) =>
-      !transactionRows.some(
-        (actual) => actual.date === expected.date && actual.amount === expected.amount,
-      ),
-  );
+  const expectedTransactions = config.expectedTransactions ?? [];
+  const transactionsMismatch =
+    expectedTransactions.length > 0 &&
+    (transactionRows.length !== expectedTransactions.length ||
+      expectedTransactions.some(
+        (expected) =>
+          !transactionRows.some(
+            (actual) => actual.date === expected.date && actual.amount === expected.amount,
+          ),
+      ));
   const actualTypes = parsed.cards.map(({ type }) => type);
   const expectedTypes = config.expectedCardTypes ?? [];
   const cardTypesMismatch =
@@ -130,8 +134,8 @@ export default function assertFinanceResponse(output: string, context: Assertion
     missingCategories.length > 0
       ? `不足 categories: ${missingCategories.map(({ label, amount }) => `${label}=${amount}`).join(", ")}`
       : undefined,
-    missingTransactions.length > 0
-      ? `不足 transactions: ${missingTransactions.map(({ date, amount }) => `${date}=${amount}`).join(", ")}`
+    transactionsMismatch
+      ? `transactions 不一致: expected=${expectedTransactions.map(({ date, amount }) => `${date}=${amount}`).join(",")}`
       : undefined,
     cardTypesMismatch
       ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`

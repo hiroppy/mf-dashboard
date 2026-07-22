@@ -78,6 +78,12 @@
     - type: is-json
     - type: not-contains
       value: 必ず削減できます
+    - type: regex
+      value: (食費|衣服・美容|日用品)
+    - type: regex
+      value: (前月|先月|前年|平均|通常|他カテゴリ)
+    - type: regex
+      value: (ため|ので|理由|高い|多い|増加|上回)
     - type: javascript
       value: file://./assertions.ts
       config:
