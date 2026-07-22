@@ -135,6 +135,29 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("未許可の可視金額: 999999");
   });
 
+  it("rejects a bare unsupported amount with an unconfigured finance label", () => {
+    const bareAmountOutput = JSON.stringify({
+      text: "生活費は999999です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(bareAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [93341],
+          visibleAmountClaims: [{ label: "収支", amount: 93341 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
       text: `収支は${amount}です。`,

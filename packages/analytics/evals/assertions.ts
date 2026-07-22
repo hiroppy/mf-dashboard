@@ -227,13 +227,15 @@ function collectBareVisibleAmountMatches(
     text.normalize("NFKC"),
   );
   return visibleTexts.flatMap((text) =>
-    [...new Set(expectedClaims.map(({ label }) => label))].flatMap((label) => {
-      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    [
+      ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
+      "(?:収入|支出|収支|総資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
+    ].flatMap((labelPattern) => {
       return Array.from(
         text.matchAll(
           new RegExp(
-            `${escapedLabel}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日))`,
-            "g",
+            `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日|件))`,
+            "gu",
           ),
         ),
         (match) => ({
