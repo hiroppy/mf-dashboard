@@ -4171,6 +4171,34 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-去年") });
   });
 
+  it.each([
+    ["2025年", "year-2025"],
+    ["2025年度", "year-2025"],
+    ["令和7年", "year-2025"],
+  ])("rejects a standalone absolute-year claim: %s", (year, expectedYear) => {
+    const absoluteYearOutput = JSON.stringify({
+      text: `${year}の総資産は5,683,100円です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(absoluteYearOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining(expectedYear) });
+  });
+
   it("requires action facts in the visible action label", () => {
     const unrelatedActionOutput = JSON.stringify({
       text: "回答",
@@ -5224,6 +5252,63 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("税率=29.8") });
   });
+
+  it("rejects a category percentage attributed to the wrong denominator", () => {
+    const wrongBasisOutput = JSON.stringify({
+      text: "食費は収入の19.03%です。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(wrongBasisOutput, {
+        config: {
+          allowedVisiblePercentages: [19.03],
+          visiblePercentageClaims: [
+            { label: "食費", amount: 19.03, basisPattern: "(支出|出費|総支出)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "誤ラベルの可視割合: 食費=19.03(分母:収入)" });
+  });
+
+  it.each(["収入はありません", "支出はありません"])(
+    "rejects a denial of a nonzero monthly total: %s",
+    (denial) => {
+      const denialOutput = JSON.stringify({
+        text: `${denial}。黒字なので貯蓄を確保できます。`,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [
+              { label: "収入", amount: 313235, amountType: "income" },
+              { label: "支出", amount: 219894, amountType: "expense" },
+              { label: "収支", amount: 93341, amountType: "balance" },
+            ],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(denialOutput, {
+          config: {
+            forbiddenVisiblePatterns: [
+              "(収入|所得)(は|が)?(ありません|ございません|ない|発生していません)",
+              "(支出|出費)(は|が)?(ありません|ございません|ない|発生していません)",
+            ],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   it("accepts a percentage delta with a directional claim", () => {
     const directionalOutput = JSON.stringify({

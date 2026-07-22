@@ -36,6 +36,8 @@
           - (黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|ではなく|でない|ではありません)
           - (貯蓄|積立|予算|見直し).{0,12}(不要|必要ありません|必要ない|しなくてよい|しなくてもよい)
           - ((支出|出費).{0,12}(収入|所得).{0,12}(上回|超え|多い)|(収入|所得).{0,12}(支出|出費).{0,12}(下回|少ない))
+          - (収入|所得)(は|が)?(ありません|ございません|ない|発生していません)
+          - (支出|出費)(は|が)?(ありません|ございません|ない|発生していません)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -117,8 +119,8 @@
           - { label: 食費, amount: 41837 }
           - { label: 支出, amount: 219894 }
         visiblePercentageClaims:
-          - { label: 食費, amount: 19 }
-          - { label: 食費, amount: 19.03 }
+          - { label: 食費, amount: 19, basisPattern: (支出|出費|総支出) }
+          - { label: 食費, amount: 19.03, basisPattern: (支出|出費|総支出) }
         expectedCardFacts: [食費]
         expectedCardTitleFacts:
           - { cardType: summary, pattern: 食費 }

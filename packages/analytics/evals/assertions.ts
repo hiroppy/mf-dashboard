@@ -13,6 +13,7 @@ interface CategoryExpectation extends MetricExpectation {
 interface VisibleAmountClaim {
   label: string;
   amount: number;
+  basisPattern?: string;
   rolePattern?: string;
 }
 
@@ -1072,6 +1073,11 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
         text.matchAll(/(?:昨年|去年|前年|来年|翌年)/g),
         ([relativeYear]) => `relative-${relativeYear}`,
       ),
+      ...Array.from(text.matchAll(/(?<!\d)(\d{4})年(?:度)?/g), ([, year]) => `year-${year}`),
+      ...Array.from(
+        text.matchAll(/(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(?:度)?/g),
+        ([, era, eraYear]) => `year-${toGregorianYear(era, eraYear)}`,
+      ),
       ...Array.from(
         text.matchAll(/(?:先々月|昨々月|先月|前月|来月|翌月)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
@@ -1347,6 +1353,21 @@ function collectMislabeledVisiblePercentages(
         (left, right) => left.distance - right.distance || right.label.length - left.label.length,
       )[0]?.label;
     if (nearerUnexpectedLabel !== undefined) return [`${nearerUnexpectedLabel}=${amount}`];
+    const explicitBasis = Array.from(
+      text
+        .slice(clauseStart + 1, index)
+        .matchAll(/(収入|所得|支出|出費|総支出|売上|資産|負債)(?:に対する|に占める|の)/gu),
+    ).at(-1)?.[1];
+    if (
+      explicitBasis !== undefined &&
+      claimsForLabel.some(({ basisPattern }) => basisPattern !== undefined) &&
+      !claimsForLabel.some(
+        ({ basisPattern }) =>
+          basisPattern !== undefined && new RegExp(basisPattern, "u").test(explicitBasis),
+      )
+    ) {
+      return [`${nearestLabel}=${amount}(分母:${explicitBasis})`];
+    }
     const context = collectClaimContext(text, index, endIndex);
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
@@ -1428,7 +1449,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
           (month) =>
             !(
               config.allowedVisibleMonths?.some(
-                (allowedMonth) => month === allowedMonth || month === `*-${allowedMonth.slice(5)}`,
+                (allowedMonth) =>
+                  month === allowedMonth ||
+                  month === `*-${allowedMonth.slice(5)}` ||
+                  month === `year-${allowedMonth.slice(0, 4)}`,
               ) ||
               (month.startsWith("relative-") &&
                 config.visibleMonthClaims?.some(
