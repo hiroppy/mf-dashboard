@@ -5967,6 +5967,100 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "transactions 不一致" });
   });
 
+  it("rejects an amount whose configured label is explicitly excluded", () => {
+    const excludedLabelOutput = JSON.stringify({
+      text: "総資産以外の評価額は5,683,100円です。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/bs" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(excludedLabelOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("総資産=5683100(否定)") });
+  });
+
+  it("rejects a percentage with a shorthand wrong denominator", () => {
+    const wrongBasisOutput = JSON.stringify({
+      text: "食費は収入比19.03%です。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(wrongBasisOutput, {
+        config: {
+          allowedVisiblePercentages: [19.03],
+          visiblePercentageClaims: [
+            { label: "食費", amount: 19.03, basisPattern: "(支出|出費|総支出)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("分母:収入") });
+  });
+
+  it("rejects an unsupported contained transaction description", () => {
+    const containedTransactionOutput = JSON.stringify({
+      text: "明細には7月10日の架空店が含まれます。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(containedTransactionOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
+  });
+
+  it.each(["豪ドル", "NZドル", "カナダドル"])(
+    "rejects a prefixed foreign currency: %s",
+    (currency) => {
+      const currencyOutput = JSON.stringify({
+        text: `総資産は5,683,100${currency}です。`,
+        cards: [
+          {
+            type: "insight",
+            title: "確認",
+            description: "確認します。",
+            action: { label: "詳細を見る", href: "/0/bs" },
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(currencyOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining(currency) });
+    },
+  );
+
   it.each(["月初", "月末"])("rejects an ambiguous standalone month boundary: %s", (boundary) => {
     const boundaryOutput = JSON.stringify({
       text: `${boundary}時点の総資産は5,683,100円です。`,

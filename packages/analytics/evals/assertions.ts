@@ -704,7 +704,7 @@ function collectMislabeledVisibleAmounts(
     const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
     if (
       labelBeforeIndex >= clauseStart &&
-      /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
+      /^\s*(?:以外|ではなく|でなく|ではない|でない)/u.test(
         text.slice(labelBeforeIndex + nearestLabel.length, index),
       )
     ) {
@@ -1401,7 +1401,7 @@ function collectMislabeledVisiblePercentages(
       const explicitBasis = Array.from(
         text
           .slice(clauseStart + 1, index)
-          .matchAll(/(収入|所得|支出|出費|総支出|売上|資産|負債)(?:に対する|に占める|の)/gu),
+          .matchAll(/(収入|所得|支出|出費|総支出|売上|資産|負債)(?:に対する|に占める|の|比)/gu),
       ).at(-1)?.[1];
       if (
         explicitBasis !== undefined &&
@@ -1536,7 +1536,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n");
   const foreignCurrencyClaims = [
     ...visibleText.matchAll(
-      /(?:[$＄€£]\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:米?ドル|ユーロ|ポンド|USD|EUR|GBP))/giu,
+      /(?:[$＄€£]\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|USD|EUR|GBP))/giu,
     ),
   ].map(([claim]) => claim);
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
@@ -1706,7 +1706,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
         .flatMap((sentence) =>
           Array.from(
             sentence.matchAll(
-              /(?:明細|取引)(?:には|に|は)?(?:\d{1,2}月\d{1,2}日の)?(.+?)(?:があります|がありました)/gu,
+              /(?:明細|取引)(?:には|に|は)?(?:\d{1,2}月\d{1,2}日の)?(.+?)(?:があります|がありました|が含まれます|が含まれています|を含みます|が記載されています|が載っています)/gu,
             ),
             ([, description]) => description.trim(),
           ),
