@@ -314,12 +314,15 @@ CODEX_EXEC_TIMEOUT_MS=120000
 `CODEX_HOME` は file-backed credential が必要なため、事前に
 `codex login --config 'cli_auth_credentials_store="file"'` を実行する。
 `CODEX_EXEC_PATH` には `command -v codex` で確認した repository 外の absolute path を指定する。
-symlink は実体へ解決し、group / world-writable な executable は credential copy 前に拒否する。
+symlink は実体へ解決し、current user / root 以外が所有する executable、group / world-writable な
+executable または祖先 directory は credential copy 前に拒否する。spawn 前にも device / inode を再検証する。
+root-owned sticky temporary directory は、他 user が current-user 所有 child を置換できないため許可する。
 child の `PATH` は Codex launcher、現在の Node runtime、OS system directory だけに限定する。
 
 Codex 経路は canonical credential を一時 `CODEX_HOME` へ snapshot し、clean cwd、read-only
 filesystem、MCP 無効、bundled skill 無効、bounded I/O、process timeout で実行する。isolated credential
-が refresh された場合は canonical へ自動 copy-back せず fail closed になるため、host で再ログインする。
+が refresh された場合や temporary credential root の削除を確認できない場合は fail closed になる。credential
+は canonical へ自動 copy-back しないため、refresh 時は host で再ログインする。
 `tools.view_image=false` と `tools.web_search=false` を strict config として認識しない Codex CLI は、画像や
 検索 query を介して financial data を外部へ送信し得る状態で実行せず、generation 前に fail closed する。
 現在の CLI がこれらの設定を未対応の場合は、対応版へ更新するまで `AI_BACKEND=ai-sdk` を利用する。

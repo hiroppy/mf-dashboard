@@ -29,6 +29,8 @@ interface IsolatedEnvironment {
   authPath: string;
   cwd: string;
   executable: string;
+  executableDevice: number;
+  executableInode: number;
   initialAuth: Buffer;
   outputPath: string;
   root: string;
@@ -39,6 +41,12 @@ interface IsolatedEnvironment {
 interface ProcessResult {
   stderr: string;
   stdout: string;
+}
+
+interface TrustedExecutable {
+  device: number;
+  inode: number;
+  path: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -150,29 +158,57 @@ async function findRepositoryRoot(): Promise<string> {
   }
 }
 
-async function resolveExecutable(signal: AbortSignal): Promise<string> {
+async function assertTrustedAncestors(
+  path: string,
+  uid: number,
+  signal: AbortSignal,
+): Promise<void> {
+  let directory = dirname(path);
+  while (true) {
+    const metadata = await raceSignal(lstat(directory), signal);
+    const protectedTemporaryBoundary = metadata.uid === 0 && (metadata.mode & 0o1000) !== 0;
+    if (
+      !metadata.isDirectory() ||
+      metadata.isSymbolicLink() ||
+      (metadata.uid !== 0 && metadata.uid !== uid) ||
+      ((metadata.mode & 0o022) !== 0 && !protectedTemporaryBoundary)
+    ) {
+      throw new Error("untrusted ancestor");
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return;
+    directory = parent;
+  }
+}
+
+async function resolveExecutable(signal: AbortSignal): Promise<TrustedExecutable> {
   const configured = process.env.CODEX_EXEC_PATH;
   if (!configured || !isAbsolute(configured)) {
     throw new Error("CODEX_EXEC_PATH must be an absolute trusted executable");
   }
   try {
+    const uid = process.getuid?.();
+    if (uid === undefined) throw new Error("missing uid");
     const executable = await raceSignal(realpath(configured), signal);
     const [metadata, repositoryRoot] = await Promise.all([
-      raceSignal(stat(executable), signal),
+      raceSignal(lstat(executable), signal),
       raceSignal(findRepositoryRoot(), signal),
       raceSignal(access(executable, constants.X_OK), signal),
     ]);
     if (
       !metadata.isFile() ||
+      metadata.isSymbolicLink() ||
+      (metadata.uid !== 0 && metadata.uid !== uid) ||
       (metadata.mode & 0o022) !== 0 ||
       isWithin(executable, repositoryRoot)
     ) {
       throw new Error("untrusted");
     }
-    return executable;
-  } catch {
+    await assertTrustedAncestors(executable, uid, signal);
+    return { device: metadata.dev, inode: metadata.ino, path: executable };
+  } catch (error) {
     signal.throwIfAborted();
-    throw new Error("CODEX_EXEC_PATH must be an absolute trusted executable");
+    throw new Error("CODEX_EXEC_PATH must be an absolute trusted executable", { cause: error });
   }
 }
 
@@ -200,7 +236,7 @@ async function readAuth(signal: AbortSignal): Promise<Buffer> {
 }
 
 async function createEnvironment(
-  executable: string,
+  executable: TrustedExecutable,
   signal: AbortSignal,
 ): Promise<IsolatedEnvironment> {
   const initialAuth = await readAuth(signal);
@@ -224,7 +260,9 @@ async function createEnvironment(
       authHome,
       authPath,
       cwd,
-      executable,
+      executable: executable.path,
+      executableDevice: executable.device,
+      executableInode: executable.inode,
       initialAuth,
       outputPath: join(root, "output.txt"),
       root,
@@ -296,6 +334,17 @@ async function runProcess(
   input?: string,
   monitorOutput = false,
 ): Promise<ProcessResult> {
+  signal.throwIfAborted();
+  const executable = await raceSignal(lstat(environment.executable), signal);
+  if (
+    !executable.isFile() ||
+    (executable.uid !== 0 && executable.uid !== process.getuid?.()) ||
+    (executable.mode & 0o022) !== 0 ||
+    executable.dev !== environment.executableDevice ||
+    executable.ino !== environment.executableInode
+  ) {
+    throw new Error("codex exec executable changed before spawn");
+  }
   signal.throwIfAborted();
   return await new Promise<ProcessResult>((resolvePromise, reject) => {
     const usesGroup = process.platform !== "win32";
@@ -516,12 +565,23 @@ async function cleanupRoot(root: string): Promise<void> {
   try {
     await Promise.race([
       rm(root, { recursive: true, force: true }),
-      new Promise<void>((resolvePromise) => {
-        timer = setTimeout(resolvePromise, CLEANUP_TIMEOUT_MS);
+      new Promise<void>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("temporary credential cleanup timed out")),
+          CLEANUP_TIMEOUT_MS,
+        );
       }),
     ]);
-  } catch {
-    // Cleanup must not replace the primary generation result or error.
+    try {
+      await lstat(root);
+      throw new Error("temporary credential root still exists");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  } catch (error) {
+    throw new Error("codex exec could not confirm temporary credential cleanup", {
+      cause: error,
+    });
   } finally {
     if (timer) clearTimeout(timer);
   }

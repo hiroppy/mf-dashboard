@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -15,7 +15,7 @@ afterEach(async () => {
   );
 });
 
-async function createFixture(execBody: string) {
+async function createFixture(execBody: string, mcpBody = "printf '[]'") {
   const root = await mkdtemp(join(tmpdir(), "mf-dashboard-codex-test-"));
   temporaryDirectories.push(root);
   const executable = join(root, "fake-codex");
@@ -24,11 +24,12 @@ async function createFixture(execBody: string) {
     executable,
     `#!/bin/sh
 case "$1" in
-  mcp) printf '[]' ;;
+  mcp) ${mcpBody} ;;
   debug) printf '[]' ;;
   exec) ${execBody
     .replaceAll("__PROMPT_PATH__", JSON.stringify(join(root, "prompt.txt")))
-    .replaceAll("__ARGS_PATH__", JSON.stringify(join(root, "args.txt")))} ;;
+    .replaceAll("__ARGS_PATH__", JSON.stringify(join(root, "args.txt")))
+    .replaceAll("__ISOLATED_ROOT_PATH__", JSON.stringify(join(root, "isolated-root.txt")))} ;;
 esac
 `,
   );
@@ -64,6 +65,32 @@ describe("generateWithCodexExec", () => {
     );
   });
 
+  test("rejects an executable below a writable ancestor", async () => {
+    const root = await createFixture(`
+      cat >/dev/null
+    `);
+    await chmod(root, 0o777);
+
+    await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
+      "CODEX_EXEC_PATH must be an absolute trusted executable",
+    );
+  });
+
+  test("rejects an executable replaced between preflight processes", async () => {
+    await createFixture(
+      `cat >/dev/null`,
+      `
+        cp "$0" "$0.replacement"
+        mv "$0.replacement" "$0"
+        printf '[]'
+      `,
+    );
+
+    await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
+      "codex exec executable changed before spawn",
+    );
+  });
+
   test("preloads bounded tool data and returns structured output", async () => {
     const root = await createFixture(`
       printf '%s\\n' "$@" > __ARGS_PATH__
@@ -73,6 +100,7 @@ describe("generateWithCodexExec", () => {
       done
       input=$(cat)
       printf '%s' "$input" > __PROMPT_PATH__
+      printf '%s' "$HOME" > __ISOLATED_ROOT_PATH__
       printf '{"value":"ok"}' > "$output"
       printf 'model: fake-codex-model\\n' >&2
     `);
@@ -114,6 +142,8 @@ describe("generateWithCodexExec", () => {
     expect(args).toContain("tools.view_image=false");
     expect(args).toContain("tools.web_search=false");
     expect(await readFile(join(root, "auth.json"), "utf8")).toBe('{"token":"test"}');
+    const isolatedRoot = await readFile(join(root, "isolated-root.txt"), "utf8");
+    await expect(lstat(isolatedRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("fails closed when isolated credentials are refreshed", async () => {
