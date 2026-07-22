@@ -312,8 +312,9 @@ Codex 経路には Codex CLI のインストールと ChatGPT subscription に�
 codex login --config 'cli_auth_credentials_store="file"'
 ```
 
-Codex 経路は custom filesystem permissions を strict config で指定し、組み込み tool が読める
-範囲を空の一時 workspace に限定する。`--ignore-user-config` と `--ignore-rules` で設定・rules
+Codex 経路は custom filesystem permissions を strict config で指定し、組み込み `view_image` も
+明示的に無効化する。`tools.view_image=false` を認識しない Codex CLI では、workspace 外の画像を
+読み得る状態で実行せず、strict config error で fail closed になる。`--ignore-user-config` と `--ignore-rules` で設定・rules
 の読込を止める。canonical `CODEX_HOME` からは file-backed credential だけを予測不能な一時
 `CODEX_HOME` へコピーし、skill・plugin・instruction source は渡さない。Codex が更新した
 credential は、通常の Codex CLI による同時更新を上書きしないよう canonical `auth.json` へ

@@ -110,6 +110,7 @@ const CODEX_CONFIG = [
   'cli_auth_credentials_store="file"',
   "mcp_servers={}",
   'permissions.isolated.filesystem={":workspace_roots"={ "."="read"}}',
+  "tools.view_image=false",
   'web_search="disabled"',
 ] as const;
 const DATA_BOUNDARY =

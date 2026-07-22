@@ -217,6 +217,7 @@ describe("generateWithCodexExec", () => {
         expect.stringContaining("developer_instructions="),
         'default_permissions="isolated"',
         'permissions.isolated.filesystem={":workspace_roots"={ "."="read"}}',
+        "tools.view_image=false",
       ]),
     );
     expect(spawnOptions?.cwd).toContain("mf-dashboard-codex-");
