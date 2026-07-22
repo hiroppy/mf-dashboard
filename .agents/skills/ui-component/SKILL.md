@@ -9,8 +9,8 @@ description: Use when creating new UI components under apps/web/src/components/
 
 - [ ] Create component file
 - [ ] Create `*.stories.tsx` for Storybook
-- [ ] Use semantic colors for monetary values (see CLAUDE.md)
-- [ ] Verify Storybook: `pnpm --filter @mf-dashboard/web storybook`
+- [ ] Use semantic colors for monetary values (see `AGENTS.md`)
+- [ ] Verify Storybook: `pnpm --filter @mf-dashboard/web test:storybook`
 
 ## Component Types
 

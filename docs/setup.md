@@ -1,113 +1,297 @@
 # セットアップ
 
+このガイドでは、ローカルPC上のDocker ComposeでWebダッシュボード、crawler、Cloudflare Tunnelを常時稼働させる。完了すると、許可されたGoogleアカウントでダッシュボードへアクセスでき、毎日7:00と15:30（JST）の自動更新と画面上からの手動更新を利用できる。
+
+セットアップは次の順番で進める。
+
+1. Money Forward MEと1Passwordを準備する
+2. Cloudflare Zero TrustとGoogle OAuthを準備する
+3. アプリとインフラの設定ファイルを作成する
+4. Terraformを適用する
+5. Docker Composeを起動して動作を確認する
+
 ## 必須要件
 
-- [MoneyForward Me](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)
-- [Cloudflare](https://www.cloudflare.com/ja-jp/)
-  - GitHub Pagesが使えるならなくてもいいが、workflowを変更する必要あり
+- [Money Forward ME](https://moneyforward.com/)
+- [1Password](https://1password.com/jp)（Service Account）
+- [Cloudflare](https://www.cloudflare.com/ja-jp/)アカウント（Zero Trustを有効化済み）
+- 公開先FQDNのゾーンをCloudflareで管理していること
+- ローカルPCが常時起動できる環境
+- ローカルにインストール済みのツール:
+  - **Docker Desktop**（System SettingsのLogin Itemsでログイン時起動を有効化）
+  - `git`
+  - `terraform`（1.6以上）
+  - `openssl`
 
-## 1. プライベートリポジトリの作成
-
-**SQLiteをプッシュするため、プライベートリポジトリで行ってください。** GitHubの仕様上、このリポジトリをforkした場合は強制的にパブリックになるため、UIから行わずに以下を手元で実行し作成してください。
+リポジトリを取得し、以降のコマンドを実行するディレクトリへ移動する。
 
 ```sh
-$ git clone --bare https://github.com/hiroppy/mf-dashboard
-$ cd mf-dashboard
-# 作成したプライベートリポジトリへ変更
-$ git push --mirror https://github.com/xxxx/private-repo.git
-$ git remote add upstream https://github.com/hiroppy/mf-dashboard
+git clone https://github.com/hiroppy/mf-dashboard.git
+cd mf-dashboard
 ```
 
-## 2. 各種アカウント設定
+## 1. Money Forward MEと1Passwordの準備
 
-- MoneyForwardでワンタイムパスワードの設定を行う ([参考](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95))
-- 1Passwordでservice accountを発行する ([参考](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account))
-  - Private, Familyなど最初から作成されているvaultにMoneyForwardのアカウントを保存している場合、service accountはそのvaultへアクセスできないので注意。その場合は、手で作ったvaultへ移動させる必要がある
-- Cloudflareにプロジェクトを作り、そのリポジトリとGitHub連携を行う ([参考](https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/))
-  - ビルド構成
-    - ビルド コマンド: `pnpm build --filter="@mf-dashboard/web"`
-    - デプロイ コマンド: `npx wrangler deploy`
-    - バージョン コマンド: `npx wrangler versions upload`
-    - ルート ディレクトリ: `/`
-- (Optional) Slack Botを作成する (更新結果をSlackに通知したい場合)
-  - [ここ](https://api.slack.com/apps)から作成し、`xoxb-`から始まるtokenを作成
-    - Install App > OAuth Tokens
-  - `chat:write` の権限を与えておく
-    - OAuth & Permissions > Scopes
-  - 投稿したいチャンネルに招待する
-- (Optional) Discord Incoming Webhook を作成する (更新結果をDiscordに通知したい場合)
-  - 通知先チャンネルの「連携サービス」から Incoming Webhook を作成
-  - `https://discord.com/api/webhooks/...` 形式の URL を控える
+- Money Forward MEでワンタイムパスワードを設定する（[設定方法](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95)）
+- 1PasswordでService Accountを発行する（[設定方法](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account)）
+  - Private、Personal、Familyなど、最初から用意されている保管庫へService Accountはアクセスできない。Money Forward MEのアカウントを自分で作成した保管庫へ移し、Service Accountへアクセス権を付与する。
 
-## 3. Cloudflare Oneを設定
+## 2. Cloudflare Zero Trustの準備
 
-Cloudflareへデプロイするにあたり、[Cloudflare One](https://developers.cloudflare.com/cloudflare-one/)でアクセスコントロールを設定する必要がある。
+### 2.1 Zero Trustの有効化とTeam domainの確認
 
-Workers&Pagesで先程作ったプロジェクトの「設定」タブの「ドメインとルート」項目にあるworkers.devタイプのURL行の3点メニューを開き、Cloudflare Accessを有効にする。そうするとアプリケーションが作られているので、ポリシーとログイン方法を設定する必要がある。ここのポリシーで許可したいEmailを追加する。
+CloudflareダッシュボードからZero Trustを有効化し、Team domain（`<team-name>.cloudflareaccess.com`）を控えておく。
 
-注意: プロジェクトのプレビュー URL がactive(default)の場合、外から見えてしまうため無効にするのを忘れないこと。
+### 2.2 Google OAuth clientの準備
 
-標準でワンタイムパスワード込みのログインは行えるが、Google認証を使いたい場合は次のセクションへ移動。
+Googleログイン用のWeb Application clientを作成する。
 
-### Google認証を利用したい場合
+1. [Google Cloud Console](https://console.cloud.google.com/)でプロジェクトを作り、OAuth client IDを発行
+   - APIs & Services > Credentials > Create Credentials
+   - アプリケーションタイプ: `Web application`
+   - 承認済みの JavaScript 生成元: `https://<your-team-name>.cloudflareaccess.com`
+   - 承認済みのリダイレクト URI: `https://<your-team-name>.cloudflareaccess.com/cdn-cgi/access/callback`
+2. `Client ID`と`Client Secret`を控える
+3. `terraform/terraform.tfvars`の`google_oauth_client_id`と`google_oauth_client_secret`に設定する
 
-- [Google Cloud](https://console.cloud.google.com/)でプロジェクトを作り、OAuth client IDを発行
-  - APIs & Services > Credentials > Create Credentials
-  - `https://console.cloud.google.com/apis/credentials`
-- 以下を設定
-  - アプリケーションタイプ
-    - `Web application`
-  - 承認済みの JavaScript 生成元
-    - https://<your-team-name>.cloudflareaccess.com
-    - `<your-team-name>`はCloudflare Oneのチーム名
-  - 承認済みのリダイレクト URI
-    - `https://<your-team-name>.cloudflareaccess.com/cdn-cgi/access/callback`
-- `Client ID` と `Client Secret`を覚えておく
+TerraformがGoogle IdPをCloudflare Zero Trustへ登録し、Access ApplicationではこのIdPだけを許可する。
 
-Cloudflare OneにIdentity Providerの登録(`/integrations/identity-providers`)があるので、そこへ行き、Google認証を登録する。最後にさっき作ったアプリケーションの設定に行き、ログイン方法の選択でGoogleが選べるようになるので選べば完了。
+### 2.3 Cloudflare API Tokenの発行
 
-## 3. 環境変数設定
+Terraform用のAPI Tokenを発行する。必要な最小権限は次のとおり。
 
-作成したリポジトリの `/settings/secrets/actions` ページへ行き、以下の環境変数をそれぞれ設定。変数とシークレットそれぞれあるので間違えないように。
+| スコープ | 権限                                                         |
+| -------- | ------------------------------------------------------------ |
+| Account  | `Cloudflare Tunnel:Edit`                                     |
+| Account  | `Access: Apps and Policies:Edit`                             |
+| Account  | `Access: Organizations, Identity Providers, and Groups:Edit` |
+| Zone     | `Zone:Read`                                                  |
+| Zone     | `DNS:Edit`（対象ゾーンを含む）                               |
 
-### Variables
+発行したトークンをパスワードマネージャーなどへ保管し、実値をGit管理対象外の`terraform/terraform.tfvars`にある`cloudflare_api_token`へ設定する。Terraformは`.env`や1Passwordからインフラ設定を読み取らない。
 
-| Key              | Required | Value | Why                                                               |
-| ---------------- | -------- | ----- | ----------------------------------------------------------------- |
-| RUN_TASK         | ✅       | true  | crontabの実行に必要                                               |
-| CACHE_AUTH_STATE |          | true  | 認証状態をキャッシュし毎回のログインをスキップ (default: false)   |
-| CLEANUP_GROUPS   |          | true  | MoneyForwardから削除されたグループをDBからも削除 (default: false) |
+`terraform.tfvars`とTerraform stateには秘密情報が含まれる。どちらもGitへ追加せず、ローカルディスクの暗号化とファイル権限`600`を維持する。
 
-### Secrets
+### 2.4 公開設定と既存リソースの確認
 
-| Key                      | Required | Value                                            | Why                                                 |
-| ------------------------ | -------- | ------------------------------------------------ | --------------------------------------------------- |
-| OP_SERVICE_ACCOUNT_TOKEN | ✅       | 1passwordのサービスアカウントトークン            | ログインに必要                                      |
-| OP_VAULT                 | ✅       | 保管庫ID                                         | ログインに必要                                      |
-| OP_ITEM                  | ✅       | MoneyForwardのアイテムID                         | ログインに必要                                      |
-| OP_TOTP_FIELD            | ✅       | MoneyForwardのワンタイムパスワードのフィールドID | ログインに必要                                      |
-| DASHBOARD_URL            |          | デプロイ先URL                                    | Slack投稿でダッシュボードリンクを生成               |
-| SLACK_BOT_TOKEN          |          | bot token                                        | Slackへ結果投稿のため                               |
-| SLACK_CHANNEL_ID         |          | 投稿先のチャンネルID                             | Slackへ結果投稿のため                               |
-| DISCORD_WEBHOOK_URL      |          | Discord Incoming Webhook URL                     | crawler/e2e結果をDiscordへ通知するため              |
-| DISCORD_AVATAR_URL       |          | Discord通知のアイコン画像URL                     | Discord通知の `avatar_url` を上書きするため         |
-| NEXT_PUBLIC_GITHUB_ORG   |          | このリポジトリの組織名                           | UIからGitHub workflowへアクセスするためのリンク作成 |
-| NEXT_PUBLIC_GITHUB_REPO  |          | このリポジトリのリポジトリ名                     | UIからGitHub workflowへアクセスするためのリンク作成 |
+以下を決めておく。
 
-`NEXT_PUBLIC_GITHUB_ORG`, `NEXT_PUBLIC_GITHUB_REPO`に関しては、Next.jsのビルド時に必要な環境変数なので、Cloudflare側で設定する必要がある。
+- Cloudflareのゾーン（例: `example.com`）
+- 公開するホスト名（例: `dashboard.example.com`）
+- Cloudflare Accessで許可するメールアドレス
 
-### 1PasswordのIDの見つけ方 (アプリ)
+`terraform apply`の前に、Cloudflare上に同じホスト名のDNSレコードや、同名のTunnel、Access Application、Google IdPがないことを確認する。既存リソースを継続利用する場合は、重複作成せずTerraformへインポートする。
 
-1password/sdkは日本語に対応しておらずエラーとなってしまうため日本語のものは全部UUIDを利用する必要がある。
+## 3. セットアップ
 
-- `OP_VAULT`
-  - サイドバーでその保管庫を右クリックすると、UUIDをコピーが出てくる
-- `OP_ITEM`
-  - MoneyForwardのアイテム画面右上にあるケバブメニュー(`︙`)をクリックすると、UUIDをコピーが出てくる
-- `OP_TOTP_FIELD`
-  - `OP_ITEM`同様、メニューを開きアイテムのJSONをコピーを押し、そのJSONの中からUUIDを探す。`u`に`TOTP_`開始の文字列があったらそれが正解
+### 3.1 アプリ設定
 
-## 4. 実行
+`.env`を作成し、Money Forward MEと1Passwordの必須値を設定する。
 
-作ったリポジトリの`/actions/workflows/daily-update.yml`へ行くとRun Workflowがあるので、手動実行し、SQLiteがコミットされたら成功。
+```sh
+cp .env.example .env
+openssl rand -hex 32
+```
+
+`openssl`の出力を`.env`の`REFRESH_TOKEN`に設定する。このトークンはcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。
+
+| `.env`のキー                                 | 必須 | 内容                                                                     |
+| -------------------------------------------- | ---- | ------------------------------------------------------------------------ |
+| `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する`/api/refresh/`用Bearerトークン                    |
+| `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL           |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                   |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                              |
+| `HOST_UID` / `HOST_GID`                      | 任意 | Linuxで`./data`へ書き込むユーザーのUIDとGID。既定値は`1000:1000`         |
+| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない |
+
+Linuxで`./data`へ書き込めない場合は、`id -u`と`id -g`で値を確認し、`.env`の`HOST_UID`と`HOST_GID`へ設定する。
+
+#### 1PasswordのIDを確認する
+
+1Password SDKは日本語の保管庫名や項目名を扱えないため、日本語を含む場合はUUIDを使う。
+
+- `OP_VAULT`: サイドバーで保管庫を右クリックし、「UUIDをコピー」を選ぶ
+- `OP_ITEM`: アイテム画面右上のメニューから「UUIDをコピー」を選ぶ
+- `OP_TOTP_FIELD`: 同じメニューの「アイテムのJSONをコピー」を選び、`u`の値が`TOTP_`で始まるフィールドIDを取り出す
+
+### 3.2 インフラ設定
+
+Cloudflare API TokenとGoogle OAuth clientを用意したら、Git管理対象外のインフラ設定ファイルを作成する。
+
+```sh
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+chmod 600 terraform/terraform.tfvars
+```
+
+`terraform/terraform.tfvars`に実値を設定する。
+
+```hcl
+cloudflare_api_token       = "..."
+google_oauth_client_id     = "..."
+google_oauth_client_secret = "..."
+
+zone_name = "example.com"
+hostname  = "dashboard.example.com"
+
+allowed_emails = [
+  "user-a@example.com",
+]
+```
+
+`terraform/terraform.tfvars`、Terraform state、`secrets/cloudflared-token`はGit管理対象外。秘密情報を含むため、内容を表示したりコミットしたりしない。
+
+### 3.3 Terraform planの確認
+
+まずは適用せず、変更内容だけを確認する。
+
+```sh
+terraform -chdir=terraform init
+terraform -chdir=terraform plan
+```
+
+planでは以下を確認する。
+
+- 意図しない変更や削除がない
+- 対象のゾーンとホスト名が正しい
+- Google IdP、Tunnel、Tunnel設定、DNS、Access Application、メールアドレスの許可ポリシーが作成対象になっている
+- `local_sensitive_file`が`secrets/cloudflared-token`を作成する
+
+既存リソースとの競合や意図しない変更がある場合は適用せず、設定またはインポート方針を見直す。
+
+### 3.4 インフラの適用
+
+planに問題がなければ適用する。
+
+```sh
+terraform -chdir=terraform apply
+```
+
+適用後にTerraformの出力とTunnelトークンファイルを確認する。
+
+```sh
+terraform -chdir=terraform output
+ls -l secrets/cloudflared-token
+```
+
+`tunnel_id`、`hostname`、`google_identity_provider_id`が出力され、`secrets/cloudflared-token`の権限が`-r--r--r--`（mode `444`）なら成功。
+
+### 3.5 Docker Composeの起動
+
+```sh
+docker compose build
+docker compose up -d
+```
+
+Terraformの適用が成功し、`secrets/cloudflared-token`が作成されたことを確認してからDocker Composeを起動する。
+
+以降はcrawlerコンテナ内のsupercronicが`crontab`のスケジュールで自動更新する。
+
+各コンテナの役割は次のとおり。
+
+- **web**: ダッシュボードを配信し、共有データベースを読み取る
+- **cloudflared**: Cloudflare Tunnelへ接続する
+- **crawler**: 定期更新と手動更新を受け付け、取得したデータを共有データベースへ保存する
+
+スケジュールを変更する場合は`docker/crawler/crontab`を編集し、`docker compose build crawler`でcrawlerを再ビルドする。
+
+### 3.6 TunnelとAccessの動作確認
+
+```sh
+docker compose ps
+docker compose logs -f
+```
+
+以下を確認する:
+
+- `docker compose ps`で3サービスすべてが`Up`になっている
+- ログに認証エラーやTunnel接続エラーがない
+- 未ログインで`https://<hostname>/`へアクセスするとGoogleログインへ移動する
+- 許可したアカウントではダッシュボードが表示される
+- 許可していないアカウントではアクセスが拒否される
+- Google以外のログイン方法が表示されない
+
+```sh
+# Cloudflare Access経由の応答を確認
+curl -I https://<hostname>/
+# → 302 + Location が <team-name>.cloudflareaccess.com 配下なら Access 動作中
+
+# Terraform管理中のTunnel IDを確認
+terraform -chdir=terraform output -raw tunnel_id
+```
+
+## 4. 運用
+
+- **ホストを再起動する**: Docker Desktopの自動起動後、`restart: unless-stopped`を設定した各コンテナも自動復帰する
+- **イメージを再ビルドする**: `docker compose build && docker compose up -d`
+- **crawlerをすぐに実行する**: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start`
+- **webの表示だけを更新する**: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer ${REFRESH_TOKEN}" http://web:8765/api/refresh/'`
+
+## 5. オプション設定
+
+ここからの設定は、基本セットアップの完了後に必要なものだけ追加する。
+
+### Slack通知
+
+1. [Slack API](https://api.slack.com/apps)でBotを作成し、`xoxb-`から始まるトークンを発行する
+2. Botへ`chat:write`権限を付与し、投稿先チャンネルへ招待する
+3. `.env`の`SLACK_BOT_TOKEN`と`SLACK_CHANNEL_ID`を設定する
+
+### Discord通知
+
+1. 通知先チャンネルの「連携サービス」からIncoming Webhookを作成する
+2. `.env`の`DISCORD_WEBHOOK_URL`へ、発行された`https://discord.com/api/webhooks/...`形式のURLを設定する
+
+### 未分類取引のカテゴリ決定
+
+`data/category-rules.json`を作成すると、crawlerはデータベースへ保存する前に、新規の未分類取引へカテゴリを設定する。ファイルが存在しない場合、この機能は無効になり、取引を未分類のまま保存する。
+
+```sh
+cp data/category-rules.example.json data/category-rules.json
+```
+
+設定例:
+
+```json
+{
+  "llm": {
+    "enabled": false,
+    "maxPerRun": 5,
+    "minConfidence": 0.65
+  },
+  "rules": [
+    {
+      "accountName": "テスト口座",
+      "category": "食費",
+      "subCategory": "食料品"
+    },
+    {
+      "descriptionContains": "動画サービス",
+      "category": "趣味・娯楽",
+      "subCategory": "動画・音楽"
+    }
+  ]
+}
+```
+
+#### 固定ルール
+
+- 対象は「新規」「未分類」「非振替」「計算対象」の取引のみ
+- `accountName`は取引の口座名と完全一致する
+- `descriptionContains`は取引内容と部分一致する
+- 両方を指定した場合は、両条件に一致する取引だけを対象にする
+- 固定ルールに一致した場合はそのカテゴリを優先し、LLMを呼び出さない
+- `category`または`subCategory`がMoney Forward MEの候補に存在しない場合、そのルールを採用しない
+
+#### LLMによる推論
+
+固定ルールに一致しなかった取引だけをLLMで推論する場合は、`llm.enabled`を`true`へ変更し、`.env`に`AI_PROVIDER`、`AI_MODEL`、`AI_API_KEY`を設定する。
+
+- Money Forward MEから取得した候補カテゴリの中から選択し、カテゴリIDは生成しない
+- 1回の実行件数は`llm.maxPerRun`で制限する。既定値は`5`
+- 推論結果の確信度が`llm.minConfidence`未満の場合は反映しない。既定値は`0.65`
+- 取引の日付、種別、金額、内容、候補カテゴリのIDと名称を外部プロバイダーへ送信する
+- 更新に失敗してもcrawlerは停止せず、対象取引を未分類のまま保存する
+
+採用したカテゴリはMoney Forward MEの`/cf/update`へ反映する。その後、対象月を再取得してデータベースへ保存する。外部プロバイダーへ取引情報を送信してよい場合だけ、LLMによる推論を有効にする。

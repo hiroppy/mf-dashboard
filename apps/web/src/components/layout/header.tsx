@@ -26,11 +26,11 @@ export function Header({ groupSelector, notifications }: HeaderProps) {
             className="lg:hidden shrink-0"
           />
           <Image
-            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/logo.png`}
+            src="/logo.png"
             alt="Logo"
-            width={32}
-            height={32}
-            className="hidden shrink-0 lg:block"
+            width={758}
+            height={708}
+            className="hidden h-auto w-8 shrink-0 lg:block"
           />
           <div className="flex flex-col gap-0.5">{groupSelector}</div>
         </div>

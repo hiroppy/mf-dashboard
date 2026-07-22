@@ -1,0 +1,14 @@
+cloudflare_api_token       = ""
+google_oauth_client_id     = ""
+google_oauth_client_secret = ""
+
+zone_name = ""
+hostname  = ""
+
+allowed_emails = [
+  # "user-a@example.com",
+]
+
+# tunnel_name       = "mf-dashboard"
+# local_service_url = "http://web:8765"
+# session_duration  = "24h"

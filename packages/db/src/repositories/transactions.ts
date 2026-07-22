@@ -1,4 +1,4 @@
-import { eq, like, sql } from "drizzle-orm";
+import { eq, inArray, like, sql } from "drizzle-orm";
 import type { Db } from "../index";
 import { schema } from "../index";
 import type { CashFlowItem } from "../types";
@@ -78,6 +78,26 @@ export async function hasTransactionsForMonth(db: Db, month: string): Promise<bo
     .where(like(schema.transactions.date, `${month}%`))
     .get();
   return (result?.count ?? 0) > 0;
+}
+
+export async function findExistingTransactionMfIds(db: Db, mfIds: string[]): Promise<Set<string>> {
+  if (mfIds.length === 0) return new Set();
+
+  const existingMfIds = new Set<string>();
+  for (let i = 0; i < mfIds.length; i += BATCH_SIZE) {
+    const batch = mfIds.slice(i, i + BATCH_SIZE);
+    const rows = await db
+      .select({ mfId: schema.transactions.mfId })
+      .from(schema.transactions)
+      .where(inArray(schema.transactions.mfId, batch))
+      .all();
+
+    for (const row of rows) {
+      existingMfIds.add(row.mfId);
+    }
+  }
+
+  return existingMfIds;
 }
 
 /**

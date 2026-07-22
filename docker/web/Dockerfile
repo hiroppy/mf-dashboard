@@ -1,0 +1,81 @@
+FROM node:22-bookworm-slim AS builder
+WORKDIR /app
+ENV PNPM_HOME=/pnpm \
+    COREPACK_HOME=/pnpm/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    PATH=/pnpm:$PATH \
+    HOME=/home/node
+ARG DASHBOARD_URL
+ARG NEXT_PUBLIC_SIMULATOR_CURRENT_AGE=
+ARG NEXT_PUBLIC_SIMULATOR_INITIAL_AMOUNT=
+ARG NEXT_PUBLIC_SIMULATOR_MONTHLY_CONTRIBUTION=
+ARG NEXT_PUBLIC_SIMULATOR_ANNUAL_RETURN_RATE=
+ARG NEXT_PUBLIC_SIMULATOR_INFLATION_RATE=
+ARG NEXT_PUBLIC_SIMULATOR_CONTRIBUTION_YEARS=
+ARG NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_START_YEAR=
+ARG NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_YEARS=
+ARG NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_MODE=
+ARG NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_RATE=
+ARG NEXT_PUBLIC_SIMULATOR_MONTHLY_WITHDRAWAL=
+ARG NEXT_PUBLIC_SIMULATOR_EXPENSE_RATIO=
+ARG NEXT_PUBLIC_SIMULATOR_VOLATILITY=
+ARG NEXT_PUBLIC_SIMULATOR_BASE_PENSION=
+ARG NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE=
+ARG NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME=
+ENV DASHBOARD_URL=${DASHBOARD_URL} \
+    NEXT_PUBLIC_SIMULATOR_CURRENT_AGE=${NEXT_PUBLIC_SIMULATOR_CURRENT_AGE} \
+    NEXT_PUBLIC_SIMULATOR_INITIAL_AMOUNT=${NEXT_PUBLIC_SIMULATOR_INITIAL_AMOUNT} \
+    NEXT_PUBLIC_SIMULATOR_MONTHLY_CONTRIBUTION=${NEXT_PUBLIC_SIMULATOR_MONTHLY_CONTRIBUTION} \
+    NEXT_PUBLIC_SIMULATOR_ANNUAL_RETURN_RATE=${NEXT_PUBLIC_SIMULATOR_ANNUAL_RETURN_RATE} \
+    NEXT_PUBLIC_SIMULATOR_INFLATION_RATE=${NEXT_PUBLIC_SIMULATOR_INFLATION_RATE} \
+    NEXT_PUBLIC_SIMULATOR_CONTRIBUTION_YEARS=${NEXT_PUBLIC_SIMULATOR_CONTRIBUTION_YEARS} \
+    NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_START_YEAR=${NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_START_YEAR} \
+    NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_YEARS=${NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_YEARS} \
+    NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_MODE=${NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_MODE} \
+    NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_RATE=${NEXT_PUBLIC_SIMULATOR_WITHDRAWAL_RATE} \
+    NEXT_PUBLIC_SIMULATOR_MONTHLY_WITHDRAWAL=${NEXT_PUBLIC_SIMULATOR_MONTHLY_WITHDRAWAL} \
+    NEXT_PUBLIC_SIMULATOR_EXPENSE_RATIO=${NEXT_PUBLIC_SIMULATOR_EXPENSE_RATIO} \
+    NEXT_PUBLIC_SIMULATOR_VOLATILITY=${NEXT_PUBLIC_SIMULATOR_VOLATILITY} \
+    NEXT_PUBLIC_SIMULATOR_BASE_PENSION=${NEXT_PUBLIC_SIMULATOR_BASE_PENSION} \
+    NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE=${NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE} \
+    NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME=${NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME}
+RUN mkdir -p /pnpm \
+    && corepack enable \
+    && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/db/package.json ./packages/db/
+COPY packages/date-utils/package.json ./packages/date-utils/
+COPY packages/meta/package.json ./packages/meta/
+COPY packages/analytics/package.json ./packages/analytics/
+
+RUN package_manager=$(node -p "require('./package.json').packageManager") \
+    && corepack prepare "$package_manager" --activate \
+    && pnpm install --frozen-lockfile --filter "@mf-dashboard/web..." --ignore-scripts \
+    && pnpm rebuild --pending --filter "@mf-dashboard/web..."
+
+COPY . .
+
+# Runtime dashboard pages wait for an incoming request before reading the mounted DB.
+RUN cd apps/web && ./node_modules/.bin/next build
+
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    HOSTNAME=0.0.0.0 \
+    PORT=8765 \
+    HOME=/home/node
+
+RUN mkdir -p /app/data \
+    && chown node:node /app/data
+
+COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
+
+USER node
+
+EXPOSE 8765
+CMD ["node", "apps/web/server.js"]

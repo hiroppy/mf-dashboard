@@ -1,108 +1,100 @@
 <div align="center">
-  <img src="apps/web/public/logo.png" alt="Logo" width="120">
+  <img src="apps/web/public/logo.png" alt="MoneyForward Me Dashboardのロゴ" width="120">
   <h1>MoneyForward Me Dashboard</h1>
-  <p>MoneyForward Meを自動化、可視化</p>
+  <p>Money Forward MEのデータ取得・更新・可視化を自動化するダッシュボード</p>
 </div>
 
-## 機能
+Money Forward MEの家計・資産・投資データを定期的に取得し、Webダッシュボードで確認できる。更新結果の通知、取引カテゴリの自動決定、AIアシスタントからのデータ照会にも対応する。
 
-### 指定した時間に金融機関の一括更新
+[デモを見る](https://mf-dashboard-demo.vercel.app/) · [本番環境をセットアップする](docs/setup.md) · [MCP連携を設定する](apps/mcp/README.md)
 
-GitHubのworkflowでcrontabを使い定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日6:50(JST)と15:20(JST)。GitHubのcrontabは指定時間ちょうどに実行されないので、-10分に設定。
+## デモデータですぐ試す
 
-### Slackへ結果を投稿
+必要なものはNode.jsとpnpm。
 
-Slack botの設定をすることにより、前日との差分を投稿可能。
+```sh
+git clone https://github.com/hiroppy/mf-dashboard.git
+cd mf-dashboard
+corepack enable pnpm
+pnpm install
+pnpm dev
+```
 
-<img src="./.github/assets/slack.png" alt="slack" width="30%" />
+起動後、ターミナルに表示されるURLをブラウザで開く。この手順では実際のMoney Forward MEアカウントへ接続しない。
 
-### 自分の行いたい処理を実行
+## 本番環境へ導入する
 
-hookが提供されているので、スクレイピング時に用意したスクリプトを実行可能。例えば、特定の金融機関の取引の場合に大項目、中項目を常に食品に設定する等。Playwrightの`Page`を持っているので基本何でもできる。
+本番環境では、ローカルPC上のDocker ComposeでWeb、crawler、Cloudflare Tunnelを常時稼働させる。Money Forward ME、1Password Service Account、Cloudflare Zero Trustの準備が必要になる。
 
-### MCP経由でAIアシスタントと連携
+設定値の作成から起動後の確認まで、[セットアップガイド](docs/setup.md)に沿って進める。
 
-MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopから、家計・資産・投資データを自然言語で照会できる。詳細は [apps/mcp/README.md](apps/mcp/README.md) を参照。
+## 主な機能
 
-### すべての情報を可視化
+### 金融機関の情報を自動更新
 
-[demoページ](https://hiroppy.github.io/mf-dashboard)を参考。予算機能以外はすべて対応済み。
+crawlerコンテナ内のsupercronicが、登録金融機関の「一括更新」を定期的に実行して完了を監視する。既定の実行時刻は毎日7:00と15:30（JST）。ダッシュボードから手動でも実行できる。
 
-<img src="./.github/assets/demo-month.png" alt="month page" width="50%" /><img src="./.github/assets/demo-dashboard.png" alt="dashboard page" width="50%" />
+### 更新結果をSlackやDiscordへ通知
 
-### 複利シミュレーター
+通知先を設定すると、更新結果や前日との差分をSlackまたはDiscordへ投稿できる。
 
-いくら積み立てて、いくら切り崩しをすればいいのかモンテカルロ法を用いて計算。年金なども設定でき、精度高く検証する。
+<img src="./.github/assets/slack.png" alt="Slackに投稿された更新結果" width="420" />
 
-[個別サイト](https://asset-melt.party/)
+### スクレイピング処理をフックで拡張
 
-## 導入方法
+スクレイピング中に独自のスクリプトを実行できる。Playwrightの`Page`を利用し、特定の条件に一致する取引のカテゴリ変更など、ブラウザ上の処理を追加できる。
 
-[使い方ページ](/docs/setup.md)を参照
+### 未分類取引のカテゴリを自動決定
 
-## アーキテクチャ
+`data/category-rules.json`を用意すると、新規の未分類取引へ固定ルールを適用できる。ルールに一致しない取引には、任意でLLMによる推論も利用できる。決定したカテゴリはMoney Forward MEへ反映し、対象月を再取得してデータベースへ保存する。
 
-このプロダクトは、GitHub Actionsで定期的にMoneyForward Meのデータを取得してSQLiteに保存し、Cloudflare Pagesで静的サイトをビルド・公開する。Publicで公開する前提のものではないので、以下の構成とする。
+[カテゴリ決定機能を設定する](docs/setup.md#未分類取引のカテゴリ決定)
+
+### AIアシスタントから家計データを照会
+
+MCP（Model Context Protocol）サーバーを内蔵。ChatGPTデスクトップアプリ、Codex、Claude Desktop、Claude Codeから、家計・資産・投資データを自然言語で照会できる。
+
+[MCP連携の設定を見る](apps/mcp/README.md)
+
+### 家計・資産情報を可視化
+
+予算機能を除くダッシュボードの表示を、[公開デモ](https://mf-dashboard-demo.vercel.app/)で確認できる。
+
+| 月次画面                                                                     | ダッシュボード                                                                             |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| <img src="./.github/assets/demo-month.png" alt="月次収支画面" width="600" /> | <img src="./.github/assets/demo-dashboard.png" alt="資産ダッシュボード画面" width="600" /> |
+
+### 複利シミュレーション
+
+積立額や取崩額、年金などの条件を設定し、モンテカルロ法で資産推移をシミュレーションできる。[公開サイト](https://asset-melt.party/)でも利用可能。
+
+## システム構成
+
+Docker Composeで次の3サービスを動かす。
+
+- **web**: SQLiteのデータを表示するNext.jsアプリ
+- **crawler**: Money Forward MEからデータを取得し、SQLiteへ保存するPlaywrightアプリ
+- **cloudflared**: Cloudflare Tunnelへ接続し、認証済みユーザーへWebアプリを公開
 
 ```mermaid
-graph LR
-    A[GitHub Actions<br/>Cron] -->|1. 実行| B[Crawler<br/>Playwright]
-    B -->|2. OTP取得| E[1Password<br/>Service Account]
-    E -->|3. 認証情報| B
-    B -->|4. アクセス| F[MoneyForward Me]
-    F -->|5. データ| B
-    B -->|6. 保存| C[SQLite<br/>Database]
-    C -->|7. 更新完了| A
-    A -->|8. Git Commit| D[Cloudflare Worker<br/>Next.js Static Export]
+flowchart TD
+    U[利用者] -->|Cloudflare Accessで認証| T[cloudflared]
+    T --> W[web]
+    W -->|手動更新| C[crawler]
+    S[supercronic<br/>7:00 / 15:30 JST] --> C
+    O[1Password<br/>認証情報とOTP] --> C
+    C --> M[Money Forward ME]
+    M --> C
+    C -->|保存| D[(SQLite)]
+    D -->|読み取り| W
+    C -->|表示を更新| W
 ```
 
-**処理の流れ:**
+SQLiteはwebとcrawlerで共有する。外部アクセスはCloudflare TunnelとAccessで保護し、Googleログインとメールアドレスの許可リストを通過したユーザーだけに限定する。詳しい構築手順は[セットアップガイド](docs/setup.md)を参照。
 
-- **定期実行**: GitHub Actionsのcronスケジュールで自動実行
-- **認証**: 1Password Service AccountからOTPを取得
-- **データ取得**: Playwrightを使用してMoneyForward Meからデータをスクレイピング
-- **データ保存**: SQLiteデータベースに構造化して保存
-- **コミット**: SQLiteファイルをリポジトリにコミットすることにより、cloudflareをキック
-- **ビルド・デプロイ**: Cloudflare PagesでNext.jsの静的サイトをビルドして公開(Cloudflare Oneの利用を強く推奨)
+## セキュリティ上の推奨事項
 
-## 推奨セキュリティ
+- Money Forward MEではワンタイムパスワードを有効にする
+- Cloudflare AccessでGoogleログインとメールアドレスの許可リストを設定する
 
-- GitHub
-  - Passkey
-- MoneyForward Me
-  - ワンタイムパスワード
-  - Passkeyだけだとクローリングするときにログインできない点に注意
-- Cloudflare
-  - Cloudflare oneでサイトへのアクセス制限 (e.g. googleログイン)
-
-このプロダクトはスケールさせる必要がないことから、当初GitHubだけで完結するように設計されていた。しかし、Private repoの場合はGitHub Pagesが有料限定ということでページの公開と認証はCloudflareを利用するようにした経緯がある。
-
-SQLiteを今後、pushしなくても良いオプションを作る可能性はあるが、毎回1年分のデータ取得と取得毎のdiffが取れなくなるデメリットがあるため現段階では実装していない。またインフラは今後変える可能性あり。
-
-## 開発
-
-[UIコンポーネント集](https://hiroppy.github.io/mf-dashboard/storybook/)
-
-Storybook story 必須対象: `apps/web/src/components/` 配下の再利用 UI component は
-同階層に `*.stories.tsx` を置く。例外は `.client.tsx`、context/provider、hook、types、
-および親 component の story で直接検証される実装専用 component に限る。
-
-```sh
-$ git clone xxx
-$ cd mf-dashboard
-# demoで確認したいだけであれば不要
-$ cp .env.example .env
-$ pnpm i
-# demoデータで確認
-$ pnpm dev:demo
-# 実際のアカウントのデータを取得する場合
-$ pnpm db:dev
-$ pnpm dev
-```
-
-`data/demo.db` は生成物として扱い、Git には含めない。`pnpm dev:demo` / `pnpm build:demo`
-実行時に自動生成される。手動で作り直したい場合は次を実行する。
-
-```sh
-$ pnpm --filter @mf-dashboard/db build:demo
-```
+Money Forward MEでパスキーだけを設定するとcrawlerからログインできないため、ワンタイムパスワードも利用する。
