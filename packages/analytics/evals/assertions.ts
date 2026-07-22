@@ -1863,13 +1863,103 @@ function collectMonthlySavingsRates(results: DataToolResult[]) {
   });
 }
 
+function collectMonthlySummaryMetrics(results: DataToolResult[]) {
+  return results.flatMap((result) => {
+    if (
+      !["getLatestMonthlySummary", "getMonthlySummaryByMonth"].includes(result.toolName) ||
+      typeof result.output !== "object" ||
+      result.output === null
+    ) {
+      return [];
+    }
+    const output = result.output as Record<string, unknown>;
+    const input =
+      typeof result.input === "object" && result.input !== null
+        ? (result.input as Record<string, unknown>)
+        : {};
+    const month =
+      typeof output.month === "string"
+        ? output.month
+        : typeof input.month === "string"
+          ? input.month
+          : undefined;
+    return month !== undefined &&
+      typeof output.totalIncome === "number" &&
+      typeof output.totalExpense === "number" &&
+      typeof output.netIncome === "number"
+      ? [
+          {
+            month,
+            income: output.totalIncome,
+            expense: output.totalExpense,
+            net: output.netIncome,
+          },
+        ]
+      : [];
+  });
+}
+
+function collectInvalidMonthlySummaryTrends(text: string, results: DataToolResult[]): string[] {
+  const rows = collectMonthlySummaryMetrics(results).sort((left, right) =>
+    left.month.localeCompare(right.month),
+  );
+  const labels = [
+    { pattern: "収入|所得", metric: "income" },
+    { pattern: "支出|出費", metric: "expense" },
+    { pattern: "収支|純収支|手残り", metric: "net" },
+  ] as const;
+  return labels.flatMap(({ metric, pattern }) => {
+    const matches = [
+      ...text.matchAll(
+        new RegExp(
+          `(?:${pattern})(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?\\s*(上昇|増加|改善|増え|上が|低下|減少|悪化|減り|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)`,
+          "gu",
+        ),
+      ),
+      ...text.matchAll(
+        new RegExp(
+          `(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?.{0,12}(?:${pattern})(?:は|が)?\\s*(上昇|増加|改善|増え|上が|低下|減少|悪化|減り|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)`,
+          "gu",
+        ),
+      ),
+    ];
+    return matches.flatMap((match) => {
+      const endIndex = match.index + match[0].length;
+      const { clauseEnd, clauseStart } = collectClauseBounds(text, match.index, endIndex);
+      if (hasNegatedSuffix(text, endIndex, clauseEnd)) return [];
+      const scope = collectTemporalMonthScope(text.slice(Math.max(0, clauseStart + 1), clauseEnd));
+      const current =
+        scope === undefined
+          ? rows.at(-1)
+          : rows.find(
+              ({ month }) =>
+                month === scope || (scope.startsWith("*-") && month.endsWith(scope.slice(1))),
+            );
+      if (current === undefined) return [match[0]];
+      const [year, month] = current.month.split("-").map(Number);
+      const previousDate = new Date(Date.UTC(year, month - 2, 1));
+      const previousMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
+      const previous = rows.find((row) => row.month === previousMonth);
+      if (previous === undefined) return [match[0]];
+      const claimsUnchanged = /(?:横ばい|変化|同額|同じ)/u.test(match[1]);
+      const claimsIncrease = /(?:上昇|増加|改善|増え|上が)/u.test(match[1]);
+      const isValid = claimsUnchanged
+        ? current[metric] === previous[metric]
+        : claimsIncrease
+          ? current[metric] > previous[metric]
+          : current[metric] < previous[metric];
+      return isValid ? [] : [match[0]];
+    });
+  });
+}
+
 function collectInvalidSavingsRateDirections(text: string, results: DataToolResult[]): string[] {
   const directionMatches = [
     ...text.matchAll(
-      /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
+      /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)/gu,
     ),
     ...text.matchAll(
-      /(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?.{0,12}貯蓄率(?:は|が)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
+      /(?:前月|先月)(?:と比べて|と|より|から|比)?(?:も)?.{0,12}貯蓄率(?:は|が)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額|同じ)/gu,
     ),
   ].filter((match) => {
     const endIndex = match.index + match[0].length;
@@ -1902,10 +1992,13 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
     const previousMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
     const previous = rates.find((rate) => rate.month === previousMonth);
     if (previous === undefined) return [match[0]];
+    const claimsUnchanged = /(?:横ばい|変化|同額|同じ)/u.test(match[1]);
     const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);
-    const directionIsValid = claimsIncrease
-      ? current.rate > previous.rate
-      : current.rate < previous.rate;
+    const directionIsValid = claimsUnchanged
+      ? current.rate === previous.rate
+      : claimsIncrease
+        ? current.rate > previous.rate
+        : current.rate < previous.rate;
     return directionIsValid ? [] : [match[0]];
   });
 }
@@ -1940,7 +2033,7 @@ function chartPointMatchesFactMonth(
   );
 }
 
-function collectCategorySuperlativeClaims(text: string): string[] {
+function collectCategorySuperlativeClaims(text: string) {
   return [
     ...text.matchAll(
       /(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)(?:の)?(?:は|が)[\p{L}・]{1,24}?(?=\s*(?:です|である|だ|。|、|$))/gu,
@@ -1966,7 +2059,11 @@ function collectCategorySuperlativeClaims(text: string): string[] {
         collectClauseBounds(text, match.index, endIndex).clauseEnd,
       );
     })
-    .map(([claim]) => claim);
+    .map((match) => ({
+      claim: match[0],
+      endIndex: match.index + match[0].length,
+      index: match.index,
+    }));
 }
 
 function categorySuperlativeIsGrounded(
@@ -2182,21 +2279,38 @@ export default function assertFinanceResponse(output: string, context: Assertion
       collectInvalidSavingsRateDirections(text, parsed.dataToolResults),
     ),
   ];
-  const invalidCategorySuperlativeClaims = [
+  const invalidMonthlySummaryTrends = [
     ...categoryTextEvidence.flatMap((evidence) =>
-      collectCategorySuperlativeClaims(evidence.text).filter(
-        (claim) =>
-          !categorySuperlativeIsGrounded(
-            claim,
-            collectCategoryGroups(evidence.dataToolResults),
-            evidence.text,
-          ),
-      ),
+      collectInvalidMonthlySummaryTrends(evidence.text, evidence.dataToolResults),
     ),
     ...collectFacts(parsed.cards).flatMap((text) =>
-      collectCategorySuperlativeClaims(text).filter(
-        (claim) => !categorySuperlativeIsGrounded(claim, knownCategoryGroups, text),
-      ),
+      collectInvalidMonthlySummaryTrends(text, parsed.dataToolResults),
+    ),
+  ];
+  const invalidCategorySuperlativeClaims = [
+    ...categoryTextEvidence.flatMap((evidence) =>
+      collectCategorySuperlativeClaims(evidence.text)
+        .filter(({ claim, endIndex, index }) => {
+          const { clauseEnd, clauseStart } = collectClauseBounds(evidence.text, index, endIndex);
+          return !categorySuperlativeIsGrounded(
+            claim,
+            collectCategoryGroups(evidence.dataToolResults),
+            evidence.text.slice(Math.max(0, clauseStart + 1), clauseEnd),
+          );
+        })
+        .map(({ claim }) => claim),
+    ),
+    ...collectFacts(parsed.cards).flatMap((text) =>
+      collectCategorySuperlativeClaims(text)
+        .filter(({ claim, endIndex, index }) => {
+          const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
+          return !categorySuperlativeIsGrounded(
+            claim,
+            knownCategoryGroups,
+            text.slice(Math.max(0, clauseStart + 1), clauseEnd),
+          );
+        })
+        .map(({ claim }) => claim),
     ),
   ];
   const unsupportedQualitativeDominanceClaims = [
@@ -2999,6 +3113,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     invalidSavingsRateDirections.length > 0
       ? `誤った貯蓄率方向: ${[...new Set(invalidSavingsRateDirections)].join(",")}`
+      : undefined,
+    invalidMonthlySummaryTrends.length > 0
+      ? `誤った月次収支方向: ${[...new Set(invalidMonthlySummaryTrends)].join(",")}`
       : undefined,
     unsupportedBareAmountUnits.length > 0
       ? `非金銭単位付き可視金額: ${[...new Set(unsupportedBareAmountUnits)].join(",")}`

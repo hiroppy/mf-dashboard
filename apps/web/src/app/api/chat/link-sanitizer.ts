@@ -4,6 +4,21 @@ import type { StreamTextTransform, ToolSet } from "ai";
 
 export { sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
 
+function hasCompleteRawHtmlAnchorOpening(text: string, start: number): boolean {
+  let quote: '"' | "'" | undefined;
+  for (let index = start + 2; index < text.length; index += 1) {
+    const character = text[index];
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function splitCompleteFinanceChatText(
   text: string,
   knownReferenceIds: ReadonlySet<string> = new Set(),
@@ -21,7 +36,12 @@ export function splitCompleteFinanceChatText(
     const character = text[index];
     const escaped = index > 0 && text[index - 1] === "\\";
 
-    if (!escaped && !htmlAnchorOpen && /^<a\b/iu.test(text.slice(index))) {
+    if (
+      !escaped &&
+      !htmlAnchorOpen &&
+      /^<a\b/iu.test(text.slice(index)) &&
+      hasCompleteRawHtmlAnchorOpening(text, index)
+    ) {
       htmlAnchorOpen = true;
       continue;
     }

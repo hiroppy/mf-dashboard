@@ -1702,6 +1702,39 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("scopes each category superlative to its own clause", () => {
+    const results = [
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-06" },
+        output: [
+          { category: "食費", type: "expense", totalAmount: 80000 },
+          { category: "住宅", type: "expense", totalAmount: 75000 },
+        ],
+      },
+      {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-07" },
+        output: [
+          { category: "食費", type: "expense", totalAmount: 41837 },
+          { category: "住宅", type: "expense", totalAmount: 75000 },
+        ],
+      },
+    ];
+    const text = "2026年6月の支出で最も多いのは食費です。2026年7月の支出で最も多いのは食費です。";
+    const multiMonthOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(multiMonthOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠の定性的支出構成"),
+    });
+  });
+
   it.each([
     ["食費は固定費です。", false, "誤ったカテゴリ種別"],
     ["食費は固定費とは限りません。", true, "期待する最終応答です。"],
@@ -1867,6 +1900,8 @@ describe("assertFinanceResponse", () => {
     ["貯蓄率は前月より低下しました。", true, "期待する最終応答です。"],
     ["前月より貯蓄率が上昇しました。", false, "誤った貯蓄率方向"],
     ["前月より貯蓄率が低下しました。", true, "期待する最終応答です。"],
+    ["貯蓄率は前月と同じです。", false, "誤った貯蓄率方向"],
+    ["貯蓄率は前月から横ばいです。", false, "誤った貯蓄率方向"],
   ])("validates a qualitative savings-rate direction: %s", (text, pass, expectedReason) => {
     const juneResult = {
       toolName: "getMonthlySummaryByMonth",
@@ -1888,6 +1923,51 @@ describe("assertFinanceResponse", () => {
     const result = assertFinanceResponse(directionOutput);
     expect(result.pass).toBe(pass);
     expect(result.reason).toContain(expectedReason);
+  });
+
+  it("accepts an unchanged savings-rate claim when both rates are equal", () => {
+    const results = ["2026-06", "2026-07"].map((month) => ({
+      toolName: "getMonthlySummaryByMonth",
+      input: { month },
+      output: { month, totalIncome: 100, totalExpense: 60, netIncome: 40 },
+    }));
+    const text = "貯蓄率は前月から変化なしです。";
+    const directionOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(directionOutput)).toMatchObject({ pass: true });
+  });
+
+  it.each([
+    ["収入は前月より増加しました。", false, false],
+    ["収入は前月より減少しました。", true, true],
+    ["支出は前月より減少しました。", true, true],
+    ["支出は前月より増加しました。", true, false],
+    ["収支は前月より減少しました。", true, true],
+  ])("validates a monthly summary trend: %s", (text, includePrevious, pass) => {
+    const juneResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-06" },
+      output: { month: "2026-06", totalIncome: 637637, totalExpense: 226504, netIncome: 411133 },
+    };
+    const julyResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { month: "2026-07", totalIncome: 313235, totalExpense: 219894, netIncome: 93341 },
+    };
+    const results = includePrevious ? [juneResult, julyResult] : [julyResult];
+    const trendOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(trendOutput).pass).toBe(pass);
   });
 
   it("rejects a savings-rate trend when only one month was retrieved", () => {

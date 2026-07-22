@@ -143,6 +143,13 @@ describe("splitCompleteFinanceChatText", () => {
       pending: "続き",
     });
   });
+
+  it.each(["前半 <a 後半です。", "`<a` はHTMLタグ例です。"])(
+    "streams a literal unterminated anchor opener: %s",
+    (text) => {
+      expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+    },
+  );
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
