@@ -3,6 +3,7 @@ import {
   buildFinanceChatHref,
   financeChatCardSchema,
   financeChatHrefSchema,
+  MAX_CATEGORY_BREAKDOWN_ROWS,
   MAX_TRANSACTION_CARD_ROWS,
 } from "./cards.js";
 
@@ -306,6 +307,39 @@ describe("financeChatCardSchema", () => {
           { name: "食費", amount: 100, amountType: "expense", percentage: 40 },
           { name: "食費", amount: 50, amountType: "expense", percentage: 20 },
         ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("limits category breakdown rows and display text", () => {
+    const category = {
+      name: "食費",
+      amount: -100,
+      amountType: "expense" as const,
+      percentage: 0,
+    };
+    const card = {
+      type: "categoryBreakdown" as const,
+      title: "カテゴリ別支出",
+      categories: [category],
+    };
+
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        categories: Array.from({ length: MAX_CATEGORY_BREAKDOWN_ROWS + 1 }, (_, index) => ({
+          ...category,
+          name: `カテゴリ${index + 1}`,
+        })),
+      }).success,
+    ).toBe(false);
+    expect(financeChatCardSchema.safeParse({ ...card, title: "a".repeat(201) }).success).toBe(
+      false,
+    );
+    expect(
+      financeChatCardSchema.safeParse({
+        ...card,
+        categories: [{ ...category, name: "a".repeat(201) }],
       }).success,
     ).toBe(false);
   });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const MAX_PIE_CATEGORIES = 5;
+export const MAX_CATEGORY_BREAKDOWN_ROWS = 25;
 export const MAX_SUMMARY_CARD_METRICS = 12;
 export const MAX_TRANSACTION_CARD_ROWS = 25;
 const MAX_CATEGORY_PERCENTAGE_TOTAL = 100.1;
@@ -124,17 +125,18 @@ export const transactionListCardSchema = z
 export const categoryBreakdownCardSchema = z
   .object({
     type: z.literal("categoryBreakdown"),
-    title: z.string().min(1),
+    title: cardTextSchema,
     categories: z
       .array(
         z.object({
-          name: z.string().min(1),
+          name: cardTextSchema,
           amount: finiteAmountSchema,
           amountType: z.enum(["income", "expense"]),
           percentage: z.number().min(0).max(100),
         }),
       )
-      .min(1),
+      .min(1)
+      .max(MAX_CATEGORY_BREAKDOWN_ROWS),
   })
   .extend(linkableCardSchema.shape)
   .superRefine((card, context) => {

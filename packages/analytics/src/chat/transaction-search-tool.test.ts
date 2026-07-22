@@ -69,6 +69,14 @@ describe("createTransactionSearchTool", () => {
     expect(schema.safeParse({ minAmount: 1_000, maxAmount: 1_000 }).success).toBe(true);
   });
 
+  it("振替のみの検索と振替除外の矛盾を拒否する", () => {
+    const schema = createTransactionSearchTool(db, "group-a").inputSchema as z.ZodType;
+
+    expect(schema.safeParse({ type: "transfer", includeTransfers: false }).success).toBe(false);
+    expect(schema.safeParse({ type: "transfer", includeTransfers: true }).success).toBe(true);
+    expect(schema.safeParse({ type: "expense", includeTransfers: false }).success).toBe(true);
+  });
+
   it.each(["", "   "])("空の検索filter %jを拒否する", (filter) => {
     const schema = createTransactionSearchTool(db, "group-a").inputSchema as z.ZodType;
 
