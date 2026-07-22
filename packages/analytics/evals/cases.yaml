@@ -482,17 +482,25 @@
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
           - { label: 食費, amount: 49922, rolePattern: (前月|先月|比較) }
-          - { label: 食費, amount: 8085, rolePattern: (差額|差|増減|変化|円\s*(減|減少)|下回) }
+          - {
+              label: 食費,
+              amount: 8085,
+              rolePattern: '((差額|差|増減|変化).{0,20}(減|減少|下回)|円\s*(の\s*)?(減|減少)|下回)',
+            }
           - { label: 衣服・美容, amount: 19475 }
           - { label: 衣服・美容, amount: 12111, rolePattern: (前月|先月|比較) }
           - {
               label: 衣服・美容,
               amount: 7364,
-              rolePattern: (差額|差|増減|変化|円\s*(増|増加)|上回),
+              rolePattern: '((差額|差|増減|変化).{0,20}(増|増加|上回)|円\s*(の\s*)?(増|増加)|上回)',
             }
           - { label: 日用品, amount: 11198 }
           - { label: 日用品, amount: 11495, rolePattern: (前月|先月|比較) }
-          - { label: 日用品, amount: 297, rolePattern: (差額|差|増減|変化|円\s*(減|減少)|下回) }
+          - {
+              label: 日用品,
+              amount: 297,
+              rolePattern: '((差額|差|増減|変化).{0,20}(減|減少|下回)|円\s*(の\s*)?(減|減少)|下回)',
+            }
         visiblePercentageClaims:
           - { label: 貯蓄率, amount: 29.8 }
           - { label: 貯蓄率, amount: 30 }
@@ -514,6 +522,24 @@
               labelPattern: (?=.*(衣服・美容|衣服))(?=.*(差|増|前月|比較))(?=.*(候補|見直し|参考|対象)),
             }
         expectedDataToolFacts:
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalIncome,
+              value: 313235,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalExpense,
+              value: 219894,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.netIncome,
+              value: 93341,
+            }
           - {
               toolName: getMonthlyCategoryTotals,
               input: { month: "2026-07" },

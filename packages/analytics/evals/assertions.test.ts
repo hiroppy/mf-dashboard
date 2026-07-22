@@ -699,6 +699,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("rejects a negated suffix-qualified approximate claim", () => {
+    const denialOutput = JSON.stringify({
+      text: "収入は313,235円ほどではありません。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収入", amount: 313235, amountType: "income" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          allowedVisibleAmounts: [313235],
+          visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -1023,6 +1046,38 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a category delta stated in the opposite direction", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "衣服・美容の差額は7,364円減少です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475, 7364],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+            {
+              label: "衣服・美容",
+              amount: 7364,
+              rolePattern:
+                "((差額|差|増減|変化).{0,20}(増|増加|上回)|円\\s*(の\\s*)?(増|増加)|上回)",
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("does not classify a current amount followed by に増加 as a delta", () => {
