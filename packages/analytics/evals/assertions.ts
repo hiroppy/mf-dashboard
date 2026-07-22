@@ -1,10 +1,24 @@
 import { financeChatCardsSchema, type FinanceChatCard } from "../src/chat/cards";
 
+interface MetricExpectation {
+  label: string;
+  amount: number;
+  amountType: string;
+}
+
+interface TransactionExpectation {
+  date: string;
+  amount: number;
+}
+
 interface AssertionContext {
   config?: {
     expectedCardTypes?: string[];
-    expectedFacts?: Array<string | number>;
+    expectedCategories?: MetricExpectation[];
+    expectedFacts?: string[];
+    expectedMetrics?: MetricExpectation[];
     expectedRoute?: string;
+    expectedTransactions?: TransactionExpectation[];
   };
 }
 
@@ -24,15 +38,15 @@ function parseOutput(output: string): EvaluationOutput | undefined {
   }
 }
 
-function normalize(value: string | number): string {
+function normalize(value: string): string {
   return String(value)
     .normalize("NFKC")
     .replace(/[¥￥,\s]/g, "")
     .toLowerCase();
 }
 
-function collectFacts(value: unknown): Array<string | number> {
-  if (typeof value === "string" || typeof value === "number") return [value];
+function collectFacts(value: unknown): string[] {
+  if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(collectFacts);
   if (typeof value === "object" && value !== null) {
     return Object.entries(value).flatMap(([key, item]) =>
@@ -42,12 +56,15 @@ function collectFacts(value: unknown): Array<string | number> {
   return [];
 }
 
-function includesFact(actualFacts: Array<string | number>, expected: string | number): boolean {
-  if (typeof expected === "number") {
-    return actualFacts.some((actual) => typeof actual === "number" && actual === expected);
-  }
-  return actualFacts.some(
-    (actual) => typeof actual === "string" && normalize(actual).includes(normalize(expected)),
+function includesFact(actualFacts: string[], expected: string): boolean {
+  return actualFacts.some((actual) => normalize(actual).includes(normalize(expected)));
+}
+
+function metricMatches(actual: MetricExpectation, expected: MetricExpectation): boolean {
+  return (
+    normalize(actual.label) === normalize(expected.label) &&
+    actual.amount === expected.amount &&
+    actual.amountType === expected.amountType
   );
 }
 
@@ -69,6 +86,33 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const missingFacts = (config.expectedFacts ?? []).filter(
     (expected) => !includesFact(facts, expected),
   );
+  const summaryMetrics = parsed.cards.flatMap((card) =>
+    card.type === "summary" ? card.metrics : [],
+  );
+  const missingMetrics = (config.expectedMetrics ?? []).filter(
+    (expected) => !summaryMetrics.some((actual) => metricMatches(actual, expected)),
+  );
+  const categoryRows = parsed.cards.flatMap((card) =>
+    card.type === "categoryBreakdown"
+      ? card.categories.map(({ name, amount, amountType }) => ({
+          label: name,
+          amount,
+          amountType,
+        }))
+      : [],
+  );
+  const missingCategories = (config.expectedCategories ?? []).filter(
+    (expected) => !categoryRows.some((actual) => metricMatches(actual, expected)),
+  );
+  const transactionRows = parsed.cards.flatMap((card) =>
+    card.type === "transactionList" ? card.transactions : [],
+  );
+  const missingTransactions = (config.expectedTransactions ?? []).filter(
+    (expected) =>
+      !transactionRows.some(
+        (actual) => actual.date === expected.date && actual.amount === expected.amount,
+      ),
+  );
   const actualTypes = parsed.cards.map(({ type }) => type);
   const expectedTypes = config.expectedCardTypes ?? [];
   const cardTypesMismatch =
@@ -80,6 +124,15 @@ export default function assertFinanceResponse(output: string, context: Assertion
 
   const failures = [
     missingFacts.length > 0 ? `不足 facts: ${missingFacts.join(", ")}` : undefined,
+    missingMetrics.length > 0
+      ? `不足 summary metrics: ${missingMetrics.map(({ label, amount }) => `${label}=${amount}`).join(", ")}`
+      : undefined,
+    missingCategories.length > 0
+      ? `不足 categories: ${missingCategories.map(({ label, amount }) => `${label}=${amount}`).join(", ")}`
+      : undefined,
+    missingTransactions.length > 0
+      ? `不足 transactions: ${missingTransactions.map(({ date, amount }) => `${date}=${amount}`).join(", ")}`
+      : undefined,
     cardTypesMismatch
       ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`
       : undefined,

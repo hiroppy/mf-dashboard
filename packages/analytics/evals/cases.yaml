@@ -9,7 +9,10 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: [313235, 219894, 93341]
+        expectedMetrics:
+          - { label: 収入, amount: 313235, amountType: income }
+          - { label: 支出, amount: 219894, amountType: expense }
+          - { label: 収支, amount: 93341, amountType: balance }
         expectedCardTypes: [summary, insight]
         expectedRoute: /0/cf/2026-07
 
@@ -24,7 +27,11 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: [食費, 41837]
+        expectedFacts: [食費]
+        expectedMetrics:
+          - { label: 食費, amount: 41837, amountType: expense }
+        expectedCategories:
+          - { label: 食費, amount: 41837, amountType: expense }
         expectedCardTypes: [summary, categoryBreakdown, transactionList]
         expectedRoute: /0/cf/2026-07
 
@@ -39,7 +46,11 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: [2026-07-10, 6587]
+        expectedMetrics:
+          - { label: 支出, amount: 6587, amountType: expense }
+        expectedTransactions:
+          - { date: "2026-07-10", amount: 3435 }
+          - { date: "2026-07-10", amount: 3152 }
         expectedCardTypes: [summary, transactionList, action]
         expectedRoute: /0/cf/2026-07
 
@@ -54,7 +65,8 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: [5683100]
+        expectedMetrics:
+          - { label: 総資産, amount: 5683100, amountType: balance }
         expectedCardTypes: [summary]
         expectedRoute: /0/bs
 
