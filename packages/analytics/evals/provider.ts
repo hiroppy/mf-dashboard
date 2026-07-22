@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
+import { getCurrentGroup, getDb, isDatabaseAvailable, searchTransactions } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
 import MockDate from "mockdate";
 import { z } from "zod";
@@ -40,6 +40,7 @@ export interface ProviderDependencies {
   getModel: typeof getModel;
   isDatabaseAvailable: typeof isDatabaseAvailable;
   isDemoDatabasePath: (databasePath: string) => boolean;
+  isDemoFixtureDatabase: typeof isDemoFixtureDatabase;
   isLLMEnabled: typeof isLLMEnabled;
 }
 
@@ -51,6 +52,7 @@ const dependencies: ProviderDependencies = {
   getModel,
   isDatabaseAvailable,
   isDemoDatabasePath,
+  isDemoFixtureDatabase,
   isLLMEnabled,
 };
 
@@ -74,6 +76,31 @@ export function isDemoDatabasePath(databasePath: string) {
   } catch {
     return false;
   }
+}
+
+async function isDemoFixtureDatabase(db: ReturnType<typeof getDb>) {
+  const markers = await searchTransactions(
+    {
+      groupId: "0",
+      date: "2026-07-31",
+      category: "食費",
+      keyword: "すき家",
+      minAmount: 2638,
+      maxAmount: 2638,
+      type: "expense",
+      limit: 10,
+    },
+    db,
+  );
+  return markers.some(
+    (marker) =>
+      marker.mfId === "demo_001281" &&
+      marker.date === "2026-07-31" &&
+      marker.description === "すき家" &&
+      marker.amount === 2638 &&
+      marker.category === "食費" &&
+      marker.type === "expense",
+  );
 }
 
 export function toEvaluationOutput(response: ChatResponse, groupId: string) {
@@ -174,6 +201,16 @@ export default class FinanceChatProvider {
       const db = this.providerDependencies.getDb();
       const group = await this.providerDependencies.getCurrentGroup(db);
       if (!group) throw new Error("demo.db に current group がありません。");
+      if (
+        group.id !== "0" ||
+        group.name !== "グループ選択なし" ||
+        !group.isCurrent ||
+        !(await this.providerDependencies.isDemoFixtureDatabase(db))
+      ) {
+        throw new Error(
+          "demo.db の内容が評価fixtureと一致しません。pnpm --filter @mf-dashboard/db build:demo --period=2026-07 で再生成してください。",
+        );
+      }
 
       MockDate.set(evaluationDate);
       let response: ChatResponse;

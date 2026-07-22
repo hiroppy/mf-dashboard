@@ -26,8 +26,8 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
       ],
     }),
     getCurrentGroup: vi.fn<ProviderDependencies["getCurrentGroup"]>().mockResolvedValue({
-      id: "test-group",
-      name: "Test Group",
+      id: "0",
+      name: "グループ選択なし",
       isCurrent: true,
       lastScrapedAt: null,
       createdAt: "2026-07-01T00:00:00.000Z",
@@ -42,6 +42,9 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
       .mockReturnValue({} as ReturnType<ProviderDependencies["getModel"]>),
     isDatabaseAvailable: () => true,
     isDemoDatabasePath: () => true,
+    isDemoFixtureDatabase: vi
+      .fn<ProviderDependencies["isDemoFixtureDatabase"]>()
+      .mockResolvedValue(true),
     isLLMEnabled: () => true,
     ...overrides,
   } as unknown as ProviderDependencies;
@@ -352,6 +355,35 @@ describe("FinanceChatProvider", () => {
     expect(result).toEqual({
       error: "評価には通常ファイルの data/demo.db を DB_PATH に指定してください。",
     });
+  });
+
+  it("rejects a canonical demo path whose fixture contents do not match", async () => {
+    const generate = vi.fn<ProviderDependencies["generate"]>();
+    const provider = new FinanceChatProvider(
+      {},
+      createDependencies({
+        generate,
+        getCurrentGroup: vi.fn<ProviderDependencies["getCurrentGroup"]>().mockResolvedValue({
+          id: "0",
+          name: "グループ選択なし",
+          isCurrent: true,
+          lastScrapedAt: null,
+          createdAt: "2026-07-24T00:00:00.000Z",
+          updatedAt: "2026-07-24T00:00:00.000Z",
+        }),
+        isDemoFixtureDatabase: vi
+          .fn<ProviderDependencies["isDemoFixtureDatabase"]>()
+          .mockResolvedValue(false),
+      }),
+    );
+
+    await expect(
+      provider.callApi("質問", { vars: { evaluationDate: "2026-07-31T03:00:00.000Z" } }),
+    ).resolves.toEqual({
+      error:
+        "demo.db の内容が評価fixtureと一致しません。pnpm --filter @mf-dashboard/db build:demo --period=2026-07 で再生成してください。",
+    });
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it("rejects a symlink to the demo database", () => {
