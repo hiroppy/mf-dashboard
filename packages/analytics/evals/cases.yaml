@@ -30,12 +30,224 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: [食費]
+        expectedCardFacts: [食費]
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }
         expectedCategories:
-          - { label: 食費, amount: 41837, amountType: expense }
-        expectedTransactionGroup: { month: "2026-07", category: 食費, amountType: expense }
+          - { label: 食費, amount: 41837, amountType: expense, percentage: 19.03 }
+        expectedTransactionGroup:
+          month: "2026-07"
+          category: 食費
+          amountType: expense
+          allowedTransactions:
+            - {
+                ids: ["1250", demo_001281],
+                date: "2026-07-31",
+                description: すき家,
+                amount: 2638,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1248", demo_001279],
+                date: "2026-07-29",
+                description: 大戸屋,
+                amount: 2744,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1238", demo_001269],
+                date: "2026-07-27",
+                description: 成城石井,
+                amount: 2142,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1235", demo_001266],
+                date: "2026-07-27",
+                description: サミット,
+                amount: 860,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1251", demo_001282],
+                date: "2026-07-26",
+                description: サンマルクカフェ,
+                amount: 687,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1257", demo_001288],
+                date: "2026-07-22",
+                description: タリーズ,
+                amount: 489,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1245", demo_001276],
+                date: "2026-07-22",
+                description: ガスト,
+                amount: 1537,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1256", demo_001287],
+                date: "2026-07-20",
+                description: サンマルクカフェ,
+                amount: 666,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1249", demo_001280],
+                date: "2026-07-19",
+                description: 餃子の王将,
+                amount: 1647,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1241", demo_001272],
+                date: "2026-07-19",
+                description: ライフ,
+                amount: 2668,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1233", demo_001264],
+                date: "2026-07-19",
+                description: オーケー,
+                amount: 1004,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1242", demo_001273],
+                date: "2026-07-18",
+                description: 業務スーパー,
+                amount: 3393,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1239", demo_001270],
+                date: "2026-07-18",
+                description: サミット,
+                amount: 941,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1236", demo_001267],
+                date: "2026-07-18",
+                description: まいばすけっと,
+                amount: 3037,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1254", demo_001285],
+                date: "2026-07-17",
+                description: サンマルクカフェ,
+                amount: 759,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1240", demo_001271],
+                date: "2026-07-17",
+                description: ライフ,
+                amount: 1678,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1246", demo_001277],
+                date: "2026-07-16",
+                description: やよい軒,
+                amount: 2016,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1255", demo_001286],
+                date: "2026-07-14",
+                description: コメダ珈琲,
+                amount: 577,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1234", demo_001265],
+                date: "2026-07-10",
+                description: 成城石井,
+                amount: 3152,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1258", demo_001289],
+                date: "2026-07-09",
+                description: タリーズ,
+                amount: 460,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1244", demo_001275],
+                date: "2026-07-09",
+                description: まいばすけっと,
+                amount: 861,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1253", demo_001284],
+                date: "2026-07-06",
+                description: サンマルクカフェ,
+                amount: 391,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1243", demo_001274],
+                date: "2026-07-06",
+                description: ライフ,
+                amount: 1985,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1237", demo_001268],
+                date: "2026-07-06",
+                description: 成城石井,
+                amount: 3112,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1247", demo_001278],
+                date: "2026-07-04",
+                description: 丸亀製麺,
+                amount: 1632,
+                amountType: expense,
+                category: 食費,
+              }
+            - {
+                ids: ["1252", demo_001283],
+                date: "2026-07-03",
+                description: サンマルクカフェ,
+                amount: 761,
+                amountType: expense,
+                category: 食費,
+              }
         expectedCardTypes: [summary, categoryBreakdown, transactionList]
         expectedRoute: /0/cf/2026-07
 
@@ -53,8 +265,22 @@
         expectedMetrics:
           - { label: 支出, amount: 6587, amountType: expense }
         expectedTransactions:
-          - { date: "2026-07-10", amount: 3435, amountType: expense }
-          - { date: "2026-07-10", amount: 3152, amountType: expense }
+          - {
+              ids: ["1229", demo_001260],
+              date: "2026-07-10",
+              description: 東京ガス ガス代,
+              amount: 3435,
+              amountType: expense,
+              category: 水道・光熱費,
+            }
+          - {
+              ids: ["1234", demo_001265],
+              date: "2026-07-10",
+              description: 成城石井,
+              amount: 3152,
+              amountType: expense,
+              category: 食費,
+            }
         expectedCardTypes: [summary, transactionList, action]
         expectedRoute: /0/cf/2026-07
 
@@ -84,15 +310,14 @@
       value: 必ず削減できます
     - type: not-regex
       value: (必ず|確実に|絶対に).{0,8}(削減|節約)(でき|可能)
-    - type: regex
-      value: (食費|衣服・美容|日用品)
-    - type: regex
-      value: (前月|先月|前年|平均|通常|他カテゴリ)
-    - type: regex
-      value: (ため|ので|理由|高い|多い|増加|上回)
     - type: javascript
       value: file://./assertions.ts
       config:
         expectedInsightFacts: [2026-07]
+        requiredInsightPatterns:
+          - (食費|衣服・美容|日用品)
+          - (前月|先月|前年|平均|通常|他カテゴリ)
+          - (ため|ので|理由|高い|多い|増加|上回)
+        expectedInsightActionPattern: (内訳|支出|食費)
         expectedCardTypes: [insight]
         expectedRoute: /0/cf/2026-07

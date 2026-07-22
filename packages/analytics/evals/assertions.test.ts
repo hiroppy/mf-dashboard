@@ -7,6 +7,7 @@ const output = JSON.stringify({
     {
       type: "summary",
       title: "月次収支",
+      description: "2026年7月",
       metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
       href: "/0/cf/2026-07",
     },
@@ -18,7 +19,7 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(output, {
         config: {
-          expectedFacts: ["2026年7月"],
+          expectedCardFacts: ["2026年7月"],
           expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
           expectedCardTypes: ["summary"],
           expectedRoute: "/0/cf/2026-07",
@@ -37,7 +38,7 @@ describe("assertFinanceResponse", () => {
   it("reports every missing expectation", () => {
     const result = assertFinanceResponse(output, {
       config: {
-        expectedFacts: ["未記載"],
+        expectedCardFacts: ["未記載"],
         expectedMetrics: [{ label: "収支", amount: 123, amountType: "balance" }],
         expectedCardTypes: ["insight"],
         expectedRoute: "/bs",
@@ -45,7 +46,7 @@ describe("assertFinanceResponse", () => {
     });
 
     expect(result.pass).toBe(false);
-    expect(result.reason).toContain("不足 facts: 未記載");
+    expect(result.reason).toContain("不足 card facts: 未記載");
     expect(result.reason).toContain("summary metrics 不一致: expected=収支=123");
     expect(result.reason).toContain("card types 不一致: expected=insight actual=summary");
     expect(result.reason).toContain("route 不一致: expected=/bs actual=/0/cf/2026-07");
@@ -76,6 +77,7 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(misplacedAmountOutput, {
         config: {
           expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          expectedInsightMetrics: [{ label: "参考額", amount: 93341, amountType: "balance" }],
         },
       }),
     ).toMatchObject({ pass: false, reason: "summary metrics 不一致: expected=収支=93341" });
@@ -125,10 +127,36 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(extraCategoryOutput, {
         config: {
-          expectedCategories: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          expectedCategories: [
+            { label: "食費", amount: 41837, amountType: "expense", percentage: 80 },
+          ],
         },
       }),
-    ).toMatchObject({ pass: false, reason: "categories 不一致: expected=食費=41837" });
+    ).toMatchObject({ pass: false, reason: "categories 不一致: expected=食費=41837/80%" });
+  });
+
+  it("rejects an incorrect category percentage", () => {
+    const categoryOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "categoryBreakdown",
+          title: "支出内訳",
+          href: "/0/cf/2026-07",
+          categories: [{ name: "食費", amount: 41837, amountType: "expense", percentage: 100 }],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(categoryOutput, {
+        config: {
+          expectedCategories: [
+            { label: "食費", amount: 41837, amountType: "expense", percentage: 19.03 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects extra transaction rows outside the expected date", () => {
@@ -162,12 +190,20 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(transactionOutput, {
         config: {
-          expectedTransactions: [{ date: "2026-07-10", amount: 3435, amountType: "expense" }],
+          expectedTransactions: [
+            {
+              ids: ["tx-a"],
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
         },
       }),
     ).toMatchObject({
       pass: false,
-      reason: "transactions 不一致: expected=2026-07-10=3435/expense",
+      reason: "transactions 不一致",
     });
   });
 
@@ -195,13 +231,63 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(transactionOutput, {
         config: {
-          expectedTransactions: [{ date: "2026-07-10", amount: 3435, amountType: "expense" }],
+          expectedTransactions: [
+            {
+              ids: ["tx-a"],
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
         },
       }),
     ).toMatchObject({
       pass: false,
-      reason: "transactions 不一致: expected=2026-07-10=3435/expense",
+      reason: "transactions 不一致",
     });
+  });
+
+  it("consumes exact transaction matches as a multiset", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+            {
+              id: "tx-b",
+              date: "2026-07-11",
+              description: "店舗 B",
+              amount: 9999,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+    const expectedTransaction = {
+      ids: ["tx-a"],
+      date: "2026-07-10",
+      description: "店舗 A",
+      amount: 3435,
+      amountType: "expense",
+    };
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: { expectedTransactions: [expectedTransaction, expectedTransaction] },
+      }),
+    ).toMatchObject({ pass: false, reason: "transactions 不一致" });
   });
 
   it("accepts a truncated transaction group when every visible row matches", () => {
@@ -233,10 +319,65 @@ describe("assertFinanceResponse", () => {
             month: "2026-07",
             category: "食費",
             amountType: "expense",
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
           },
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a fabricated row in a transaction group", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 1,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects cards in the wrong presentation order", () => {
@@ -319,6 +460,29 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("rejects an unexpected bare route in visible text", () => {
+    const textRouteOutput = JSON.stringify({
+      text: "資産は /0/bs で確認できます。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(textRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
+    });
+  });
+
   it("requires insight facts to appear in the insight card", () => {
     const fallbackOnlyOutput = JSON.stringify({
       text: "2026-07の支出改善です。",
@@ -340,5 +504,69 @@ describe("assertFinanceResponse", () => {
       pass: false,
       reason: "不足 insight facts: 2026-07",
     });
+  });
+
+  it("requires insight patterns to appear in the description", () => {
+    const fallbackOnlyOutput = JSON.stringify({
+      text: "食費は前月より高いため見直せそうです。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "支出を見直しましょう。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fallbackOnlyOutput, {
+        config: { requiredInsightPatterns: ["食費", "前月", "ため"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects undeclared insight amounts and generic actions", () => {
+    const insightOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026-07は食費が前月より高いため見直せそうです。",
+          amount: 999999999,
+          amountLabel: "削減候補",
+          amountType: "balance",
+          action: { label: "詳細を確認", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    const result = assertFinanceResponse(insightOutput, {
+      config: { expectedInsightActionPattern: "(内訳|支出|食費)" },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("insight metrics 不一致");
+    expect(result.reason).toContain("insight action 不一致");
+  });
+
+  it("does not use hidden Markdown reference definitions as card facts", () => {
+    const hiddenFactOutput = JSON.stringify({
+      text: "回答本文です。\n[ref]: https://example.com/食費",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "支出を見直しましょう。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(hiddenFactOutput, {
+        config: { expectedCardFacts: ["食費"] },
+      }),
+    ).toMatchObject({ pass: false, reason: "不足 card facts: 食費" });
   });
 });
