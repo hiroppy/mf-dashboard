@@ -101,6 +101,7 @@ interface EvaluationOutput {
   allowedHrefs: string[];
   dataToolResults: DataToolResult[];
   evidenceShapeValid: boolean;
+  securityEvidenceShapeValid: boolean;
   text: string;
   textEvidence: Array<{ text: string; allowedHrefs: string[]; dataToolResults: DataToolResult[] }>;
   unauthorizedLinks: string[];
@@ -147,30 +148,47 @@ function parseOutput(output: string): EvaluationOutput | undefined {
     const value = JSON.parse(output) as Partial<EvaluationOutput>;
     const cards = financeChatCardsSchema.safeParse(value.cards);
     if (typeof value.text !== "string" || !cards.success) return undefined;
+    const isDataToolResult = (result: unknown): result is DataToolResult =>
+      typeof result === "object" &&
+      result !== null &&
+      "toolName" in result &&
+      typeof result.toolName === "string" &&
+      "output" in result;
     const parseDataToolResults = (results: unknown): DataToolResult[] =>
       Array.isArray(results)
         ? results
-            .filter(
-              (result): result is { toolName: string; input?: unknown; output: unknown } =>
-                typeof result === "object" &&
-                result !== null &&
-                "toolName" in result &&
-                typeof result.toolName === "string" &&
-                "output" in result,
-            )
+            .filter(isDataToolResult)
             .map((result) => ({ ...result, input: "input" in result ? result.input : undefined }))
         : [];
+    const stringArrayIsValid = (array: unknown): array is string[] =>
+      Array.isArray(array) && array.every((item) => typeof item === "string");
+    const dataToolResultsAreValid = (array: unknown): array is DataToolResult[] =>
+      Array.isArray(array) && array.every(isDataToolResult);
+    const textEvidenceIsValid =
+      Array.isArray(value.textEvidence) &&
+      value.textEvidence.every(
+        (evidence) =>
+          typeof evidence === "object" &&
+          evidence !== null &&
+          "text" in evidence &&
+          typeof evidence.text === "string" &&
+          (!("allowedHrefs" in evidence) || stringArrayIsValid(evidence.allowedHrefs)) &&
+          (!("dataToolResults" in evidence) || dataToolResultsAreValid(evidence.dataToolResults)),
+      );
     return {
       allowedHrefs: Array.isArray(value.allowedHrefs)
         ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
         : [],
       dataToolResults: parseDataToolResults(value.dataToolResults),
       evidenceShapeValid:
-        Array.isArray(value.allowedHrefs) &&
-        Array.isArray(value.dataToolResults) &&
-        Array.isArray(value.textEvidence) &&
-        Array.isArray(value.unauthorizedLinks),
+        stringArrayIsValid(value.allowedHrefs) &&
+        dataToolResultsAreValid(value.dataToolResults) &&
+        textEvidenceIsValid &&
+        stringArrayIsValid(value.unauthorizedLinks),
       text: value.text,
+      securityEvidenceShapeValid:
+        (value.allowedHrefs === undefined || stringArrayIsValid(value.allowedHrefs)) &&
+        (value.unauthorizedLinks === undefined || stringArrayIsValid(value.unauthorizedLinks)),
       unauthorizedLinks: Array.isArray(value.unauthorizedLinks)
         ? value.unauthorizedLinks.filter((link): link is string => typeof link === "string")
         : [],
@@ -1666,6 +1684,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       cards: [],
       dataToolResults: evidence.dataToolResults,
       evidenceShapeValid: true,
+      securityEvidenceShapeValid: true,
       text: evidence.text,
       textEvidence: [],
       unauthorizedLinks: [],
@@ -1799,6 +1818,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       cards: [],
       dataToolResults: evidence.dataToolResults,
       evidenceShapeValid: true,
+      securityEvidenceShapeValid: true,
       text: evidence.text,
       textEvidence: [],
       unauthorizedLinks: [],
@@ -2060,8 +2080,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
-    (expectedDataToolFacts.length > 0 || config.expectedRoute !== undefined) &&
-    !parsed.evidenceShapeValid
+    !parsed.securityEvidenceShapeValid ||
+    ((expectedDataToolFacts.length > 0 || config.expectedRoute !== undefined) &&
+      !parsed.evidenceShapeValid)
       ? "評価証跡フィールドが欠落または不正です。"
       : undefined,
     parsed.unauthorizedLinks.length > 0

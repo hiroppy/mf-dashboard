@@ -122,7 +122,48 @@ describe("assertFinanceResponse", () => {
           ],
         },
       }),
-    ).toMatchObject({ pass: false, reason: "評価証跡フィールドが欠落または不正です。" });
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("評価証跡フィールドが欠落または不正です。"),
+    });
+  });
+
+  it.each([
+    ["unauthorizedLinks", (value: Record<string, unknown>) => (value.unauthorizedLinks = [null])],
+    ["allowedHrefs", (value: Record<string, unknown>) => (value.allowedHrefs = [null])],
+    ["dataToolResults", (value: Record<string, unknown>) => (value.dataToolResults = [null])],
+    ["textEvidence", (value: Record<string, unknown>) => (value.textEvidence = [null])],
+    [
+      "textEvidence.allowedHrefs",
+      (value: Record<string, unknown>) =>
+        ((value.textEvidence as Array<Record<string, unknown>>)[0].allowedHrefs = [null]),
+    ],
+    [
+      "textEvidence.dataToolResults",
+      (value: Record<string, unknown>) =>
+        ((value.textEvidence as Array<Record<string, unknown>>)[0].dataToolResults = [null]),
+    ],
+  ])("fails closed when %s contains a malformed element", (_field, mutate) => {
+    const malformedEvidence = JSON.parse(output) as Record<string, unknown>;
+    mutate(malformedEvidence);
+
+    expect(
+      assertFinanceResponse(JSON.stringify(malformedEvidence), {
+        config: {
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.netIncome",
+              value: 93341,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("評価証跡フィールドが欠落または不正です。"),
+    });
   });
 
   it("matches data-tool evidence by tool, input, path, and exact value", () => {
