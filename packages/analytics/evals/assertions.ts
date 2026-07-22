@@ -170,15 +170,46 @@ function collectRoutes(output: EvaluationOutput): string[] {
     if ("action" in card && card.action) routes.push(card.action.href);
     return routes;
   });
-  const textRoutes = Array.from(
-    output.text.matchAll(/(?<![\w:/])\/[A-Za-z0-9%._~!$&'*+,;=:@/?#-]+/g),
-    ([route]) => route,
-  );
+  const textRoutes = [output.text, ...collectFacts(output.cards)].flatMap((text) => [
+    ...Array.from(
+      text.matchAll(/(?<![\w:/])\/[A-Za-z0-9%._~!$&'*+,;=:@/?#-]+/g),
+      ([route]) => route,
+    ),
+    ...Array.from(text.matchAll(/https?:\/\/[^\s)\]]+/g), ([route]) => route),
+  ]);
   return [...new Set([...cardRoutes, ...textRoutes])];
 }
 
 function collectVisibleAmounts(output: EvaluationOutput): number[] {
   return collectVisibleAmountMatches(output).map(({ amount }) => amount);
+}
+
+function collectBareVisibleAmounts(
+  output: EvaluationOutput,
+  expectedClaims: VisibleAmountClaim[],
+): number[] {
+  const visibleTexts = [output.text, ...collectFacts(output.cards)].map((text) =>
+    text.normalize("NFKC"),
+  );
+  return visibleTexts.flatMap((text) =>
+    expectedClaims.flatMap(({ label }) => {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return Array.from(
+        text.matchAll(
+          new RegExp(
+            `${escapedLabel}.{0,8}?([+\\-−▲▼]?[\\d,]{3,})(?![\\d,]|\\s*(?:円|億|万|千|[%％]|年|月|日))`,
+            "g",
+          ),
+        ),
+        ([, value]) =>
+          Number(
+            String(value)
+              .replaceAll(",", "")
+              .replace(/[▲▼−]/, "-"),
+          ),
+      );
+    }),
+  );
 }
 
 function collectVisibleAmountMatches(output: EvaluationOutput) {
@@ -314,8 +345,8 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
   return [output.text, ...collectFacts(output.cards)]
     .map((text) => text.normalize("NFKC"))
     .flatMap((text) =>
-      Array.from(text.matchAll(/([+＋\-−]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
-        amount: Number(match[2]?.replaceAll(",", "")) * (/[-−]/.test(match[1] ?? "") ? -1 : 1),
+      Array.from(text.matchAll(/([+＋\-−▲▼]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
+        amount: Number(match[2]?.replaceAll(",", "")) * (/[-−▲▼]/.test(match[1] ?? "") ? -1 : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,
@@ -366,9 +397,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
   if (!parsed) return { pass: false, score: 0, reason: "text/cards の評価 JSON が不正です。" };
 
   const config = context.config ?? {};
-  const unexpectedVisibleAmounts = collectVisibleAmounts(parsed).filter(
-    (amount) => !(config.allowedVisibleAmounts ?? []).includes(amount),
-  );
+  const unexpectedVisibleAmounts = [
+    ...collectVisibleAmounts(parsed),
+    ...collectBareVisibleAmounts(parsed, config.visibleAmountClaims ?? []),
+  ].filter((amount) => !(config.allowedVisibleAmounts ?? []).includes(amount));
   const mislabeledVisibleAmounts = collectMislabeledVisibleAmounts(
     parsed,
     config.visibleAmountClaims ?? [],

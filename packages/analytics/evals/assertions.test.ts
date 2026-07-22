@@ -111,6 +111,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 不明=313235" });
   });
 
+  it("rejects a bare unsupported number in a monetary context", () => {
+    const bareAmountOutput = JSON.stringify({
+      text: "収支は999999です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(bareAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [93341],
+          visibleAmountClaims: [{ label: "収支", amount: 93341 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視金額: 999999" });
+  });
+
   it("preserves the sign of visible monetary claims", () => {
     const signedAmountOutput = JSON.stringify({
       text: "収支は−93,341円です。",
@@ -658,6 +681,27 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("rejects an unexpected route rendered in card text", () => {
+    const cardTextRouteOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          description: "詳細は /0/bs です。",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(cardTextRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects an unexpected route in a visible Markdown link", () => {
     const textRouteOutput = JSON.stringify({
       text: "[資産を見る](/0/bs)",
@@ -975,6 +1019,29 @@ describe("assertFinanceResponse", () => {
   it("recognizes full-width percentage signs", () => {
     const percentageOutput = JSON.stringify({
       text: "貯蓄率は99％です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(percentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("treats a triangle-prefixed percentage as negative", () => {
+    const percentageOutput = JSON.stringify({
+      text: "現在の貯蓄率は▲29.8%です。",
       cards: [
         {
           type: "insight",

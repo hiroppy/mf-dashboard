@@ -315,6 +315,7 @@
       config:
         allowedVisibleAmounts: [6587, 3435, 3152]
         allowedVisibleDates: ["2026-07-10"]
+        allowedVisibleMonths: ["2026-07"]
         visibleAmountClaims:
           - { label: 支出, amount: 6587 }
         expectedMetrics:
@@ -378,6 +379,7 @@
       config:
         allowedVisibleAmounts: [41837, 19475, 11198, 49922, 12111, 11495, 8085, 7364, 297]
         allowedVisiblePercentages: [29.8, 30, 64, 64.48, 64.5]
+        allowedVisibleMonths: ["2026-06", "2026-07"]
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
           - { label: 食費, amount: 49922, rolePattern: (前月|先月|比較) }
@@ -395,14 +397,14 @@
           - { label: 貯蓄率, amount: 64.48, rolePattern: (前月|先月|比較) }
           - { label: 貯蓄率, amount: 64.5, rolePattern: (前月|先月|比較) }
         allowedInsightMetrics:
-          - { amount: 19475, amountType: balance, labelPattern: (見直し|候補|支出|衣服) }
-          - { amount: 7364, amountType: balance, labelPattern: (差額|変化|増加|削減) }
+          - { amount: 19475, amountType: balance, labelPattern: (衣服・美容|衣服) }
+          - { amount: 7364, amountType: balance, labelPattern: (衣服・美容|衣服) }
         expectedInsightFacts: [2026-07]
         requiredInsightPatterns:
           - 衣服・美容
           - (衣服・美容.{0,40}(前月|先月).{0,20}(高い|多い|増加|上回)|(前月|先月).{0,20}衣服・美容.{0,20}(高い|多い|増加|上回))
           - (ため|ので|理由|高い|多い|増加|上回)
-        expectedInsightActionPattern: (内訳|支出|食費)
+        expectedInsightActionPattern: ^(?!.*(食費|日用品)).*(内訳|支出|衣服・美容|衣服)
         forbiddenVisiblePatterns:
           - (増加|上回|高い|多い).{0,8}(していない|ではない|でない|ありません|ない|対象外)
         expectedCardTypes: [insight]

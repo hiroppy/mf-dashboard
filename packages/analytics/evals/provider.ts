@@ -59,8 +59,10 @@ export function isDemoDatabasePath(databasePath: string) {
     return (
       databaseStat.isFile() &&
       !databaseStat.isSymbolicLink() &&
+      databaseStat.nlink === 1 &&
       demoStat.isFile() &&
       !demoStat.isSymbolicLink() &&
+      demoStat.nlink === 1 &&
       realpathSync(resolvedPath) === realpathSync(DEMO_DB_PATH)
     );
   } catch {
