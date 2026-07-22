@@ -22,6 +22,11 @@ interface InsightMetricAllowance {
   labelPattern: string;
 }
 
+interface CardTextFactExpectation {
+  cardType: string;
+  pattern: string;
+}
+
 interface TransactionExpectation {
   ids: string[];
   date: string;
@@ -40,19 +45,23 @@ interface TransactionGroupExpectation {
 
 interface AssertionContext {
   config?: {
+    allowedInsightMetrics?: InsightMetricAllowance[];
     allowedVisibleAmounts?: number[];
+    allowedVisibleDates?: string[];
+    allowedVisiblePercentages?: number[];
     expectedCardFacts?: string[];
+    expectedCardTextFacts?: CardTextFactExpectation[];
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
     expectedInsightActionPattern?: string;
     expectedInsightFacts?: string[];
-    allowedInsightMetrics?: InsightMetricAllowance[];
     expectedMetrics?: MetricExpectation[];
     expectedRoute?: string;
     expectedTransactionGroup?: TransactionGroupExpectation;
     expectedTransactions?: TransactionExpectation[];
     requiredInsightPatterns?: string[];
     visibleAmountClaims?: VisibleAmountClaim[];
+    visiblePercentageClaims?: VisibleAmountClaim[];
   };
 }
 
@@ -174,9 +183,13 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
   const visibleTexts = [output.text, ...collectFacts(output.cards)];
   return visibleTexts.flatMap((text) =>
     Array.from(
-      text.matchAll(/(?:[¥￥]\s*([\d,.]+)|((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g),
+      text.matchAll(
+        /(?:([+＋\-−]?)\s*[¥￥]\s*([+＋\-−]?)\s*([\d,.]+)|([+＋\-−]?)\s*((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g,
+      ),
       (match) => ({
-        amount: parseVisibleAmount(match[1], match[2]),
+        amount:
+          parseVisibleAmount(match[3], match[5]) *
+          (/[-−]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
         index: match.index,
         text,
       }),
@@ -217,7 +230,7 @@ function collectMislabeledVisibleAmounts(
       .filter(({ distance }) => distance <= 20)
       .sort((left, right) => left.distance - right.distance);
     const nearestLabel = nearbyClaims[0]?.claim.label;
-    if (nearestLabel === undefined) return [];
+    if (nearestLabel === undefined) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
     const claimsForLabel = nearbyClaims
       .filter(({ claim }) => claim.label === nearestLabel)
       .map(({ claim }) => claim);
@@ -239,6 +252,49 @@ function collectMislabeledVisibleAmounts(
   });
 }
 
+function collectVisibleDates(output: EvaluationOutput): string[] {
+  return [output.text, ...collectFacts(output.cards)].flatMap((text) => [
+    ...Array.from(text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), ([date]) => date),
+    ...Array.from(
+      text.matchAll(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g),
+      ([, year, month, day]) =>
+        `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    ),
+  ]);
+}
+
+function collectVisiblePercentageMatches(output: EvaluationOutput) {
+  return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
+    Array.from(text.matchAll(/([+＋\-−]?)\s*([\d,.]+)\s*%/g), (match) => ({
+      amount: Number(match[2]?.replaceAll(",", "")) * (/[-−]/.test(match[1] ?? "") ? -1 : 1),
+      index: match.index,
+      text,
+    })),
+  );
+}
+
+function collectMislabeledVisiblePercentages(
+  output: EvaluationOutput,
+  expectedClaims: VisibleAmountClaim[],
+): string[] {
+  return collectVisiblePercentageMatches(output).flatMap(({ amount, index, text }) => {
+    const nearbyClaims = expectedClaims.filter(({ label }) => {
+      const beforeIndex = text.lastIndexOf(label, index);
+      const afterIndex = text.indexOf(label, index);
+      return (
+        Math.min(
+          beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
+          afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
+        ) <= 20
+      );
+    });
+    if (nearbyClaims.length === 0) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
+    return nearbyClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
+      ? []
+      : [`${nearbyClaims[0]?.label}=${amount}`];
+  });
+}
+
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
   const parsed = parseOutput(output);
   if (!parsed) return { pass: false, score: 0, reason: "text/cards の評価 JSON が不正です。" };
@@ -251,9 +307,39 @@ export default function assertFinanceResponse(output: string, context: Assertion
     parsed,
     config.visibleAmountClaims ?? [],
   );
+  const unexpectedVisibleDates =
+    config.allowedVisibleDates === undefined
+      ? []
+      : collectVisibleDates(parsed).filter(
+          (actualDate) =>
+            !config.allowedVisibleDates?.some(
+              (allowedDate) =>
+                actualDate === allowedDate || actualDate === `*-${allowedDate.slice(5)}`,
+            ),
+        );
+  const unexpectedVisiblePercentages =
+    config.allowedVisiblePercentages === undefined
+      ? []
+      : collectVisiblePercentageMatches(parsed).filter(
+          ({ amount }) =>
+            !config.allowedVisiblePercentages?.some(
+              (allowed) => Math.abs(allowed - amount) <= 0.01,
+            ),
+        );
+  const mislabeledVisiblePercentages = collectMislabeledVisiblePercentages(
+    parsed,
+    config.visiblePercentageClaims ?? [],
+  );
   const cardFacts = collectFacts(parsed.cards);
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
+  );
+  const missingCardTextFacts = (config.expectedCardTextFacts ?? []).filter(
+    ({ cardType, pattern }) =>
+      !parsed.cards.some(
+        (card) =>
+          card.type === cardType && new RegExp(pattern, "u").test(collectFacts(card).join("\n")),
+      ),
   );
   const summaryMetrics = parsed.cards.flatMap((card) =>
     card.type === "summary" ? card.metrics : [],
@@ -350,7 +436,19 @@ export default function assertFinanceResponse(output: string, context: Assertion
     mislabeledVisibleAmounts.length > 0
       ? `誤ラベルの可視金額: ${[...new Set(mislabeledVisibleAmounts)].join(",")}`
       : undefined,
+    unexpectedVisibleDates.length > 0
+      ? `未許可の可視日付: ${[...new Set(unexpectedVisibleDates)].join(",")}`
+      : undefined,
+    unexpectedVisiblePercentages.length > 0
+      ? `未許可の可視割合: ${[...new Set(unexpectedVisiblePercentages.map(({ amount }) => amount))].join(",")}`
+      : undefined,
+    mislabeledVisiblePercentages.length > 0
+      ? `誤ラベルの可視割合: ${[...new Set(mislabeledVisiblePercentages)].join(",")}`
+      : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
+    missingCardTextFacts.length > 0
+      ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
+      : undefined,
     summaryMetricsMismatch
       ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,

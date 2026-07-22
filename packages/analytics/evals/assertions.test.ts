@@ -88,6 +88,52 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 支出=313235" });
   });
 
+  it("rejects an allowlisted amount with an unknown label", () => {
+    const unknownLabelOutput = JSON.stringify({
+      text: "生活費は313,235円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収入", amount: 313235, amountType: "income" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unknownLabelOutput, {
+        config: {
+          allowedVisibleAmounts: [313235],
+          visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 不明=313235" });
+  });
+
+  it("preserves the sign of visible monetary claims", () => {
+    const signedAmountOutput = JSON.stringify({
+      text: "収支は−93,341円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    const result = assertFinanceResponse(signedAmountOutput, {
+      config: {
+        allowedVisibleAmounts: [93341],
+        visibleAmountClaims: [{ label: "収支", amount: 93341 }],
+      },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("未許可の可視金額: -93341");
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
@@ -652,6 +698,91 @@ describe("assertFinanceResponse", () => {
         config: { requiredInsightPatterns: ["食費", "前月", "ため"] },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("binds a spending comparison direction to its category", () => {
+    const reversedDirectionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026-07の食費は前月より高いため見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(reversedDirectionOutput, {
+        config: {
+          requiredInsightPatterns: ["(衣服・美容.{0,40}(前月|先月).{0,20}(高い|増加|上回))"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects conflicting visible dates outside transaction rows", () => {
+    const conflictingDateOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2026-07-11の支出",
+          metrics: [{ label: "支出", amount: 3435, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+        {
+          type: "transactionList",
+          title: "2026-07-10の明細",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = assertFinanceResponse(conflictingDateOutput, {
+      config: {
+        allowedVisibleDates: ["2026-07-10"],
+        expectedCardTextFacts: [
+          { cardType: "summary", pattern: "(2026-07-10|7月10日)" },
+          { cardType: "transactionList", pattern: "(2026-07-10|7月10日)" },
+        ],
+      },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("未許可の可視日付: 2026-07-11");
+    expect(result.reason).toContain("不足 card text facts");
+  });
+
+  it("rejects an unsupported visible percentage claim", () => {
+    const percentageOutput = JSON.stringify({
+      text: "貯蓄率は99%です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    const result = assertFinanceResponse(percentageOutput, {
+      config: {
+        allowedVisiblePercentages: [29.8],
+        visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+      },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("未許可の可視割合: 99");
   });
 
   it("rejects undeclared insight amounts and generic actions", () => {
