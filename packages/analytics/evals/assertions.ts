@@ -315,12 +315,23 @@ function collectMislabeledVisibleAmounts(
           beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - (beforeIndex + label.length),
           afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - endIndex,
         );
-        return { claim, distance };
+        const compoundPriority =
+          !new Set(["収入", "支出", "収支", "金額", "差額", "残高"]).has(label) &&
+          beforeIndex !== -1 &&
+          new RegExp(
+            `${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}の?(?:収入|支出|収支)`,
+            "u",
+          ).test(text.slice(beforeIndex, index))
+            ? 1
+            : 0;
+        return { claim, compoundPriority, distance };
       })
       .filter(({ distance }) => distance <= 20)
       .sort(
         (left, right) =>
-          left.distance - right.distance || right.claim.label.length - left.claim.label.length,
+          right.compoundPriority - left.compoundPriority ||
+          left.distance - right.distance ||
+          right.claim.label.length - left.claim.label.length,
       );
     const nearestLabel = nearbyClaims[0]?.claim.label;
     if (nearestLabel === undefined) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
@@ -416,12 +427,13 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
 }
 
 function collectCardHeadingDates(output: EvaluationOutput): string[] {
-  return collectDates(
-    output.cards.flatMap((card) => [
+  return collectDates([
+    output.text,
+    ...output.cards.flatMap((card) => [
       card.title,
       "description" in card && typeof card.description === "string" ? card.description : "",
     ]),
-  );
+  ]);
 }
 
 function collectVisibleMonths(output: EvaluationOutput): string[] {
@@ -464,20 +476,19 @@ function collectMislabeledVisibleMonths(
               : `*-${String(match[5]).padStart(2, "0")}`,
       }),
     );
-    const latestVisibleMonthNumber = Math.max(
-      ...monthMatches.map(({ month }) => Number(month.slice(-2))),
-    );
-
     return monthMatches.flatMap((monthMatch, monthIndex) => {
       const adjacentRoleContext = `${text.slice(Math.max(0, monthMatch.index - 8), monthMatch.index)} ${
         /^\s*[（(]?(前月|先月)/.exec(
           text.slice(monthMatch.endIndex, monthMatch.endIndex + 8),
         )?.[0] ?? ""
       }`;
+      const isExpectedComparisonMonth = expectedClaims.some(
+        ({ month, rolePattern }) =>
+          rolePattern !== undefined &&
+          (monthMatch.month === month || monthMatch.month === `*-${month.slice(5)}`),
+      );
       const roleContext = `${adjacentRoleContext} ${
-        monthMatches.length > 1 && Number(monthMatch.month.slice(-2)) < latestVisibleMonthNumber
-          ? "比較"
-          : ""
+        monthMatches.length > 1 && isExpectedComparisonMonth ? "比較" : ""
       }`;
       const roleSpecificClaims = expectedClaims.filter(
         ({ rolePattern }) =>
@@ -500,7 +511,12 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
     .map((text) => text.normalize("NFKC"))
     .flatMap((text) =>
       Array.from(text.matchAll(/([+＋\-−▲△▼▽]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
-        amount: Number(match[2]?.replaceAll(",", "")) * (/[-−▲△▼▽]/.test(match[1] ?? "") ? -1 : 1),
+        amount:
+          Number(match[2]?.replaceAll(",", "")) *
+          (/[-−▲△▼▽]/.test(match[1] ?? "") ||
+          /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
+            ? -1
+            : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,

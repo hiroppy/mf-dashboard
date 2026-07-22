@@ -316,6 +316,32 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("preserves a category label in a compound spending claim", () => {
+    const foodSpendingOutput = JSON.stringify({
+      text: "食費の支出は41,837円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(foodSpendingOutput, {
+        config: {
+          allowedVisibleAmounts: [41837, 219894],
+          visibleAmountClaims: [
+            { label: "食費", amount: 41837 },
+            { label: "支出", amount: 219894 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
@@ -786,6 +812,26 @@ describe("assertFinanceResponse", () => {
         config: { allowedCardHeadingDates: ["2026-07-31"] },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("validates fallback text dates with card heading dates", () => {
+    const partialMonthOutput = JSON.stringify({
+      text: "2026年7月10日時点の食費です。",
+      cards: [
+        {
+          type: "summary",
+          title: "2026年7月31日時点の食費",
+          metrics: [{ label: "食費", amount: 3435, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(partialMonthOutput, {
+        config: { allowedCardHeadingDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects a transaction with the wrong amount type", () => {
@@ -1331,6 +1377,32 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("accepts a comparison that crosses a year boundary", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "2026年12月と2027年1月の比較",
+          description: "2027年1月は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2027-01" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleMonths: ["2026-12", "2027-01"],
+          visibleMonthClaims: [
+            { month: "2027-01" },
+            { month: "2026-12", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("rejects a stale dotted snapshot date", () => {
     const staleSnapshotOutput = JSON.stringify({
       text: "回答",
@@ -1646,6 +1718,29 @@ describe("assertFinanceResponse", () => {
   it("treats a triangle-prefixed percentage as negative", () => {
     const percentageOutput = JSON.stringify({
       text: "現在の貯蓄率は▲29.8%です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(percentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("treats a マイナス-prefixed percentage as negative", () => {
+    const percentageOutput = JSON.stringify({
+      text: "貯蓄率はマイナス29.8%です。",
       cards: [
         {
           type: "insight",
