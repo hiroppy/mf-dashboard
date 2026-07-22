@@ -98,6 +98,7 @@
           month: "2026-07"
           category: 食費
           amountType: expense
+          expectedCount: 25
           allowedTransactions:
             - {
                 ids: ["1250", demo_001281],

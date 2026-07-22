@@ -708,6 +708,7 @@ describe("assertFinanceResponse", () => {
             month: "2026-07",
             category: "食費",
             amountType: "expense",
+            expectedCount: 2,
             allowedTransactions: [
               {
                 ids: ["tx-a"],
@@ -761,6 +762,7 @@ describe("assertFinanceResponse", () => {
             month: "2026-07",
             category: "食費",
             amountType: "expense",
+            expectedCount: 1,
             allowedTransactions: [
               {
                 ids: ["tx-a"],

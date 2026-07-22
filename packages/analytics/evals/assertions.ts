@@ -45,6 +45,7 @@ interface TransactionGroupExpectation {
   category: string;
   month: string;
   amountType: string;
+  expectedCount: number;
   allowedTransactions: TransactionExpectation[];
 }
 
@@ -636,7 +637,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const expectedTransactionGroup = config.expectedTransactionGroup;
   const transactionGroupMismatch =
     expectedTransactionGroup !== undefined &&
-    (transactionRows.length !== expectedTransactionGroup.allowedTransactions.length ||
+    (transactionRows.length !== expectedTransactionGroup.expectedCount ||
       transactionRows.some(
         (transaction) =>
           !transaction.date.startsWith(`${expectedTransactionGroup.month}-`) ||
