@@ -449,6 +449,8 @@
           - { label: 総資産, amount: 5683100, amountType: balance }
         expectedDataToolFacts:
           - { toolName: getLatestTotalAssets, path: $, value: 5683100 }
+        forbiddenVisiblePatterns:
+          - (総資産|資産).{0,8}(ありません|ない|なし|保有していません|ゼロです)
         expectedCardTitleFacts:
           - { cardType: summary, pattern: 総資産 }
         expectedCardTypes: [summary]

@@ -602,6 +602,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a denial of a grounded total-assets balance", () => {
+    const denialOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産はありません",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(総資産|資産).{0,8}(ありません|ない|なし|保有していません|ゼロです)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("allows an explicitly approximate rounded monetary claim", () => {
     const approximateOutput = JSON.stringify({
       text: "総資産は約568万円です。",
