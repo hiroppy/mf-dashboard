@@ -1787,6 +1787,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("converts a Japanese era snapshot date before validation", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "令和7年7月31日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("requires insight patterns to appear in the description", () => {
     const fallbackOnlyOutput = JSON.stringify({
       text: "食費は前月より高いため見直せそうです。",
@@ -1935,6 +1958,35 @@ describe("assertFinanceResponse", () => {
         config: { forbiddenVisiblePatterns: ["(赤字|収支.{0,10}マイナス)"] },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("allows an explicitly negated deficit claim", () => {
+    const surplusOutput = JSON.stringify({
+      text: "赤字ではなく、93,341円の黒字です。",
+      cards: [
+        {
+          type: "summary",
+          title: "2026年7月の収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(surplusOutput, {
+        config: {
+          allowedVisibleAmounts: [93341],
+          forbiddenVisiblePatterns: [
+            "(赤字(?!\\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)",
+          ],
+          visibleAmountClaims: [
+            { label: "収支", amount: 93341 },
+            { label: "黒字", amount: 93341 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it.each([
@@ -2263,6 +2315,29 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(directionalOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a negated allowlisted percentage claim", () => {
+    const negatedOutput = JSON.stringify({
+      text: "貯蓄率は29.8%ではありません。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedOutput, {
         config: {
           allowedVisiblePercentages: [29.8],
           visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],

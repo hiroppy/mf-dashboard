@@ -367,11 +367,9 @@ function collectMislabeledVisibleAmounts(
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
         : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
-    const isNegated =
-      /^\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない)/u.test(
-        text.slice(endIndex, clauseEnd),
-      );
-    if (isNegated) return [`${nearestLabel}=${amount}(否定)`];
+    if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
+      return [`${nearestLabel}=${amount}(否定)`];
+    }
     if (
       applicableClaims.length === 0 ||
       applicableClaims.some((claim) => claim.amount === amount)
@@ -380,6 +378,12 @@ function collectMislabeledVisibleAmounts(
     }
     return [`${nearestLabel}=${amount}`];
   });
+}
+
+function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
+  return /^\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない)/u.test(
+    text.slice(endIndex, clauseEnd),
+  );
 }
 
 function isSentenceSeparator(text: string, index: number): boolean {
@@ -492,6 +496,11 @@ function collectDates(rawTexts: string[]): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
+        text.matchAll(/(令和|平成|昭和)(元|\d+)年(\d{1,2})月(\d{1,2})日/g),
+        ([, era, eraYear, month, day]) =>
+          `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月(\d{1,2})日/g),
         ([, month, day]) =>
           `last-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
@@ -520,6 +529,12 @@ function collectDates(rawTexts: string[]): string[] {
   });
 }
 
+function toGregorianYear(era: string, rawYear: string): number {
+  const eraYear = rawYear === "元" ? 1 : Number(rawYear);
+  const startYears: Record<string, number> = { 令和: 2018, 平成: 1988, 昭和: 1925 };
+  return startYears[era]! + eraYear;
+}
+
 function collectVisibleDates(output: EvaluationOutput): string[] {
   return collectDates([output.text, ...collectFacts(output.cards)]);
 }
@@ -537,6 +552,11 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     return [
+      ...Array.from(
+        text.matchAll(/(令和|平成|昭和)(元|\d+)年(\d{1,2})月/g),
+        ([, era, eraYear, month]) =>
+          `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}`,
+      ),
       ...Array.from(
         text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月/g),
         ([, month]) => `last-${String(month).padStart(2, "0")}`,
@@ -687,6 +707,9 @@ function collectMislabeledVisiblePercentages(
         : hasDirectionalSuffix
           ? []
           : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+    if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
+      return [`${nearestLabel}=${amount}(否定)`];
+    }
     return applicableClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
       ? []
       : [`${nearestLabel}=${amount}`];

@@ -30,7 +30,7 @@
         expectedCardTextFacts:
           - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
         forbiddenVisiblePatterns:
-          - (赤字|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
+          - (赤字(?!\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
           - (黒字|プラス|余剰|手残り).{0,12}(とは言えません|とは限りません|ではない|でない|ありません|ない)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
@@ -347,6 +347,9 @@
           - { cardType: transactionList, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
           - { cardType: action, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
           - { cardType: action, pattern: "(支出|明細|内訳)" }
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: "(支出|出金|支払い)" }
+          - { cardType: transactionList, pattern: "(支出|出金|支払い)" }
         expectedTransactions:
           - {
               ids: ["1229", demo_001260],
