@@ -71,6 +71,14 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(expected);
   });
 
+  it.each(["前半 <a 後半も表示してほしい。", "`<a` はHTMLタグ例です。"])(
+    "preserves a literal unterminated anchor opener: %s",
+    (text) => {
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+      expect(collectFinanceChatLinks(text)).toEqual([]);
+    },
+  );
+
   it.each(["<mailto:evil@example.com>", "<ftp://evil.example/path>"])(
     "removes a non-HTTP URI autolink: %s",
     (text) => {

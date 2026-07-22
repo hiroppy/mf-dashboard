@@ -58,7 +58,7 @@ function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
   let openingMatch: RegExpExecArray | null;
   while ((openingMatch = openingPattern.exec(text)) !== null) {
     let quote: '"' | "'" | undefined;
-    let openingEnd = text.length;
+    let openingEnd: number | undefined;
     for (let index = openingMatch.index + openingMatch[0].length; index < text.length; index += 1) {
       const character = text[index];
       if (quote !== undefined) {
@@ -70,6 +70,7 @@ function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
         break;
       }
     }
+    if (openingEnd === undefined) continue;
     const openingTag = text.slice(openingMatch.index, openingEnd);
     const hrefMatch = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/iu.exec(openingTag);
     const selfClosing = /\/\s*>\s*$/u.test(openingTag);
