@@ -1508,6 +1508,67 @@ function collectMislabeledVisiblePercentages(
   );
 }
 
+function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
+  const categoryGroups = output.dataToolResults.flatMap((result) =>
+    result.toolName === "getMonthlyCategoryTotals" && Array.isArray(result.output)
+      ? [
+          result.output.flatMap((row) =>
+            typeof row === "object" &&
+            row !== null &&
+            "category" in row &&
+            typeof row.category === "string" &&
+            "totalAmount" in row &&
+            typeof row.totalAmount === "number"
+              ? [{ category: row.category, totalAmount: row.totalAmount }]
+              : [],
+          ),
+        ]
+      : [],
+  );
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const claims = [output.text, ...collectFacts(output.cards)].flatMap((text) =>
+    categoryGroups.flatMap((categoryTotals) =>
+      categoryTotals.flatMap((subject) =>
+        categoryTotals.flatMap((comparison) => {
+          if (subject.category === comparison.category) return [];
+          const subjectPattern = escapeRegExp(subject.category);
+          const comparisonPattern = escapeRegExp(comparison.category);
+          const patterns = [
+            new RegExp(
+              `${subjectPattern}(?:は|が)${comparisonPattern}(?:より(?:も)?|を)\\s*(多い|少ない|高い|低い|大きい|小さい|上回(?:る|っています|っている|りました)|下回(?:る|っています|っている|りました))`,
+              "gu",
+            ),
+            new RegExp(
+              `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(多い|少ない|高い|低い|大きい|小さい)`,
+              "gu",
+            ),
+          ];
+          return patterns.flatMap((pattern) =>
+            Array.from(text.matchAll(pattern)).flatMap((match) => {
+              const endIndex = match.index + match[0].length;
+              if (
+                hasNegatedSuffix(
+                  text,
+                  endIndex,
+                  collectClauseBounds(text, match.index, endIndex).clauseEnd,
+                )
+              ) {
+                return [];
+              }
+              const claimsHigher = /(?:多い|高い|大きい|上回)/u.test(match[1]);
+              const relationIsValid = claimsHigher
+                ? subject.totalAmount > comparison.totalAmount
+                : subject.totalAmount < comparison.totalAmount;
+              return relationIsValid ? [] : [match[0]];
+            }),
+          );
+        }),
+      ),
+    ),
+  );
+  return [...new Set(claims)];
+}
+
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
   const parsed = parseOutput(output);
   if (!parsed) return { pass: false, score: 0, reason: "text/cards の評価 JSON が不正です。" };
@@ -1648,6 +1709,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       );
     })
     .map(([claim]) => claim);
+  const invalidCategoryComparisons = collectInvalidCategoryComparisons(parsed);
   const unsupportedBareAmountUnits = collectBareVisibleAmountMatches(
     parsed,
     config.visibleAmountClaims ?? [],
@@ -2127,6 +2189,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unsupportedQualitativeDominanceClaims.length > 0
       ? `未根拠の定性的支出構成: ${[...new Set(unsupportedQualitativeDominanceClaims)].join(",")}`
+      : undefined,
+    invalidCategoryComparisons.length > 0
+      ? `誤ったカテゴリ間比較: ${invalidCategoryComparisons.join(",")}`
       : undefined,
     unsupportedBareAmountUnits.length > 0
       ? `非金銭単位付き可視金額: ${[...new Set(unsupportedBareAmountUnits)].join(",")}`

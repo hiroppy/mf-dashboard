@@ -50,7 +50,7 @@ export function splitCompleteFinanceChatText(text: string): {
   );
   const definedReferenceIds = new Set(
     Array.from(
-      text.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu),
+      complete.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu),
       ([, id]) => id.toLowerCase(),
     ),
   );

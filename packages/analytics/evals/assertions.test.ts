@@ -1036,7 +1036,7 @@ describe("assertFinanceResponse", () => {
     ],
     [
       "支出は予算内です。",
-      "((支出|出費).{0,12}予算.{0,8}(内|範囲内|以下|超過|オーバー|上回|下回)|予算.{0,12}(内|範囲内|以下|超過|オーバー|上回|下回).{0,8}(支出|出費))",
+      "((支出|出費).{0,12}予算.{0,8}(内|範囲内|以下|超過|オーバー|上回|下回)(?![^。！？\\n]{0,16}(判断でき|わかり|分かり|不明|とは限|とは言え))|予算.{0,12}(内|範囲内|以下|超過|オーバー|上回|下回)(?![^。！？\\n]{0,16}(判断でき|わかり|分かり|不明|とは限|とは言え)).{0,8}(支出|出費))",
     ],
   ])("rejects an unsupported monthly qualitative claim: %s", (text, pattern) => {
     const qualitativeOutput = JSON.stringify({
@@ -1059,6 +1059,46 @@ describe("assertFinanceResponse", () => {
         config: { forbiddenVisiblePatterns: [pattern] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("accepts explicit uncertainty about budget status", () => {
+    const uncertainOutput = JSON.stringify({
+      text: "支出が予算内かは判断できません。",
+      cards: JSON.parse(output).cards,
+    });
+
+    expect(
+      assertFinanceResponse(uncertainOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((支出|出費).{0,12}予算.{0,8}(内|範囲内|以下|超過|オーバー|上回|下回)(?![^。！？\\n]{0,16}(判断でき|わかり|分かり|不明|とは限|とは言え))|予算.{0,12}(内|範囲内|以下|超過|オーバー|上回|下回)(?![^。！？\\n]{0,16}(判断でき|わかり|分かり|不明|とは限|とは言え)).{0,8}(支出|出費))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it.each([
+    ["食費は住宅費より多いです。", false],
+    ["食費は住宅費より少ないです。", true],
+    ["住宅費より食費が多いとは限りません。", true],
+  ])("validates a grounded pairwise category comparison: %s", (text, pass) => {
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 41837 },
+        { category: "住宅費", type: "expense", totalAmount: 75000 },
+      ],
+    };
+    const comparisonOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [categoryResult],
+      textEvidence: [{ text, dataToolResults: [categoryResult] }],
+    });
+
+    expect(assertFinanceResponse(comparisonOutput)).toMatchObject({ pass });
   });
 
   it("accepts an explicitly negated income-expense equality claim", () => {
@@ -5525,11 +5565,28 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(compositionOutput, {
         config: {
           forbiddenVisiblePatterns: [
-            "(総資産|保有資産|資産).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)",
+            "(総資産|保有資産|資産).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))",
           ],
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("accepts explicit uncertainty about asset composition from a scalar snapshot", () => {
+    const compositionOutput = JSON.stringify({
+      text: "総資産がすべて現金とは限りません。",
+      cards: JSON.parse(output).cards,
+    });
+
+    expect(
+      assertFinanceResponse(compositionOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(総資産|保有資産|資産).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects an unsupported majority asset-composition claim from a scalar snapshot", () => {

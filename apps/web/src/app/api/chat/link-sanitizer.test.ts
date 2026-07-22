@@ -115,6 +115,13 @@ describe("splitCompleteFinanceChatText", () => {
       pending: "",
     });
   });
+
+  it("keeps a reference link buffered with its definition when the definition has no newline", () => {
+    expect(splitCompleteFinanceChatText("[詳細][route]\n[route]: /group-a/cf/2026-07")).toEqual({
+      complete: "",
+      pending: "[詳細][route]\n[route]: /group-a/cf/2026-07",
+    });
+  });
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
