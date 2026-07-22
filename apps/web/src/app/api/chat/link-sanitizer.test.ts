@@ -159,6 +159,11 @@ describe("splitCompleteFinanceChatText", () => {
     expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
   });
 
+  it("does not close a Markdown code span with a longer backtick run", () => {
+    const text = '``example ``` <a href="/0/cf">literal</a> ``。';
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+  });
+
   it("keeps a quoted self-closing marker inside an anchor opener buffered", () => {
     const text = '<a title="/>。';
     expect(splitCompleteFinanceChatText(text)).toEqual({ complete: "", pending: text });

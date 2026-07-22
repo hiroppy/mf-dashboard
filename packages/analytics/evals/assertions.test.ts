@@ -1816,6 +1816,10 @@ describe("assertFinanceResponse", () => {
     ["食費は減少しました。", true, true],
     ["食費は前月を上回りました。", true, false],
     ["食費は前月を下回りました。", true, true],
+    ["食費は前月より多いです。", true, false],
+    ["食費は前月より少ないです。", true, true],
+    ["食費は前月より高いです。", true, false],
+    ["食費は前月より低いです。", true, true],
   ])("validates a qualitative category trend: %s", (text, includePreviousMonth, pass) => {
     const julyResult = {
       toolName: "getMonthlyCategoryTotals",
@@ -1955,6 +1959,8 @@ describe("assertFinanceResponse", () => {
   it.each([
     ["食費は予算を超過しています。", false],
     ["食費は予算を超過しているとは限りません。", true],
+    ["予算を超過したのは食費です。", false],
+    ["予算内なのは食費です。", false],
   ])("rejects an unsupported category budget status: %s", (text, pass) => {
     const categoryResult = {
       toolName: "getMonthlyCategoryTotals",
@@ -8405,6 +8411,39 @@ describe("assertFinanceResponse", () => {
       pass: false,
       reason: expect.stringContaining("誤った明細属性: 成城石井:カテゴリ=水道・光熱費"),
     });
+  });
+
+  it.each([
+    ["成城石井は収入です。", false],
+    ["成城石井は支出です。", true],
+  ])("validates a direct transaction type assertion: %s", (text, pass) => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+        ],
+      },
+    };
+    const typedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [searchResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(typedOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }).pass,
+    ).toBe(pass);
   });
 
   it.each(["総資産は横ばいです。", "総資産は変化なしです。", "総資産は同額です。"])(

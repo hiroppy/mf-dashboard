@@ -126,6 +126,12 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toEqual([]);
   });
 
+  it("requires an equal backtick run to close a Markdown code span", () => {
+    const text = '``example ``` <a href="javascript:alert(1)">literal</a> ``';
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+    expect(collectFinanceChatLinks(text)).toEqual([]);
+  });
+
   it.each([
     '`<a href="javascript:alert(1)">click</a>',
     '``<a href="javascript:alert(1)">click</a>`',

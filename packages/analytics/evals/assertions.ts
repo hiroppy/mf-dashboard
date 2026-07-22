@@ -1767,7 +1767,13 @@ function collectInvalidCategoryTrendClaims(
       ),
       ...text.matchAll(
         new RegExp(
-          `(?:前月|先月)(?:と比べて|より|から|比|を)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が|上回|下回|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
+          `(?:前月|先月)(?:と比べて|より|から|比|を)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が|上回|下回|多い|少ない|高い|低い|横ばい|変化(?:は|が)?なし|変化(?:は|が)?ない|同額)(?:しました|しています|ました|りました|っています|った|ったまま|です|でした)?`,
+          "gu",
+        ),
+      ),
+      ...text.matchAll(
+        new RegExp(
+          `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,8}(?:前月|先月)(?:と比べて|より|から|比|を)?(?:も)?[^。！？\\n、,]{0,4}(多い|少ない|高い|低い)(?:です|でした)?`,
           "gu",
         ),
       ),
@@ -1801,7 +1807,7 @@ function collectInvalidCategoryTrendClaims(
       const previous = amounts.find(({ month }) => month === previousCalendarMonth(current.month));
       if (previous === undefined) return [match[0]];
       const claimsUnchanged = /(?:横ばい|変化|同額)/u.test(match[1]);
-      const claimsIncrease = /(?:増加|上昇|増え|上が|上回)/u.test(match[1]);
+      const claimsIncrease = /(?:増加|上昇|増え|上が|上回|多い|高い)/u.test(match[1]);
       const trendIsValid = claimsUnchanged
         ? current.amount === previous.amount
         : claimsIncrease
@@ -1821,14 +1827,21 @@ function collectUnsupportedCategoryBudgetClaims(
   ];
   return knownCategories.flatMap((category) => {
     const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return Array.from(
-      text.matchAll(
+    const matches = [
+      ...text.matchAll(
         new RegExp(
-          `${categoryPattern}(?:は|が).{0,8}予算(?:を|より|に対して)?.{0,8}(超過|超え|上回|以内|下回|達成)(?:しています|している|しました|です|でした)?`,
+          `${categoryPattern}(?:は|が).{0,8}予算(?:を|より|に対して)?.{0,8}(超過|超え|上回|以内|内|下回|達成)(?:しています|している|しました|です|でした)?`,
           "gu",
         ),
       ),
-    ).flatMap((match) => {
+      ...text.matchAll(
+        new RegExp(
+          `予算(?:を|より|に対して)?.{0,8}(超過|超え|上回|以内|内|下回|達成)(?:しています|している|しました|した|ています|ている|りました|った|です|でした|な)?(?:の)?(?:は|が)\\s*${categoryPattern}(?:です|でした|である|だ)?`,
+          "gu",
+        ),
+      ),
+    ];
+    return matches.flatMap((match) => {
       const endIndex = match.index + match[0].length;
       return hasNegatedSuffix(
         text,
@@ -2901,7 +2914,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       }
     }
     for (const match of text.matchAll(
-      /(?:^|[。！？\n])\s*([^。！？\n]{1,80}?)の(?:種別|区分|タイプ)(?:は|が)\s*(収入|支出|入金|出金|income|expense)(?:です|でした|である|だ)(?=[。！？\n]|$)/giu,
+      /(?:^|[。！？\n])\s*([^。！？\n]{1,80}?)(?:の(?:種別|区分|タイプ))?(?:は|が)\s*(収入|支出|入金|出金|income|expense)(?:です|でした|である|だ)(?=[。！？\n]|$)/giu,
     )) {
       const description = match[1].trim();
       const claimedType = /^(?:収入|入金|income)$/iu.test(match[2]) ? "income" : "expense";

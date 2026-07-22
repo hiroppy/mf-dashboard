@@ -72,7 +72,7 @@ function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
       if (text[closingStart] !== "`") continue;
       let closingLength = 1;
       while (text[closingStart + closingLength] === "`") closingLength += 1;
-      if (closingLength >= delimiterLength) {
+      if (closingLength === delimiterLength) {
         const end = closingStart + closingLength;
         ranges.push({ start: index, end });
         index = end - 1;

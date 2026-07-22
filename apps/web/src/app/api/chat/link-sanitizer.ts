@@ -43,7 +43,7 @@ export function splitCompleteFinanceChatText(
       while (text[index + runLength] === "`") runLength += 1;
       if (codeDelimiterLength === 0) {
         codeDelimiterLength = runLength;
-      } else if (runLength >= codeDelimiterLength) {
+      } else if (runLength === codeDelimiterLength) {
         codeDelimiterLength = 0;
       }
       index += runLength - 1;
