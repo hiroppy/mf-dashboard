@@ -1958,6 +1958,61 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("rejects an arbitrary allowed row instead of the deterministic truncated prefix", () => {
+    const transactionOutput = JSON.stringify({
+      text: "全2件中1件を表示します。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細（全2件中1件を表示）",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-b",
+              date: "2026-07-09",
+              description: "店舗 B",
+              category: "食費",
+              amount: 2000,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [2],
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 1000,
+                amountType: "expense",
+              },
+              {
+                ids: ["tx-b"],
+                date: "2026-07-09",
+                description: "店舗 B",
+                category: "食費",
+                amount: 2000,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "transaction group 不一致: 2026-07/食費/expense" });
+  });
+
   it("allows a source total written as N件中M件", () => {
     const transactionOutput = JSON.stringify({
       text: "2件中1件を表示します。",

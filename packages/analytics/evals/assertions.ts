@@ -303,19 +303,14 @@ function transactionsMatchExactly(
   return multisetsMatch(actualRows, expectedRows, transactionMatches);
 }
 
-function transactionsAreAllowedSubset(
+function transactionsMatchExpectedPrefix(
   actualRows: TransactionRow[],
-  allowedRows: TransactionExpectation[],
+  expectedRows: TransactionExpectation[],
 ): boolean {
-  const remainingAllowedRows = [...allowedRows];
-  for (const actual of actualRows) {
-    const matchingIndex = remainingAllowedRows.findIndex((expected) =>
-      transactionMatches(actual, expected),
-    );
-    if (matchingIndex === -1) return false;
-    remainingAllowedRows.splice(matchingIndex, 1);
-  }
-  return true;
+  return actualRows.every((actual, index) => {
+    const expected = expectedRows[index];
+    return expected !== undefined && transactionMatches(actual, expected);
+  });
 }
 
 function collectCardRoutes(output: EvaluationOutput): string[] {
@@ -1534,7 +1529,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
           normalize(transaction.category ?? "") !== normalize(expectedTransactionGroup.category) ||
           transaction.amountType !== expectedTransactionGroup.amountType,
       ) ||
-      !transactionsAreAllowedSubset(transactionRows, expectedTransactionGroup.allowedTransactions));
+      !transactionsMatchExpectedPrefix(
+        transactionRows,
+        expectedTransactionGroup.allowedTransactions,
+      ));
   const insightCards = parsed.cards.filter((card) => card.type === "insight");
   const insightDescription = insightCards.map(({ description }) => description).join("\n");
   const missingInsightFacts = (config.expectedInsightFacts ?? []).filter(
