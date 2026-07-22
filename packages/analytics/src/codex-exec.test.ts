@@ -85,7 +85,7 @@ function createFakeCodex(
     materializeSystemSkill?: boolean;
     output?: string;
     outputWhileHanging?: string;
-    promptInput?: string;
+    promptInput?: string | ((codexHome: string) => string);
     stderr?: string;
     stdout?: string;
   } = {},
@@ -120,13 +120,17 @@ function createFakeCodex(
         return;
       }
       if (args[0] === "debug") {
+        const codexHome = spawnMock.mock.calls.at(-1)?.[2]?.env?.CODEX_HOME as string;
         if (options.materializeSystemSkill) {
-          const codexHome = spawnMock.mock.calls.at(-1)?.[2]?.env?.CODEX_HOME as string;
           const skillDirectory = join(codexHome, "skills", ".system", "bundled");
           await mkdirMock(skillDirectory, { recursive: true });
           await writeFile(join(skillDirectory, "SKILL.md"), "# Bundled skill");
         }
-        stdout.write(options.promptInput ?? "[]");
+        stdout.write(
+          typeof options.promptInput === "function"
+            ? options.promptInput(codexHome)
+            : (options.promptInput ?? "[]"),
+        );
         queueMicrotask(() => child.emit("close", options.exitCode ?? 0));
         callback();
         return;
@@ -154,8 +158,8 @@ function mockCodexRun(
   mcp: ReturnType<typeof createFakeCodex>,
   codex: ReturnType<typeof createFakeCodex>,
   initialize = createFakeCodex(),
+  verify = createFakeCodex(),
 ) {
-  const verify = createFakeCodex();
   spawnMock
     .mockReturnValueOnce(mcp.child)
     .mockReturnValueOnce(initialize.child)
@@ -549,6 +553,20 @@ describe("generateWithCodexExec", () => {
     );
     expect(spawnMock.mock.calls[3]?.[1]).toContain(
       `skills.config=[{path=${JSON.stringify(skillPath)},enabled=false}]`,
+    );
+  });
+
+  test("rejects bundled skill paths rendered with non-native separators", async () => {
+    const mcp = createFakeCodex();
+    const initialize = createFakeCodex({ materializeSystemSkill: true });
+    const verify = createFakeCodex({
+      promptInput: (codexHome) =>
+        join(codexHome, "skills", ".system", "bundled").replaceAll("/", "\\"),
+    });
+    mockCodexRun(mcp, createFakeCodex(), initialize, verify);
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "codex exec loaded bundled skills",
     );
   });
 

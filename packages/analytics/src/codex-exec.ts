@@ -731,7 +731,9 @@ async function initializeAndDisableBundledSkills(
     [...baseArgs, "--config", skillConfig, "skill isolation check"],
     signal,
   );
-  if (stdout.includes(`${join(environment.authHome, "skills")}/`)) {
+  const normalizedStdout = stdout.replaceAll("\\", "/");
+  const normalizedSkillsRoot = join(environment.authHome, "skills").replaceAll("\\", "/");
+  if (normalizedStdout.includes(`${normalizedSkillsRoot}/`)) {
     throw new Error("codex exec loaded bundled skills");
   }
   const verifiedPaths = await listIsolatedSkills(environment, signal);
