@@ -270,6 +270,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("rejects a negated allowlisted monetary claim", () => {
+    const negatedAmountOutput = JSON.stringify({
+      text: "2026年7月31日時点の総資産は5,683,100円ではありません。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("treats a マイナス-prefixed amount as negative", () => {
     const negativeAmountOutput = JSON.stringify({
       text: "総資産はマイナス5,683,100円です。",
@@ -1740,6 +1763,26 @@ describe("assertFinanceResponse", () => {
           allowedVisibleDates: ["2026-07-31"],
           allowedVisibleMonths: ["2026-07"],
         },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a month-only snapshot qualified as last year", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "昨年7月の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: { allowedVisibleMonths: ["2026-07"] },
       }),
     ).toMatchObject({ pass: false });
   });

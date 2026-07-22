@@ -367,6 +367,11 @@ function collectMislabeledVisibleAmounts(
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
         : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+    const isNegated =
+      /^\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない)/u.test(
+        text.slice(endIndex, clauseEnd),
+      );
+    if (isNegated) return [`${nearestLabel}=${amount}(否定)`];
     if (
       applicableClaims.length === 0 ||
       applicableClaims.some((claim) => claim.amount === amount)
@@ -532,6 +537,10 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     return [
+      ...Array.from(
+        text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月/g),
+        ([, month]) => `last-${String(month).padStart(2, "0")}`,
+      ),
       ...Array.from(
         text.matchAll(/\b(\d{4})[-/.](\d{1,2})\b/g),
         ([, year, month]) => `${year}-${String(month).padStart(2, "0")}`,
