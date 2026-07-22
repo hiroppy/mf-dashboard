@@ -2785,69 +2785,75 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "summary metrics 不一致: expected=収支=93341" });
   });
 
-  it("accepts additional summary metrics when each amount is grounded", () => {
-    const categoryResult = {
-      toolName: "getMonthlyCategoryTotals",
-      input: { month: "2026-07" },
-      output: [{ category: "食費", type: "expense", totalAmount: 41837 }],
-    };
-    const summaryResult = {
-      toolName: "getMonthlySummaryByMonth",
-      input: { month: "2026-07" },
-      output: { totalExpense: 219894 },
-    };
-    const additionalMetricOutput = JSON.stringify({
-      allowedHrefs: ["/0/cf/2026-07"],
-      text: "回答",
-      textEvidence: [
-        {
-          text: "回答",
-          allowedHrefs: ["/0/cf/2026-07"],
-          dataToolResults: [categoryResult, summaryResult],
-        },
-      ],
-      unauthorizedLinks: [],
-      cards: [
-        {
-          type: "summary",
-          title: "食費",
-          href: "/0/cf/2026-07",
-          metrics: [
-            { label: "食費", amount: 41837, amountType: "expense" },
-            { label: "支出", amount: 219894, amountType: "expense" },
-          ],
-        },
-      ],
-      dataToolResults: [categoryResult, summaryResult],
-    });
+  it.each([
+    ["expense", true],
+    ["income", false],
+  ])(
+    "validates the amount type of an additional grounded summary metric: %s",
+    (additionalAmountType, pass) => {
+      const categoryResult = {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-07" },
+        output: [{ category: "食費", type: "expense", totalAmount: 41837 }],
+      };
+      const summaryResult = {
+        toolName: "getMonthlySummaryByMonth",
+        input: { month: "2026-07" },
+        output: { totalExpense: 219894 },
+      };
+      const additionalMetricOutput = JSON.stringify({
+        allowedHrefs: ["/0/cf/2026-07"],
+        text: "回答",
+        textEvidence: [
+          {
+            text: "回答",
+            allowedHrefs: ["/0/cf/2026-07"],
+            dataToolResults: [categoryResult, summaryResult],
+          },
+        ],
+        unauthorizedLinks: [],
+        cards: [
+          {
+            type: "summary",
+            title: "食費",
+            href: "/0/cf/2026-07",
+            metrics: [
+              { label: "食費", amount: 41837, amountType: "expense" },
+              { label: "支出", amount: 219894, amountType: additionalAmountType },
+            ],
+          },
+        ],
+        dataToolResults: [categoryResult, summaryResult],
+      });
 
-    expect(
-      assertFinanceResponse(additionalMetricOutput, {
-        config: {
-          allowedVisibleAmounts: [41837, 219894],
-          visibleAmountClaims: [
-            { label: "食費", amount: 41837 },
-            { label: "支出", amount: 219894 },
-          ],
-          expectedMetrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
-          expectedDataToolFacts: [
-            {
-              toolName: "getMonthlyCategoryTotals",
-              input: { month: "2026-07" },
-              path: "$.*",
-              value: { category: "食費", type: "expense", totalAmount: 41837 },
-            },
-            {
-              toolName: "getMonthlySummaryByMonth",
-              input: { month: "2026-07" },
-              path: "$.totalExpense",
-              value: 219894,
-            },
-          ],
-        },
-      }),
-    ).toMatchObject({ pass: true, reason: "期待する最終応答です。" });
-  });
+      expect(
+        assertFinanceResponse(additionalMetricOutput, {
+          config: {
+            allowedVisibleAmounts: [41837, 219894],
+            visibleAmountClaims: [
+              { label: "食費", amount: 41837 },
+              { label: "支出", amount: 219894 },
+            ],
+            expectedMetrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+            expectedDataToolFacts: [
+              {
+                toolName: "getMonthlyCategoryTotals",
+                input: { month: "2026-07" },
+                path: "$.*",
+                value: { category: "食費", type: "expense", totalAmount: 41837 },
+              },
+              {
+                toolName: "getMonthlySummaryByMonth",
+                input: { month: "2026-07" },
+                path: "$.totalExpense",
+                value: 219894,
+              },
+            ],
+          },
+        }),
+      ).toMatchObject({ pass });
+    },
+  );
 
   it("rejects unexpected summary metrics", () => {
     const extraMetricOutput = JSON.stringify({

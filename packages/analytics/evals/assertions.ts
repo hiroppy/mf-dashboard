@@ -310,6 +310,20 @@ function dataToolFactSupportsLabel(expected: DataToolFactExpectation, label: str
   return normalize(factText).includes(normalize(label));
 }
 
+function dataToolFactSupportsAmountType(
+  expected: DataToolFactExpectation,
+  amountType: MetricExpectation["amountType"],
+): boolean {
+  const factText = JSON.stringify(expected);
+  if (amountType === "income") {
+    return /(?:totalIncome|"type":"income")/iu.test(factText) && !/netIncome/iu.test(factText);
+  }
+  if (amountType === "expense") {
+    return /(?:totalExpense|"type":"expense")/iu.test(factText);
+  }
+  return /(?:netIncome|totalAssets|balance)/iu.test(factText);
+}
+
 function includesFact(actualFacts: string[], expected: string): boolean {
   const expectedMonth = /^(\d{4})-(\d{2})$/.exec(expected);
   if (expectedMonth) {
@@ -2048,6 +2062,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
                 (expected) =>
                   collectNumericValues(expected.value).includes(metric.amount) &&
                   dataToolFactSupportsLabel(expected, metric.label) &&
+                  dataToolFactSupportsAmountType(expected, metric.amountType) &&
                   parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
               ),
           ),
