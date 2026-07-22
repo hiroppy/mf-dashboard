@@ -1781,7 +1781,8 @@ function collectInvalidCategoryTrendClaims(
         }))
         .filter((row): row is { amount: number; month: string } => row.amount !== undefined)
         .sort((left, right) => left.month.localeCompare(right.month));
-      const scope = collectTemporalMonthScope(text);
+      const { clauseEnd, clauseStart } = collectClauseBounds(text, match.index, endIndex);
+      const scope = collectTemporalMonthScope(text.slice(Math.max(0, clauseStart + 1), clauseEnd));
       const currentIndex =
         scope === undefined
           ? amounts.length - 1
@@ -2243,6 +2244,13 @@ export default function assertFinanceResponse(output: string, context: Assertion
         )
       : [],
   );
+  const invalidTimeSeriesChartTypes = parsed.cards.flatMap((card) => {
+    if (card.type !== "chart" || card.data.length < 2) return [];
+    const isTimeSeries = card.data.every(({ label }) =>
+      /(?:\d{4}(?:[-/]\d{1,2}|年\d{1,2}月)|(?<!\d)\d{1,2}月|今月|当月|前月|先月)/u.test(label),
+    );
+    return isTimeSeries && card.chartType !== "line" ? [card.chartType] : [];
+  });
   const textEvidenceMismatch =
     expectedDataToolFacts.length > 0 &&
     (parsed.textEvidence.length === 0 ||
@@ -2611,6 +2619,61 @@ export default function assertFinanceResponse(output: string, context: Assertion
       });
     });
   };
+  const collectInvalidTransactionComparisons = (text: string, results: DataToolResult[]) => {
+    const rows = results
+      .flatMap((result) =>
+        result.toolName === "searchTransactions"
+          ? collectValuesAtPath(result.output, "$.transactions.*")
+          : [],
+      )
+      .flatMap((transaction) =>
+        typeof transaction === "object" &&
+        transaction !== null &&
+        "description" in transaction &&
+        typeof transaction.description === "string" &&
+        "amount" in transaction &&
+        typeof transaction.amount === "number"
+          ? [{ amount: transaction.amount, description: transaction.description }]
+          : [],
+      );
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return rows.flatMap((subject) =>
+      rows.flatMap((comparison) => {
+        if (subject.description === comparison.description) return [];
+        const subjectPattern = escapeRegExp(subject.description);
+        const comparisonPattern = escapeRegExp(comparison.description);
+        const patterns = [
+          new RegExp(
+            `${subjectPattern}(?:は|が)${comparisonPattern}より(?:も)?\\s*(安い|高い|少ない|多い)`,
+            "gu",
+          ),
+          new RegExp(
+            `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(安い|高い|少ない|多い)`,
+            "gu",
+          ),
+        ];
+        return patterns.flatMap((pattern) =>
+          Array.from(text.matchAll(pattern)).flatMap((match) => {
+            const endIndex = match.index + match[0].length;
+            if (
+              hasNegatedSuffix(
+                text,
+                endIndex,
+                collectClauseBounds(text, match.index, endIndex).clauseEnd,
+              )
+            ) {
+              return [];
+            }
+            const claimsLower = /(?:安い|少ない)/u.test(match[1]);
+            const comparisonIsValid = claimsLower
+              ? subject.amount < comparison.amount
+              : subject.amount > comparison.amount;
+            return comparisonIsValid ? [] : [match[0]];
+          }),
+        );
+      }),
+    );
+  };
   const unsupportedTextTransactionDescriptions = config.requireTransactionToolGrounding
     ? [
         ...(parsed.textEvidence.length > 0
@@ -2634,6 +2697,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
         ),
         ...collectFacts(parsed.cards).flatMap((text) =>
           collectInvalidTransactionSuperlatives(text, parsed.dataToolResults),
+        ),
+      ]
+    : [];
+  const invalidTransactionComparisons = config.requireTransactionToolGrounding
+    ? [
+        ...parsed.textEvidence.flatMap((evidence) =>
+          collectInvalidTransactionComparisons(evidence.text, evidence.dataToolResults),
+        ),
+        ...collectFacts(parsed.cards).flatMap((text) =>
+          collectInvalidTransactionComparisons(text, parsed.dataToolResults),
         ),
       ]
     : [];
@@ -2921,6 +2994,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     ungroundedChartValues.length > 0
       ? `未根拠の chart values: ${[...new Set(ungroundedChartValues)].join(",")}`
       : undefined,
+    invalidTimeSeriesChartTypes.length > 0
+      ? `時系列 chart type 不一致: ${[...new Set(invalidTimeSeriesChartTypes)].join(",")}`
+      : undefined,
     ungroundedTextClaims.length > 0
       ? `取得前に主張された可視数値: ${[...new Set(ungroundedTextClaims)].join(",")}`
       : undefined,
@@ -2957,6 +3033,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     invalidTransactionSuperlatives.length > 0
       ? `誤った明細最上級: ${[...new Set(invalidTransactionSuperlatives)].join(", ")}`
+      : undefined,
+    invalidTransactionComparisons.length > 0
+      ? `誤った明細比較: ${[...new Set(invalidTransactionComparisons)].join(", ")}`
       : undefined,
     mismatchedTransactionAttributes.length > 0
       ? `誤った明細属性: ${[...new Set(mismatchedTransactionAttributes)].join(", ")}`

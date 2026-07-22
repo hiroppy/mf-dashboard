@@ -1773,6 +1773,29 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(trendOutput)).toMatchObject({ pass: true });
   });
 
+  it("scopes each category trend to its own clause", () => {
+    const results = [
+      ["2026-06", 49922],
+      ["2026-07", 41837],
+    ].map(([month, totalAmount]) => ({
+      toolName: "getMonthlyCategoryTotals",
+      input: { month },
+      output: [{ category: "食費", type: "expense", totalAmount }],
+    }));
+    const text = "2026年7月の食費は減少しました。2026年6月の食費は減少しました。";
+    const trendOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(trendOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠のカテゴリ状態"),
+    });
+  });
+
   it("recognizes a period-first category trend", () => {
     const results = [
       ["2026-06", 11495],
@@ -4526,7 +4549,7 @@ describe("assertFinanceResponse", () => {
       chart: {
         type: "chart",
         title: "月別比較",
-        chartType: "bar",
+        chartType: "line",
         href: "/0/cf/2026-07",
         series: [{ name: "支出", amountType: "expense" }],
         data: [
@@ -4757,6 +4780,62 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("未根拠の chart values") });
+  });
+
+  it("rejects a composition chart type for a time series", () => {
+    const monthlyResults = [
+      {
+        toolName: "getMonthlySummaryByMonth",
+        input: { month: "2026-06" },
+        output: { month: "2026-06", totalExpense: 100 },
+      },
+      {
+        toolName: "getMonthlySummaryByMonth",
+        input: { month: "2026-07" },
+        output: { month: "2026-07", totalExpense: 80 },
+      },
+    ];
+    const chartOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "chart",
+          title: "月別支出",
+          chartType: "pie",
+          href: "/0/cf/2026-07",
+          series: [{ name: "支出", amountType: "expense" }],
+          data: [
+            { label: "2026-06", values: [100] },
+            { label: "2026-07", values: [80] },
+          ],
+        },
+      ],
+      dataToolResults: monthlyResults,
+      textEvidence: [{ text: "回答", dataToolResults: monthlyResults }],
+    });
+
+    expect(
+      assertFinanceResponse(chartOutput, {
+        config: {
+          allowedVisibleAmounts: [80, 100],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-06" },
+              path: "$.totalExpense",
+              value: 100,
+            },
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalExpense",
+              value: 80,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("時系列 chart type 不一致") });
   });
 
   it("rejects an unexpected route on any card", () => {
@@ -8003,6 +8082,46 @@ describe("assertFinanceResponse", () => {
       ).toMatchObject({ pass: false, reason: expect.stringContaining("誤った明細最上級") });
     },
   );
+
+  it.each([
+    ["東京ガス ガス代は成城石井より安いです。", false],
+    ["東京ガス ガス代は成城石井より高いです。", true],
+  ])("validates a pairwise transaction comparison: %s", (text, pass) => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+          {
+            date: "2026-07-10",
+            description: "東京ガス ガス代",
+            category: "光熱費",
+            type: "expense",
+            amount: 3435,
+          },
+        ],
+      },
+    };
+    const comparisonOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [searchResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }).pass,
+    ).toBe(pass);
+  });
 
   it("rejects a mismatched category asserted for a retrieved transaction", () => {
     const searchResult = {
