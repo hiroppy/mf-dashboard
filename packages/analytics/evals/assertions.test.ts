@@ -1558,6 +1558,37 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(groundedOutput)).toMatchObject({ pass });
   });
 
+  it("scopes a category superlative to its stated month", () => {
+    const juneResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-06" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 80000 },
+        { category: "住宅", type: "expense", totalAmount: 75000 },
+      ],
+    };
+    const julyResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 41837 },
+        { category: "住宅", type: "expense", totalAmount: 75000 },
+      ],
+    };
+    const text = "2026年7月の支出で最も多いのは食費です。";
+    const multiMonthOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [juneResult, julyResult] }],
+    });
+
+    expect(assertFinanceResponse(multiMonthOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠の定性的支出構成"),
+    });
+  });
+
   it("rejects a liability-absence claim for the demo fixture", () => {
     const liabilityOutput = JSON.stringify({
       text: "総資産は5,683,100円で、負債はありません。",

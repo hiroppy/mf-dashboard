@@ -1560,22 +1560,31 @@ function collectCategoryGroups(results: DataToolResult[]) {
   return results.flatMap((result) =>
     result.toolName === "getMonthlyCategoryTotals" && Array.isArray(result.output)
       ? [
-          result.output.flatMap((row) =>
-            typeof row === "object" &&
-            row !== null &&
-            "category" in row &&
-            typeof row.category === "string" &&
-            "totalAmount" in row &&
-            typeof row.totalAmount === "number"
-              ? [
-                  {
-                    category: row.category,
-                    totalAmount: row.totalAmount,
-                    type: "type" in row && typeof row.type === "string" ? row.type : undefined,
-                  },
-                ]
-              : [],
-          ),
+          {
+            month:
+              typeof result.input === "object" &&
+              result.input !== null &&
+              "month" in result.input &&
+              typeof result.input.month === "string"
+                ? result.input.month
+                : undefined,
+            rows: result.output.flatMap((row) =>
+              typeof row === "object" &&
+              row !== null &&
+              "category" in row &&
+              typeof row.category === "string" &&
+              "totalAmount" in row &&
+              typeof row.totalAmount === "number"
+                ? [
+                    {
+                      category: row.category,
+                      totalAmount: row.totalAmount,
+                      type: "type" in row && typeof row.type === "string" ? row.type : undefined,
+                    },
+                  ]
+                : [],
+            ),
+          },
         ]
       : [],
   );
@@ -1588,7 +1597,7 @@ function collectInvalidCategoryComparisons(
 ): string[] {
   const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const knownCategories = [
-    ...new Set(knownCategoryGroups.flatMap((group) => group.map(({ category }) => category))),
+    ...new Set(knownCategoryGroups.flatMap((group) => group.rows.map(({ category }) => category))),
   ];
   const claims = knownCategories.flatMap((subjectCategory) =>
     knownCategories.flatMap((comparisonCategory) => {
@@ -1622,8 +1631,8 @@ function collectInvalidCategoryComparisons(
           const claimsHigher = /(?:多い|高い|大きい|上回|以上)/u.test(match[1]);
           const includesEquality = /(?:以上|以下)/u.test(match[1]);
           const relationIsValid = availableCategoryGroups.some((group) => {
-            const subject = group.find(({ category }) => category === subjectCategory);
-            const comparison = group.find(({ category }) => category === comparisonCategory);
+            const subject = group.rows.find(({ category }) => category === subjectCategory);
+            const comparison = group.rows.find(({ category }) => category === comparisonCategory);
             if (subject === undefined || comparison === undefined) return false;
             return claimsHigher
               ? includesEquality
@@ -1647,7 +1656,7 @@ function collectInvalidCategoryTypeClaims(
   availableCategoryGroups: ReturnType<typeof collectCategoryGroups>,
 ): string[] {
   const knownCategories = [
-    ...new Set(knownCategoryGroups.flatMap((group) => group.map(({ category }) => category))),
+    ...new Set(knownCategoryGroups.flatMap((group) => group.rows.map(({ category }) => category))),
   ];
   return knownCategories.flatMap((category) => {
     const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1667,7 +1676,7 @@ function collectInvalidCategoryTypeClaims(
       }
       const claimedType = /^(?:収入|入金)$/u.test(match[1]) ? "income" : "expense";
       const matchesEvidence = availableCategoryGroups.some((group) =>
-        group.some((row) => row.category === category && row.type === claimedType),
+        group.rows.some((row) => row.category === category && row.type === claimedType),
       );
       return matchesEvidence ? [] : [`${category}=${match[1]}`];
     });
@@ -1700,12 +1709,33 @@ function collectCategorySuperlativeClaims(text: string): string[] {
 function categorySuperlativeIsGrounded(
   claim: string,
   categoryGroups: ReturnType<typeof collectCategoryGroups>,
+  temporalScopeText = claim,
 ): boolean {
+  const explicitYearMonth =
+    /(?<year>\d{4})(?:[-/]0?(?<numericMonth>\d{1,2})|年0?(?<japaneseMonth>\d{1,2})月)/u.exec(
+      temporalScopeText,
+    );
+  const scopedMonth = explicitYearMonth?.groups
+    ? `${explicitYearMonth.groups.year}-${String(
+        Number(explicitYearMonth.groups.numericMonth ?? explicitYearMonth.groups.japaneseMonth),
+      ).padStart(2, "0")}`
+    : undefined;
+  const yearlessMonth =
+    scopedMonth === undefined ? /(?<!\d)(\d{1,2})月/u.exec(temporalScopeText)?.[1] : undefined;
   const claimsLowest =
     /(?:最小|最も少ない|一番少ない|最も小さい|一番小さい|最も低い|一番低い)/u.test(claim);
   return categoryGroups.some((group) => {
-    const expenseRows = group.filter(({ type }) => type === "expense");
-    const candidates = expenseRows.length > 0 ? expenseRows : group;
+    const normalizedYearlessMonth =
+      yearlessMonth === undefined ? undefined : String(Number(yearlessMonth)).padStart(2, "0");
+    if (
+      (scopedMonth !== undefined && group.month !== scopedMonth) ||
+      (normalizedYearlessMonth !== undefined &&
+        !group.month?.endsWith(`-${normalizedYearlessMonth}`))
+    ) {
+      return false;
+    }
+    const expenseRows = group.rows.filter(({ type }) => type === "expense");
+    const candidates = expenseRows.length > 0 ? expenseRows : group.rows;
     const claimedRows = candidates.filter(({ category }) => claim.includes(category));
     if (claimedRows.length === 0 || candidates.length === 0) return false;
     const extremeAmount = Math[claimsLowest ? "min" : "max"](
@@ -1879,12 +1909,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
     ...categoryTextEvidence.flatMap((evidence) =>
       collectCategorySuperlativeClaims(evidence.text).filter(
         (claim) =>
-          !categorySuperlativeIsGrounded(claim, collectCategoryGroups(evidence.dataToolResults)),
+          !categorySuperlativeIsGrounded(
+            claim,
+            collectCategoryGroups(evidence.dataToolResults),
+            evidence.text,
+          ),
       ),
     ),
     ...collectFacts(parsed.cards).flatMap((text) =>
       collectCategorySuperlativeClaims(text).filter(
-        (claim) => !categorySuperlativeIsGrounded(claim, knownCategoryGroups),
+        (claim) => !categorySuperlativeIsGrounded(claim, knownCategoryGroups, text),
       ),
     ),
   ];
