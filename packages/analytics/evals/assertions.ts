@@ -338,6 +338,14 @@ function multisetsMatch<Actual, Expected>(
   matches: (actual: Actual, expected: Expected) => boolean,
 ): boolean {
   if (actualItems.length !== expectedItems.length) return false;
+  return containsExpectedItems(actualItems, expectedItems, matches);
+}
+
+function containsExpectedItems<Actual, Expected>(
+  actualItems: Actual[],
+  expectedItems: Expected[],
+  matches: (actual: Actual, expected: Expected) => boolean,
+): boolean {
   const remainingItems = [...actualItems];
   for (const expected of expectedItems) {
     const matchingIndex = remainingItems.findIndex((actual) => matches(actual, expected));
@@ -2014,7 +2022,36 @@ export default function assertFinanceResponse(output: string, context: Assertion
   );
   const expectedMetrics = config.expectedMetrics ?? [];
   const summaryMetricsMismatch =
-    expectedMetrics.length > 0 && !multisetsMatch(summaryMetrics, expectedMetrics, metricMatches);
+    expectedMetrics.length > 0 &&
+    !containsExpectedItems(summaryMetrics, expectedMetrics, metricMatches);
+  const remainingExpectedMetrics = [...expectedMetrics];
+  const additionalSummaryMetrics =
+    expectedMetrics.length === 0
+      ? []
+      : summaryMetrics.filter((actual) => {
+          const expectedIndex = remainingExpectedMetrics.findIndex((expected) =>
+            metricMatches(actual, expected),
+          );
+          if (expectedIndex === -1) return true;
+          remainingExpectedMetrics.splice(expectedIndex, 1);
+          return false;
+        });
+  const ungroundedAdditionalSummaryMetrics = summaryMetricsMismatch
+    ? []
+    : additionalSummaryMetrics.filter(
+        (metric) =>
+          !(config.visibleAmountClaims ?? []).some(
+            (claim) =>
+              normalize(claim.label) === normalize(metric.label) &&
+              claim.amount === metric.amount &&
+              expectedDataToolFacts.some(
+                (expected) =>
+                  collectNumericValues(expected.value).includes(metric.amount) &&
+                  dataToolFactSupportsLabel(expected, metric.label) &&
+                  parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+              ),
+          ),
+      );
   const categoryRows = parsed.cards.flatMap((card) =>
     card.type === "categoryBreakdown"
       ? card.categories.map(({ name, amount, amountType, percentage }) => ({
@@ -2391,6 +2428,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     summaryMetricsMismatch
       ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
+      : undefined,
+    ungroundedAdditionalSummaryMetrics.length > 0
+      ? `未根拠の追加 summary metrics: ${ungroundedAdditionalSummaryMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,
     categoriesMismatch
       ? `categories 不一致: expected=${expectedCategories.map(({ label, amount, percentage }) => `${label}=${amount}/${percentage}%`).join(",")}`

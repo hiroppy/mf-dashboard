@@ -4,7 +4,10 @@ import type { StreamTextTransform, ToolSet } from "ai";
 
 export { sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
 
-export function splitCompleteFinanceChatText(text: string): {
+export function splitCompleteFinanceChatText(
+  text: string,
+  knownReferenceIds: ReadonlySet<string> = new Set(),
+): {
   complete: string;
   pending: string;
 } {
@@ -28,6 +31,12 @@ export function splitCompleteFinanceChatText(text: string): {
       if (!escaped && closingAnchor) {
         htmlAnchorOpen = false;
         index += closingAnchor[0].length - 1;
+        continue;
+      }
+      const selfClosingAnchor = /^\/\s*>/u.exec(text.slice(index));
+      if (!escaped && selfClosingAnchor) {
+        htmlAnchorOpen = false;
+        index += selfClosingAnchor[0].length - 1;
       }
       continue;
     }
@@ -69,7 +78,7 @@ export function splitCompleteFinanceChatText(text: string): {
       ([, id]) => id.toLowerCase(),
     ),
   );
-  if (referenceIds.some((id) => !definedReferenceIds.has(id))) {
+  if (referenceIds.some((id) => !definedReferenceIds.has(id) && !knownReferenceIds.has(id))) {
     return { complete: "", pending: text };
   }
 
@@ -88,13 +97,25 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
   return () => {
     const allowedHrefs = new Set<string>();
     const pendingTextById = new Map<string, string>();
+    const referenceDefinitionsById = new Map<string, Map<string, string>>();
 
     const enqueueSanitizedText = (
       controller: TransformStreamDefaultController,
       id: string,
       text: string,
     ) => {
-      const sanitizedText = sanitizeFinanceChatLinks(text, allowedHrefs);
+      const definitions = referenceDefinitionsById.get(id) ?? new Map<string, string>();
+      for (const match of text.matchAll(
+        /^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu,
+      )) {
+        definitions.set(match[1].toLowerCase(), match[0]);
+      }
+      referenceDefinitionsById.set(id, definitions);
+      const definitionPrefix = [...definitions.values()].join("\n");
+      const sanitizedText = sanitizeFinanceChatLinks(
+        definitionPrefix ? `${definitionPrefix}\n${text}` : text,
+        allowedHrefs,
+      );
       if (!sanitizedText) return;
 
       onSanitizedText?.(sanitizedText);
@@ -106,6 +127,7 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
         enqueueSanitizedText(controller, id, text);
       }
       pendingTextById.clear();
+      referenceDefinitionsById.clear();
     };
 
     return new TransformStream({
@@ -126,13 +148,18 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
 
         if (chunk.type === "text-start") {
           pendingTextById.set(chunk.id, "");
+          referenceDefinitionsById.set(chunk.id, new Map());
           controller.enqueue(chunk);
           return;
         }
 
         if (chunk.type === "text-delta") {
           const bufferedText = `${pendingTextById.get(chunk.id) ?? ""}${chunk.text}`;
-          const { complete, pending } = splitCompleteFinanceChatText(bufferedText);
+          const knownReferenceIds = new Set(referenceDefinitionsById.get(chunk.id)?.keys());
+          const { complete, pending } = splitCompleteFinanceChatText(
+            bufferedText,
+            knownReferenceIds,
+          );
           pendingTextById.set(chunk.id, pending);
 
           if (complete) {
@@ -146,6 +173,7 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
           if (text !== undefined) {
             enqueueSanitizedText(controller, chunk.id, text);
             pendingTextById.delete(chunk.id);
+            referenceDefinitionsById.delete(chunk.id);
           }
         }
 
