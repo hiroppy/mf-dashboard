@@ -304,6 +304,7 @@ ChatGPT subscription でログインしたローカル Codex CLI を使う場合
 AI_BACKEND=codex
 AI_MODEL=gpt-5.4
 CODEX_EXEC_TIMEOUT_MS=120000
+CODEX_EXEC_PATH=/absolute/path/to/codex
 ```
 
 Codex 経路には Codex CLI のインストールと ChatGPT subscription による事前ログインが必要:
@@ -311,6 +312,11 @@ Codex 経路には Codex CLI のインストールと ChatGPT subscription に�
 ```bash
 codex login --config 'cli_auth_credentials_store="file"'
 ```
+
+`CODEX_EXEC_PATH` には `command -v codex` で確認した repository 外の absolute path を指定する。
+symlink は実体へ解決され、repository 配下または group / world-writable な executable は credential を
+渡す前に拒否される。child の `PATH` は inherited value を渡さず、この executable directory と OS の
+system directory のみに限定する。
 
 Codex 経路は custom filesystem permissions を strict config で指定し、組み込み `view_image` も
 明示的に無効化する。`tools.view_image=false` を認識しない Codex CLI では、workspace 外の画像を

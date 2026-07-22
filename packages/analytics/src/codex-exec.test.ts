@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
@@ -63,6 +63,7 @@ beforeEach(async () => {
   temporaryDirectories.push(sourceCodexHome);
   await writeFile(join(sourceCodexHome, "auth.json"), '{"token":"initial"}');
   process.env.CODEX_HOME = sourceCodexHome;
+  process.env.CODEX_EXEC_PATH = process.execPath;
 });
 
 afterEach(async () => {
@@ -201,7 +202,7 @@ describe("generateWithCodexExec", () => {
     expect(fake.getInput()).toContain('<tool_results>\n{"lookupValue":{"value":"tool-value"}}');
 
     const [command, args, spawnOptions] = spawnMock.mock.calls[3]!;
-    expect(command).toBe("codex");
+    expect(command).toBe(process.execPath);
     expect(spawnMock.mock.calls[0]?.[2]?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
     expect(spawnOptions?.env?.CODEX_HOME).not.toBe(process.env.CODEX_HOME);
     expect(args).toEqual(
@@ -380,7 +381,7 @@ describe("generateWithCodexExec", () => {
     );
   });
 
-  test("normalizes relative PATH entries before changing the child cwd", async () => {
+  test("replaces inherited PATH entries with trusted executable and system directories", async () => {
     process.env.PATH = ["./bin", "/usr/bin"].join(delimiter);
     const mcp = createFakeCodex();
     const fake = createFakeCodex();
@@ -388,9 +389,10 @@ describe("generateWithCodexExec", () => {
 
     await generateWithCodexExec({ system: "System.", prompt: "Prompt." });
 
-    expect(spawnMock.mock.calls[3]?.[2]?.env?.PATH).toBe(
-      [resolve("./bin"), "/usr/bin"].join(delimiter),
-    );
+    const childPath = spawnMock.mock.calls[3]?.[2]?.env?.PATH?.split(delimiter) ?? [];
+    expect(childPath).toContain(dirname(process.execPath));
+    expect(childPath).toContain("/usr/bin");
+    expect(childPath).not.toContain(resolve("./bin"));
   });
 
   test("waits for isolated credential cleanup when auth copying is aborted", async () => {
@@ -817,6 +819,15 @@ describe("generateWithCodexExec", () => {
     process.env.CODEX_EXEC_TIMEOUT_MS = "invalid";
     await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
       "CODEX_EXEC_TIMEOUT_MS must be an integer from 1 to 2147483647",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects a relative Codex executable before copying credentials", async () => {
+    process.env.CODEX_EXEC_PATH = "./node_modules/.bin/codex";
+
+    await expect(generateWithCodexExec({ system: "System.", prompt: "Prompt." })).rejects.toThrow(
+      "CODEX_EXEC_PATH must be an absolute trusted executable",
     );
     expect(spawnMock).not.toHaveBeenCalled();
   });

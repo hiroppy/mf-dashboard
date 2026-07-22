@@ -8,9 +8,6 @@ const config: KnipConfig = {
     "apps/mcp": {
       ignoreDependencies: ["@libsql/client"],
     },
-    "packages/analytics": {
-      ignoreBinaries: ["codex"],
-    },
   },
 };
 

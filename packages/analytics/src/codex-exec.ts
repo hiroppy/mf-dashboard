@@ -1,7 +1,19 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { lock } from "proper-lockfile";
 import { z } from "zod";
 
@@ -38,6 +50,7 @@ interface IsolatedEnvironment {
   authPath: string;
   authHome: string;
   cwd: string;
+  executable: string;
   initialAuth: Buffer;
   outputPath: string;
   root: string;
@@ -60,7 +73,6 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const OUTPUT_SIZE_POLL_MS = 25;
 const MAX_ISOLATED_SKILL_DIRECTORIES = 100;
 const MAX_ISOLATED_SKILL_DEPTH = 10;
-const PATH_LIST_ENV_KEYS = new Set(["PATH", "SSL_CERT_DIR"]);
 const ALLOWED_ENV_KEYS = [
   "ALL_PROXY",
   "DBUS_SESSION_BUS_ADDRESS",
@@ -68,7 +80,6 @@ const ALLOWED_ENV_KEYS = [
   "HTTP_PROXY",
   "LOGNAME",
   "NO_PROXY",
-  "PATH",
   "SHELL",
   "SSL_CERT_DIR",
   "SSL_CERT_FILE",
@@ -142,22 +153,26 @@ function getMaxToolCalls(value: number | undefined): number {
   return maxToolCalls;
 }
 
-function getCodexEnv(tempDir: string): NodeJS.ProcessEnv {
+function getCodexEnv(tempDir: string, executable: string): NodeJS.ProcessEnv {
   const inheritedEnv: NodeJS.ProcessEnv = {};
   for (const key of ALLOWED_ENV_KEYS) {
     const value = process.env[key];
     if (value === undefined) continue;
-    inheritedEnv[key] = PATH_LIST_ENV_KEYS.has(key)
-      ? value
-          .split(delimiter)
-          .map((path) => resolve(path))
-          .join(delimiter)
-      : key === "SSL_CERT_FILE"
-        ? resolve(value)
-        : value;
+    inheritedEnv[key] =
+      key === "SSL_CERT_DIR"
+        ? value
+            .split(delimiter)
+            .map((path) => resolve(path))
+            .join(delimiter)
+        : key === "SSL_CERT_FILE"
+          ? resolve(value)
+          : value;
   }
   return {
     ...inheritedEnv,
+    PATH: [...new Set([dirname(executable), "/usr/bin", "/bin", "/usr/sbin", "/sbin"])].join(
+      delimiter,
+    ),
     TEMP: tempDir,
     TMP: tempDir,
     TMPDIR: tempDir,
@@ -166,6 +181,54 @@ function getCodexEnv(tempDir: string): NodeJS.ProcessEnv {
 
 function getSourceAuthPath(): string {
   return join(resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")), "auth.json");
+}
+
+async function findWorkspaceRoot(): Promise<string> {
+  let directory = resolve(process.cwd());
+  while (true) {
+    try {
+      await stat(join(directory, ".git"));
+      return directory;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return resolve(process.cwd());
+    directory = parent;
+  }
+}
+
+function isWithinDirectory(path: string, directory: string): boolean {
+  const child = relative(directory, path);
+  return child === "" || (child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child));
+}
+
+async function resolveTrustedCodexExecutable(): Promise<string> {
+  const configuredPath = process.env.CODEX_EXEC_PATH;
+  if (!configuredPath || !isAbsolute(configuredPath)) {
+    throw new Error("CODEX_EXEC_PATH must be an absolute trusted executable");
+  }
+  let executable: string;
+  let metadata: Awaited<ReturnType<typeof stat>>;
+  let workspaceRoot: string;
+  try {
+    executable = await realpath(configuredPath);
+    [metadata, workspaceRoot] = await Promise.all([
+      stat(executable),
+      findWorkspaceRoot(),
+      access(executable, constants.X_OK),
+    ]);
+  } catch {
+    throw new Error("CODEX_EXEC_PATH must be an absolute trusted executable");
+  }
+  if (
+    !metadata.isFile() ||
+    (metadata.mode & 0o022) !== 0 ||
+    isWithinDirectory(executable, workspaceRoot)
+  ) {
+    throw new Error("CODEX_EXEC_PATH must be an absolute trusted executable");
+  }
+  return executable;
 }
 
 async function withCredentialLock<T>(
@@ -252,7 +315,10 @@ async function withCredentialLock<T>(
   return result;
 }
 
-async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedEnvironment> {
+async function createIsolatedEnvironment(
+  signal: AbortSignal,
+  executable: string,
+): Promise<IsolatedEnvironment> {
   signal.throwIfAborted();
   const rootCreation = mkdtemp(join(resolve(tmpdir()), "mf-dashboard-codex-"));
   let root: string;
@@ -288,6 +354,7 @@ async function createIsolatedEnvironment(signal: AbortSignal): Promise<IsolatedE
     const environment = {
       authHome,
       cwd,
+      executable,
       outputPath: join(root, "output.txt"),
       root,
       schemaPath: join(root, "output-schema.json"),
@@ -431,10 +498,12 @@ async function runCodexProcess(
   let stdout = "";
   let stdoutBytes = 0;
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("codex", args, {
+    const usesProcessGroup = process.platform !== "win32";
+    const child = spawn(environment.executable, args, {
       cwd: environment.cwd,
+      detached: usesProcessGroup,
       env: {
-        ...getCodexEnv(environment.tempDir),
+        ...getCodexEnv(environment.tempDir, environment.executable),
         CODEX_HOME: environment.authHome,
         HOME: environment.root,
       },
@@ -459,9 +528,21 @@ async function runCodexProcess(
     const stopProcess = (error: Error) => {
       if (stopError) return;
       stopError = error;
-      child.kill();
+      const kill = (signal?: NodeJS.Signals) => {
+        if (usesProcessGroup && child.pid !== undefined) {
+          try {
+            process.kill(-child.pid, signal);
+            return;
+          } catch (killError) {
+            if ((killError as NodeJS.ErrnoException).code === "ESRCH") return;
+          }
+        }
+        if (signal === undefined) child.kill();
+        else child.kill(signal);
+      };
+      kill();
       forceKill = setTimeout(() => {
-        child.kill("SIGKILL");
+        kill("SIGKILL");
         forceFinish = setTimeout(() => finish(error), SHUTDOWN_GRACE_MS);
       }, SHUTDOWN_GRACE_MS);
     };
@@ -737,8 +818,9 @@ async function generateInIsolation<T>(
   timeoutMs: number,
   signal: AbortSignal,
   deadline: number,
+  executable: string,
 ): Promise<CodexExecResult<T>> {
-  const isolatedEnvironment = await createIsolatedEnvironment(signal);
+  const isolatedEnvironment = await createIsolatedEnvironment(signal, executable);
   let generationResult!: CodexExecResult<T>;
   let generationError: unknown;
   let generationFailed = false;
@@ -827,8 +909,13 @@ export async function generateWithCodexExec<T>(
     () => preloadController.abort(new Error(`codex exec timed out after ${timeoutMs}ms`)),
     getRemainingTimeout(deadline, timeoutMs),
   );
+  let executable: string;
   let toolData: { data: Record<string, unknown>; toolNames: string[] };
   try {
+    executable = await waitForToolResult(
+      () => resolveTrustedCodexExecutable(),
+      preloadController.signal,
+    );
     toolData = await collectToolData(
       options.tools ?? {},
       options.preloadTools ?? [],
@@ -849,7 +936,7 @@ export async function generateWithCodexExec<T>(
   }
   return withCredentialLock(
     (signal, deadline) =>
-      generateInIsolation(options, toolData, prompt, timeoutMs, signal, deadline),
+      generateInIsolation(options, toolData, prompt, timeoutMs, signal, deadline, executable),
     deadline,
     timeoutMs,
   );
