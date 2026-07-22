@@ -419,6 +419,8 @@
           - { amount: 7364, amountType: balance, labelPattern: (衣服・美容|衣服) }
         requireInsightMetric: true
         expectedInsightFacts: [2026-07]
+        expectedCardTitleFacts:
+          - { cardType: insight, pattern: (衣服・美容|衣服) }
         requiredInsightPatterns:
           - 衣服・美容
           - (衣服・美容.{0,40}(前月|先月).{0,20}(高い|多い|増加|上回)|(前月|先月).{0,20}衣服・美容.{0,20}(高い|多い|増加|上回))

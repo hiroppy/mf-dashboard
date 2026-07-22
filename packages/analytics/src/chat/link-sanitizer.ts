@@ -36,7 +36,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
   );
 
   return withoutInvalidMarkdownLinks.replace(
-    /(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/g,
+    /(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/gi,
     (url) => sanitizeBareUrl(url, allowedHrefs),
   );
 }

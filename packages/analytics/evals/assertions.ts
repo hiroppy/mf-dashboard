@@ -59,6 +59,7 @@ interface AssertionContext {
     expectedCardFacts?: string[];
     expectedCardHeadingFacts?: CardTextFactExpectation[];
     expectedCardTextFacts?: CardTextFactExpectation[];
+    expectedCardTitleFacts?: CardTextFactExpectation[];
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
     expectedInsightActionPattern?: string;
@@ -209,7 +210,7 @@ function collectRoutes(output: EvaluationOutput): string[] {
       text.matchAll(/(?<![\w:/])\/[A-Za-z0-9%._~!$&'*+,;=:@/?#-]+/g),
       ([route]) => route,
     ),
-    ...Array.from(text.matchAll(/https?:\/\/[^\s)\]]+/g), ([route]) => route),
+    ...Array.from(text.matchAll(/https?:\/\/[^\s)\]]+/gi), ([route]) => route),
   ]);
   return [...new Set([...cardRoutes, ...textRoutes])];
 }
@@ -263,7 +264,8 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
         amount:
           parseVisibleAmount(match[3], match[5]) *
           (/[-−▲△▼▽]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ||
-          (text[match.index - 1] === "(" && text[match.index + match[0].length] === ")")
+          (text[match.index - 1] === "(" && text[match.index + match[0].length] === ")") ||
+          /マイナス\s*$/.test(text.slice(Math.max(0, match.index - 8), match.index))
             ? -1
             : 1),
         endIndex: match.index + match[0].length,
@@ -390,6 +392,11 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
         ([, year, month, day]) =>
           `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       ),
+      ...Array.from(
+        text.matchAll(/\b(\d{4})\.(\d{1,2})\.(\d{1,2})\b/g),
+        ([, year, month, day]) =>
+          `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
     ];
   });
 }
@@ -399,7 +406,7 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/\b(\d{4})[-/](\d{2})\b/g),
+        text.matchAll(/\b(\d{4})[-/.](\d{2})\b/g),
         ([, year, month]) => `${year}-${month}`,
       ),
       ...Array.from(
@@ -422,7 +429,7 @@ function collectMislabeledVisibleMonths(
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
     const monthMatches = Array.from(
-      text.matchAll(/\b(\d{4})[-/](\d{2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g),
+      text.matchAll(/\b(\d{4})[-/.](\d{2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g),
       (match) => ({
         endIndex: match.index + match[0].length,
         index: match.index,
@@ -434,33 +441,24 @@ function collectMislabeledVisibleMonths(
               : `*-${String(match[5]).padStart(2, "0")}`,
       }),
     );
-    const roleMarkers = Array.from(text.matchAll(/前月|先月|比較/g));
+    const latestVisibleMonth = monthMatches
+      .map(({ month }) => month)
+      .filter((month) => !month.startsWith("*-"))
+      .sort()
+      .at(-1);
 
     return monthMatches.flatMap((monthMatch, monthIndex) => {
-      const adjacentRoleContext =
-        monthMatches.length < 2
-          ? `${text.slice(Math.max(0, monthMatch.index - 8), monthMatch.index)} ${
-              /^\s*[（(]?(前月|先月|比較)/.exec(
-                text.slice(monthMatch.endIndex, monthMatch.endIndex + 8),
-              )?.[0] ?? ""
-            }`
-          : roleMarkers
-              .filter((marker) => {
-                const markerEnd = marker.index + marker[0].length;
-                const distanceToMonth = (candidate: (typeof monthMatches)[number]) =>
-                  markerEnd <= candidate.index
-                    ? candidate.index - markerEnd
-                    : marker.index >= candidate.endIndex
-                      ? marker.index - candidate.endIndex
-                      : 0;
-                const nearestDistance = Math.min(...monthMatches.map(distanceToMonth));
-                return distanceToMonth(monthMatch) === nearestDistance;
-              })
-              .map(([marker]) => marker)
-              .join(" ");
+      const adjacentRoleContext = `${text.slice(Math.max(0, monthMatch.index - 8), monthMatch.index)} ${
+        /^\s*[（(]?(前月|先月)/.exec(
+          text.slice(monthMatch.endIndex, monthMatch.endIndex + 8),
+        )?.[0] ?? ""
+      }`;
+      const roleContext = `${adjacentRoleContext} ${
+        monthMatches.length > 1 && monthMatch.month !== latestVisibleMonth ? "比較" : ""
+      }`;
       const roleSpecificClaims = expectedClaims.filter(
         ({ rolePattern }) =>
-          rolePattern !== undefined && new RegExp(rolePattern, "u").test(adjacentRoleContext),
+          rolePattern !== undefined && new RegExp(rolePattern, "u").test(roleContext),
       );
       const applicableClaims =
         roleSpecificClaims.length > 0
@@ -602,6 +600,12 @@ export default function assertFinanceResponse(output: string, context: Assertion
         return new RegExp(pattern, "u").test(headingText);
       }),
   );
+  const missingCardTitleFacts = (config.expectedCardTitleFacts ?? []).filter(
+    ({ cardType, pattern }) =>
+      !parsed.cards.some(
+        (card) => card.type === cardType && new RegExp(pattern, "u").test(card.title),
+      ),
+  );
   const summaryMetrics = parsed.cards.flatMap((card) =>
     card.type === "summary" ? card.metrics : [],
   );
@@ -632,16 +636,20 @@ export default function assertFinanceResponse(output: string, context: Assertion
     card.type === "transactionList" ? card.transactions : [],
   );
   const expectedTransactions = config.expectedTransactions ?? [];
+  const expectedTransactionGroup = config.expectedTransactionGroup;
+  const expectedVisibleTransactionCount =
+    expectedTransactions.length > 0
+      ? expectedTransactions.length
+      : expectedTransactionGroup?.expectedCount;
   const unexpectedVisibleTransactionCounts =
-    expectedTransactions.length === 0
+    expectedVisibleTransactionCount === undefined
       ? []
       : collectVisibleTransactionCounts(parsed).filter(
-          (count) => count !== expectedTransactions.length,
+          (count) => count !== expectedVisibleTransactionCount,
         );
   const transactionsMismatch =
     expectedTransactions.length > 0 &&
     !transactionsMatchExactly(transactionRows, expectedTransactions);
-  const expectedTransactionGroup = config.expectedTransactionGroup;
   const transactionGroupMismatch =
     expectedTransactionGroup !== undefined &&
     (transactionRows.length !== expectedTransactionGroup.expectedCount ||
@@ -732,6 +740,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     missingCardHeadingFacts.length > 0
       ? `不足 card heading facts: ${missingCardHeadingFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
       : undefined,
+    missingCardTitleFacts.length > 0
+      ? `不足 card title facts: ${missingCardTitleFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
+      : undefined,
     summaryMetricsMismatch
       ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,
@@ -740,7 +751,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     transactionsMismatch ? "transactions 不一致" : undefined,
     unexpectedVisibleTransactionCounts.length > 0
-      ? `明細件数 不一致: expected=${expectedTransactions.length} actual=${[...new Set(unexpectedVisibleTransactionCounts)].join(",")}`
+      ? `明細件数 不一致: expected=${expectedVisibleTransactionCount} actual=${[...new Set(unexpectedVisibleTransactionCounts)].join(",")}`
       : undefined,
     transactionGroupMismatch
       ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.amountType}`

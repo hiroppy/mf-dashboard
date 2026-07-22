@@ -224,6 +224,26 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "未許可の可視金額: -93341" });
   });
 
+  it("treats a マイナス-prefixed amount as negative", () => {
+    const negativeAmountOutput = JSON.stringify({
+      text: "総資産はマイナス5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negativeAmountOutput, {
+        config: { allowedVisibleAmounts: [5683100] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視金額: -5683100" });
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
@@ -614,6 +634,52 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: "明細件数 不一致: expected=1 actual=3" });
+  });
+
+  it("validates a visible transaction count for a transaction group", () => {
+    const transactionOutput = JSON.stringify({
+      text: "99件の明細です。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細 99件",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "明細件数 不一致: expected=1 actual=99" });
   });
 
   it("rejects a transaction with the wrong amount type", () => {
@@ -1107,6 +1173,55 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("accepts a chronological comparison without assigning 比較 to one month", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出比較",
+          description: "2026年6月と2026年7月を比較すると、衣服・美容は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a stale dotted snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2025.07.31時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("requires insight patterns to appear in the description", () => {
     const fallbackOnlyOutput = JSON.stringify({
       text: "食費は前月より高いため見直せそうです。",
@@ -1166,6 +1281,28 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(misleadingHeadingOutput, {
         config: {
           expectedCardHeadingFacts: [{ cardType: "summary", pattern: "総資産" }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("does not satisfy a title fact with the card description", () => {
+    const misleadingTitleOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "食費を見直す",
+          description: "衣服・美容が前月より増加しました。",
+          action: { label: "衣服・美容の内訳", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(misleadingTitleOutput, {
+        config: {
+          expectedCardTitleFacts: [{ cardType: "insight", pattern: "衣服・美容" }],
         },
       }),
     ).toMatchObject({ pass: false });

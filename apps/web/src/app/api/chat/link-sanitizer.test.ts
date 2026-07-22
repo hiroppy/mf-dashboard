@@ -52,6 +52,10 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(sanitizeFinanceChatLinks("https://attacker.exampleです。", new Set())).toBe("です。");
   });
 
+  it("removes a bare URL with an uppercase scheme", () => {
+    expect(sanitizeFinanceChatLinks("HTTPS://attacker.example", new Set())).toBe("");
+  });
+
   it.each([".", ","])(
     "preserves trailing punctuation after an allowed bare URL: %s",
     (punctuation) => {
