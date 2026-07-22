@@ -551,6 +551,57 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=100" });
   });
 
+  it("grounds each amount with its nearby month in a multi-month comparison", () => {
+    const juneResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-06" },
+      output: [{ category: "食費", type: "expense", totalAmount: 49922 }],
+    };
+    const julyResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [{ category: "食費", type: "expense", totalAmount: 41837 }],
+    };
+    const comparisonOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [juneResult, julyResult],
+      text: "2026年6月の食費は49,922円、2026年7月は41,837円です。",
+      textEvidence: [
+        {
+          text: "2026年6月の食費は49,922円、2026年7月は41,837円です。",
+          dataToolResults: [juneResult, julyResult],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [49922, 41837],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-06" },
+              path: "$.*",
+              value: { category: "食費", totalAmount: 49922 },
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "食費", totalAmount: 41837 },
+            },
+          ],
+          visibleAmountClaims: [
+            { label: "食費", amount: 49922 },
+            { label: "食費", amount: 41837 },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("uses the visible label to distinguish equal income and expense facts", () => {
     const incomeResult = {
       toolName: "getMonthlySummaryByMonth",

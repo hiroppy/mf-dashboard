@@ -1663,6 +1663,29 @@ export default function assertFinanceResponse(output: string, context: Assertion
       textEvidence: [],
       unauthorizedLinks: [],
     };
+    const withLocalTemporalScope = (index: number, endIndex: number) => {
+      const selectLocalScope = (collect: (text: string) => string[]) => {
+        const allScopes = [...new Set(collect(evidence.text))];
+        if (allScopes.length <= 1) return allScopes;
+
+        const precedingScope = collect(evidence.text.slice(0, endIndex)).at(-1);
+        const followingScope = collect(evidence.text.slice(index))[0];
+        return [precedingScope ?? followingScope].filter(
+          (scope): scope is string => scope !== undefined,
+        );
+      };
+
+      return {
+        visibleScopeDates: selectLocalScope((text) =>
+          collectDates([text]).filter((date) => /^\d{4}-\d{2}-\d{2}$/u.test(date)),
+        ),
+        visibleScopeMonths: selectLocalScope((text) =>
+          collectVisibleMonths({ ...evidenceOutput, text }).filter((month) =>
+            /^\d{4}-\d{2}$/u.test(month),
+          ),
+        ),
+      };
+    };
     const amounts = [
       ...collectVisibleAmountMatches(evidenceOutput),
       ...collectBareVisibleAmountMatches(evidenceOutput, config.visibleAmountClaims ?? []),
@@ -1671,6 +1694,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
         collectNearestClaimLabel(text, index, endIndex, config.visibleAmountClaims ?? []),
       ].filter((label): label is string => label !== undefined),
       label: `金額=${amount}`,
+      ...withLocalTemporalScope(index, endIndex),
       value: amount,
     }));
     const percentages = collectVisiblePercentageMatches(evidenceOutput).map(
@@ -1679,16 +1703,15 @@ export default function assertFinanceResponse(output: string, context: Assertion
           collectNearestClaimLabel(text, index, endIndex, config.visiblePercentageClaims ?? []),
         ].filter((label): label is string => label !== undefined),
         label: `割合=${amount}`,
+        ...withLocalTemporalScope(index, endIndex),
         value: amount,
       }),
     );
-    const visibleScopeMonths = collectVisibleMonths(evidenceOutput).filter((month) =>
-      /^\d{4}-\d{2}$/u.test(month),
-    );
-    const visibleScopeDates = collectDates([evidence.text]).filter((date) =>
-      /^\d{4}-\d{2}-\d{2}$/u.test(date),
-    );
-    const factSupportsVisibleScope = (expected: DataToolFactExpectation) => {
+    const factSupportsVisibleScope = (
+      expected: DataToolFactExpectation,
+      visibleScopeMonths: string[],
+      visibleScopeDates: string[],
+    ) => {
       if (typeof expected.input !== "object" || expected.input === null) return true;
       const input = expected.input as Record<string, unknown>;
       const month = typeof input.month === "string" ? input.month : undefined;
@@ -1725,38 +1748,43 @@ export default function assertFinanceResponse(output: string, context: Assertion
         )
       );
     };
-    return [...amounts, ...percentages].flatMap(({ claimLabels, label, value }) => {
-      const numericSupportingFacts = expectedDataToolFacts.filter(
-        (expected) =>
-          factSupportsVisibleScope(expected) &&
-          collectNumericValues(expected.value).some(
-            (expectedValue) =>
-              value === expectedValue ||
-              Math.abs(value - expectedValue) <= Math.max(0.01, Math.abs(expectedValue) * 0.001),
-          ),
-      );
-      const labelSupportingFacts = numericSupportingFacts.filter((expected) =>
-        claimLabels.some((claimLabel) => dataToolFactSupportsLabel(expected, claimLabel)),
-      );
-      const directSupportingFacts =
-        claimLabels.length > 0 ? labelSupportingFacts : numericSupportingFacts;
-      const hasDirectEvidence = directSupportingFacts.some((expected) =>
-        evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
-      );
-      const hasDerivedEvidence = (config.derivedVisibleClaims ?? []).some(
-        (derivedClaim) =>
-          Math.abs(derivedClaim.amount - value) <= 0.01 &&
-          derivedClaim.sourceValues.every((sourceValue) =>
-            expectedDataToolFacts.some(
-              (expected) =>
-                collectNumericValues(expected.value).includes(sourceValue) &&
-                evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+    return [...amounts, ...percentages].flatMap(
+      ({ claimLabels, label, value, visibleScopeDates, visibleScopeMonths }) => {
+        const numericSupportingFacts = expectedDataToolFacts.filter(
+          (expected) =>
+            factSupportsVisibleScope(expected, visibleScopeMonths, visibleScopeDates) &&
+            collectNumericValues(expected.value).some(
+              (expectedValue) =>
+                value === expectedValue ||
+                Math.abs(value - expectedValue) <= Math.max(0.01, Math.abs(expectedValue) * 0.001),
             ),
-          ),
-      );
-      const hasEvidence = hasDirectEvidence || hasDerivedEvidence;
-      return hasEvidence ? [] : [label];
-    });
+        );
+        const labelSupportingFacts = numericSupportingFacts.filter((expected) =>
+          claimLabels.some((claimLabel) => dataToolFactSupportsLabel(expected, claimLabel)),
+        );
+        const directSupportingFacts =
+          claimLabels.length > 0 ? labelSupportingFacts : numericSupportingFacts;
+        const hasDirectEvidence = directSupportingFacts.some((expected) =>
+          evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+        );
+        const hasDerivedEvidence = (config.derivedVisibleClaims ?? []).some(
+          (derivedClaim) =>
+            Math.abs(derivedClaim.amount - value) <= 0.01 &&
+            derivedClaim.sourceValues.every((sourceValue) =>
+              expectedDataToolFacts.some(
+                (expected) =>
+                  factSupportsVisibleScope(expected, visibleScopeMonths, visibleScopeDates) &&
+                  collectNumericValues(expected.value).includes(sourceValue) &&
+                  evidence.dataToolResults.some((result) =>
+                    dataToolResultMatches(result, expected),
+                  ),
+              ),
+            ),
+        );
+        const hasEvidence = hasDirectEvidence || hasDerivedEvidence;
+        return hasEvidence ? [] : [label];
+      },
+    );
   });
   const ungroundedTextRoutes = parsed.textEvidence.flatMap((evidence) => {
     const evidenceOutput: EvaluationOutput = {
