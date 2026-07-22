@@ -135,6 +135,15 @@ function collectFacts(value: unknown): string[] {
   return [];
 }
 
+function collectTypedLeaves(value: unknown): Array<string | number> {
+  if (typeof value === "string" || typeof value === "number") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectTypedLeaves);
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap(collectTypedLeaves);
+  }
+  return [];
+}
+
 function includesFact(actualFacts: string[], expected: string): boolean {
   const expectedMonth = /^(\d{4})-(\d{2})$/.exec(expected);
   if (expectedMonth) {
@@ -255,28 +264,49 @@ function collectBareVisibleAmountMatches(
       ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
       "(?:収入|支出|収支|総資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
     ].flatMap((labelPattern) => {
-      return Array.from(
-        text.matchAll(
-          new RegExp(
-            `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
-            "gu",
+      return [
+        ...Array.from(
+          text.matchAll(
+            new RegExp(
+              `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
+              "gu",
+            ),
           ),
+          (match) => ({
+            amount:
+              Number(
+                String(match[1])
+                  .replaceAll(",", "")
+                  .replace(/[▲△▼▽−]/, "-"),
+              ) *
+              (/マイナス\s*$/.test(match[0].slice(0, match[0].lastIndexOf(String(match[1]))))
+                ? -1
+                : 1),
+            endIndex: match.index + match[0].length,
+            index: match.index + match[0].lastIndexOf(String(match[1])),
+            text,
+          }),
         ),
-        (match) => ({
-          amount:
-            Number(
-              String(match[1])
-                .replaceAll(",", "")
-                .replace(/[▲△▼▽−]/, "-"),
-            ) *
-            (/マイナス\s*$/.test(match[0].slice(0, match[0].lastIndexOf(String(match[1]))))
-              ? -1
-              : 1),
-          endIndex: match.index + match[0].length,
-          index: match.index + match[0].lastIndexOf(String(match[1])),
-          text,
-        }),
-      );
+        ...Array.from(
+          text.matchAll(
+            new RegExp(
+              `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?)\\s*((?:[\\d,.]+\\s*(?:億|万|千)\\s*)+)(?![\\d,.]|\\s*(?:億|万|千|円))`,
+              "gu",
+            ),
+          ),
+          (match) => ({
+            amount:
+              parseVisibleAmount(undefined, match[2]) *
+              (/[-−▲△▼▽]/u.test(match[1] ?? "") ||
+              /マイナス\s*$/u.test(text.slice(Math.max(0, match.index - 8), match.index))
+                ? -1
+                : 1),
+            endIndex: match.index + match[0].length,
+            index: match.index + match[0].lastIndexOf(String(match[2])),
+            text,
+          }),
+        ),
+      ];
     }),
   );
 }
@@ -601,9 +631,28 @@ function collectDates(rawTexts: string[]): string[] {
           `last-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(
+          /(?:昨年|去年|前年)([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g,
+        ),
+        ([, month, day]) =>
+          `last-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/(?:来年|翌年)(\d{1,2})月(\d{1,2})日/g),
         ([, month, day]) =>
           `next-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(
+          /(?:来年|翌年)([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g,
+        ),
+        ([, month, day]) =>
+          `next-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(\d{4})年([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g),
+        ([, year, month, day]) =>
+          `${year}-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g),
@@ -671,8 +720,20 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
         ([, month]) => `last-${String(month).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(/(?:昨年|去年|前年)([〇零一二三四五六七八九十]+)月/g),
+        ([, month]) => `last-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/(?:来年|翌年)(\d{1,2})月/g),
         ([, month]) => `next-${String(month).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:来年|翌年)([〇零一二三四五六七八九十]+)月/g),
+        ([, month]) => `next-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(\d{4})年([〇零一二三四五六七八九十]+)月/g),
+        ([, year, month]) => `${year}-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/\b(\d{4})[-/.](\d{1,2})\b/g),
@@ -913,9 +974,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
   const cardFacts = collectFacts(parsed.cards);
-  const dataToolEvidence = JSON.stringify(parsed.dataToolResults);
+  const dataToolEvidence = parsed.dataToolResults.flatMap(({ output }) =>
+    collectTypedLeaves(output),
+  );
   const missingDataToolFacts = (config.expectedDataToolFacts ?? []).filter(
-    (fact) => !dataToolEvidence.includes(JSON.stringify(fact)),
+    (fact) => !dataToolEvidence.some((actual) => typeof actual === typeof fact && actual === fact),
   );
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),

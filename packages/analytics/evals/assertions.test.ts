@@ -44,6 +44,19 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "不足 data tool facts: 93341" });
   });
 
+  it("matches numeric data-tool evidence as an exact typed leaf", () => {
+    const wrongEvidenceOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [{ toolName: "getFinancialMetrics", output: { amount: 1297 } }],
+    });
+
+    expect(
+      assertFinanceResponse(wrongEvidenceOutput, {
+        config: { expectedDataToolFacts: [297] },
+      }),
+    ).toMatchObject({ pass: false, reason: "不足 data tool facts: 297" });
+  });
+
   it("rejects malformed evaluation output", () => {
     expect(assertFinanceResponse("not-json")).toMatchObject({
       pass: false,
@@ -366,6 +379,29 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(kanjiAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects an unallowlisted monetary unit without 円", () => {
+    const unitAmountOutput = JSON.stringify({
+      text: "総資産は999万です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unitAmountOutput, {
         config: {
           allowedVisibleAmounts: [5683100],
           visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
@@ -2222,6 +2258,29 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("preserves a future qualifier on a kanji-written snapshot date", () => {
+    const futureSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "来年七月三十一日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(futureSnapshotOutput, {
         config: {
           allowedVisibleDates: ["2026-07-31"],
           allowedVisibleMonths: ["2026-07"],
