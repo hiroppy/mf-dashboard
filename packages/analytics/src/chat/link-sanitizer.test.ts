@@ -58,6 +58,12 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("click");
   });
 
+  it("strips a nested dangerous raw HTML anchor from an allowed anchor label", () => {
+    const text = '<a href="/0/cf/2026-07"><a href="javascript:alert(1)">evil</a></a>';
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[evil](/0/cf/2026-07)");
+    expect(collectFinanceChatLinks(text)).toContain("javascript:alert(1)");
+  });
+
   it.each([
     ['<a href="mailto:evil@example.com">メール', "メール"],
     ['<a href="javascript:alert(1)"/>メール', "メール"],

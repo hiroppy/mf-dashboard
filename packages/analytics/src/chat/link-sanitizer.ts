@@ -95,7 +95,10 @@ function sanitizeRawHtmlAnchors(text: string, allowedHrefs: Set<string>): string
   for (const anchor of findRawHtmlAnchors(text)) {
     sanitized += text.slice(cursor, anchor.start);
     if (anchor.closingStart !== undefined && anchor.closingEnd !== undefined) {
-      const label = text.slice(anchor.openingEnd, anchor.closingStart);
+      const label = sanitizeRawHtmlAnchors(
+        text.slice(anchor.openingEnd, anchor.closingStart),
+        new Set(),
+      );
       const href =
         anchor.destination === undefined
           ? undefined
@@ -107,6 +110,15 @@ function sanitizeRawHtmlAnchors(text: string, allowedHrefs: Set<string>): string
     }
   }
   return `${sanitized}${text.slice(cursor)}`.replace(/<\/a\s*>/giu, "");
+}
+
+function collectRawHtmlAnchorDestinations(text: string): string[] {
+  return findRawHtmlAnchors(text).flatMap((anchor) => [
+    ...(anchor.destination === undefined ? [] : [anchor.destination]),
+    ...(anchor.closingStart === undefined
+      ? []
+      : collectRawHtmlAnchorDestinations(text.slice(anchor.openingEnd, anchor.closingStart))),
+  ]);
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
@@ -156,9 +168,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 
 export function collectFinanceChatLinks(text: string): string[] {
   return [
-    ...findRawHtmlAnchors(text).flatMap(({ destination }) =>
-      destination === undefined ? [] : [destination],
-    ),
+    ...collectRawHtmlAnchorDestinations(text),
     ...Array.from(
       text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
       ([, href]) =>
