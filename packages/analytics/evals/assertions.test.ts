@@ -1081,6 +1081,8 @@ describe("assertFinanceResponse", () => {
   it.each([
     ["食費は住宅費より多いです。", false],
     ["食費は住宅費より少ないです。", true],
+    ["食費は住宅費以上です。", false],
+    ["住宅費以下なのは食費です。", true],
     ["住宅費より食費が多いとは限りません。", true],
   ])("validates a grounded pairwise category comparison: %s", (text, pass) => {
     const categoryResult = {
@@ -1101,31 +1103,43 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(comparisonOutput)).toMatchObject({ pass });
   });
 
-  it("accepts an explicitly negated income-expense equality claim", () => {
-    const comparisonOutput = JSON.stringify({
-      text: "収入と支出は同額ではありません。",
-      cards: [
-        {
-          type: "summary",
-          title: "月次収支",
-          metrics: [
-            { label: "収入", amount: 313235, amountType: "income" },
-            { label: "支出", amount: 219894, amountType: "expense" },
-          ],
-          href: "/0/cf/2026-07",
-        },
-      ],
+  it.each(["収入と支出は同額ではありません。", "収入と支出は同じくらいではありません。"])(
+    "accepts an explicitly negated income-expense equality claim: %s",
+    (text) => {
+      const comparisonOutput = JSON.stringify({
+        text,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [
+              { label: "収入", amount: 313235, amountType: "income" },
+              { label: "支出", amount: 219894, amountType: "expense" },
+            ],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(comparisonOutput, {
+          config: {
+            forbiddenVisiblePatterns: [
+              "((収入|所得).{0,12}(支出|出費)|(支出|出費).{0,12}(収入|所得)).{0,12}(同額(?!\\s*(?:では|じゃ)(?:ありません|ない|なく))|同じ(?!(?:くらい|程度)?\\s*(?:では|じゃ)(?:ありません|ない|なく))(?:くらい|程度)?|等しい(?!\\s*(?:とは|わけでは)?(?:ありません|ない))|ほぼ同額(?!\\s*(?:では|じゃ)(?:ありません|ない))|ほぼ同じ(?!\\s*(?:では|じゃ)(?:ありません|ない))|大差(?:が)?ない|差(?:が)?ない)",
+            ],
+          },
+        }),
+      ).toMatchObject({ pass: true });
+    },
+  );
+
+  it("does not classify a nonmonetary three-letter acronym as a currency", () => {
+    const acronymOutput = JSON.stringify({
+      text: "ETFの3銘柄に分散します。",
+      cards: JSON.parse(output).cards,
     });
 
-    expect(
-      assertFinanceResponse(comparisonOutput, {
-        config: {
-          forbiddenVisiblePatterns: [
-            "((収入|所得).{0,12}(支出|出費)|(支出|出費).{0,12}(収入|所得)).{0,12}(同額(?!s*(?:では|じゃ)(?:ありません|ない|なく))|同じ(?:くらい|程度)?(?!s*(?:では|じゃ)(?:ありません|ない|なく))|等しい(?!s*(?:とは|わけでは)?(?:ありません|ない))|ほぼ同額(?!s*(?:では|じゃ)(?:ありません|ない))|ほぼ同じ(?!s*(?:では|じゃ)(?:ありません|ない))|大差(?:が)?ない|差(?:が)?ない)",
-          ],
-        },
-      }),
-    ).toMatchObject({ pass: true });
+    expect(assertFinanceResponse(acronymOutput)).toMatchObject({ pass: true });
   });
 
   it.each(["給与", "手取り"])(
@@ -6935,6 +6949,41 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
+  });
+
+  it("rejects a mismatched category asserted for a retrieved transaction", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+        ],
+      },
+    };
+    const mismatchedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "成城石井のカテゴリは水道・光熱費です。",
+      dataToolResults: [searchResult],
+      textEvidence: [
+        { text: "成城石井のカテゴリは水道・光熱費です。", dataToolResults: [searchResult] },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(mismatchedOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤った明細属性: 成城石井:カテゴリ=水道・光熱費"),
+    });
   });
 
   it("rejects an unsupported fallback transaction with expectedTransactions", () => {

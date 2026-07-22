@@ -1542,6 +1542,8 @@ function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
               `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(多い|少ない|高い|低い|大きい|小さい)`,
               "gu",
             ),
+            new RegExp(`${subjectPattern}(?:は|が)${comparisonPattern}(以上|以下)`, "gu"),
+            new RegExp(`${comparisonPattern}(以上|以下)(?:なの)?(?:は|が)${subjectPattern}`, "gu"),
           ];
           return patterns.flatMap((pattern) =>
             Array.from(text.matchAll(pattern)).flatMap((match) => {
@@ -1555,10 +1557,15 @@ function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
               ) {
                 return [];
               }
-              const claimsHigher = /(?:多い|高い|大きい|上回)/u.test(match[1]);
+              const claimsHigher = /(?:多い|高い|大きい|上回|以上)/u.test(match[1]);
+              const includesEquality = /(?:以上|以下)/u.test(match[1]);
               const relationIsValid = claimsHigher
-                ? subject.totalAmount > comparison.totalAmount
-                : subject.totalAmount < comparison.totalAmount;
+                ? includesEquality
+                  ? subject.totalAmount >= comparison.totalAmount
+                  : subject.totalAmount > comparison.totalAmount
+                : includesEquality
+                  ? subject.totalAmount <= comparison.totalAmount
+                  : subject.totalAmount < comparison.totalAmount;
               return relationIsValid ? [] : [match[0]];
             }),
           );
@@ -1670,7 +1677,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       /(?:[$€£]\s*[\d]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|(?:スイス)?フラン|(?:タイ)?バーツ|(?:インド|パキスタン|スリランカ|ネパール)?ルピー|ペソ|レアル|ランド|ルーブル|リラ|ドン|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|(?:スイス)?フラン|(?:タイ)?バーツ|(?:インド|パキスタン|スリランカ|ネパール)?ルピー|ペソ|レアル|ランド|ルーブル|リラ|ドン|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW))/gu,
     ),
     ...visibleText.matchAll(
-      /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*[A-Z]{3})/gu,
+      /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d](?![\d,.]*\s*(?:銘柄|件|個|口|本|社|回|つ|名|枚|台))|[\d][\d,.]*\s*[A-Z]{3})/gu,
     ),
   ]
     .filter((match) => {
@@ -2016,6 +2023,62 @@ export default function assertFinanceResponse(output: string, context: Assertion
         ),
       ]
     : [];
+  const mismatchedTransactionAttributes = config.requireTransactionToolGrounding
+    ? [parsed.text, ...collectFacts(parsed.cards)].flatMap((text) =>
+        retrievedTransactionRows.flatMap((transaction) => {
+          if (
+            typeof transaction !== "object" ||
+            transaction === null ||
+            !("description" in transaction) ||
+            typeof transaction.description !== "string"
+          ) {
+            return [];
+          }
+          const descriptionPattern = transaction.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const mismatches: string[] = [];
+          for (const match of text.matchAll(
+            new RegExp(
+              `${descriptionPattern}のカテゴリ(?:は|が)\\s*([^。！？\\n]+?)(?:です|でした|である|だ)(?=[。！？\\n]|$)`,
+              "gu",
+            ),
+          )) {
+            if (
+              !("category" in transaction) ||
+              normalize(String(transaction.category)) !== normalize(match[1])
+            ) {
+              mismatches.push(`${transaction.description}:カテゴリ=${match[1]}`);
+            }
+          }
+          for (const match of text.matchAll(
+            new RegExp(
+              `${descriptionPattern}の(?:種別|区分|タイプ)(?:は|が)\\s*(収入|支出|入金|出金|income|expense)(?:です|でした|である|だ)(?=[。！？\\n]|$)`,
+              "giu",
+            ),
+          )) {
+            const claimedType = /^(?:収入|入金|income)$/iu.test(match[1]) ? "income" : "expense";
+            if (!("type" in transaction) || transaction.type !== claimedType) {
+              mismatches.push(`${transaction.description}:種別=${match[1]}`);
+            }
+          }
+          for (const match of text.matchAll(
+            new RegExp(
+              `${descriptionPattern}の(?:日付|取引日)(?:は|が)\\s*(?:(\\d{4})[-/.年](\\d{1,2})[-/.月](\\d{1,2})日?|(\\d{1,2})月(\\d{1,2})日)(?:です|でした|である|だ)(?=[。！？\\n]|$)`,
+              "gu",
+            ),
+          )) {
+            const claimedDate =
+              match[1] === undefined
+                ? `*-${String(match[4]).padStart(2, "0")}-${String(match[5]).padStart(2, "0")}`
+                : `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+            const actualDate = "date" in transaction ? String(transaction.date) : "";
+            if (claimedDate !== actualDate && claimedDate !== `*-${actualDate.slice(5)}`) {
+              mismatches.push(`${transaction.description}:日付=${claimedDate}`);
+            }
+          }
+          return mismatches;
+        }),
+      )
+    : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
   const retrievedGroupTransactionIds =
@@ -2230,6 +2293,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unsupportedTextTransactionDescriptions.length > 0
       ? `本文中の未取得明細: ${unsupportedTextTransactionDescriptions.join(", ")}`
+      : undefined,
+    mismatchedTransactionAttributes.length > 0
+      ? `誤った明細属性: ${[...new Set(mismatchedTransactionAttributes)].join(", ")}`
       : undefined,
     unexpectedVisibleTransactionCounts.length > 0
       ? `明細件数 不一致: expected=${expectedVisibleTransactionCount} actual=${[
