@@ -107,7 +107,6 @@ const CODEX_CONFIG = [
   'default_permissions="isolated"',
   "mcp_servers={}",
   'permissions.isolated.filesystem={":workspace_roots"={ "."="read"}}',
-  "tools.view_image=false",
   "tools.web_search=false",
 ] as const;
 
@@ -284,8 +283,18 @@ async function createEnvironment(
   executable: TrustedExecutable,
   signal: AbortSignal,
 ): Promise<IsolatedEnvironment> {
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error("codex exec temporary directory must be trusted");
+  let temporaryBase: string;
+  try {
+    temporaryBase = await raceSignal(realpath(resolve(process.env.TMPDIR ?? tmpdir())), signal);
+    await assertTrustedAncestors(join(temporaryBase, "candidate"), uid, signal);
+  } catch {
+    signal.throwIfAborted();
+    throw new Error("codex exec temporary directory must be trusted");
+  }
   const initialAuth = await readAuth(signal);
-  const root = await raceSignal(mkdtemp(join(resolve(tmpdir()), "mf-dashboard-codex-")), signal);
+  const root = await raceSignal(mkdtemp(join(temporaryBase, "mf-dashboard-codex-")), signal);
   try {
     await raceSignal(chmod(root, 0o700), signal);
     const authHome = join(root, "home");

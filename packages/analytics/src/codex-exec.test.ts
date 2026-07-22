@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -91,6 +91,18 @@ describe("generateWithCodexExec", () => {
     );
   });
 
+  test("rejects an untrusted temporary directory before copying credentials", async () => {
+    const root = await createFixture(`cat >/dev/null`);
+    const temporaryRoot = join(root, "untrusted-tmp");
+    await mkdir(temporaryRoot, { mode: 0o777 });
+    await chmod(temporaryRoot, 0o777);
+    process.env.TMPDIR = temporaryRoot;
+
+    await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
+      "codex exec temporary directory must be trusted",
+    );
+  });
+
   test("preloads bounded tool data and returns structured output", async () => {
     const root = await createFixture(`
       printf '%s\\n' "$@" > __ARGS_PATH__
@@ -139,7 +151,7 @@ describe("generateWithCodexExec", () => {
     const args = await readFile(join(root, "args.txt"), "utf8");
     expect(args).toContain("--strict-config");
     expect(args).toContain("--ignore-user-config");
-    expect(args).toContain("tools.view_image=false");
+    expect(args).not.toContain("tools.view_image");
     expect(args).toContain("tools.web_search=false");
     expect(await readFile(join(root, "auth.json"), "utf8")).toBe('{"token":"test"}');
     const isolatedRoot = await readFile(join(root, "isolated-root.txt"), "utf8");
