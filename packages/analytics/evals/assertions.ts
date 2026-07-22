@@ -11,6 +11,12 @@ interface TransactionExpectation {
   amount: number;
 }
 
+interface TransactionGroupExpectation {
+  category: string;
+  month: string;
+  totalAmount: number;
+}
+
 interface AssertionContext {
   config?: {
     expectedCardTypes?: string[];
@@ -18,7 +24,9 @@ interface AssertionContext {
     expectedFacts?: string[];
     expectedMetrics?: MetricExpectation[];
     expectedRoute?: string;
+    expectedTransactionGroup?: TransactionGroupExpectation;
     expectedTransactions?: TransactionExpectation[];
+    requiredInsightPatterns?: string[];
   };
 }
 
@@ -89,9 +97,13 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const summaryMetrics = parsed.cards.flatMap((card) =>
     card.type === "summary" ? card.metrics : [],
   );
-  const missingMetrics = (config.expectedMetrics ?? []).filter(
-    (expected) => !summaryMetrics.some((actual) => metricMatches(actual, expected)),
-  );
+  const expectedMetrics = config.expectedMetrics ?? [];
+  const summaryMetricsMismatch =
+    expectedMetrics.length > 0 &&
+    (summaryMetrics.length !== expectedMetrics.length ||
+      expectedMetrics.some(
+        (expected) => !summaryMetrics.some((actual) => metricMatches(actual, expected)),
+      ));
   const categoryRows = parsed.cards.flatMap((card) =>
     card.type === "categoryBreakdown"
       ? card.categories.map(({ name, amount, amountType }) => ({
@@ -117,6 +129,24 @@ export default function assertFinanceResponse(output: string, context: Assertion
             (actual) => actual.date === expected.date && actual.amount === expected.amount,
           ),
       ));
+  const expectedTransactionGroup = config.expectedTransactionGroup;
+  const transactionGroupMismatch =
+    expectedTransactionGroup !== undefined &&
+    (transactionRows.length === 0 ||
+      transactionRows.some(
+        ({ date, category }) =>
+          !date.startsWith(`${expectedTransactionGroup.month}-`) ||
+          normalize(category ?? "") !== normalize(expectedTransactionGroup.category),
+      ) ||
+      transactionRows.reduce((total, { amount }) => total + amount, 0) !==
+        expectedTransactionGroup.totalAmount);
+  const insightText = parsed.cards
+    .filter((card) => card.type === "insight")
+    .map(({ title, description }) => `${title}\n${description}`)
+    .join("\n");
+  const missingInsightPatterns = (config.requiredInsightPatterns ?? []).filter(
+    (pattern) => !new RegExp(pattern, "u").test(insightText),
+  );
   const actualTypes = parsed.cards.map(({ type }) => type);
   const expectedTypes = config.expectedCardTypes ?? [];
   const cardTypesMismatch =
@@ -130,14 +160,20 @@ export default function assertFinanceResponse(output: string, context: Assertion
 
   const failures = [
     missingFacts.length > 0 ? `不足 facts: ${missingFacts.join(", ")}` : undefined,
-    missingMetrics.length > 0
-      ? `不足 summary metrics: ${missingMetrics.map(({ label, amount }) => `${label}=${amount}`).join(", ")}`
+    summaryMetricsMismatch
+      ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`
       : undefined,
     missingCategories.length > 0
       ? `不足 categories: ${missingCategories.map(({ label, amount }) => `${label}=${amount}`).join(", ")}`
       : undefined,
     transactionsMismatch
       ? `transactions 不一致: expected=${expectedTransactions.map(({ date, amount }) => `${date}=${amount}`).join(",")}`
+      : undefined,
+    transactionGroupMismatch
+      ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.totalAmount}`
+      : undefined,
+    missingInsightPatterns.length > 0
+      ? `不足 insight patterns: ${missingInsightPatterns.join(", ")}`
       : undefined,
     cardTypesMismatch
       ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`

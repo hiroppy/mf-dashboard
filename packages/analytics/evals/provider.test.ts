@@ -105,6 +105,27 @@ describe("toEvaluationOutput", () => {
 
     expect(toEvaluationOutput(response, "test-group").text).toBe("途中回答。最終回答");
   });
+
+  it("does not allow a route that is returned after visible text", () => {
+    const response: ChatResponse = {
+      text: "最終回答",
+      steps: [
+        { text: "[詳細](/test-group/cf/2026-07)", toolResults: [] },
+        {
+          text: "",
+          toolResults: [
+            {
+              toolName: "getFinanceDashboardRoute",
+              output: { href: "/test-group/cf/2026-07" },
+            },
+            { toolName: "presentFinanceCards", output: [{ type: "summary" }] },
+          ],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").text).toBe("詳細");
+  });
 });
 
 describe("FinanceChatProvider", () => {

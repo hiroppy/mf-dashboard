@@ -46,7 +46,7 @@ describe("assertFinanceResponse", () => {
 
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("不足 facts: 未記載");
-    expect(result.reason).toContain("不足 summary metrics: 収支=123");
+    expect(result.reason).toContain("summary metrics 不一致: expected=収支=123");
     expect(result.reason).toContain("card types 不一致: expected=insight actual=summary");
     expect(result.reason).toContain("route 不一致: expected=/bs actual=/0/cf/2026-07");
   });
@@ -78,7 +78,32 @@ describe("assertFinanceResponse", () => {
           expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
         },
       }),
-    ).toMatchObject({ pass: false, reason: "不足 summary metrics: 収支=93341" });
+    ).toMatchObject({ pass: false, reason: "summary metrics 不一致: expected=収支=93341" });
+  });
+
+  it("rejects unexpected summary metrics", () => {
+    const extraMetricOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          href: "/0/cf/2026-07",
+          metrics: [
+            { label: "収支", amount: 93341, amountType: "balance" },
+            { label: "未確認額", amount: 999999, amountType: "balance" },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(extraMetricOutput, {
+        config: {
+          expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "summary metrics 不一致: expected=収支=93341" });
   });
 
   it("rejects extra transaction rows outside the expected date", () => {

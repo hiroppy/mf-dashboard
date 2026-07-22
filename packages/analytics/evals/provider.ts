@@ -62,29 +62,34 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   }
 
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
-  const allowedHrefs = new Set(
-    response.steps
-      .flatMap(({ toolResults }) => toolResults)
-      .filter(({ toolName }) => toolName === "getFinanceDashboardRoute")
-      .flatMap(({ output }) => {
+  const allowedHrefs = new Set<string>();
+  const visibleText: string[] = [];
+  let hasStepText = false;
+
+  for (const step of response.steps) {
+    if (step.text !== undefined) {
+      hasStepText = true;
+      visibleText.push(sanitizeFinanceChatLinks(step.text, allowedHrefs));
+    }
+
+    for (const { toolName, output } of step.toolResults) {
+      if (toolName === "getFinanceDashboardRoute") {
         const route = financeChatHrefSchema.safeParse(
           typeof output === "object" && output !== null && "href" in output
             ? output.href
             : undefined,
         );
-        return route.success && (route.data === groupHref || route.data.startsWith(`${groupHref}/`))
-          ? [route.data]
-          : [];
-      }),
-  );
+        if (route.success && (route.data === groupHref || route.data.startsWith(`${groupHref}/`))) {
+          allowedHrefs.add(route.data);
+        }
+      }
+    }
+  }
 
   return {
-    text: sanitizeFinanceChatLinks(
-      response.steps.some(({ text }) => text !== undefined)
-        ? response.steps.map(({ text }) => text ?? "").join("")
-        : response.text,
-      allowedHrefs,
-    ),
+    text: hasStepText
+      ? visibleText.join("")
+      : sanitizeFinanceChatLinks(response.text, allowedHrefs),
     cards: presentations[0],
   };
 }
