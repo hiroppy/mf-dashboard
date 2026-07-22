@@ -1107,6 +1107,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("prefers an intervening unconfigured finance label over an earlier expected label", () => {
+    const mislabeledOutput = JSON.stringify({
+      text: "総資産と比べ総負債は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(mislabeledOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("総負債=5683100") });
+  });
+
   it("rejects a materially different small approximate monetary claim", () => {
     const approximateOutput = JSON.stringify({
       text: "日用品の差額は約1,200円減少です。",
@@ -3059,7 +3082,7 @@ describe("assertFinanceResponse", () => {
         {
           type: "insight",
           title: "支出改善",
-          description: "2026-7の衣服・美容は前月より増加しました。",
+          description: "2026-7の衣服・美容を確認しました。",
           action: { label: "内訳を見る", href: "/0/cf/2026-07" },
         },
       ],
@@ -3251,6 +3274,58 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
+  });
+
+  it.each(["先月、食費41,837円です。", "先月も食費41,837円です。"])(
+    "recognizes a relative month across common Japanese boundaries: %s",
+    (text) => {
+      const relativeComparisonOutput = JSON.stringify({
+        text,
+        cards: [
+          {
+            type: "summary",
+            title: "食費",
+            metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(relativeComparisonOutput, {
+          config: {
+            allowedVisibleAmounts: [41837],
+            allowedVisibleMonths: ["2026-07"],
+            visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
+    },
+  );
+
+  it("recognizes a relative month followed by a day", () => {
+    const relativeDateOutput = JSON.stringify({
+      text: "先月10日の支出は6,587円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "7月10日の支出",
+          metrics: [{ label: "支出", amount: 6587, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeDateOutput, {
+        config: {
+          allowedVisibleAmounts: [6587],
+          allowedVisibleDates: ["2026-07-10"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "支出", amount: 6587 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月10日") });
   });
 
   it("rejects a numeric relative month outside the allowed month", () => {

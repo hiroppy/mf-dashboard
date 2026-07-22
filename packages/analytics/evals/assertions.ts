@@ -106,6 +106,33 @@ interface DataToolResult {
 
 type TransactionRow = Extract<FinanceChatCard, { type: "transactionList" }>["transactions"][number];
 
+const FINANCE_AMOUNT_LABELS = [
+  "収入",
+  "給与",
+  "給料",
+  "所得",
+  "手取り",
+  "売上",
+  "報酬",
+  "賃金",
+  "年収",
+  "月収",
+  "支出",
+  "収支",
+  "総資産",
+  "保有資産",
+  "資産",
+  "総負債",
+  "負債",
+  "黒字",
+  "赤字",
+  "余剰",
+  "手残り",
+  "残高",
+  "差額",
+  "金額",
+];
+
 function parseOutput(output: string): EvaluationOutput | undefined {
   try {
     const value = JSON.parse(output) as Partial<EvaluationOutput>;
@@ -364,7 +391,7 @@ function collectBareVisibleAmountMatches(
   return visibleTexts.flatMap((text) => {
     const labelPatterns = [
       ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
-      "(?:収入|給与|給料|所得|手取り|売上|報酬|賃金|年収|月収|支出|収支|総資産|保有資産|資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
+      `(?:${FINANCE_AMOUNT_LABELS.join("|")}|[\\p{L}・]{1,12}費)`,
     ];
     const directMatches = labelPatterns.flatMap((labelPattern) => {
       return [
@@ -618,6 +645,32 @@ function collectMislabeledVisibleAmounts(
     }
     const nearestLabel = nearbyClaims[0]?.claim.label;
     if (nearestLabel === undefined) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
+    const nearestExpectedDistance = nearbyClaims[0]?.distance ?? Number.POSITIVE_INFINITY;
+    const nearerUnexpectedLabel = FINANCE_AMOUNT_LABELS.filter(
+      (label) =>
+        !new Set(["差額", "金額", "残高"]).has(label) &&
+        !expectedClaims.some((claim) => claim.label.includes(label)),
+    )
+      .map((label) => {
+        const foundBeforeIndex = text.lastIndexOf(label, index);
+        const foundAfterIndex = text.indexOf(label, endIndex);
+        return {
+          label,
+          distance: Math.min(
+            foundBeforeIndex !== -1 && foundBeforeIndex >= clauseStart
+              ? index - (foundBeforeIndex + label.length)
+              : Number.POSITIVE_INFINITY,
+            foundAfterIndex !== -1 && foundAfterIndex < clauseEnd
+              ? foundAfterIndex - endIndex
+              : Number.POSITIVE_INFINITY,
+          ),
+        };
+      })
+      .filter(({ distance }) => distance < nearestExpectedDistance)
+      .sort(
+        (left, right) => left.distance - right.distance || right.label.length - left.label.length,
+      )[0]?.label;
+    if (nearerUnexpectedLabel !== undefined) return [`${nearerUnexpectedLabel}=${amount}`];
     const claimsForLabel = nearbyClaims
       .filter(({ claim }) => claim.label === nearestLabel)
       .map(({ claim }) => claim);
@@ -832,6 +885,10 @@ function collectDates(rawTexts: string[]): string[] {
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
+        text.matchAll(/(?:先月|前月|来月|翌月)\d{1,2}日/g),
+        ([relativeDate]) => `relative-${relativeDate}`,
+      ),
+      ...Array.from(
         text.matchAll(/(\d{4})年(\d{1,2})月(初|末)(?=の|は|が|時点|現在)/g),
         ([, year, month, boundary]) => {
           const numericMonth = Number(month);
@@ -986,13 +1043,11 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:先月|前月|来月|翌月)(?=末|分|の|は|が|時点|現在|\s|$)/g),
+        text.matchAll(/(?:先月|前月|来月|翌月)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(
-        text.matchAll(
-          /(\d+|[〇零一二三四五六七八九十百]+)\s*(?:か月|ヶ月|ケ月|箇月)(?:前|後)(?=末|分|の|は|が|時点|現在|\s|$)/g,
-        ),
+        text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)\s*(?:か月|ヶ月|ケ月|箇月)(?:前|後)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(
