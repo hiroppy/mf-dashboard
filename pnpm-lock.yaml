@@ -98,7 +98,7 @@ importers:
     dependencies:
       '@next/third-parties':
         specifier: 16.2.9
-        version: 16.2.9(next@16.2.9(@opentelemetry/api@1.9.0)(@playwright/test@1.61.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)
+        version: 16.2.9(next@16.2.9(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.61.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)
       lucide-react:
         specifier: 1.20.0
         version: 1.20.0(react@19.2.7)
@@ -285,6 +285,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.3
+      mockdate:
+        specifier: 3.0.5
+        version: 3.0.5
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -4691,6 +4694,9 @@ packages:
   mkdirp-classic@0.5.3:
     resolution: {integrity: sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A==}
 
+  mockdate@3.0.5:
+    resolution: {integrity: sha512-iniQP4rj1FhBdBYS/+eQv7j1tadJ9lJtdzgOpvsOHng/GbcDh2Fhdeq+ZRldrPYdXvCyfFUmFeEwEGXZB5I/AQ==}
+
   module-alias@2.3.3:
     resolution: {integrity: sha512-vN8YITf48QuzKHiWGGFRnf+kM8xcFtUZ5Ba9FeiVkzwp1RS09nIwX7Ac7wWa5gfvyDhwF5Cy/7/21hqG0rqgUQ==}
 
@@ -6531,7 +6537,7 @@ snapshots:
   '@next/swc-win32-x64-msvc@16.2.9':
     optional: true
 
-  '@next/third-parties@16.2.9(next@16.2.9(@opentelemetry/api@1.9.0)(@playwright/test@1.61.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)':
+  '@next/third-parties@16.2.9(next@16.2.9(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.61.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)':
     dependencies:
       next: 16.2.9(@babel/core@7.29.0)(@opentelemetry/api@1.9.0)(@playwright/test@1.61.0)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react: 19.2.7
@@ -9507,6 +9513,8 @@ snapshots:
 
   mkdirp-classic@0.5.3:
     optional: true
+
+  mockdate@3.0.5: {}
 
   module-alias@2.3.3: {}
 

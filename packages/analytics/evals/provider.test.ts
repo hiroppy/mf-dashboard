@@ -92,6 +92,30 @@ describe("FinanceChatProvider", () => {
     );
   });
 
+  it("applies the evaluation date to date-sensitive tools and restores the clock", async () => {
+    const realNow = Date.now();
+    const providerDependencies = createDependencies({
+      generate: vi.fn<ProviderDependencies["generate"]>().mockImplementation(async () => {
+        expect(new Date().toISOString()).toBe("2026-07-31T03:00:00.000Z");
+        return {
+          text: "回答",
+          steps: [
+            {
+              toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+            },
+          ],
+        };
+      }),
+    });
+    const provider = new FinanceChatProvider({}, providerDependencies);
+
+    await provider.callApi("質問", {
+      vars: { evaluationDate: "2026-07-31T03:00:00.000Z" },
+    });
+
+    expect(Date.now()).toBeGreaterThanOrEqual(realNow);
+  });
+
   it("explains missing model configuration", async () => {
     const provider = new FinanceChatProvider({}, createDependencies({ isLLMEnabled: () => false }));
 

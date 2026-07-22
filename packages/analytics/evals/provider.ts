@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
+import MockDate from "mockdate";
 import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
@@ -78,13 +79,19 @@ export default class FinanceChatProvider {
       const group = await this.providerDependencies.getCurrentGroup(db);
       if (!group) throw new Error("demo.db に current group がありません。");
 
-      const response = await this.providerDependencies.generate({
-        model: this.providerDependencies.getModel(),
-        system: getFinanceChatSystemPrompt(evaluationDate),
-        prompt,
-        tools: createFinanceChatTools(db, group.id),
-        stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
-      });
+      MockDate.set(evaluationDate);
+      let response: ChatResponse;
+      try {
+        response = await this.providerDependencies.generate({
+          model: this.providerDependencies.getModel(),
+          system: getFinanceChatSystemPrompt(evaluationDate),
+          prompt,
+          tools: createFinanceChatTools(db, group.id),
+          stopWhen: stepCountIs(FINANCE_CHAT_MAX_TOOL_STEPS),
+        });
+      } finally {
+        MockDate.reset();
+      }
 
       return { output: JSON.stringify(toEvaluationOutput(response)) };
     } catch (error) {
