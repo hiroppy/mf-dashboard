@@ -1682,13 +1682,58 @@ export default function assertFinanceResponse(output: string, context: Assertion
         value: amount,
       }),
     );
+    const visibleScopeMonths = collectVisibleMonths(evidenceOutput).filter((month) =>
+      /^\d{4}-\d{2}$/u.test(month),
+    );
+    const visibleScopeDates = collectDates([evidence.text]).filter((date) =>
+      /^\d{4}-\d{2}-\d{2}$/u.test(date),
+    );
+    const factSupportsVisibleScope = (expected: DataToolFactExpectation) => {
+      if (typeof expected.input !== "object" || expected.input === null) return true;
+      const input = expected.input as Record<string, unknown>;
+      const month = typeof input.month === "string" ? input.month : undefined;
+      const date = typeof input.date === "string" ? input.date : undefined;
+      const startDate = typeof input.startDate === "string" ? input.startDate : undefined;
+      const endDate = typeof input.endDate === "string" ? input.endDate : undefined;
+      const hasTemporalScope =
+        month !== undefined ||
+        date !== undefined ||
+        startDate !== undefined ||
+        endDate !== undefined;
+      if (!hasTemporalScope) return true;
+      if (
+        visibleScopeDates.length > 0 &&
+        !visibleScopeDates.every(
+          (visibleDate) =>
+            (date !== undefined && visibleDate === date) ||
+            (month !== undefined && visibleDate.startsWith(`${month}-`)) ||
+            ((startDate !== undefined || endDate !== undefined) &&
+              (startDate === undefined || visibleDate >= startDate) &&
+              (endDate === undefined || visibleDate <= endDate)),
+        )
+      ) {
+        return false;
+      }
+      return (
+        visibleScopeMonths.length === 0 ||
+        visibleScopeMonths.every(
+          (visibleMonth) =>
+            month === visibleMonth ||
+            date?.startsWith(`${visibleMonth}-`) === true ||
+            startDate?.startsWith(`${visibleMonth}-`) === true ||
+            endDate?.startsWith(`${visibleMonth}-`) === true,
+        )
+      );
+    };
     return [...amounts, ...percentages].flatMap(({ claimLabels, label, value }) => {
-      const numericSupportingFacts = expectedDataToolFacts.filter((expected) =>
-        collectNumericValues(expected.value).some(
-          (expectedValue) =>
-            value === expectedValue ||
-            Math.abs(value - expectedValue) <= Math.max(0.01, Math.abs(expectedValue) * 0.001),
-        ),
+      const numericSupportingFacts = expectedDataToolFacts.filter(
+        (expected) =>
+          factSupportsVisibleScope(expected) &&
+          collectNumericValues(expected.value).some(
+            (expectedValue) =>
+              value === expectedValue ||
+              Math.abs(value - expectedValue) <= Math.max(0.01, Math.abs(expectedValue) * 0.001),
+          ),
       );
       const labelSupportingFacts = numericSupportingFacts.filter((expected) =>
         claimLabels.some((claimLabel) => dataToolFactSupportsLabel(expected, claimLabel)),

@@ -508,6 +508,49 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=313235" });
   });
 
+  it("does not ground a monthly claim with an identical value from another month", () => {
+    const juneResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-06" },
+      output: { totalIncome: 100 },
+    };
+    const julyResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalIncome: 100 },
+    };
+    const wrongPeriodOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [juneResult, julyResult],
+      text: "2026年7月の収入は100円です。",
+      textEvidence: [{ text: "2026年7月の収入は100円です。", dataToolResults: [juneResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(wrongPeriodOutput, {
+        config: {
+          allowedVisibleAmounts: [100],
+          allowedVisibleMonths: ["2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-06" },
+              path: "$.totalIncome",
+              value: 100,
+            },
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalIncome",
+              value: 100,
+            },
+          ],
+          visibleAmountClaims: [{ label: "収入", amount: 100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=100" });
+  });
+
   it("uses the visible label to distinguish equal income and expense facts", () => {
     const incomeResult = {
       toolName: "getMonthlySummaryByMonth",
