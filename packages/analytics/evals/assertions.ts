@@ -1750,14 +1750,21 @@ function collectInvalidCategoryTrendClaims(
   ];
   return knownCategories.flatMap((category) => {
     const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return Array.from(
-      text.matchAll(
+    const trendMatches = [
+      ...text.matchAll(
         new RegExp(
           `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,12}(増加|減少|上昇|低下|増え|減り|上が|下が)(?:しました|しています|ました|りました|っています|った|ったまま)?`,
           "gu",
         ),
       ),
-    ).flatMap((match) => {
+      ...text.matchAll(
+        new RegExp(
+          `(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?[^。！？\\n、,]{0,8}${categoryPattern}(?:は|が)?\\s*(増加|減少|上昇|低下|増え|減り|上が|下が)(?:しました|しています|ました|りました|っています|った|ったまま)?`,
+          "gu",
+        ),
+      ),
+    ];
+    return trendMatches.flatMap((match) => {
       const endIndex = match.index + match[0].length;
       if (
         hasNegatedSuffix(text, endIndex, collectClauseBounds(text, match.index, endIndex).clauseEnd)
@@ -1899,6 +1906,12 @@ function chartPointMatchesFactMonth(
     );
   }
   const sortedMonths = allowedVisibleMonths.filter((month) => /^\d{4}-\d{2}$/u.test(month)).sort();
+  const yearlessMonth = /(?<!\d)(\d{1,2})月/u.exec(label)?.[1];
+  if (yearlessMonth !== undefined) {
+    const suffix = `-${String(Number(yearlessMonth)).padStart(2, "0")}`;
+    const matchingMonths = sortedMonths.filter((month) => month.endsWith(suffix));
+    return matchingMonths.length === 1 && expectedMonth === matchingMonths[0];
+  }
   if (/(?:今月|当月)/u.test(label)) return expectedMonth === sortedMonths.at(-1);
   if (/(?:前月|先月)/u.test(label)) return expectedMonth === sortedMonths.at(-2);
   return true;
@@ -2547,14 +2560,21 @@ export default function assertFinanceResponse(output: string, context: Assertion
       );
     return [...new Set(rows.map(({ description }) => description))].flatMap((description) => {
       const descriptionPattern = description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return Array.from(
-        text.matchAll(
+      const superlativeMatches = [
+        ...text.matchAll(
           new RegExp(
             `${descriptionPattern}(?:は|が).{0,8}(?:最も|一番)(安い|高い|少ない|多い)(?:明細|取引)?`,
             "gu",
           ),
         ),
-      ).flatMap((match) => {
+        ...text.matchAll(
+          new RegExp(
+            `(?:最も|一番)(安い|高い|少ない|多い)(?:明細|取引)(?:は|が)${descriptionPattern}(?:です|でした|である|だ)?`,
+            "gu",
+          ),
+        ),
+      ];
+      return superlativeMatches.flatMap((match) => {
         const endIndex = match.index + match[0].length;
         if (
           hasNegatedSuffix(

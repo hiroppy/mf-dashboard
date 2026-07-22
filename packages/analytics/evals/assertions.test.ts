@@ -1741,6 +1741,29 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(trendOutput)).toMatchObject({ pass: true });
   });
 
+  it("recognizes a period-first category trend", () => {
+    const results = [
+      ["2026-06", 11495],
+      ["2026-07", 11198],
+    ].map(([month, totalAmount]) => ({
+      toolName: "getMonthlyCategoryTotals",
+      input: { month },
+      output: [{ category: "日用品", type: "expense", totalAmount }],
+    }));
+    const text = "前月より日用品が増加しました。";
+    const trendOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(trendOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠のカテゴリ状態"),
+    });
+  });
+
   it.each([
     ["食費は予算を超過しています。", false],
     ["食費は予算を超過しているとは限りません。", true],
@@ -4559,6 +4582,60 @@ describe("assertFinanceResponse", () => {
           allowedVisibleAmounts: [19475],
           allowedVisibleMonths: ["2026-07"],
           expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 19475 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("未根拠の chart values") });
+  });
+
+  it("binds yearless chart labels to their corresponding fact months", () => {
+    const juneResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-06" },
+      output: [{ category: "衣服・美容", type: "expense", totalAmount: 12111 }],
+    };
+    const julyResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [{ category: "衣服・美容", type: "expense", totalAmount: 19475 }],
+    };
+    const chartOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "chart",
+          title: "衣服・美容",
+          chartType: "bar",
+          href: "/0/cf/2026-07",
+          series: [{ name: "衣服・美容", amountType: "expense" }],
+          data: [
+            { label: "6月", values: [19475] },
+            { label: "7月", values: [12111] },
+          ],
+        },
+      ],
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text: "回答", dataToolResults: [juneResult, julyResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(chartOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-06" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 12111 },
+            },
             {
               toolName: "getMonthlyCategoryTotals",
               input: { month: "2026-07" },
@@ -7751,43 +7828,45 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
-  it("validates a transaction superlative against retrieved rows", () => {
-    const searchResult = {
-      toolName: "searchTransactions",
-      input: { date: "2026-07-10", type: "expense" },
-      output: {
-        transactions: [
-          {
-            date: "2026-07-10",
-            description: "成城石井",
-            category: "食費",
-            type: "expense",
-            amount: 3152,
-          },
-          {
-            date: "2026-07-10",
-            description: "東京ガス ガス代",
-            category: "光熱費",
-            type: "expense",
-            amount: 3435,
-          },
-        ],
-      },
-    };
-    const text = "東京ガス ガス代が最も安い明細です。";
-    const superlativeOutput = JSON.stringify({
-      ...JSON.parse(output),
-      text,
-      dataToolResults: [searchResult],
-      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
-    });
+  it.each(["東京ガス ガス代が最も安い明細です。", "最も安い明細は東京ガス ガス代です。"])(
+    "validates a transaction superlative against retrieved rows: %s",
+    (text) => {
+      const searchResult = {
+        toolName: "searchTransactions",
+        input: { date: "2026-07-10", type: "expense" },
+        output: {
+          transactions: [
+            {
+              date: "2026-07-10",
+              description: "成城石井",
+              category: "食費",
+              type: "expense",
+              amount: 3152,
+            },
+            {
+              date: "2026-07-10",
+              description: "東京ガス ガス代",
+              category: "光熱費",
+              type: "expense",
+              amount: 3435,
+            },
+          ],
+        },
+      };
+      const superlativeOutput = JSON.stringify({
+        ...JSON.parse(output),
+        text,
+        dataToolResults: [searchResult],
+        textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
+      });
 
-    expect(
-      assertFinanceResponse(superlativeOutput, {
-        config: { requireTransactionToolGrounding: true },
-      }),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("誤った明細最上級") });
-  });
+      expect(
+        assertFinanceResponse(superlativeOutput, {
+          config: { requireTransactionToolGrounding: true },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("誤った明細最上級") });
+    },
+  );
 
   it("rejects a mismatched category asserted for a retrieved transaction", () => {
     const searchResult = {
