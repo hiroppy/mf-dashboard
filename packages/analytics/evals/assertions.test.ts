@@ -1102,7 +1102,10 @@ describe("assertFinanceResponse", () => {
     ["住宅費以下なのは食費です。", true],
     ["住宅費より食費が多いとは限りません。", true],
     ["食費は収入カテゴリです。", false],
+    ["食費は収入に分類されます。", false],
+    ["食費は入金カテゴリです。", false],
     ["食費は支出カテゴリです。", true],
+    ["食費は出金に分類されます。", true],
   ])("validates a grounded qualitative category claim: %s", (text, pass) => {
     const categoryResult = {
       toolName: "getMonthlyCategoryTotals",
@@ -1120,6 +1123,29 @@ describe("assertFinanceResponse", () => {
     });
 
     expect(assertFinanceResponse(comparisonOutput)).toMatchObject({ pass });
+  });
+
+  it("rejects a category comparison asserted before its retrieval evidence", () => {
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 41837 },
+        { category: "住宅費", type: "expense", totalAmount: 75000 },
+      ],
+    };
+    const text = "食費は住宅費より少ないです。";
+    const earlyComparisonOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [categoryResult],
+      textEvidence: [{ text, dataToolResults: [] }],
+    });
+
+    expect(assertFinanceResponse(earlyComparisonOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤ったカテゴリ間比較"),
+    });
   });
 
   it.each(["収入と支出は同額ではありません。", "収入と支出は同じくらいではありません。"])(
@@ -5624,6 +5650,8 @@ describe("assertFinanceResponse", () => {
 
   it.each([
     ["総資産には不動産が含まれています。", false],
+    ["総資産には不動産もあります。", false],
+    ["総資産は不動産を保有しています。", false],
     ["総資産に不動産が含まれているとは限りません。", true],
   ])("validates an asset-category presence claim from a scalar snapshot: %s", (text, pass) => {
     const compositionOutput = JSON.stringify({ text, cards: JSON.parse(output).cards });
@@ -5632,7 +5660,7 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(compositionOutput, {
         config: {
           forbiddenVisiblePatterns: [
-            "((総資産|保有資産|資産)(?:には|に|は|が).{0,12}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が)?(含まれています|含まれます|含まれている|あります|保有されています)|(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が|は).{0,12}(総資産|保有資産|資産)(?:に|へ)(含まれています|含まれます|含まれている|あります))(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))",
+            "((総資産|保有資産|資産)(?:には|に|は|が).{0,12}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:(?:が|も)?(?:含まれています|含まれます|含まれている|あります|保有されています)|を保有しています)|(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が|は).{0,12}(総資産|保有資産|資産)(?:に|へ)(含まれています|含まれます|含まれている|あります))(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))",
           ],
         },
       }),
@@ -7052,6 +7080,40 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({
       pass: false,
       reason: expect.stringContaining("誤った明細属性: 成城石井:カテゴリ=食費"),
+    });
+  });
+
+  it("rejects an attribute claim for a transaction absent from retrieval evidence", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+        ],
+      },
+    };
+    const text = "架空店のカテゴリは食費です。";
+    const fabricatedAttributeOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [searchResult],
+      textEvidence: [{ text, dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedAttributeOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤った明細属性: 架空店:カテゴリ=食費"),
     });
   });
 

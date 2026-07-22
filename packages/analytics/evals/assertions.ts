@@ -1508,8 +1508,8 @@ function collectMislabeledVisiblePercentages(
   );
 }
 
-function collectCategoryGroups(output: EvaluationOutput) {
-  return output.dataToolResults.flatMap((result) =>
+function collectCategoryGroups(results: DataToolResult[]) {
+  return results.flatMap((result) =>
     result.toolName === "getMonthlyCategoryTotals" && Array.isArray(result.output)
       ? [
           result.output.flatMap((row) =>
@@ -1533,72 +1533,34 @@ function collectCategoryGroups(output: EvaluationOutput) {
   );
 }
 
-function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
-  const categoryGroups = collectCategoryGroups(output);
+function collectInvalidCategoryComparisons(
+  text: string,
+  knownCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+  availableCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+): string[] {
   const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const claims = [output.text, ...collectFacts(output.cards)].flatMap((text) =>
-    categoryGroups.flatMap((categoryTotals) =>
-      categoryTotals.flatMap((subject) =>
-        categoryTotals.flatMap((comparison) => {
-          if (subject.category === comparison.category) return [];
-          const subjectPattern = escapeRegExp(subject.category);
-          const comparisonPattern = escapeRegExp(comparison.category);
-          const patterns = [
-            new RegExp(
-              `${subjectPattern}(?:は|が)${comparisonPattern}(?:より(?:も)?|を)\\s*(多い|少ない|高い|低い|大きい|小さい|上回(?:る|っています|っている|りました)|下回(?:る|っています|っている|りました))`,
-              "gu",
-            ),
-            new RegExp(
-              `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(多い|少ない|高い|低い|大きい|小さい)`,
-              "gu",
-            ),
-            new RegExp(`${subjectPattern}(?:は|が)${comparisonPattern}(以上|以下)`, "gu"),
-            new RegExp(`${comparisonPattern}(以上|以下)(?:なの)?(?:は|が)${subjectPattern}`, "gu"),
-          ];
-          return patterns.flatMap((pattern) =>
-            Array.from(text.matchAll(pattern)).flatMap((match) => {
-              const endIndex = match.index + match[0].length;
-              if (
-                hasNegatedSuffix(
-                  text,
-                  endIndex,
-                  collectClauseBounds(text, match.index, endIndex).clauseEnd,
-                )
-              ) {
-                return [];
-              }
-              const claimsHigher = /(?:多い|高い|大きい|上回|以上)/u.test(match[1]);
-              const includesEquality = /(?:以上|以下)/u.test(match[1]);
-              const relationIsValid = claimsHigher
-                ? includesEquality
-                  ? subject.totalAmount >= comparison.totalAmount
-                  : subject.totalAmount > comparison.totalAmount
-                : includesEquality
-                  ? subject.totalAmount <= comparison.totalAmount
-                  : subject.totalAmount < comparison.totalAmount;
-              return relationIsValid ? [] : [match[0]];
-            }),
-          );
-        }),
-      ),
-    ),
-  );
-  return [...new Set(claims)];
-}
-
-function collectInvalidCategoryTypeClaims(output: EvaluationOutput): string[] {
-  return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
-    collectCategoryGroups(output).flatMap((categories) =>
-      categories.flatMap((category) => {
-        const categoryPattern = category.category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        return Array.from(
-          text.matchAll(
-            new RegExp(
-              `${categoryPattern}(?:は|が)\\s*(収入|支出)(?:カテゴリ|区分|扱い)?(?:です|でした|である|だ)`,
-              "gu",
-            ),
-          ),
-        ).flatMap((match) => {
+  const knownCategories = [
+    ...new Set(knownCategoryGroups.flatMap((group) => group.map(({ category }) => category))),
+  ];
+  const claims = knownCategories.flatMap((subjectCategory) =>
+    knownCategories.flatMap((comparisonCategory) => {
+      if (subjectCategory === comparisonCategory) return [];
+      const subjectPattern = escapeRegExp(subjectCategory);
+      const comparisonPattern = escapeRegExp(comparisonCategory);
+      const patterns = [
+        new RegExp(
+          `${subjectPattern}(?:は|が)${comparisonPattern}(?:より(?:も)?|を)\\s*(多い|少ない|高い|低い|大きい|小さい|上回(?:る|っています|っている|りました)|下回(?:る|っています|っている|りました))`,
+          "gu",
+        ),
+        new RegExp(
+          `${comparisonPattern}より(?:も)?${subjectPattern}(?:は|が)?\\s*(多い|少ない|高い|低い|大きい|小さい)`,
+          "gu",
+        ),
+        new RegExp(`${subjectPattern}(?:は|が)${comparisonPattern}(以上|以下)`, "gu"),
+        new RegExp(`${comparisonPattern}(以上|以下)(?:なの)?(?:は|が)${subjectPattern}`, "gu"),
+      ];
+      return patterns.flatMap((pattern) =>
+        Array.from(text.matchAll(pattern)).flatMap((match) => {
           const endIndex = match.index + match[0].length;
           if (
             hasNegatedSuffix(
@@ -1609,12 +1571,59 @@ function collectInvalidCategoryTypeClaims(output: EvaluationOutput): string[] {
           ) {
             return [];
           }
-          const claimedType = match[1] === "収入" ? "income" : "expense";
-          return category.type === claimedType ? [] : [`${category.category}=${match[1]}`];
-        });
-      }),
-    ),
+          const claimsHigher = /(?:多い|高い|大きい|上回|以上)/u.test(match[1]);
+          const includesEquality = /(?:以上|以下)/u.test(match[1]);
+          const relationIsValid = availableCategoryGroups.some((group) => {
+            const subject = group.find(({ category }) => category === subjectCategory);
+            const comparison = group.find(({ category }) => category === comparisonCategory);
+            if (subject === undefined || comparison === undefined) return false;
+            return claimsHigher
+              ? includesEquality
+                ? subject.totalAmount >= comparison.totalAmount
+                : subject.totalAmount > comparison.totalAmount
+              : includesEquality
+                ? subject.totalAmount <= comparison.totalAmount
+                : subject.totalAmount < comparison.totalAmount;
+          });
+          return relationIsValid ? [] : [match[0]];
+        }),
+      );
+    }),
   );
+  return [...new Set(claims)];
+}
+
+function collectInvalidCategoryTypeClaims(
+  text: string,
+  knownCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+  availableCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+): string[] {
+  const knownCategories = [
+    ...new Set(knownCategoryGroups.flatMap((group) => group.map(({ category }) => category))),
+  ];
+  return knownCategories.flatMap((category) => {
+    const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return Array.from(
+      text.matchAll(
+        new RegExp(
+          `${categoryPattern}(?:は|が)\\s*(収入|支出|入金|出金)(?:(?:カテゴリ|区分|扱い)?(?:です|でした|である|だ)|に分類(?:されます|されています|されました|された))`,
+          "gu",
+        ),
+      ),
+    ).flatMap((match) => {
+      const endIndex = match.index + match[0].length;
+      if (
+        hasNegatedSuffix(text, endIndex, collectClauseBounds(text, match.index, endIndex).clauseEnd)
+      ) {
+        return [];
+      }
+      const claimedType = /^(?:収入|入金)$/u.test(match[1]) ? "income" : "expense";
+      const matchesEvidence = availableCategoryGroups.some((group) =>
+        group.some((row) => row.category === category && row.type === claimedType),
+      );
+      return matchesEvidence ? [] : [`${category}=${match[1]}`];
+    });
+  });
 }
 
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
@@ -1757,8 +1766,35 @@ export default function assertFinanceResponse(output: string, context: Assertion
       );
     })
     .map(([claim]) => claim);
-  const invalidCategoryComparisons = collectInvalidCategoryComparisons(parsed);
-  const invalidCategoryTypeClaims = collectInvalidCategoryTypeClaims(parsed);
+  const knownCategoryGroups = collectCategoryGroups(parsed.dataToolResults);
+  const categoryTextEvidence =
+    parsed.textEvidence.length > 0
+      ? parsed.textEvidence
+      : [{ text: parsed.text, allowedHrefs: [], dataToolResults: [] }];
+  const invalidCategoryComparisons = [
+    ...categoryTextEvidence.flatMap((evidence) =>
+      collectInvalidCategoryComparisons(
+        evidence.text,
+        knownCategoryGroups,
+        collectCategoryGroups(evidence.dataToolResults),
+      ),
+    ),
+    ...collectFacts(parsed.cards).flatMap((text) =>
+      collectInvalidCategoryComparisons(text, knownCategoryGroups, knownCategoryGroups),
+    ),
+  ];
+  const invalidCategoryTypeClaims = [
+    ...categoryTextEvidence.flatMap((evidence) =>
+      collectInvalidCategoryTypeClaims(
+        evidence.text,
+        knownCategoryGroups,
+        collectCategoryGroups(evidence.dataToolResults),
+      ),
+    ),
+    ...collectFacts(parsed.cards).flatMap((text) =>
+      collectInvalidCategoryTypeClaims(text, knownCategoryGroups, knownCategoryGroups),
+    ),
+  ];
   const unsupportedBareAmountUnits = collectBareVisibleAmountMatches(
     parsed,
     config.visibleAmountClaims ?? [],
@@ -2065,95 +2101,75 @@ export default function assertFinanceResponse(output: string, context: Assertion
         ),
       ]
     : [];
-  const knownTransactionDescriptions = [
-    ...new Set(
-      retrievedTransactionRows.flatMap((transaction) =>
-        typeof transaction === "object" &&
-        transaction !== null &&
-        "description" in transaction &&
-        typeof transaction.description === "string"
-          ? [transaction.description]
-          : [],
-      ),
-    ),
-  ];
   const collectMismatchedTransactionAttributes = (text: string, results: DataToolResult[]) => {
     const availableRows = results.flatMap((result) =>
       result.toolName === "searchTransactions"
         ? collectValuesAtPath(result.output, "$.transactions.*")
         : [],
     );
-    return knownTransactionDescriptions.flatMap((description) => {
-      const descriptionPattern = description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const matchingRows = availableRows.filter(
+    const matchingRows = (description: string) =>
+      availableRows.filter(
         (transaction) =>
           typeof transaction === "object" &&
           transaction !== null &&
           "description" in transaction &&
           normalize(String(transaction.description)) === normalize(description),
       );
-      const mismatches: string[] = [];
-      for (const match of text.matchAll(
-        new RegExp(
-          `${descriptionPattern}のカテゴリ(?:は|が)\\s*([^。！？\\n]+?)(?:です|でした|である|だ)(?=[。！？\\n]|$)`,
-          "gu",
-        ),
-      )) {
-        if (
-          !matchingRows.some(
-            (transaction) =>
-              typeof transaction === "object" &&
-              transaction !== null &&
-              "category" in transaction &&
-              normalize(String(transaction.category)) === normalize(match[1]),
-          )
-        ) {
-          mismatches.push(`${description}:カテゴリ=${match[1]}`);
-        }
+    const mismatches: string[] = [];
+    for (const match of text.matchAll(
+      /(?:^|[。！？\n])\s*([^。！？\n]{1,80}?)のカテゴリ(?:は|が)\s*([^。！？\n]+?)(?:です|でした|である|だ)(?=[。！？\n]|$)/gu,
+    )) {
+      const description = match[1].trim();
+      if (
+        !matchingRows(description).some(
+          (transaction) =>
+            typeof transaction === "object" &&
+            transaction !== null &&
+            "category" in transaction &&
+            normalize(String(transaction.category)) === normalize(match[2]),
+        )
+      ) {
+        mismatches.push(`${description}:カテゴリ=${match[2]}`);
       }
-      for (const match of text.matchAll(
-        new RegExp(
-          `${descriptionPattern}の(?:種別|区分|タイプ)(?:は|が)\\s*(収入|支出|入金|出金|income|expense)(?:です|でした|である|だ)(?=[。！？\\n]|$)`,
-          "giu",
-        ),
-      )) {
-        const claimedType = /^(?:収入|入金|income)$/iu.test(match[1]) ? "income" : "expense";
-        if (
-          !matchingRows.some(
-            (transaction) =>
-              typeof transaction === "object" &&
-              transaction !== null &&
-              "type" in transaction &&
-              transaction.type === claimedType,
-          )
-        ) {
-          mismatches.push(`${description}:種別=${match[1]}`);
-        }
+    }
+    for (const match of text.matchAll(
+      /(?:^|[。！？\n])\s*([^。！？\n]{1,80}?)の(?:種別|区分|タイプ)(?:は|が)\s*(収入|支出|入金|出金|income|expense)(?:です|でした|である|だ)(?=[。！？\n]|$)/giu,
+    )) {
+      const description = match[1].trim();
+      const claimedType = /^(?:収入|入金|income)$/iu.test(match[2]) ? "income" : "expense";
+      if (
+        !matchingRows(description).some(
+          (transaction) =>
+            typeof transaction === "object" &&
+            transaction !== null &&
+            "type" in transaction &&
+            transaction.type === claimedType,
+        )
+      ) {
+        mismatches.push(`${description}:種別=${match[2]}`);
       }
-      for (const match of text.matchAll(
-        new RegExp(
-          `${descriptionPattern}の(?:日付|取引日)(?:は|が)\\s*(?:(\\d{4})[-/.年](\\d{1,2})[-/.月](\\d{1,2})日?|(\\d{1,2})月(\\d{1,2})日)(?:です|でした|である|だ)(?=[。！？\\n]|$)`,
-          "gu",
-        ),
-      )) {
-        const claimedDate =
-          match[1] === undefined
-            ? `*-${String(match[4]).padStart(2, "0")}-${String(match[5]).padStart(2, "0")}`
-            : `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
-        if (
-          !matchingRows.some((transaction) => {
-            const actualDate =
-              typeof transaction === "object" && transaction !== null && "date" in transaction
-                ? String(transaction.date)
-                : "";
-            return claimedDate === actualDate || claimedDate === `*-${actualDate.slice(5)}`;
-          })
-        ) {
-          mismatches.push(`${description}:日付=${claimedDate}`);
-        }
+    }
+    for (const match of text.matchAll(
+      /(?:^|[。！？\n])\s*([^。！？\n]{1,80}?)の(?:日付|取引日)(?:は|が)\s*(?:(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?|(\d{1,2})月(\d{1,2})日)(?:です|でした|である|だ)(?=[。！？\n]|$)/gu,
+    )) {
+      const description = match[1].trim();
+      const claimedDate =
+        match[2] === undefined
+          ? `*-${String(match[5]).padStart(2, "0")}-${String(match[6]).padStart(2, "0")}`
+          : `${match[2]}-${String(match[3]).padStart(2, "0")}-${String(match[4]).padStart(2, "0")}`;
+      if (
+        !matchingRows(description).some((transaction) => {
+          const actualDate =
+            typeof transaction === "object" && transaction !== null && "date" in transaction
+              ? String(transaction.date)
+              : "";
+          return claimedDate === actualDate || claimedDate === `*-${actualDate.slice(5)}`;
+        })
+      ) {
+        mismatches.push(`${description}:日付=${claimedDate}`);
       }
-      return mismatches;
-    });
+    }
+    return mismatches;
   };
   const mismatchedTransactionAttributes = config.requireTransactionToolGrounding
     ? [
