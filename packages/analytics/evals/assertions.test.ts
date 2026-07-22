@@ -4206,6 +4206,39 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("accepts a configured alternative card-type set", () => {
+    const chartOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "前月との比較です。",
+        },
+        {
+          type: "chart",
+          title: "前月比較",
+          chartType: "bar",
+          href: "/0/cf/2026-07",
+          series: [{ name: "支出", amountType: "expense" }],
+          data: [
+            { label: "前月", values: [100] },
+            { label: "今月", values: [80] },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(chartOutput, {
+        config: {
+          allowedCardTypeSets: [["insight"], ["insight", "chart"]],
+          allowedVisibleAmounts: [80, 100],
+        },
+      }),
+    ).toMatchObject({ pass: true, reason: "期待する最終応答です。" });
+  });
+
   it("rejects an unexpected route on any card", () => {
     const mixedRouteOutput = JSON.stringify({
       text: "回答",

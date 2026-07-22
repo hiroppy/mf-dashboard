@@ -72,6 +72,7 @@ interface AssertionContext {
     allowedVisibleMonths?: string[];
     allowedVisiblePercentages?: number[];
     allowedVisibleTransactionCounts?: number[];
+    allowedCardTypeSets?: string[][];
     expectedCardFacts?: string[];
     expectedCardActionFacts?: CardTextFactExpectation[];
     expectedCardHeadingFacts?: CardTextFactExpectation[];
@@ -2473,10 +2474,15 @@ export default function assertFinanceResponse(output: string, context: Assertion
     );
   const actualTypes = parsed.cards.map(({ type }) => type);
   const expectedTypes = config.expectedCardTypes ?? [];
+  const allowedTypeSets =
+    config.allowedCardTypeSets ?? (expectedTypes.length > 0 ? [expectedTypes] : []);
   const cardTypesMismatch =
-    expectedTypes.length > 0 &&
-    (actualTypes.length !== expectedTypes.length ||
-      actualTypes.some((actual, index) => actual !== expectedTypes[index]));
+    allowedTypeSets.length > 0 &&
+    !allowedTypeSets.some(
+      (allowedTypes) =>
+        actualTypes.length === allowedTypes.length &&
+        actualTypes.every((actual, index) => actual === allowedTypes[index]),
+    );
   const actualRoutes = collectRoutes(parsed);
   const cardRoutes = collectCardRoutes(parsed);
   const routeMismatch =
@@ -2602,7 +2608,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
     insightMetricsMismatch ? "insight metrics 不一致" : undefined,
     insightActionMismatch ? `insight action 不一致: ${expectedInsightActionPattern}` : undefined,
     cardTypesMismatch
-      ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`
+      ? `card types 不一致: expected=${allowedTypeSets.map((types) => types.join(",")).join("|")} actual=${actualTypes.join(",")}`
       : undefined,
     routeMismatch
       ? `route 不一致: expected=${config.expectedRoute} actual=${actualRoutes.join(",") || "none"}`
