@@ -307,9 +307,20 @@ CODEX_HOME=/absolute/path/to/.codex
 CODEX_EXEC_TIMEOUT_MS=120000
 ```
 
-この Codex 経路は、crawler をホスト上で直接実行する場合だけ対応する。Docker Compose の crawler
+この Codex 経路は、POSIX host 上で crawler を直接実行する場合だけ対応する。Windows は descendant process
+を確実に停止する POSIX process-group isolation を利用できないため未対応。Docker Compose の crawler
 コンテナには Codex CLI、credential、`AI_BACKEND` / `CODEX_*` を渡さないため、Compose で運用する場合は
 上記の AI provider 経路（`AI_BACKEND=ai-sdk`）を利用する。
+
+host の crawler command は root `.env` を自動で読み込まない。Codex 経路を使う場合は、同じ POSIX shell で
+`.env` を export してから起動する。
+
+```sh
+set -a
+. ./.env
+set +a
+pnpm --filter @mf-dashboard/crawler dev:scrape
+```
 
 `CODEX_HOME` は file-backed credential が必要なため、事前に
 `codex login --config 'cli_auth_credentials_store="file"'` を実行する。

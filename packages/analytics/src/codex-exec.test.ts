@@ -162,6 +162,22 @@ describe("generateWithCodexExec", () => {
     );
   });
 
+  test("bounds isolated credentials before reading their contents", async () => {
+    await createFixture(`
+      while [ "$#" -gt 0 ]; do
+        if [ "$1" = "--output-last-message" ]; then shift; output="$1"; fi
+        shift
+      done
+      cat >/dev/null
+      dd if=/dev/zero of="$CODEX_HOME/auth.json" bs=1048577 count=1 2>/dev/null
+      printf 'ok' > "$output"
+    `);
+
+    await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
+      "codex exec isolated credentials exceeded its size limit",
+    );
+  });
+
   test("terminates timed-out descendants in the Codex process group", async () => {
     const grandchildPidPath = join(tmpdir(), `hir115-grandchild-${process.pid}.pid`);
     temporaryDirectories.push(grandchildPidPath);

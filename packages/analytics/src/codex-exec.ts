@@ -8,7 +8,6 @@ import {
   mkdtemp,
   open,
   readdir,
-  readFile,
   realpath,
   rm,
   stat,
@@ -217,22 +216,68 @@ function sourceAuthPath(): string {
   return join(home, "auth.json");
 }
 
-async function readAuth(signal: AbortSignal): Promise<Buffer> {
-  let auth: Buffer;
+async function readBoundedHandle(
+  handle: Awaited<ReturnType<typeof open>>,
+  limit: number,
+  signal: AbortSignal,
+  errorMessage: string,
+): Promise<Buffer> {
+  const buffer = Buffer.alloc(limit + 1);
+  let offset = 0;
+  while (offset < buffer.byteLength) {
+    const { bytesRead } = await raceSignal(
+      handle.read(buffer, offset, buffer.byteLength - offset, offset),
+      signal,
+    );
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  if (offset > limit) throw new Error(errorMessage);
+  return buffer.subarray(0, offset);
+}
+
+async function readBoundedFile(
+  path: string,
+  limit: number,
+  signal: AbortSignal,
+  errorMessage: string,
+): Promise<Buffer> {
+  const handle = await raceSignal(open(path, "r"), signal);
   try {
-    const metadata = await raceSignal(lstat(sourceAuthPath()), signal);
-    if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error("invalid file");
+    const metadata = await raceSignal(handle.stat(), signal);
+    if (!metadata.isFile() || metadata.size > limit) throw new Error(errorMessage);
+    return await readBoundedHandle(handle, limit, signal, errorMessage);
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readAuth(signal: AbortSignal): Promise<Buffer> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await raceSignal(
+      open(sourceAuthPath(), constants.O_RDONLY | constants.O_NOFOLLOW),
+      signal,
+    );
+    const metadata = await raceSignal(handle.stat(), signal);
+    if (!metadata.isFile() || metadata.size > MAX_AUTH_BYTES) throw new Error("invalid file");
     if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
       throw new Error("insecure mode");
     }
-    auth = await raceSignal(readFile(sourceAuthPath()), signal);
-    if (auth.byteLength > MAX_AUTH_BYTES) throw new Error("oversized");
+    const auth = await readBoundedHandle(
+      handle,
+      MAX_AUTH_BYTES,
+      signal,
+      "codex exec credentials exceeded their size limit",
+    );
     JSON.parse(auth.toString("utf8"));
+    return auth;
   } catch {
     signal.throwIfAborted();
     throw new Error("codex exec requires valid file-backed Codex credentials");
+  } finally {
+    await handle?.close();
   }
-  return auth;
 }
 
 async function createEnvironment(
@@ -537,23 +582,14 @@ function buildPrompt(prompt: string, toolData: Record<string, unknown>): string 
 }
 
 async function readBoundedOutput(path: string, signal: AbortSignal): Promise<string> {
-  const handle = await raceSignal(open(path, "r"), signal);
-  try {
-    const buffer = Buffer.alloc(MAX_OUTPUT_BYTES + 1);
-    let offset = 0;
-    while (offset < buffer.byteLength) {
-      const { bytesRead } = await raceSignal(
-        handle.read(buffer, offset, buffer.byteLength - offset, offset),
-        signal,
-      );
-      if (bytesRead === 0) break;
-      offset += bytesRead;
-    }
-    if (offset > MAX_OUTPUT_BYTES) throw new Error("codex exec output exceeded its size limit");
-    return buffer.subarray(0, offset).toString("utf8");
-  } finally {
-    await handle.close();
-  }
+  return (
+    await readBoundedFile(
+      path,
+      MAX_OUTPUT_BYTES,
+      signal,
+      "codex exec output exceeded its size limit",
+    )
+  ).toString("utf8");
 }
 
 function parseModel(stderr: string): string {
@@ -648,7 +684,12 @@ export async function generateWithCodexExec<T>(
     ];
     const processResult = await runProcess(environment, args, controller.signal, prompt, true);
     const text = await readBoundedOutput(environment.outputPath, controller.signal);
-    const currentAuth = await raceSignal(readFile(environment.authPath), controller.signal);
+    const currentAuth = await readBoundedFile(
+      environment.authPath,
+      MAX_AUTH_BYTES,
+      controller.signal,
+      "codex exec isolated credentials exceeded its size limit",
+    );
     if (!currentAuth.equals(environment.initialAuth)) {
       throw new Error(
         "codex exec refreshed isolated credentials; run codex login again on the host",
