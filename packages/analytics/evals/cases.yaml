@@ -349,14 +349,6 @@
                 amountType: expense,
                 category: 食費,
               }
-            - {
-                ids: ["1252", demo_001283],
-                date: "2026-07-03",
-                description: サンマルクカフェ,
-                amount: 761,
-                amountType: expense,
-                category: 食費,
-              }
         requireTransactionToolGrounding: true
         expectedCardTypes: [summary, categoryBreakdown, transactionList]
         expectedRoute: /0/cf/2026-07

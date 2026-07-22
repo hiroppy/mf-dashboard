@@ -609,15 +609,31 @@ function collectMislabeledVisibleAmounts(
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
     );
+    const hasDirectionalSuffix = /^\s*(?:の\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
+      text.slice(endIndex, clauseEnd),
+    );
     const applicableClaims =
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
-        : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+        : hasDirectionalSuffix
+          ? []
+          : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+    const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
+    if (
+      labelBeforeIndex >= clauseStart &&
+      /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
+        text.slice(labelBeforeIndex + nearestLabel.length, index),
+      )
+    ) {
+      return [`${nearestLabel}=${amount}(否定)`];
+    }
     if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
       return [`${nearestLabel}=${amount}(否定)`];
     }
+    if (applicableClaims.length === 0) {
+      return hasDirectionalSuffix ? [`${nearestLabel}=${amount}(増減)`] : [];
+    }
     if (
-      applicableClaims.length === 0 ||
       applicableClaims.some(
         (claim) =>
           claim.amount === amount ||
@@ -763,6 +779,10 @@ function collectDates(rawTexts: string[]): string[] {
     return [
       ...Array.from(
         text.matchAll(/(?:昨日|一昨日|前日|明日|明後日|翌日)(?=の|は|が|時点|現在)/g),
+        ([relativeDay]) => `relative-${relativeDay}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)日(?:前|後)(?=の|は|が|時点|現在)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(

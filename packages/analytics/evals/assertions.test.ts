@@ -844,6 +844,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a monetary label negated before another label's amount", () => {
+    const denialOutput = JSON.stringify({
+      text: "総資産ではなく総負債は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(denialOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it.each(["未満", "超"])("rejects a strict %s qualifier at the grounded boundary", (qualifier) => {
     const boundedOutput = JSON.stringify({
       text: `総資産は5,683,100円${qualifier}です。`,
@@ -1372,6 +1395,29 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a directional use of an amount configured only as a level", () => {
+    const directionalOutput = JSON.stringify({
+      text: "総資産は5,683,100円減少しました。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(directionalOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("scopes a period marker to its adjacent amount in one clause", () => {
@@ -2303,6 +2349,52 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects an older row outside the deterministic truncated subset", () => {
+    const transactionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-old",
+              date: "2026-07-03",
+              description: "店舗 B",
+              category: "食費",
+              amount: 761,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-new"],
+                date: "2026-07-31",
+                description: "店舗 A",
+                category: "食費",
+                amount: 2638,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("requires every displayed transaction to be retrieved before presentation", () => {
     const transactionOutput = JSON.stringify({
       dataToolResults: [
@@ -3125,6 +3217,26 @@ describe("assertFinanceResponse", () => {
       ).toMatchObject({ pass: false });
     },
   );
+
+  it("rejects a snapshot labeled with a numeric relative day", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "2日前の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: { allowedVisibleDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視日付: relative-2日前" });
+  });
 
   it("rejects a snapshot labeled as tomorrow", () => {
     const futureSnapshotOutput = JSON.stringify({
