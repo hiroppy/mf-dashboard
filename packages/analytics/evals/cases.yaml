@@ -9,6 +9,7 @@
     - type: javascript
       value: file://./assertions.ts
       config:
+        allowedVisibleAmounts: [313235, 219894, 93341]
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -30,6 +31,37 @@
     - type: javascript
       value: file://./assertions.ts
       config:
+        allowedVisibleAmounts:
+          [
+            41837,
+            219894,
+            2638,
+            2744,
+            2142,
+            860,
+            687,
+            489,
+            1537,
+            666,
+            1647,
+            2668,
+            1004,
+            3393,
+            941,
+            3037,
+            759,
+            1678,
+            2016,
+            577,
+            3152,
+            460,
+            861,
+            391,
+            1985,
+            3112,
+            1632,
+            761,
+          ]
         expectedCardFacts: [食費]
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }
@@ -262,6 +294,7 @@
     - type: javascript
       value: file://./assertions.ts
       config:
+        allowedVisibleAmounts: [6587, 3435, 3152]
         expectedMetrics:
           - { label: 支出, amount: 6587, amountType: expense }
         expectedTransactions:
@@ -295,6 +328,7 @@
     - type: javascript
       value: file://./assertions.ts
       config:
+        allowedVisibleAmounts: [5683100]
         expectedMetrics:
           - { label: 総資産, amount: 5683100, amountType: balance }
         expectedCardTypes: [summary]
@@ -313,6 +347,7 @@
     - type: javascript
       value: file://./assertions.ts
       config:
+        allowedVisibleAmounts: [41837, 19475, 11198, 49922, 12111, 11495, 8085, 7364, 297]
         expectedInsightFacts: [2026-07]
         requiredInsightPatterns:
           - (食費|衣服・美容|日用品)

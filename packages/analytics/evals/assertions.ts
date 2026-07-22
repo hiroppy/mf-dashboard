@@ -28,6 +28,7 @@ interface TransactionGroupExpectation {
 
 interface AssertionContext {
   config?: {
+    allowedVisibleAmounts?: number[];
     expectedCardFacts?: string[];
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
@@ -154,11 +155,23 @@ function collectRoutes(output: EvaluationOutput): string[] {
   return [...new Set([...cardRoutes, ...textRoutes])];
 }
 
+function collectVisibleAmounts(output: EvaluationOutput): number[] {
+  const visibleText = [output.text, ...collectFacts(output.cards)].join("\n");
+  return Array.from(
+    visibleText.matchAll(/(?:[¥￥]\s*([\d,]+)|([\d,]+)\s*円)/g),
+    ([, prefixedAmount, suffixedAmount]) =>
+      Number(String(prefixedAmount ?? suffixedAmount).replaceAll(",", "")),
+  );
+}
+
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
   const parsed = parseOutput(output);
   if (!parsed) return { pass: false, score: 0, reason: "text/cards の評価 JSON が不正です。" };
 
   const config = context.config ?? {};
+  const unexpectedVisibleAmounts = collectVisibleAmounts(parsed).filter(
+    (amount) => !(config.allowedVisibleAmounts ?? []).includes(amount),
+  );
   const cardFacts = collectFacts(parsed.cards);
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
@@ -246,6 +259,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (actualRoutes.length === 0 || actualRoutes.some((route) => route !== config.expectedRoute));
 
   const failures = [
+    unexpectedVisibleAmounts.length > 0
+      ? `未許可の可視金額: ${[...new Set(unexpectedVisibleAmounts)].join(",")}`
+      : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     summaryMetricsMismatch
       ? `summary metrics 不一致: expected=${expectedMetrics.map(({ label, amount }) => `${label}=${amount}`).join(",")}`

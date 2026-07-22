@@ -35,6 +35,30 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("rejects an undeclared monetary claim in visible text", () => {
+    const fabricatedAmountOutput = JSON.stringify({
+      text: "支出は999,999円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          description: "支出は¥999999です。",
+          metrics: [{ label: "支出", amount: 219894, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [219894],
+          expectedMetrics: [{ label: "支出", amount: 219894, amountType: "expense" }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視金額: 999999" });
+  });
+
   it("reports every missing expectation", () => {
     const result = assertFinanceResponse(output, {
       config: {
