@@ -124,14 +124,14 @@ describe("assertFinanceResponse", () => {
       ],
     });
 
-    expect(
-      assertFinanceResponse(bareAmountOutput, {
-        config: {
-          allowedVisibleAmounts: [93341],
-          visibleAmountClaims: [{ label: "収支", amount: 93341 }],
-        },
-      }),
-    ).toMatchObject({ pass: false, reason: "未許可の可視金額: 999999" });
+    const result = assertFinanceResponse(bareAmountOutput, {
+      config: {
+        allowedVisibleAmounts: [93341],
+        visibleAmountClaims: [{ label: "収支", amount: 93341 }],
+      },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("未許可の可視金額: 999999");
   });
 
   it("preserves the sign of visible monetary claims", () => {
@@ -180,6 +180,33 @@ describe("assertFinanceResponse", () => {
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "食費を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(wrongRoleOutput, {
+        config: {
+          allowedVisibleAmounts: [41837, 49922, 8085],
+          visibleAmountClaims: [
+            { label: "食費", amount: 41837 },
+            { label: "食費", amount: 49922, rolePattern: "(前月|先月|比較)" },
+            { label: "食費", amount: 8085, rolePattern: "(差額|差|減少)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 食費=8085" });
+  });
+
+  it("applies role validation to monetary claims without a unit", () => {
+    const wrongRoleOutput = JSON.stringify({
+      text: "2026-07の食費は8,085です。",
       cards: [
         {
           type: "insight",
@@ -894,6 +921,58 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(localizedMonthOutput, {
         config: { expectedInsightFacts: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("binds visible months to current and comparison roles", () => {
+    const reversedMonthsOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026年6月の衣服・美容は前月（2026年7月）より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(reversedMonthsOutput, {
+        config: {
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("accepts visible months in their expected comparison roles", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026年7月の衣服・美容は前月（2026年6月）より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
       }),
     ).toMatchObject({ pass: true });
   });
