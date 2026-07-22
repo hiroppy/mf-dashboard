@@ -26,6 +26,12 @@ export interface ChatResponse {
   }>;
 }
 
+interface DataToolResult {
+  toolName: string;
+  input: unknown;
+  output: unknown;
+}
+
 export interface ProviderDependencies {
   generate: (options: Parameters<typeof generateText>[0]) => Promise<ChatResponse>;
   getCurrentGroup: typeof getCurrentGroup;
@@ -74,14 +80,11 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
   const allowedHrefs = new Set<string>();
   let allowedHrefsAtPresentation: string[] = [];
-  const dataToolResults: Array<{ toolName: string; input: unknown; output: unknown }> = [];
-  let dataToolResultsAtPresentation: Array<{
-    toolName: string;
-    input: unknown;
-    output: unknown;
-  }> = [];
+  const dataToolResults: DataToolResult[] = [];
+  let dataToolResultsAtPresentation: DataToolResult[] = [];
   const presentations: unknown[] = [];
   const visibleText: string[] = [];
+  const textEvidence: Array<{ text: string; dataToolResults: DataToolResult[] }> = [];
   let hasStepText = false;
 
   for (const step of response.steps) {
@@ -89,7 +92,9 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     const dataToolResultsBeforeStep = [...dataToolResults];
     if (step.text !== undefined) {
       hasStepText = true;
-      visibleText.push(sanitizeFinanceChatLinks(step.text, allowedHrefs));
+      const text = sanitizeFinanceChatLinks(step.text, allowedHrefs);
+      visibleText.push(text);
+      textEvidence.push({ text, dataToolResults: dataToolResultsBeforeStep });
     }
 
     for (const { toolName, input, output } of step.toolResults) {
@@ -120,12 +125,16 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     );
   }
 
+  const text = hasStepText
+    ? visibleText.join("")
+    : sanitizeFinanceChatLinks(response.text, allowedHrefs);
   return {
     allowedHrefs: allowedHrefsAtPresentation,
     dataToolResults: dataToolResultsAtPresentation,
-    text: hasStepText
-      ? visibleText.join("")
-      : sanitizeFinanceChatLinks(response.text, allowedHrefs),
+    text,
+    textEvidence: hasStepText
+      ? textEvidence
+      : [{ text, dataToolResults: dataToolResultsAtPresentation }],
     cards: presentations[0],
   };
 }

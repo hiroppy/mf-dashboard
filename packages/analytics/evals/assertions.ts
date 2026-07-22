@@ -92,9 +92,16 @@ interface AssertionContext {
 
 interface EvaluationOutput {
   allowedHrefs: string[];
-  dataToolResults: Array<{ toolName: string; input: unknown; output: unknown }>;
+  dataToolResults: DataToolResult[];
   text: string;
+  textEvidence: Array<{ text: string; dataToolResults: DataToolResult[] }>;
   cards: FinanceChatCard[];
+}
+
+interface DataToolResult {
+  toolName: string;
+  input: unknown;
+  output: unknown;
 }
 
 type TransactionRow = Extract<FinanceChatCard, { type: "transactionList" }>["transactions"][number];
@@ -104,14 +111,11 @@ function parseOutput(output: string): EvaluationOutput | undefined {
     const value = JSON.parse(output) as Partial<EvaluationOutput>;
     const cards = financeChatCardsSchema.safeParse(value.cards);
     if (typeof value.text !== "string" || !cards.success) return undefined;
-    return {
-      allowedHrefs: Array.isArray(value.allowedHrefs)
-        ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
-        : [],
-      dataToolResults: Array.isArray(value.dataToolResults)
-        ? value.dataToolResults
+    const parseDataToolResults = (results: unknown): DataToolResult[] =>
+      Array.isArray(results)
+        ? results
             .filter(
-              (result): result is { toolName: string; input: unknown; output: unknown } =>
+              (result): result is { toolName: string; input?: unknown; output: unknown } =>
                 typeof result === "object" &&
                 result !== null &&
                 "toolName" in result &&
@@ -119,8 +123,30 @@ function parseOutput(output: string): EvaluationOutput | undefined {
                 "output" in result,
             )
             .map((result) => ({ ...result, input: "input" in result ? result.input : undefined }))
+        : [];
+    return {
+      allowedHrefs: Array.isArray(value.allowedHrefs)
+        ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
         : [],
+      dataToolResults: parseDataToolResults(value.dataToolResults),
       text: value.text,
+      textEvidence: Array.isArray(value.textEvidence)
+        ? value.textEvidence.flatMap((evidence) =>
+            typeof evidence === "object" &&
+            evidence !== null &&
+            "text" in evidence &&
+            typeof evidence.text === "string"
+              ? [
+                  {
+                    text: evidence.text,
+                    dataToolResults: parseDataToolResults(
+                      "dataToolResults" in evidence ? evidence.dataToolResults : [],
+                    ),
+                  },
+                ]
+              : [],
+          )
+        : [],
       cards: cards.data,
     };
   } catch {
@@ -180,6 +206,25 @@ function collectValuesAtPath(value: unknown, path: string): unknown[] {
     },
     [value],
   );
+}
+
+function dataToolResultMatches(result: DataToolResult, expected: DataToolFactExpectation): boolean {
+  return (
+    result.toolName === expected.toolName &&
+    (expected.input === undefined || matchesPartial(result.input, expected.input)) &&
+    collectValuesAtPath(result.output, expected.path).some((actual) =>
+      matchesPartial(actual, expected.value),
+    )
+  );
+}
+
+function collectNumericValues(value: unknown): number[] {
+  if (typeof value === "number") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectNumericValues);
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap(collectNumericValues);
+  }
+  return [];
 }
 
 function includesFact(actualFacts: string[], expected: string): boolean {
@@ -1183,17 +1228,38 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
   const cardFacts = collectFacts(parsed.cards);
-  const missingDataToolFacts = (config.expectedDataToolFacts ?? []).filter(
-    (expected) =>
-      !parsed.dataToolResults.some(
-        (result) =>
-          result.toolName === expected.toolName &&
-          (expected.input === undefined || matchesPartial(result.input, expected.input)) &&
-          collectValuesAtPath(result.output, expected.path).some((actual) =>
-            matchesPartial(actual, expected.value),
-          ),
-      ),
+  const expectedDataToolFacts = config.expectedDataToolFacts ?? [];
+  const missingDataToolFacts = expectedDataToolFacts.filter(
+    (expected) => !parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
   );
+  const ungroundedTextAmounts = parsed.textEvidence.flatMap((evidence) => {
+    const evidenceOutput: EvaluationOutput = {
+      allowedHrefs: [],
+      cards: [],
+      dataToolResults: evidence.dataToolResults,
+      text: evidence.text,
+      textEvidence: [],
+    };
+    const amounts = [
+      ...collectVisibleAmountMatches(evidenceOutput),
+      ...collectBareVisibleAmountMatches(evidenceOutput, config.visibleAmountClaims ?? []),
+    ];
+    return amounts.flatMap(({ amount }) => {
+      const supportingFacts = expectedDataToolFacts.filter((expected) =>
+        collectNumericValues(expected.value).some(
+          (expectedAmount) =>
+            amount === expectedAmount ||
+            Math.abs(amount - expectedAmount) <= Math.max(1_000, Math.abs(expectedAmount) * 0.01),
+        ),
+      );
+      return supportingFacts.length > 0 &&
+        !supportingFacts.some((expected) =>
+          evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+        )
+        ? [amount]
+        : [];
+    });
+  });
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
   );
@@ -1406,6 +1472,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingDataToolFacts.length > 0
       ? `不足 data tool facts: ${missingDataToolFacts.map(({ toolName, path }) => `${toolName}:${path}`).join(", ")}`
+      : undefined,
+    ungroundedTextAmounts.length > 0
+      ? `取得前に主張された可視金額: ${[...new Set(ungroundedTextAmounts)].join(",")}`
       : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`

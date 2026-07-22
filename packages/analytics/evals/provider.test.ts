@@ -77,6 +77,18 @@ describe("toEvaluationOutput", () => {
         },
       ],
       text: "回答",
+      textEvidence: [
+        {
+          text: "回答",
+          dataToolResults: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              output: { income: 100 },
+            },
+          ],
+        },
+      ],
       cards: [{ type: "summary" }],
     });
   });
@@ -140,6 +152,31 @@ describe("toEvaluationOutput", () => {
     };
 
     expect(toEvaluationOutput(response, "test-group").text).toBe("途中回答。最終回答");
+  });
+
+  it("snapshots data evidence before each visible text fragment", () => {
+    const response: ChatResponse = {
+      text: "収入は313,235円です。",
+      steps: [
+        { text: "収入は313,235円です。", toolResults: [] },
+        {
+          toolResults: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              output: { totalIncome: 313235 },
+            },
+          ],
+        },
+        {
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").textEvidence).toEqual([
+      { text: "収入は313,235円です。", dataToolResults: [] },
+    ]);
   });
 
   it("does not allow a route that is returned after visible text", () => {

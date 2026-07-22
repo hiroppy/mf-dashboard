@@ -92,6 +92,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a visible amount stated before its supporting tool result", () => {
+    const earlyClaimOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "収支は93,341円です。",
+      textEvidence: [{ text: "収支は93,341円です。", dataToolResults: [] }],
+    });
+
+    expect(
+      assertFinanceResponse(earlyClaimOutput, {
+        config: {
+          allowedVisibleAmounts: [93341],
+          visibleAmountClaims: [{ label: "収支", amount: 93341 }],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.netIncome",
+              value: 93341,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視金額: 93341" });
+  });
+
   it("requires identity fields and values on the same data-tool row", () => {
     const splitEvidenceOutput = JSON.stringify({
       ...JSON.parse(output),
