@@ -297,11 +297,12 @@ function collectBareVisibleAmountMatches(
   const visibleTexts = [output.text, ...collectFacts(output.cards)].map((text) =>
     text.normalize("NFKC"),
   );
-  return visibleTexts.flatMap((text) =>
-    [
+  return visibleTexts.flatMap((text) => {
+    const labelPatterns = [
       ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
       "(?:収入|支出|収支|総資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
-    ].flatMap((labelPattern) => {
+    ];
+    const directMatches = labelPatterns.flatMap((labelPattern) => {
       return [
         ...Array.from(
           text.matchAll(
@@ -370,8 +371,35 @@ function collectBareVisibleAmountMatches(
           }),
         ),
       ];
-    }),
-  );
+    });
+    const continuationMatches = Array.from(
+      text.matchAll(
+        /[、，;；]\s*(?:前月|先月|今月|当月|比較(?:対象)?|差額|差|増減|変化)?[^\d]{0,4}?([+\-−▲△▼▽]?[\d,]+)(?![\d,]|[./-]\d|\s*(?:円|億|万|千|[%％]|ポイント|年|月|か月|ヶ月|ケ月|箇月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))/gu,
+      ),
+      (match) => ({
+        amount: Number(
+          String(match[1])
+            .replaceAll(",", "")
+            .replace(/[▲△▼▽−]/, "-"),
+        ),
+        endIndex: match.index + match[0].length,
+        index: match.index + match[0].lastIndexOf(String(match[1])),
+        text,
+      }),
+    ).filter((match) => {
+      const clauseStart = Math.max(
+        text.lastIndexOf("。", match.index),
+        text.lastIndexOf("！", match.index),
+        text.lastIndexOf("？", match.index),
+        text.lastIndexOf("\n", match.index),
+      );
+      const precedingClause = text.slice(clauseStart + 1, match.index);
+      return labelPatterns.some((labelPattern) =>
+        new RegExp(labelPattern, "u").test(precedingClause),
+      );
+    });
+    return [...directMatches, ...continuationMatches];
+  });
 }
 
 function collectVisibleAmountMatches(output: EvaluationOutput) {
@@ -697,6 +725,13 @@ function collectDates(rawTexts: string[]): string[] {
           `${toGregorianYear(era, eraYear)}-${String(parseJapaneseInteger(month)).padStart(2, "0")}-${String(parseJapaneseInteger(day)).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(
+          /([〇零一二三四五六七八九]{4})年([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g,
+        ),
+        ([, year, month, day]) =>
+          `${parseKanjiDigitSequence(year)}-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g),
         ([, month, day]) =>
           `*-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
@@ -769,6 +804,28 @@ function parseJapaneseInteger(value: string): number {
   return /^\d+$/u.test(value) ? Number(value) : parseKanjiAmount(value);
 }
 
+function parseKanjiDigitSequence(value: string): number {
+  const digits: Record<string, string> = {
+    〇: "0",
+    零: "0",
+    一: "1",
+    二: "2",
+    三: "3",
+    四: "4",
+    五: "5",
+    六: "6",
+    七: "7",
+    八: "8",
+    九: "9",
+  };
+  return Number(
+    value
+      .split("")
+      .map((character) => digits[character])
+      .join(""),
+  );
+}
+
 function collectVisibleDates(output: EvaluationOutput): string[] {
   return collectDates([output.text, ...collectFacts(output.cards)]);
 }
@@ -796,6 +853,11 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
         ),
         ([, era, eraYear, month]) =>
           `${toGregorianYear(era, eraYear)}-${String(parseJapaneseInteger(month)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/([〇零一二三四五六七八九]{4})年([〇零一二三四五六七八九十]+)月/g),
+        ([, year, month]) =>
+          `${parseKanjiDigitSequence(year)}-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/([〇零一二三四五六七八九十]+)月/g),
@@ -846,7 +908,7 @@ function collectMislabeledVisibleMonths(
     const text = rawText.normalize("NFKC");
     const monthMatches = Array.from(
       text.matchAll(
-        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|(\d{4})年([〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g,
+        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|(\d{4})年([〇零一二三四五六七八九十]+)月|([〇零一二三四五六七八九]{4})年([〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月|([〇零一二三四五六七八九十]+)月/g,
       ),
       (match) => ({
         endIndex: match.index + match[0].length,
@@ -857,10 +919,14 @@ function collectMislabeledVisibleMonths(
             : match[4] !== undefined
               ? `${match[4]}-${String(parseJapaneseInteger(match[5])).padStart(2, "0")}`
               : match[6] !== undefined
-                ? `${match[6]}-${String(match[7]).padStart(2, "0")}`
+                ? `${parseKanjiDigitSequence(match[6])}-${String(parseKanjiAmount(match[7])).padStart(2, "0")}`
                 : match[8] !== undefined
                   ? `${match[8]}-${String(match[9]).padStart(2, "0")}`
-                  : `*-${String(match[10]).padStart(2, "0")}`,
+                  : match[10] !== undefined
+                    ? `${match[10]}-${String(match[11]).padStart(2, "0")}`
+                    : match[12] !== undefined
+                      ? `*-${String(match[12]).padStart(2, "0")}`
+                      : `*-${String(parseKanjiAmount(match[13])).padStart(2, "0")}`,
       }),
     );
     return monthMatches.flatMap((monthMatch, monthIndex) => {
@@ -1185,7 +1251,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
       expectedCategories,
       (actual, expected) =>
         metricMatches(actual, expected) &&
-        Math.abs(actual.percentage - expected.percentage) <= 0.01,
+        actual.percentage.toFixed(1) === expected.percentage.toFixed(1),
     );
   const transactionRows = parsed.cards.flatMap((card) =>
     card.type === "transactionList" ? card.transactions : [],
