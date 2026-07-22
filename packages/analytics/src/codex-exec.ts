@@ -441,7 +441,9 @@ async function runProcess(
     signal.addEventListener("abort", onAbort, { once: true });
     if (signal.aborted) onAbort();
 
-    child.on("error", (error) => finish(new Error(`codex exec could not start: ${error.message}`)));
+    child.on("error", (error) => {
+      if (!stopError) finish(new Error(`codex exec could not start: ${error.message}`));
+    });
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutBytes += chunk.byteLength;
       if (stdoutBytes > MAX_OUTPUT_BYTES)
@@ -459,8 +461,8 @@ async function runProcess(
         stop(new Error("codex exec stdin failed"));
     });
     child.on("close", (code) => {
-      if (stopError) finish(stopError);
-      else if (code !== 0) finish(new Error("codex exec exited unsuccessfully"));
+      if (stopError) return;
+      if (code !== 0) finish(new Error("codex exec exited unsuccessfully"));
       else finish();
     });
 

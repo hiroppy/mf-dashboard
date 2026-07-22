@@ -194,7 +194,11 @@ describe("generateWithCodexExec", () => {
     const grandchildPidPath = join(tmpdir(), `hir115-grandchild-${process.pid}.pid`);
     temporaryDirectories.push(grandchildPidPath);
     await createFixture(`
-      sleep 30 &
+      (
+        trap '' TERM
+        exec </dev/null >/dev/null 2>/dev/null
+        while true; do sleep 30; done
+      ) &
       grandchild=$!
       printf '%s' "$grandchild" > ${JSON.stringify(grandchildPidPath)}
       wait
@@ -205,6 +209,12 @@ describe("generateWithCodexExec", () => {
       "codex exec timed out after 500ms",
     );
     const grandchildPid = Number(await readFile(grandchildPidPath, "utf8"));
-    await vi.waitFor(() => expect(() => process.kill(grandchildPid, 0)).toThrow("kill ESRCH"));
+    try {
+      await vi.waitFor(() => expect(() => process.kill(grandchildPid, 0)).toThrow("kill ESRCH"));
+    } finally {
+      try {
+        process.kill(grandchildPid, "SIGKILL");
+      } catch {}
+    }
   });
 });
