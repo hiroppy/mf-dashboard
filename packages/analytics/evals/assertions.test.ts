@@ -3390,12 +3390,39 @@ describe("assertFinanceResponse", () => {
             {
               label: "貯蓄率",
               amount: 34.68,
-              rolePattern: "(ポイント|差|変化|低下|減少)",
+              rolePattern: "(低下|減少|下落)",
             },
           ],
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a savings-rate point change in the opposite direction", () => {
+    const pointOutput = JSON.stringify({
+      text: "貯蓄率は前月から34.68ポイント上昇しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "貯蓄を見直します。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(pointOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8, 34.68, 64.48],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 29.8 },
+            { label: "貯蓄率", amount: 64.48, rolePattern: "(前月|先月|比較)" },
+            { label: "貯蓄率", amount: 34.68, rolePattern: "(低下|減少|下落)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("validates a word-based fractional percentage claim", () => {

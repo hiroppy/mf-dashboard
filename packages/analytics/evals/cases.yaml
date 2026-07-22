@@ -497,9 +497,9 @@
           - { label: 貯蓄率, amount: 64, rolePattern: (前月|先月|比較) }
           - { label: 貯蓄率, amount: 64.48, rolePattern: (前月|先月|比較) }
           - { label: 貯蓄率, amount: 64.5, rolePattern: (前月|先月|比較) }
-          - { label: 貯蓄率, amount: 34.2, rolePattern: (ポイント|差|変化|低下|減少) }
-          - { label: 貯蓄率, amount: 34.68, rolePattern: (ポイント|差|変化|低下|減少) }
-          - { label: 貯蓄率, amount: 34.7, rolePattern: (ポイント|差|変化|低下|減少) }
+          - { label: 貯蓄率, amount: 34.2, rolePattern: (低下|減少|下落) }
+          - { label: 貯蓄率, amount: 34.68, rolePattern: (低下|減少|下落) }
+          - { label: 貯蓄率, amount: 34.7, rolePattern: (低下|減少|下落) }
         allowedInsightMetrics:
           - { amount: 19475, amountType: balance, labelPattern: (衣服・美容|衣服) }
           - {
