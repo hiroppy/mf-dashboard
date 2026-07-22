@@ -172,8 +172,10 @@ function parseOutput(output: string): EvaluationOutput | undefined {
           evidence !== null &&
           "text" in evidence &&
           typeof evidence.text === "string" &&
-          (!("allowedHrefs" in evidence) || stringArrayIsValid(evidence.allowedHrefs)) &&
-          (!("dataToolResults" in evidence) || dataToolResultsAreValid(evidence.dataToolResults)),
+          "allowedHrefs" in evidence &&
+          stringArrayIsValid(evidence.allowedHrefs) &&
+          "dataToolResults" in evidence &&
+          dataToolResultsAreValid(evidence.dataToolResults),
       );
     return {
       allowedHrefs: Array.isArray(value.allowedHrefs)
@@ -187,8 +189,9 @@ function parseOutput(output: string): EvaluationOutput | undefined {
         stringArrayIsValid(value.unauthorizedLinks),
       text: value.text,
       securityEvidenceShapeValid:
-        (value.allowedHrefs === undefined || stringArrayIsValid(value.allowedHrefs)) &&
-        (value.unauthorizedLinks === undefined || stringArrayIsValid(value.unauthorizedLinks)),
+        stringArrayIsValid(value.allowedHrefs) &&
+        stringArrayIsValid(value.unauthorizedLinks) &&
+        (!Array.isArray(value.textEvidence) || textEvidenceIsValid),
       unauthorizedLinks: Array.isArray(value.unauthorizedLinks)
         ? value.unauthorizedLinks.filter((link): link is string => typeof link === "string")
         : [],
@@ -2342,10 +2345,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const expectedInsightActionPattern = config.expectedInsightActionPattern;
   const insightActionMismatch =
     expectedInsightActionPattern !== undefined &&
-    insightCards.some(
+    !insightCards.some(
       (card) =>
-        card.action === undefined ||
-        !new RegExp(expectedInsightActionPattern, "u").test(card.action.label),
+        card.action !== undefined &&
+        new RegExp(expectedInsightActionPattern, "u").test(card.action.label),
     );
   const actualTypes = parsed.cards.map(({ type }) => type);
   const expectedTypes = config.expectedCardTypes ?? [];

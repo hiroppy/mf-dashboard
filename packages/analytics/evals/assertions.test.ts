@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
-import assertFinanceResponse from "./assertions";
+import rawAssertFinanceResponse from "./assertions";
+
+const assertFinanceResponse = (
+  output: string,
+  context?: Parameters<typeof rawAssertFinanceResponse>[1],
+) => {
+  try {
+    const value = JSON.parse(output) as Record<string, unknown>;
+    const textEvidence = Array.isArray(value.textEvidence)
+      ? value.textEvidence.map((evidence) =>
+          typeof evidence === "object" && evidence !== null
+            ? { allowedHrefs: [], dataToolResults: [], ...evidence }
+            : evidence,
+        )
+      : [];
+    return rawAssertFinanceResponse(
+      JSON.stringify({
+        allowedHrefs: [],
+        dataToolResults: [],
+        unauthorizedLinks: [],
+        ...value,
+        textEvidence,
+      }),
+      context,
+    );
+  } catch {
+    return rawAssertFinanceResponse(output, context);
+  }
+};
 
 const output = JSON.stringify({
   allowedHrefs: ["/0/cf/2026-07"],
@@ -115,7 +143,7 @@ describe("assertFinanceResponse", () => {
     delete missingSecurityEvidence.unauthorizedLinks;
 
     expect(
-      assertFinanceResponse(JSON.stringify(missingSecurityEvidence), {
+      rawAssertFinanceResponse(JSON.stringify(missingSecurityEvidence), {
         config: {
           expectedDataToolFacts: [
             { toolName: "getMonthlySummaryByMonth", path: "$.netIncome", value: 93341 },
@@ -127,6 +155,32 @@ describe("assertFinanceResponse", () => {
       reason: expect.stringContaining("評価証跡フィールドが欠落または不正です。"),
     });
   });
+
+  it.each(["allowedHrefs", "unauthorizedLinks"])(
+    "fails closed when top-level %s is omitted without configured facts",
+    (field) => {
+      const missingEvidence = JSON.parse(output);
+      delete missingEvidence[field];
+
+      expect(rawAssertFinanceResponse(JSON.stringify(missingEvidence))).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining("評価証跡フィールドが欠落または不正です。"),
+      });
+    },
+  );
+
+  it.each(["allowedHrefs", "dataToolResults"])(
+    "fails closed when textEvidence.%s is omitted",
+    (field) => {
+      const missingEvidence = JSON.parse(output);
+      delete missingEvidence.textEvidence[0][field];
+
+      expect(rawAssertFinanceResponse(JSON.stringify(missingEvidence))).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining("評価証跡フィールドが欠落または不正です。"),
+      });
+    },
+  );
 
   it.each([
     ["unauthorizedLinks", (value: Record<string, unknown>) => (value.unauthorizedLinks = [null])],
@@ -6765,6 +6819,26 @@ describe("assertFinanceResponse", () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("insight metrics 不一致");
     expect(result.reason).toContain("insight action 不一致");
+  });
+
+  it("requires an insight action when an action pattern is configured", () => {
+    const emptyOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "empty",
+          title: "該当データなし",
+          description: "条件を変えて確認してください。",
+          prompts: ["今月の支出を確認"],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(emptyOutput, {
+        config: { expectedInsightActionPattern: "内訳" },
+      }),
+    ).toMatchObject({ pass: false, reason: "insight action 不一致: 内訳" });
   });
 
   it("rejects an insight label that asserts a reducible amount", () => {
