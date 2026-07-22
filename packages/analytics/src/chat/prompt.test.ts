@@ -11,4 +11,18 @@ describe("finance chat prompt", () => {
   it("keeps the production tool limit explicit", () => {
     expect(FINANCE_CHAT_MAX_TOOL_STEPS).toBe(8);
   });
+
+  it("does not request individual transactions for a category-total question", () => {
+    const prompt = getFinanceChatSystemPrompt();
+
+    expect(prompt).toContain(
+      "カテゴリ合計の質問には、対象月のカテゴリ合計だけを取得し、summary、categoryBreakdownを提示してください。個別取引は取得しないでください。",
+    );
+  });
+
+  it("adds a transaction list only for an explicit category-detail request", () => {
+    expect(getFinanceChatSystemPrompt()).toContain(
+      "そのカテゴリの明細、取引、詳細を明示的に求めた場合だけ対象取引を検索し、transactionListを追加してください。",
+    );
+  });
 });
