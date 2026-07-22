@@ -57,6 +57,7 @@ interface AssertionContext {
     allowedVisibleDates?: string[];
     allowedVisibleMonths?: string[];
     allowedVisiblePercentages?: number[];
+    allowedVisibleTransactionCounts?: number[];
     expectedCardFacts?: string[];
     expectedCardHeadingFacts?: CardTextFactExpectation[];
     expectedCardTextFacts?: CardTextFactExpectation[];
@@ -306,11 +307,15 @@ function collectMislabeledVisibleAmounts(
     ...collectBareVisibleAmountMatches(output, expectedClaims),
   ];
   return matches.flatMap(({ amount, endIndex, index, text }) => {
+    const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
     const nearbyClaims = expectedClaims
       .map((claim) => {
         const { label } = claim;
-        const beforeIndex = text.lastIndexOf(label, index);
-        const afterIndex = text.indexOf(label, index);
+        const foundBeforeIndex = text.lastIndexOf(label, index);
+        const foundAfterIndex = text.indexOf(label, endIndex);
+        const beforeIndex = foundBeforeIndex >= clauseStart ? foundBeforeIndex : -1;
+        const afterIndex =
+          foundAfterIndex !== -1 && foundAfterIndex < clauseEnd ? foundAfterIndex : -1;
         const distance = Math.min(
           beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - (beforeIndex + label.length),
           afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - endIndex,
@@ -357,16 +362,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function collectClaimContext(text: string, startIndex: number, endIndex: number): string {
-  const precedingText = text.slice(0, startIndex);
-  const followingText = text.slice(endIndex);
-  const clauseStart = Math.max(
-    ...["、", "。", "，", "．", "\n"].map((separator) => precedingText.lastIndexOf(separator)),
-  );
-  const followingBoundaries = ["、", "。", "，", "．", "\n"]
-    .map((separator) => followingText.indexOf(separator))
-    .filter((boundary) => boundary !== -1);
-  const clauseEnd =
-    followingBoundaries.length === 0 ? text.length : endIndex + Math.min(...followingBoundaries);
+  const { clauseEnd, clauseStart } = collectClauseBounds(text, startIndex, endIndex);
   const clausePrefix = text.slice(clauseStart + 1, startIndex);
   const precedingClaims = Array.from(
     clausePrefix.matchAll(/[+\-−▲△▼▽]?\s*(?:[¥￥]\s*)?[\d,.]+(?:\s*(?:億|万|千))*\s*(?:円|[%％])/g),
@@ -388,6 +384,20 @@ function collectClaimContext(text: string, startIndex: number, endIndex: number)
     return text.slice(clauseStart + 1, contextEnd);
   }
   return text.slice(clauseStart + 1, clauseEnd);
+}
+
+function collectClauseBounds(text: string, startIndex: number, endIndex: number) {
+  const separators = ["、", "。", "，", "．", "\n"];
+  const clauseStart = Math.max(
+    ...separators.map((separator) => text.lastIndexOf(separator, startIndex - 1)),
+  );
+  const followingBoundaries = separators
+    .map((separator) => text.indexOf(separator, endIndex))
+    .filter((boundary) => boundary !== -1);
+  return {
+    clauseEnd: followingBoundaries.length === 0 ? text.length : Math.min(...followingBoundaries),
+    clauseStart,
+  };
 }
 
 function collectVisibleTransactionCounts(output: EvaluationOutput): number[] {
@@ -529,10 +539,14 @@ function collectMislabeledVisiblePercentages(
   expectedClaims: VisibleAmountClaim[],
 ): string[] {
   return collectVisiblePercentageMatches(output).flatMap(({ amount, endIndex, index, text }) => {
+    const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
     const nearbyClaims = expectedClaims
       .map((claim) => {
-        const beforeIndex = text.lastIndexOf(claim.label, index);
-        const afterIndex = text.indexOf(claim.label, index);
+        const foundBeforeIndex = text.lastIndexOf(claim.label, index);
+        const foundAfterIndex = text.indexOf(claim.label, endIndex);
+        const beforeIndex = foundBeforeIndex >= clauseStart ? foundBeforeIndex : -1;
+        const afterIndex =
+          foundAfterIndex !== -1 && foundAfterIndex < clauseEnd ? foundAfterIndex : -1;
         return {
           claim,
           distance: Math.min(
@@ -699,7 +713,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     expectedVisibleTransactionCount === undefined
       ? []
       : collectVisibleTransactionCounts(parsed).filter(
-          (count) => count !== expectedVisibleTransactionCount,
+          (count) =>
+            count !== expectedVisibleTransactionCount &&
+            !config.allowedVisibleTransactionCounts?.includes(count),
         );
   const transactionsMismatch =
     expectedTransactions.length > 0 &&

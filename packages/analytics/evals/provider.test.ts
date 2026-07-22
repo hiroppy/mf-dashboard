@@ -84,8 +84,10 @@ describe("toEvaluationOutput", () => {
               toolName: "getFinanceDashboardRoute",
               output: { href: "/test-group/cf/2026-07" },
             },
-            { toolName: "presentFinanceCards", output: [{ type: "summary" }] },
           ],
+        },
+        {
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
         },
       ],
     };
@@ -149,6 +151,28 @@ describe("toEvaluationOutput", () => {
             {
               toolName: "getFinanceDashboardRoute",
               output: { href: "/test-group/cf/2026-07" },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").allowedHrefs).toEqual([]);
+  });
+
+  it("does not prove a card route returned in the presentation step", () => {
+    const response: ChatResponse = {
+      text: "回答",
+      steps: [
+        {
+          toolResults: [
+            {
+              toolName: "getFinanceDashboardRoute",
+              output: { href: "/test-group/cf/2026-07" },
+            },
+            {
+              toolName: "presentFinanceCards",
+              output: [{ type: "summary", href: "/test-group/cf/2026-07" }],
             },
           ],
         },

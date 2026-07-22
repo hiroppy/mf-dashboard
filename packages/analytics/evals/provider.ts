@@ -79,6 +79,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   let hasStepText = false;
 
   for (const step of response.steps) {
+    const allowedHrefsBeforeStep = [...allowedHrefs];
     if (step.text !== undefined) {
       hasStepText = true;
       visibleText.push(sanitizeFinanceChatLinks(step.text, allowedHrefs));
@@ -97,7 +98,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
       }
       if (toolName === "presentFinanceCards") {
         presentations.push(output);
-        allowedHrefsAtPresentation = [...allowedHrefs];
+        allowedHrefsAtPresentation = allowedHrefsBeforeStep;
       }
     }
   }
