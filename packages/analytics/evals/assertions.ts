@@ -1591,6 +1591,25 @@ function collectCategoryGroups(results: DataToolResult[]) {
   );
 }
 
+function categoryGroupMatchesTemporalScope(
+  text: string,
+  group: ReturnType<typeof collectCategoryGroups>[number],
+): boolean {
+  const explicitYearMonth =
+    /(?<year>\d{4})(?:[-/]0?(?<numericMonth>\d{1,2})|年0?(?<japaneseMonth>\d{1,2})月)/u.exec(text);
+  if (explicitYearMonth?.groups) {
+    const scopedMonth = `${explicitYearMonth.groups.year}-${String(
+      Number(explicitYearMonth.groups.numericMonth ?? explicitYearMonth.groups.japaneseMonth),
+    ).padStart(2, "0")}`;
+    return group.month === scopedMonth;
+  }
+  const yearlessMonth = /(?<!\d)(\d{1,2})月/u.exec(text)?.[1];
+  return (
+    yearlessMonth === undefined ||
+    group.month?.endsWith(`-${String(Number(yearlessMonth)).padStart(2, "0")}`) === true
+  );
+}
+
 function collectInvalidCategoryComparisons(
   text: string,
   knownCategoryGroups: ReturnType<typeof collectCategoryGroups>,
@@ -1632,6 +1651,7 @@ function collectInvalidCategoryComparisons(
           const claimsHigher = /(?:多い|高い|大きい|上回|以上)/u.test(match[1]);
           const includesEquality = /(?:以上|以下)/u.test(match[1]);
           const relationIsValid = availableCategoryGroups.some((group) => {
+            if (!categoryGroupMatchesTemporalScope(text, group)) return false;
             const subject = group.rows.find(({ category }) => category === subjectCategory);
             const comparison = group.rows.find(({ category }) => category === comparisonCategory);
             if (subject === undefined || comparison === undefined) return false;
@@ -1684,6 +1704,110 @@ function collectInvalidCategoryTypeClaims(
   });
 }
 
+function collectUnsupportedCategoryCostClassClaims(
+  text: string,
+  knownCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+): string[] {
+  const knownCategories = [
+    ...new Set(knownCategoryGroups.flatMap((group) => group.rows.map(({ category }) => category))),
+  ];
+  return knownCategories.flatMap((category) => {
+    const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return Array.from(
+      text.matchAll(
+        new RegExp(
+          `${categoryPattern}(?:は|が)\\s*(固定費|変動費|固定|変動)(?:(?:カテゴリ|区分|扱い)?(?:です|でした|である|だ)|に分類(?:されます|されています|されました|された))`,
+          "gu",
+        ),
+      ),
+    ).flatMap((match) => {
+      const endIndex = match.index + match[0].length;
+      return hasNegatedSuffix(
+        text,
+        endIndex,
+        collectClauseBounds(text, match.index, endIndex).clauseEnd,
+      )
+        ? []
+        : [`${category}=${match[1]}`];
+    });
+  });
+}
+
+function collectMonthlySavingsRates(results: DataToolResult[]) {
+  return results.flatMap((result) => {
+    if (
+      !["getLatestMonthlySummary", "getMonthlySummaryByMonth"].includes(result.toolName) ||
+      typeof result.output !== "object" ||
+      result.output === null
+    ) {
+      return [];
+    }
+    const output = result.output as Record<string, unknown>;
+    const input =
+      typeof result.input === "object" && result.input !== null
+        ? (result.input as Record<string, unknown>)
+        : {};
+    const month =
+      typeof output.month === "string"
+        ? output.month
+        : typeof input.month === "string"
+          ? input.month
+          : undefined;
+    return month !== undefined &&
+      typeof output.totalIncome === "number" &&
+      output.totalIncome !== 0 &&
+      typeof output.netIncome === "number"
+      ? [{ month, rate: output.netIncome / output.totalIncome }]
+      : [];
+  });
+}
+
+function collectInvalidSavingsRateDirections(text: string, results: DataToolResult[]): string[] {
+  const rates = [
+    ...new Map(collectMonthlySavingsRates(results).map((rate) => [rate.month, rate])).values(),
+  ].sort((left, right) => left.month.localeCompare(right.month));
+  if (rates.length < 2) return [];
+  const previous = rates.at(-2);
+  const current = rates.at(-1);
+  if (previous === undefined || current === undefined) return [];
+  return Array.from(
+    text.matchAll(
+      /貯蓄率(?:は|が)?.{0,12}(?:前月|先月)(?:と比べて|より|から|比)?(?:も)?\s*(上昇|増加|改善|上が|低下|減少|悪化|下が)/gu,
+    ),
+  ).flatMap((match) => {
+    const endIndex = match.index + match[0].length;
+    if (
+      hasNegatedSuffix(text, endIndex, collectClauseBounds(text, match.index, endIndex).clauseEnd)
+    ) {
+      return [];
+    }
+    const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);
+    const actuallyIncreased = current.rate > previous.rate;
+    return claimsIncrease === actuallyIncreased ? [] : [match[0]];
+  });
+}
+
+function chartPointMatchesFactMonth(
+  label: string,
+  expected: DataToolFactExpectation,
+  allowedVisibleMonths: string[],
+): boolean {
+  if (typeof expected.input !== "object" || expected.input === null) return true;
+  const expectedMonth = (expected.input as Record<string, unknown>).month;
+  if (typeof expectedMonth !== "string") return true;
+  const explicitMonth = /(?:(\d{4})[-/]\s*|(\d{4})年)0?(\d{1,2})月?/u.exec(label);
+  if (explicitMonth) {
+    return (
+      expectedMonth ===
+      `${explicitMonth[1] ?? explicitMonth[2]}-${String(Number(explicitMonth[3])).padStart(2, "0")}`
+    );
+  }
+  const sortedMonths = allowedVisibleMonths.filter((month) => /^\d{4}-\d{2}$/u.test(month)).sort();
+  if (/(?:今月|当月)/u.test(label)) return expectedMonth === sortedMonths.at(-1);
+  if (/(?:前月|先月)/u.test(label)) return expectedMonth === sortedMonths.at(-2);
+  return true;
+}
+
 function collectCategorySuperlativeClaims(text: string): string[] {
   return [
     ...text.matchAll(
@@ -1718,35 +1842,18 @@ function categorySuperlativeIsGrounded(
   categoryGroups: ReturnType<typeof collectCategoryGroups>,
   temporalScopeText = claim,
 ): boolean {
-  const explicitYearMonth =
-    /(?<year>\d{4})(?:[-/]0?(?<numericMonth>\d{1,2})|年0?(?<japaneseMonth>\d{1,2})月)/u.exec(
-      temporalScopeText,
-    );
-  const scopedMonth = explicitYearMonth?.groups
-    ? `${explicitYearMonth.groups.year}-${String(
-        Number(explicitYearMonth.groups.numericMonth ?? explicitYearMonth.groups.japaneseMonth),
-      ).padStart(2, "0")}`
-    : undefined;
-  const yearlessMonth =
-    scopedMonth === undefined ? /(?<!\d)(\d{1,2})月/u.exec(temporalScopeText)?.[1] : undefined;
   const claimsLowest =
     /(?:最小|最も少ない|一番少ない|最も小さい|一番小さい|最も低い|一番低い)/u.test(claim);
   return categoryGroups.some((group) => {
-    const normalizedYearlessMonth =
-      yearlessMonth === undefined ? undefined : String(Number(yearlessMonth)).padStart(2, "0");
-    if (
-      (scopedMonth !== undefined && group.month !== scopedMonth) ||
-      (normalizedYearlessMonth !== undefined &&
-        !group.month?.endsWith(`-${normalizedYearlessMonth}`))
-    ) {
-      return false;
-    }
+    if (!categoryGroupMatchesTemporalScope(temporalScopeText, group)) return false;
     const expenseRows = group.rows.filter(({ type }) => type === "expense");
     const candidates = expenseRows.length > 0 ? expenseRows : group.rows;
     const assertedCategoryText = claim.split(/(?:ではなく|でなく)/u).at(-1) ?? claim;
-    const claimedRows = candidates.filter(({ category }) =>
-      assertedCategoryText.includes(category),
-    );
+    const assertedCategory = candidates
+      .map(({ category }) => category)
+      .filter((category) => assertedCategoryText.includes(category))
+      .sort((left, right) => right.length - left.length)[0];
+    const claimedRows = candidates.filter(({ category }) => category === assertedCategory);
     if (claimedRows.length === 0 || candidates.length === 0) return false;
     const extremeAmount = Math[claimsLowest ? "min" : "max"](
       ...candidates.map(({ totalAmount }) => totalAmount),
@@ -1914,6 +2021,20 @@ export default function assertFinanceResponse(output: string, context: Assertion
     ...collectFacts(parsed.cards).flatMap((text) =>
       collectInvalidCategoryTypeClaims(text, knownCategoryGroups, knownCategoryGroups),
     ),
+    ...categoryTextEvidence.flatMap((evidence) =>
+      collectUnsupportedCategoryCostClassClaims(evidence.text, knownCategoryGroups),
+    ),
+    ...collectFacts(parsed.cards).flatMap((text) =>
+      collectUnsupportedCategoryCostClassClaims(text, knownCategoryGroups),
+    ),
+  ];
+  const invalidSavingsRateDirections = [
+    ...categoryTextEvidence.flatMap((evidence) =>
+      collectInvalidSavingsRateDirections(evidence.text, evidence.dataToolResults),
+    ),
+    ...collectFacts(parsed.cards).flatMap((text) =>
+      collectInvalidSavingsRateDirections(text, parsed.dataToolResults),
+    ),
   ];
   const invalidCategorySuperlativeClaims = [
     ...categoryTextEvidence.flatMap((evidence) =>
@@ -1957,6 +2078,31 @@ export default function assertFinanceResponse(output: string, context: Assertion
   );
   const cardFacts = collectFacts(parsed.cards);
   const expectedDataToolFacts = config.expectedDataToolFacts ?? [];
+  const ungroundedChartValues = parsed.cards.flatMap((card) =>
+    card.type === "chart"
+      ? card.data.flatMap((point) =>
+          point.values.flatMap((amount, index) => {
+            const series = card.series[index];
+            if (series === undefined) return [`${point.label}:series-${index}=${amount}`];
+            const amountAllowed = (config.allowedVisibleAmounts ?? []).some(
+              (allowed) => amount === allowed,
+            );
+            const factGrounded = expectedDataToolFacts.some(
+              (expected) =>
+                collectNumericValues(expected.value).includes(amount) &&
+                dataToolFactSupportsLabel(expected, series.name) &&
+                chartPointMatchesFactMonth(
+                  point.label,
+                  expected,
+                  config.allowedVisibleMonths ?? [],
+                ) &&
+                parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+            );
+            return amountAllowed && factGrounded ? [] : [`${point.label}:${series.name}=${amount}`];
+          }),
+        )
+      : [],
+  );
   const textEvidenceMismatch =
     expectedDataToolFacts.length > 0 &&
     (parsed.textEvidence.length === 0 ||
@@ -2546,12 +2692,18 @@ export default function assertFinanceResponse(output: string, context: Assertion
     invalidCategoryTypeClaims.length > 0
       ? `誤ったカテゴリ種別: ${[...new Set(invalidCategoryTypeClaims)].join(",")}`
       : undefined,
+    invalidSavingsRateDirections.length > 0
+      ? `誤った貯蓄率方向: ${[...new Set(invalidSavingsRateDirections)].join(",")}`
+      : undefined,
     unsupportedBareAmountUnits.length > 0
       ? `非金銭単位付き可視金額: ${[...new Set(unsupportedBareAmountUnits)].join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingDataToolFacts.length > 0
       ? `不足 data tool facts: ${missingDataToolFacts.map(({ toolName, path }) => `${toolName}:${path}`).join(", ")}`
+      : undefined,
+    ungroundedChartValues.length > 0
+      ? `未根拠の chart values: ${[...new Set(ungroundedChartValues)].join(",")}`
       : undefined,
     ungroundedTextClaims.length > 0
       ? `取得前に主張された可視数値: ${[...new Set(ungroundedTextClaims)].join(",")}`

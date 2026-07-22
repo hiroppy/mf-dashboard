@@ -415,4 +415,5 @@
         allowedCardTypeSets:
           - [insight]
           - [insight, chart]
+          - [chart, insight]
         expectedRoute: /0/cf/2026-07

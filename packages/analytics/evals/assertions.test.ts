@@ -1253,6 +1253,37 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("scopes a category comparison to its stated month", () => {
+    const juneResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-06" },
+      output: [
+        { category: "健康・医療", type: "expense", totalAmount: 30000 },
+        { category: "衣服・美容", type: "expense", totalAmount: 12000 },
+      ],
+    };
+    const julyResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "健康・医療", type: "expense", totalAmount: 8000 },
+        { category: "衣服・美容", type: "expense", totalAmount: 19000 },
+      ],
+    };
+    const text = "2026年7月は健康・医療が衣服・美容より多いです。";
+    const multiMonthOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [juneResult, julyResult] }],
+    });
+
+    expect(assertFinanceResponse(multiMonthOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤ったカテゴリ間比較"),
+    });
+  });
+
   it.each(["収入と支出は同額ではありません。", "収入と支出は同じくらいではありません。"])(
     "accepts an explicitly negated income-expense equality claim: %s",
     (text) => {
@@ -1591,6 +1622,79 @@ describe("assertFinanceResponse", () => {
       pass: false,
       reason: expect.stringContaining("未根拠の定性的支出構成"),
     });
+  });
+
+  it("does not ground a longer asserted category with an overlapping shorter name", () => {
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 75000 },
+        { category: "外食費", type: "expense", totalAmount: 10000 },
+      ],
+    };
+    const text = "支出で最も多いのは外食費です。";
+    const overlappingOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [categoryResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [categoryResult] }],
+    });
+
+    expect(assertFinanceResponse(overlappingOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠の定性的支出構成"),
+    });
+  });
+
+  it.each([
+    ["食費は固定費です。", false, "誤ったカテゴリ種別"],
+    ["食費は固定費とは限りません。", true, "期待する最終応答です。"],
+  ])(
+    "rejects an unsupported fixed-or-variable category classification: %s",
+    (text, pass, expectedReason) => {
+      const categoryResult = {
+        toolName: "getMonthlyCategoryTotals",
+        input: { month: "2026-07" },
+        output: [{ category: "食費", type: "expense", totalAmount: 41837 }],
+      };
+      const classificationOutput = JSON.stringify({
+        ...JSON.parse(output),
+        text,
+        dataToolResults: [categoryResult],
+        textEvidence: [{ text, allowedHrefs: [], dataToolResults: [categoryResult] }],
+      });
+
+      const result = assertFinanceResponse(classificationOutput);
+      expect(result.pass).toBe(pass);
+      expect(result.reason).toContain(expectedReason);
+    },
+  );
+
+  it.each([
+    ["貯蓄率は前月より上昇しました。", false, "誤った貯蓄率方向"],
+    ["貯蓄率は前月より低下しました。", true, "期待する最終応答です。"],
+  ])("validates a qualitative savings-rate direction: %s", (text, pass, expectedReason) => {
+    const juneResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-06" },
+      output: { month: "2026-06", totalIncome: 637637, netIncome: 411133 },
+    };
+    const julyResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { month: "2026-07", totalIncome: 313235, netIncome: 93341 },
+    };
+    const directionOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [juneResult, julyResult] }],
+    });
+
+    const result = assertFinanceResponse(directionOutput);
+    expect(result.pass).toBe(pass);
+    expect(result.reason).toContain(expectedReason);
   });
 
   it("rejects a liability-absence claim for the demo fixture", () => {
@@ -4206,37 +4310,114 @@ describe("assertFinanceResponse", () => {
     });
   });
 
-  it("accepts a configured alternative card-type set", () => {
+  it.each([
+    ["insight-first", ["insight", "chart"]],
+    ["chart-first", ["chart", "insight"]],
+  ])("accepts a configured alternative card-type set: %s", (_name, cardTypes) => {
+    const monthlyResults = [
+      {
+        toolName: "getMonthlySummaryByMonth",
+        input: { month: "2026-06" },
+        output: { month: "2026-06", totalExpense: 100 },
+      },
+      {
+        toolName: "getMonthlySummaryByMonth",
+        input: { month: "2026-07" },
+        output: { month: "2026-07", totalExpense: 80 },
+      },
+    ];
+    const cards = {
+      insight: {
+        type: "insight",
+        title: "支出改善",
+        description: "月別の比較です。",
+      },
+      chart: {
+        type: "chart",
+        title: "月別比較",
+        chartType: "bar",
+        href: "/0/cf/2026-07",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [
+          { label: "2026-06", values: [100] },
+          { label: "2026-07", values: [80] },
+        ],
+      },
+    } as const;
     const chartOutput = JSON.stringify({
       text: "回答",
-      cards: [
-        {
-          type: "insight",
-          title: "支出改善",
-          description: "前月との比較です。",
-        },
-        {
-          type: "chart",
-          title: "前月比較",
-          chartType: "bar",
-          href: "/0/cf/2026-07",
-          series: [{ name: "支出", amountType: "expense" }],
-          data: [
-            { label: "前月", values: [100] },
-            { label: "今月", values: [80] },
-          ],
-        },
-      ],
+      cards: cardTypes.map((type) => cards[type as keyof typeof cards]),
+      dataToolResults: monthlyResults,
+      textEvidence: [{ text: "回答", dataToolResults: monthlyResults }],
     });
 
     expect(
       assertFinanceResponse(chartOutput, {
         config: {
-          allowedCardTypeSets: [["insight"], ["insight", "chart"]],
+          allowedCardTypeSets: [["insight"], ["insight", "chart"], ["chart", "insight"]],
           allowedVisibleAmounts: [80, 100],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-06" },
+              path: "$.totalExpense",
+              value: 100,
+            },
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalExpense",
+              value: 80,
+            },
+          ],
         },
       }),
     ).toMatchObject({ pass: true, reason: "期待する最終応答です。" });
+  });
+
+  it("rejects chart values that are not grounded by configured tool facts", () => {
+    const monthlyResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { month: "2026-07", totalExpense: 80 },
+    };
+    const chartOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "chart",
+          title: "今月の支出",
+          chartType: "bar",
+          href: "/0/cf/2026-07",
+          series: [{ name: "支出", amountType: "expense" }],
+          data: [{ label: "今月", values: [999999] }],
+        },
+      ],
+      dataToolResults: [monthlyResult],
+      textEvidence: [{ text: "回答", dataToolResults: [monthlyResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(chartOutput, {
+        config: {
+          allowedCardTypeSets: [["chart"]],
+          allowedVisibleAmounts: [80, 999999],
+          allowedVisibleMonths: ["2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalExpense",
+              value: 80,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠の chart values"),
+    });
   });
 
   it("rejects an unexpected route on any card", () => {
