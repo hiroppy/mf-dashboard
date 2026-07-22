@@ -1588,6 +1588,15 @@ export default function assertFinanceResponse(output: string, context: Assertion
     ...visibleText.matchAll(
       /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)/gu,
     ),
+    ...visibleText.matchAll(
+      /(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い)(?:の)?(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
+    ),
+    ...visibleText.matchAll(
+      /(?:最大(?:の)?(?:支出|出費)(?:カテゴリ)?|(?:支出|出費)(?:で)?最大(?:なもの|なの)?)(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
+    ),
+    ...visibleText.matchAll(
+      /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い)/gu,
+    ),
   ]
     .filter((match) => {
       const endIndex = match.index + match[0].length;

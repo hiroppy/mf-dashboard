@@ -877,6 +877,45 @@ describe("assertFinanceResponse", () => {
     },
   );
 
+  it.each([
+    "支出で最も多いのは食費です。",
+    "最大の支出カテゴリは食費です。",
+    "食費が支出で一番多いです。",
+  ])("rejects an unsupported superlative category claim: %s", (text) => {
+    const qualitativeOutput = JSON.stringify({
+      text,
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(assertFinanceResponse(qualitativeOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠の定性的支出構成"),
+    });
+  });
+
+  it("accepts an explicitly denied superlative category claim", () => {
+    const deniedOutput = JSON.stringify({
+      text: "支出で最も多いのは食費ではありません。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(assertFinanceResponse(deniedOutput)).toMatchObject({ pass: true });
+  });
+
   it.each(["支出の大半は食費ではありません。", "食費は支出の過半数ではありません。"])(
     "accepts an explicitly denied qualitative dominance claim: %s",
     (text) => {
