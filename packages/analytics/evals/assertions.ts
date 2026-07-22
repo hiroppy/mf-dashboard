@@ -65,6 +65,7 @@ interface AssertionContext {
     expectedCardTitleFacts?: CardTextFactExpectation[];
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
+    expectedDataToolFacts?: Array<string | number>;
     expectedInsightActionPattern?: string;
     expectedInsightFacts?: string[];
     expectedMetrics?: MetricExpectation[];
@@ -82,6 +83,7 @@ interface AssertionContext {
 
 interface EvaluationOutput {
   allowedHrefs: string[];
+  dataToolResults: Array<{ toolName: string; output: unknown }>;
   text: string;
   cards: FinanceChatCard[];
 }
@@ -96,6 +98,16 @@ function parseOutput(output: string): EvaluationOutput | undefined {
     return {
       allowedHrefs: Array.isArray(value.allowedHrefs)
         ? value.allowedHrefs.filter((href): href is string => typeof href === "string")
+        : [],
+      dataToolResults: Array.isArray(value.dataToolResults)
+        ? value.dataToolResults.filter(
+            (result): result is { toolName: string; output: unknown } =>
+              typeof result === "object" &&
+              result !== null &&
+              "toolName" in result &&
+              typeof result.toolName === "string" &&
+              "output" in result,
+          )
         : [],
       text: value.text,
       cards: cards.data,
@@ -246,7 +258,7 @@ function collectBareVisibleAmountMatches(
       return Array.from(
         text.matchAll(
           new RegExp(
-            `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日|件))`,
+            `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
             "gu",
           ),
         ),
@@ -440,7 +452,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
-  return /^\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない)/u.test(
+  return /^\s*(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない)/u.test(
     text.slice(endIndex, clauseEnd),
   );
 }
@@ -592,7 +604,7 @@ function collectDates(rawTexts: string[]): string[] {
           `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       ),
       ...Array.from(
-        text.matchAll(/(?<![\d-])(\d{1,2})-(\d{1,2})(?=\s*(?:時点|現在|の))/g),
+        text.matchAll(/(?<![\d.-])(\d{1,2})[-.](\d{1,2})(?=\s*(?:時点|現在|の))/g),
         ([, month, day]) => `*-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       ),
       ...Array.from(
@@ -889,6 +901,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
   const cardFacts = collectFacts(parsed.cards);
+  const dataToolEvidence = JSON.stringify(parsed.dataToolResults);
+  const missingDataToolFacts = (config.expectedDataToolFacts ?? []).filter(
+    (fact) => !dataToolEvidence.includes(JSON.stringify(fact)),
+  );
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
   );
@@ -951,17 +967,31 @@ export default function assertFinanceResponse(output: string, context: Assertion
     expectedTransactions.length > 0
       ? expectedTransactions.length
       : expectedTransactionGroup?.expectedCount;
+  const visibleTransactionCounts = collectVisibleTransactionCounts(parsed);
+  const isExplicitSourceTotal = ({
+    count,
+    endIndex,
+    index,
+    text,
+  }: (typeof visibleTransactionCounts)[number]) =>
+    config.allowedVisibleTransactionCounts?.includes(count) === true &&
+    /全\s*$/u.test(text.slice(0, index)) &&
+    /^\s*中/u.test(text.slice(endIndex));
   const unexpectedVisibleTransactionCounts =
     expectedVisibleTransactionCount === undefined
       ? []
-      : collectVisibleTransactionCounts(parsed).filter(({ count, endIndex, index, text }) => {
+      : visibleTransactionCounts.filter((visibleCount) => {
+          const { count } = visibleCount;
           if (count === expectedVisibleTransactionCount) return false;
-          const isExplicitSourceTotal =
-            config.allowedVisibleTransactionCounts?.includes(count) === true &&
-            /全\s*$/u.test(text.slice(0, index)) &&
-            /^\s*中/u.test(text.slice(endIndex));
-          return !isExplicitSourceTotal;
+          return !isExplicitSourceTotal(visibleCount);
         });
+  const truncationDisclosureMissing =
+    expectedVisibleTransactionCount !== undefined &&
+    config.allowedVisibleTransactionCounts?.some(
+      (sourceCount) => sourceCount > expectedVisibleTransactionCount,
+    ) === true &&
+    (!visibleTransactionCounts.some(({ count }) => count === expectedVisibleTransactionCount) ||
+      !visibleTransactionCounts.some(isExplicitSourceTotal));
   const transactionsMismatch =
     expectedTransactions.length > 0 &&
     !transactionsMatchExactly(transactionRows, expectedTransactions);
@@ -1055,6 +1085,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       ? `禁止された可視表現: ${matchedForbiddenVisiblePatterns.join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
+    missingDataToolFacts.length > 0
+      ? `不足 data tool facts: ${missingDataToolFacts.join(", ")}`
+      : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
       : undefined,
@@ -1076,6 +1109,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
           ...new Set(unexpectedVisibleTransactionCounts.map(({ count }) => count)),
         ].join(",")}`
       : undefined,
+    truncationDisclosureMissing ? "明細の省略件数表示がありません" : undefined,
     transactionGroupMismatch
       ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.amountType}`
       : undefined,

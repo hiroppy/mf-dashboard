@@ -3,6 +3,7 @@ import assertFinanceResponse from "./assertions";
 
 const output = JSON.stringify({
   allowedHrefs: ["/0/cf/2026-07"],
+  dataToolResults: [{ toolName: "getMonthlySummaryByMonth", output: { balance: 93341 } }],
   text: "2026年7月の収支です。",
   cards: [
     {
@@ -21,12 +22,26 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(output, {
         config: {
           expectedCardFacts: ["2026年7月"],
+          expectedDataToolFacts: [93341],
           expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
           expectedCardTypes: ["summary"],
           expectedRoute: "/0/cf/2026-07",
         },
       }),
     ).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it("rejects claims without matching data-tool evidence", () => {
+    const fabricatedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedOutput, {
+        config: { expectedDataToolFacts: [93341] },
+      }),
+    ).toMatchObject({ pass: false, reason: "不足 data tool facts: 93341" });
   });
 
   it("rejects malformed evaluation output", () => {
@@ -291,6 +306,49 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a formally negated allowlisted monetary claim", () => {
+    const negatedAmountOutput = JSON.stringify({
+      text: "総資産は5,683,100円ではございません。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("ignores nonmonetary counters near finance labels", () => {
+    const counterOutput = JSON.stringify({
+      text: "支出の上位3項目を見る",
+      cards: [
+        {
+          type: "action",
+          title: "支出の詳細",
+          description: "上位項目を確認します。",
+          action: { label: "支出の上位3項目を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(counterOutput, {
+        config: { allowedVisibleAmounts: [] },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects an unallowlisted kanji monetary claim", () => {
@@ -1045,6 +1103,53 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("requires disclosure for a truncated transaction group", () => {
+    const transactionOutput = JSON.stringify({
+      text: "食費明細です。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [2],
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "明細の省略件数表示がありません" });
   });
 
   it("does not allow a source total as the displayed row count", () => {
@@ -2022,6 +2127,26 @@ describe("assertFinanceResponse", () => {
         {
           type: "summary",
           title: "7-30時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: { allowedVisibleDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a stale yearless dotted snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "7.30時点の総資産",
           metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
           href: "/0/bs",
         },

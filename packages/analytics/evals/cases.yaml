@@ -38,6 +38,7 @@
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
           - { label: 収支, amount: 93341, amountType: balance }
+        expectedDataToolFacts: [313235, 219894, 93341]
         requiredInsightPatterns:
           - (黒字|プラス|余剰|手残り)
           - (貯蓄|積立|予算|見直し|確保)
@@ -105,6 +106,7 @@
           - { cardType: transactionList, pattern: 食費 }
         expectedMetrics:
           - { label: 食費, amount: 41837, amountType: expense }
+        expectedDataToolFacts: [41837, すき家]
         expectedCategories:
           - { label: 食費, amount: 41837, amountType: expense, percentage: 19.03 }
         expectedCardTextFacts:
@@ -341,6 +343,7 @@
         allowedVisibleAmounts: [6587, 3435, 3152]
         allowedVisibleDates: ["2026-07-10"]
         allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: []
         visibleAmountClaims:
           - { label: 支出, amount: 6587 }
         expectedMetrics:
@@ -370,6 +373,7 @@
               amountType: expense,
               category: 食費,
             }
+        expectedDataToolFacts: [東京ガス ガス代, 成城石井]
         expectedCardTypes: [summary, transactionList, action]
         expectedRoute: /0/cf/2026-07
 
@@ -392,6 +396,7 @@
           - { label: 総資産, amount: 5683100 }
         expectedMetrics:
           - { label: 総資産, amount: 5683100, amountType: balance }
+        expectedDataToolFacts: [5683100]
         expectedCardTitleFacts:
           - { cardType: summary, pattern: 総資産 }
         expectedCardTypes: [summary]
@@ -447,6 +452,7 @@
               amountType: balance,
               labelPattern: ((衣服・美容|衣服).*(差|増|前月|比較)|(差|増|前月|比較).*(衣服・美容|衣服)),
             }
+        expectedDataToolFacts: [19475, 12111, 7364]
         requireInsightMetric: true
         expectedInsightFacts: [2026-07]
         expectedCardTitleFacts:

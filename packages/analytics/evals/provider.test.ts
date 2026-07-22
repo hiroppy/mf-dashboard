@@ -48,7 +48,7 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
 }
 
 describe("toEvaluationOutput", () => {
-  it("keeps only final text and presented cards", () => {
+  it("keeps final output and successful data-tool evidence", () => {
     const response: ChatResponse = {
       text: "回答",
       steps: [
@@ -63,6 +63,7 @@ describe("toEvaluationOutput", () => {
 
     expect(toEvaluationOutput(response, "test-group")).toEqual({
       allowedHrefs: [],
+      dataToolResults: [{ toolName: "getMonthlySummaryByMonth", output: { income: 100 } }],
       text: "回答",
       cards: [{ type: "summary" }],
     });

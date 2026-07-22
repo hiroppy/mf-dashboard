@@ -74,6 +74,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
   const allowedHrefs = new Set<string>();
   let allowedHrefsAtPresentation: string[] = [];
+  const dataToolResults: Array<{ toolName: string; output: unknown }> = [];
   const presentations: unknown[] = [];
   const visibleText: string[] = [];
   let hasStepText = false;
@@ -86,6 +87,9 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     }
 
     for (const { toolName, output } of step.toolResults) {
+      if (toolName !== "getFinanceDashboardRoute" && toolName !== "presentFinanceCards") {
+        dataToolResults.push({ toolName, output });
+      }
       if (toolName === "getFinanceDashboardRoute") {
         const route = financeChatHrefSchema.safeParse(
           typeof output === "object" && output !== null && "href" in output
@@ -111,6 +115,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
 
   return {
     allowedHrefs: allowedHrefsAtPresentation,
+    dataToolResults,
     text: hasStepText
       ? visibleText.join("")
       : sanitizeFinanceChatLinks(response.text, allowedHrefs),
