@@ -134,6 +134,26 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("未許可の可視金額: -93341");
   });
 
+  it("treats a triangle-prefixed monetary claim as negative", () => {
+    const triangleAmountOutput = JSON.stringify({
+      text: "収支は▲93,341円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(triangleAmountOutput, {
+        config: { allowedVisibleAmounts: [93341] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視金額: -93341" });
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
@@ -795,6 +815,26 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("未許可の可視月: 2026-06");
   });
 
+  it("recognizes a conflicting yearless visible month", () => {
+    const wrongMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "6月の月次収支（7月データ）",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(wrongMonthOutput, {
+        config: { allowedVisibleMonths: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視月: *-06" });
+  });
+
   it("rejects a contradictory visible deficit claim", () => {
     const deficitOutput = JSON.stringify({
       text: "回答",
@@ -812,6 +852,34 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(deficitOutput, {
         config: { forbiddenVisiblePatterns: ["(赤字|収支.{0,10}マイナス)"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it.each([
+    "今月は黒字ではありませんが、貯蓄を見直します。",
+    "衣服・美容は前月より増加していないため、見直し対象外です。",
+  ])("rejects a negated qualitative claim: %s", (description) => {
+    const negatedOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "分析",
+          description,
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(黒字|プラス).{0,8}(ではない|ありません|ない)",
+            "(増加|上回).{0,8}(していない|ありません|ない|対象外)",
+          ],
+        },
       }),
     ).toMatchObject({ pass: false });
   });

@@ -21,6 +21,7 @@
           - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
         forbiddenVisiblePatterns:
           - (赤字|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
+          - (黒字|プラス|余剰|手残り).{0,8}(ではない|でない|ありません|ない)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -73,6 +74,7 @@
             1632,
             761,
           ]
+        allowedVisibleMonths: ["2026-07"]
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
           - { label: 支出, amount: 219894 }
@@ -81,6 +83,9 @@
           - { label: 食費, amount: 41837, amountType: expense }
         expectedCategories:
           - { label: 食費, amount: 41837, amountType: expense, percentage: 19.03 }
+        expectedCardTextFacts:
+          - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
+          - { cardType: categoryBreakdown, pattern: "(2026[-/]07|2026年7月|7月)" }
         expectedTransactionGroup:
           month: "2026-07"
           category: 食費
@@ -366,6 +371,8 @@
       value: 必ず削減できます
     - type: not-regex
       value: (必ず|確実に|絶対に).{0,8}(削減|節約)(でき|可能)
+    - type: not-regex
+      value: (削減|節約)(できます|できる|可能です|可能だ)
     - type: javascript
       value: file://./assertions.ts
       config:
@@ -396,5 +403,7 @@
           - (衣服・美容.{0,40}(前月|先月).{0,20}(高い|多い|増加|上回)|(前月|先月).{0,20}衣服・美容.{0,20}(高い|多い|増加|上回))
           - (ため|ので|理由|高い|多い|増加|上回)
         expectedInsightActionPattern: (内訳|支出|食費)
+        forbiddenVisiblePatterns:
+          - (増加|上回|高い|多い).{0,8}(していない|ではない|でない|ありません|ない|対象外)
         expectedCardTypes: [insight]
         expectedRoute: /0/cf/2026-07

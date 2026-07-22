@@ -188,12 +188,12 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
   return visibleTexts.flatMap((text) =>
     Array.from(
       text.matchAll(
-        /(?:([+＋\-−]?)\s*[¥￥]\s*([+＋\-−]?)\s*([\d,.]+)|([+＋\-−]?)\s*((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g,
+        /(?:([+＋\-−▲▼]?)\s*[¥￥]\s*([+＋\-−▲▼]?)\s*([\d,.]+)|([+＋\-−▲▼]?)\s*((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g,
       ),
       (match) => ({
         amount:
           parseVisibleAmount(match[3], match[5]) *
-          (/[-−]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
+          (/[-−▲▼]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,
@@ -302,6 +302,10 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
         text.matchAll(/(\d{4})年(\d{1,2})月/g),
         ([, year, month]) => `${year}-${String(month).padStart(2, "0")}`,
       ),
+      ...Array.from(
+        text.matchAll(/(?<!\d)(\d{1,2})月/g),
+        ([, month]) => `*-${String(month).padStart(2, "0")}`,
+      ),
     ];
   });
 }
@@ -383,7 +387,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
     config.allowedVisibleMonths === undefined
       ? []
       : collectVisibleMonths(parsed).filter(
-          (month) => !config.allowedVisibleMonths?.includes(month),
+          (month) =>
+            !config.allowedVisibleMonths?.some(
+              (allowedMonth) => month === allowedMonth || month === `*-${allowedMonth.slice(5)}`,
+            ),
         );
   const unexpectedVisiblePercentages =
     config.allowedVisiblePercentages === undefined
