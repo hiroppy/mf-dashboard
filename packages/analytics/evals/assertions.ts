@@ -650,11 +650,16 @@ function collectMislabeledVisibleAmounts(
     const nearestLabel = nearbyClaims[0]?.claim.label;
     if (nearestLabel === undefined) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
     const nearestExpectedDistance = nearbyClaims[0]?.distance ?? Number.POSITIVE_INFINITY;
-    const nearerUnexpectedLabel = FINANCE_AMOUNT_LABELS.filter(
-      (label) =>
-        !new Set(["差額", "金額", "残高"]).has(label) &&
-        !expectedClaims.some((claim) => claim.label.includes(label)),
-    )
+    const dynamicCategoryLabels = Array.from(
+      text.matchAll(/[\p{L}・]{1,12}?費/gu),
+      ([label]) => label.split(/(?:と比べ|に比べ|より|は|が|の)/u).at(-1) ?? label,
+    );
+    const nearerUnexpectedLabel = [...new Set([...FINANCE_AMOUNT_LABELS, ...dynamicCategoryLabels])]
+      .filter(
+        (label) =>
+          !new Set(["差額", "金額", "残高"]).has(label) &&
+          !expectedClaims.some((claim) => claim.label.includes(label)),
+      )
       .map((label) => {
         const foundBeforeIndex = text.lastIndexOf(label, index);
         const foundAfterIndex = text.indexOf(label, endIndex);
@@ -1047,7 +1052,7 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(?:先月|前月|来月|翌月)/g),
+        text.matchAll(/(?:先々月|昨々月|先月|前月|来月|翌月)/g),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(

@@ -1130,6 +1130,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("総負債=5683100") });
   });
 
+  it("prefers an intervening unconfigured expense category over an earlier expected category", () => {
+    const mislabeledOutput = JSON.stringify({
+      text: "食費と比べ交通費は41,837円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(mislabeledOutput, {
+        config: {
+          allowedVisibleAmounts: [41837],
+          visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("交通費=41837") });
+  });
+
   it("rejects a materially different small approximate monetary claim", () => {
     const approximateOutput = JSON.stringify({
       text: "日用品の差額は約1,200円減少です。",
@@ -3325,6 +3348,30 @@ describe("assertFinanceResponse", () => {
       ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
     },
   );
+
+  it.each(["先々月", "昨々月"])("recognizes an earlier named relative month: %s", (month) => {
+    const relativeComparisonOutput = JSON.stringify({
+      text: `${month}の食費は41,837円です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining(`relative-${month}`) });
+  });
 
   it("recognizes a relative month followed by a day", () => {
     const relativeDateOutput = JSON.stringify({
