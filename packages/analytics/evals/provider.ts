@@ -84,7 +84,11 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   let dataToolResultsAtPresentation: DataToolResult[] = [];
   const presentations: unknown[] = [];
   const visibleText: string[] = [];
-  const textEvidence: Array<{ text: string; dataToolResults: DataToolResult[] }> = [];
+  const textEvidence: Array<{
+    text: string;
+    allowedHrefs: string[];
+    dataToolResults: DataToolResult[];
+  }> = [];
   let hasStepText = false;
 
   for (const step of response.steps) {
@@ -94,7 +98,11 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
       hasStepText = true;
       const text = sanitizeFinanceChatLinks(step.text, allowedHrefs);
       visibleText.push(text);
-      textEvidence.push({ text, dataToolResults: dataToolResultsBeforeStep });
+      textEvidence.push({
+        text,
+        allowedHrefs: allowedHrefsBeforeStep,
+        dataToolResults: dataToolResultsBeforeStep,
+      });
     }
 
     for (const { toolName, input, output } of step.toolResults) {
@@ -134,7 +142,13 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
     text,
     textEvidence: hasStepText
       ? textEvidence
-      : [{ text, dataToolResults: dataToolResultsAtPresentation }],
+      : [
+          {
+            text,
+            allowedHrefs: allowedHrefsAtPresentation,
+            dataToolResults: dataToolResultsAtPresentation,
+          },
+        ],
     cards: presentations[0],
   };
 }

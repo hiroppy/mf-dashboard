@@ -80,6 +80,7 @@ describe("toEvaluationOutput", () => {
       textEvidence: [
         {
           text: "回答",
+          allowedHrefs: [],
           dataToolResults: [
             {
               toolName: "getMonthlySummaryByMonth",
@@ -175,7 +176,7 @@ describe("toEvaluationOutput", () => {
     };
 
     expect(toEvaluationOutput(response, "test-group").textEvidence).toEqual([
-      { text: "収入は313,235円です。", dataToolResults: [] },
+      { text: "収入は313,235円です。", allowedHrefs: [], dataToolResults: [] },
     ]);
   });
 
@@ -198,6 +199,9 @@ describe("toEvaluationOutput", () => {
     };
 
     expect(toEvaluationOutput(response, "test-group").text).toBe("詳細");
+    expect(toEvaluationOutput(response, "test-group").textEvidence[0]).toMatchObject({
+      allowedHrefs: [],
+    });
   });
 
   it("does not prove a card route returned after card presentation", () => {

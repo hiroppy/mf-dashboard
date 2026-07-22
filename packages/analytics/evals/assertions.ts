@@ -94,7 +94,7 @@ interface EvaluationOutput {
   allowedHrefs: string[];
   dataToolResults: DataToolResult[];
   text: string;
-  textEvidence: Array<{ text: string; dataToolResults: DataToolResult[] }>;
+  textEvidence: Array<{ text: string; allowedHrefs: string[]; dataToolResults: DataToolResult[] }>;
   cards: FinanceChatCard[];
 }
 
@@ -139,6 +139,12 @@ function parseOutput(output: string): EvaluationOutput | undefined {
               ? [
                   {
                     text: evidence.text,
+                    allowedHrefs:
+                      "allowedHrefs" in evidence && Array.isArray(evidence.allowedHrefs)
+                        ? evidence.allowedHrefs.filter(
+                            (href): href is string => typeof href === "string",
+                          )
+                        : [],
                     dataToolResults: parseDataToolResults(
                       "dataToolResults" in evidence ? evidence.dataToolResults : [],
                     ),
@@ -654,7 +660,7 @@ function collectMislabeledVisibleAmounts(
         (claim) =>
           claim.amount === amount ||
           (isApproximateAmountClaim(text, index, endIndex) &&
-            Math.abs(amount - claim.amount) <= Math.max(1000, Math.abs(claim.amount) * 0.01)),
+            Math.abs(amount - claim.amount) <= Math.max(10, Math.abs(claim.amount) * 0.01)),
       )
     ) {
       return [];
@@ -764,6 +770,35 @@ function collectClauseBounds(text: string, startIndex: number, endIndex: number)
   };
 }
 
+function collectNearestClaimLabel(
+  text: string,
+  index: number,
+  endIndex: number,
+  claims: VisibleAmountClaim[],
+): string | undefined {
+  const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
+  return claims
+    .map(({ label }) => {
+      const beforeIndex = text.lastIndexOf(label, index);
+      const afterIndex = text.indexOf(label, endIndex);
+      return {
+        label,
+        distance: Math.min(
+          beforeIndex >= clauseStart
+            ? index - (beforeIndex + label.length)
+            : Number.POSITIVE_INFINITY,
+          afterIndex !== -1 && afterIndex < clauseEnd
+            ? afterIndex - endIndex
+            : Number.POSITIVE_INFINITY,
+        ),
+      };
+    })
+    .filter(({ distance }) => Number.isFinite(distance))
+    .sort(
+      (left, right) => left.distance - right.distance || right.label.length - left.label.length,
+    )[0]?.label;
+}
+
 function collectVisibleTransactionCounts(output: EvaluationOutput) {
   return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
     const text = rawText.normalize("NFKC");
@@ -800,6 +835,15 @@ function collectDates(rawTexts: string[]): string[] {
       ...Array.from(
         text.matchAll(/(\d+|[〇零一二三四五六七八九十百]+)日(?:前|後)(?=の|は|が|時点|現在)/g),
         ([relativeDay]) => `relative-${relativeDay}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(\d{4})年(\d{1,2})月(初|末)(?=の|は|が|時点|現在)/g),
+        ([, year, month, boundary]) => {
+          const numericMonth = Number(month);
+          const day =
+            boundary === "初" ? 1 : new Date(Date.UTC(Number(year), numericMonth, 0)).getUTCDate();
+          return `${year}-${String(numericMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        },
       ),
       ...Array.from(
         text.matchAll(
@@ -936,6 +980,12 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     return [
       ...Array.from(
         text.matchAll(/(?:先月|前月|来月|翌月)(?=末|分|の|時点|現在|\s|$)/g),
+        ([relativeMonth]) => `relative-${relativeMonth}`,
+      ),
+      ...Array.from(
+        text.matchAll(
+          /(\d+|[〇零一二三四五六七八九十百]+)\s*(?:か月|ヶ月|ケ月|箇月)(?:前|後)(?=末|分|の|時点|現在|\s|$)/g,
+        ),
         ([relativeMonth]) => `relative-${relativeMonth}`,
       ),
       ...Array.from(
@@ -1206,7 +1256,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
         (allowed) =>
           amount === allowed ||
           (isApproximateAmountClaim(text, index, endIndex) &&
-            Math.abs(amount - allowed) <= Math.max(1000, Math.abs(allowed) * 0.01)),
+            Math.abs(amount - allowed) <= Math.max(10, Math.abs(allowed) * 0.01)),
       ),
   );
   const mislabeledVisibleAmounts = collectMislabeledVisibleAmounts(
@@ -1305,20 +1355,22 @@ export default function assertFinanceResponse(output: string, context: Assertion
     const amounts = [
       ...collectVisibleAmountMatches(evidenceOutput),
       ...collectBareVisibleAmountMatches(evidenceOutput, config.visibleAmountClaims ?? []),
-    ].map(({ amount }) => ({
-      claimLabels: (config.visibleAmountClaims ?? [])
-        .filter((claim) => claim.amount === amount)
-        .map(({ label }) => label),
+    ].map(({ amount, endIndex, index, text }) => ({
+      claimLabels: [
+        collectNearestClaimLabel(text, index, endIndex, config.visibleAmountClaims ?? []),
+      ].filter((label): label is string => label !== undefined),
       label: `金額=${amount}`,
       value: amount,
     }));
-    const percentages = collectVisiblePercentageMatches(evidenceOutput).map(({ amount }) => ({
-      claimLabels: (config.visiblePercentageClaims ?? [])
-        .filter((claim) => Math.abs(claim.amount - amount) <= 0.01)
-        .map(({ label }) => label),
-      label: `割合=${amount}`,
-      value: amount,
-    }));
+    const percentages = collectVisiblePercentageMatches(evidenceOutput).map(
+      ({ amount, endIndex, index, text }) => ({
+        claimLabels: [
+          collectNearestClaimLabel(text, index, endIndex, config.visiblePercentageClaims ?? []),
+        ].filter((label): label is string => label !== undefined),
+        label: `割合=${amount}`,
+        value: amount,
+      }),
+    );
     return [...amounts, ...percentages].flatMap(({ claimLabels, label, value }) => {
       const numericSupportingFacts = expectedDataToolFacts.filter((expected) =>
         collectNumericValues(expected.value).some(
@@ -1342,6 +1394,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
             );
       return hasEvidence ? [] : [label];
     });
+  });
+  const ungroundedTextRoutes = parsed.textEvidence.flatMap((evidence) => {
+    const evidenceOutput: EvaluationOutput = {
+      allowedHrefs: evidence.allowedHrefs,
+      cards: [],
+      dataToolResults: evidence.dataToolResults,
+      text: evidence.text,
+      textEvidence: [],
+    };
+    return collectRoutes(evidenceOutput).filter((route) => !evidence.allowedHrefs.includes(route));
   });
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
@@ -1561,6 +1623,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     ungroundedTextClaims.length > 0
       ? `取得前に主張された可視数値: ${[...new Set(ungroundedTextClaims)].join(",")}`
+      : undefined,
+    ungroundedTextRoutes.length > 0
+      ? `取得前に表示されたroute: ${[...new Set(ungroundedTextRoutes)].join(",")}`
       : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`

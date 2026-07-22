@@ -142,6 +142,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 割合=29.8" });
   });
 
+  it("rejects a visible route stated before its navigation tool result", () => {
+    const earlyRouteOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text: "[詳細][route]\n\n[route]: /0/cf/2026-07",
+      textEvidence: [
+        {
+          text: "[詳細][route]\n\n[route]: /0/cf/2026-07",
+          allowedHrefs: [],
+          dataToolResults: [],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(earlyRouteOutput, {
+        config: { expectedRoute: "/0/cf/2026-07" },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "取得前に表示されたroute: /0/cf/2026-07",
+    });
+  });
+
   it("rejects a derived delta stated before all source tool results", () => {
     const dataToolResults = [
       {
@@ -274,6 +297,51 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=313235" });
+  });
+
+  it("uses the visible label to distinguish equal income and expense facts", () => {
+    const incomeResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalIncome: 100 },
+    };
+    const expenseResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalExpense: 100 },
+    };
+    const wrongLabelEvidenceOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [incomeResult, expenseResult],
+      text: "収入は100円です。",
+      textEvidence: [{ text: "収入は100円です。", dataToolResults: [expenseResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(wrongLabelEvidenceOutput, {
+        config: {
+          allowedVisibleAmounts: [100],
+          visibleAmountClaims: [
+            { label: "収入", amount: 100 },
+            { label: "支出", amount: 100 },
+          ],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalIncome",
+              value: 100,
+            },
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalExpense",
+              value: 100,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=100" });
   });
 
   it("requires identity fields and values on the same data-tool row", () => {
@@ -1006,6 +1074,29 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it("rejects a materially different small approximate monetary claim", () => {
+    const approximateOutput = JSON.stringify({
+      text: "日用品の差額は約1,200円減少です。",
+      cards: [
+        {
+          type: "summary",
+          title: "日用品",
+          metrics: [{ label: "差額", amount: 297, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(approximateOutput, {
+        config: {
+          allowedVisibleAmounts: [297],
+          visibleAmountClaims: [{ label: "日用品", amount: 297, rolePattern: "減少" }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("1200") });
   });
 
   it("allows a suffix-qualified approximate rounded monetary claim", () => {
@@ -2901,6 +2992,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-先月") });
   });
 
+  it("rejects a numeric relative month outside the allowed month", () => {
+    const relativeComparisonOutput = JSON.stringify({
+      text: "2か月前の食費は41,837円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-2か月前") });
+  });
+
   it("validates an era-qualified month in its configured role", () => {
     const eraMonthOutput = JSON.stringify({
       text: "回答",
@@ -3407,6 +3522,35 @@ describe("assertFinanceResponse", () => {
         config: { allowedVisibleMonths: ["2026-07"] },
       }),
     ).toMatchObject({ pass: false, reason: "未許可の可視月: relative-来月" });
+  });
+
+  it("maps explicit month-start and month-end snapshot headings to concrete dates", () => {
+    const createSnapshotOutput = (boundary: "初" | "末") =>
+      JSON.stringify({
+        text: "回答",
+        cards: [
+          {
+            type: "summary",
+            title: `2026年7月${boundary}時点の総資産`,
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+    const context = {
+      config: {
+        allowedVisibleDates: ["2026-07-31"],
+        allowedVisibleMonths: ["2026-07"],
+      },
+    };
+
+    expect(assertFinanceResponse(createSnapshotOutput("初"), context)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("2026-07-01"),
+    });
+    expect(assertFinanceResponse(createSnapshotOutput("末"), context)).toMatchObject({
+      pass: true,
+    });
   });
 
   it("requires action facts in the visible action label", () => {
