@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat/cards": "./src/chat/cards.ts",
+    "./chat/link-sanitizer": "./src/chat/link-sanitizer.ts",
     "./chat/prompt": "./src/chat/prompt.ts",
     "./chat/tools": "./src/chat/tools.ts",
     "./config": "./src/config.ts",

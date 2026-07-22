@@ -44,7 +44,35 @@ describe("assertFinanceResponse", () => {
 
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("不足 facts: 123");
-    expect(result.reason).toContain("不足 card types: insight");
+    expect(result.reason).toContain("card types 不一致: expected=insight actual=summary");
     expect(result.reason).toContain("不足 route: /bs");
+  });
+
+  it("rejects cards in the wrong presentation order", () => {
+    const reversedOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "action",
+          title: "次の操作",
+          description: "内訳を確認できます。",
+          action: { label: "見る", href: "/0/cf/2026-07" },
+        },
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(reversedOutput, {
+        config: { expectedCardTypes: ["summary", "action"] },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "card types 不一致: expected=summary,action actual=action,summary",
+    });
   });
 });

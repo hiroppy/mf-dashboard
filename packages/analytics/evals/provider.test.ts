@@ -58,15 +58,36 @@ describe("toEvaluationOutput", () => {
       ],
     };
 
-    expect(toEvaluationOutput(response)).toEqual({
+    expect(toEvaluationOutput(response, "test-group")).toEqual({
       text: "回答",
       cards: [{ type: "summary" }],
     });
   });
 
   it("requires exactly one card presentation", () => {
-    expect(() => toEvaluationOutput({ text: "回答", steps: [] })).toThrow(
+    expect(() => toEvaluationOutput({ text: "回答", steps: [] }, "test-group")).toThrow(
       "presentFinanceCards の成功結果は1件必要です",
+    );
+  });
+
+  it("sanitizes text with routes returned by the navigation tool", () => {
+    const response: ChatResponse = {
+      text: "[詳細](https://example.com/test-group/cf/2026-07) [外部](https://example.com)",
+      steps: [
+        {
+          toolResults: [
+            {
+              toolName: "getFinanceDashboardRoute",
+              output: { href: "/test-group/cf/2026-07" },
+            },
+            { toolName: "presentFinanceCards", output: [{ type: "summary" }] },
+          ],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").text).toBe(
+      "[詳細](/test-group/cf/2026-07) 外部",
     );
   });
 });
@@ -149,11 +170,14 @@ describe("FinanceChatProvider", () => {
     });
   });
 
-  it("requires a valid evaluation date", async () => {
-    const provider = new FinanceChatProvider({}, createDependencies());
+  it.each([undefined, "1", "2026-02-30T00:00:00.000Z"])(
+    "requires a valid ISO evaluation date: %s",
+    async (evaluationDate) => {
+      const provider = new FinanceChatProvider({}, createDependencies());
 
-    await expect(provider.callApi("質問")).resolves.toEqual({
-      error: "evaluationDate を ISO 8601 形式で指定してください。",
-    });
-  });
+      await expect(provider.callApi("質問", { vars: { evaluationDate } })).resolves.toEqual({
+        error: "evaluationDate を ISO 8601 形式で指定してください。",
+      });
+    },
+  );
 });

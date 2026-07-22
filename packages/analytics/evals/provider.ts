@@ -2,6 +2,9 @@ import { resolve } from "node:path";
 import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
 import MockDate from "mockdate";
+import { z } from "zod";
+import { buildFinanceChatHref, financeChatHrefSchema } from "../src/chat/cards";
+import { sanitizeFinanceChatLinks } from "../src/chat/link-sanitizer";
 import { FINANCE_CHAT_MAX_TOOL_STEPS, getFinanceChatSystemPrompt } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
@@ -40,8 +43,9 @@ const dependencies: ProviderDependencies = {
 };
 
 const DEMO_DB_PATH = resolve(import.meta.dirname, "../../../data/demo.db");
+const evaluationDateSchema = z.iso.datetime({ offset: true });
 
-export function toEvaluationOutput(response: ChatResponse) {
+export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const presentations = response.steps.flatMap(({ toolResults }) =>
     toolResults
       .filter(({ toolName }) => toolName === "presentFinanceCards")
@@ -54,7 +58,27 @@ export function toEvaluationOutput(response: ChatResponse) {
     );
   }
 
-  return { text: response.text, cards: presentations[0] };
+  const groupHref = buildFinanceChatHref({ page: "dashboard", groupId });
+  const allowedHrefs = new Set(
+    response.steps
+      .flatMap(({ toolResults }) => toolResults)
+      .filter(({ toolName }) => toolName === "getFinanceDashboardRoute")
+      .flatMap(({ output }) => {
+        const route = financeChatHrefSchema.safeParse(
+          typeof output === "object" && output !== null && "href" in output
+            ? output.href
+            : undefined,
+        );
+        return route.success && (route.data === groupHref || route.data.startsWith(`${groupHref}/`))
+          ? [route.data]
+          : [];
+      }),
+  );
+
+  return {
+    text: sanitizeFinanceChatLinks(response.text, allowedHrefs),
+    cards: presentations[0],
+  };
 }
 
 export default class FinanceChatProvider {
@@ -93,7 +117,7 @@ export default class FinanceChatProvider {
         MockDate.reset();
       }
 
-      return { output: JSON.stringify(toEvaluationOutput(response)) };
+      return { output: JSON.stringify(toEvaluationOutput(response, group.id)) };
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }
@@ -117,10 +141,10 @@ export default class FinanceChatProvider {
 
   private getEvaluationDate(context: CallContext) {
     const value = context.vars?.evaluationDate;
-    const date = typeof value === "string" ? new Date(value) : new Date(Number.NaN);
-    if (Number.isNaN(date.getTime())) {
+    const result = evaluationDateSchema.safeParse(value);
+    if (!result.success) {
       throw new Error("evaluationDate を ISO 8601 形式で指定してください。");
     }
-    return date;
+    return new Date(result.data);
   }
 }

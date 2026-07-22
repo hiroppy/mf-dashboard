@@ -70,15 +70,19 @@ export default function assertFinanceResponse(output: string, context: Assertion
     (expected) => !includesFact(facts, expected),
   );
   const actualTypes = parsed.cards.map(({ type }) => type);
-  const missingTypes = (config.expectedCardTypes ?? []).filter(
-    (expected) => !actualTypes.includes(expected as FinanceChatCard["type"]),
-  );
+  const expectedTypes = config.expectedCardTypes ?? [];
+  const cardTypesMismatch =
+    expectedTypes.length > 0 &&
+    (actualTypes.length !== expectedTypes.length ||
+      actualTypes.some((actual, index) => actual !== expectedTypes[index]));
   const routeMissing =
     config.expectedRoute && !collectRoutes(parsed.cards).includes(config.expectedRoute);
 
   const failures = [
     missingFacts.length > 0 ? `不足 facts: ${missingFacts.join(", ")}` : undefined,
-    missingTypes.length > 0 ? `不足 card types: ${missingTypes.join(", ")}` : undefined,
+    cardTypesMismatch
+      ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`
+      : undefined,
     routeMissing ? `不足 route: ${config.expectedRoute}` : undefined,
   ].filter(Boolean);
 
