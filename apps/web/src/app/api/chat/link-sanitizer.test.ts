@@ -166,6 +166,41 @@ describe("splitCompleteFinanceChatText", () => {
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
+  it("preserves fenced-code state across streamed fragments", async () => {
+    const transform = createFinanceChatLinkSanitizer("group-a")({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: Array<{ type: string; text?: string }> = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({ type: "text-delta", id: "text-a", text: "```html\n" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: '<a href="javascript:alert(1)">example</a>\n```',
+    });
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.text)
+        .join(""),
+    ).toBe('```html\n<a href="javascript:alert(1)">example</a>\n```');
+  });
+
   it("retains a reference definition emitted before its use", async () => {
     const transform = createFinanceChatLinkSanitizer("group-a")({
       stopStream: vi.fn<() => void>(),

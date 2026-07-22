@@ -22,6 +22,22 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toContain("javascript:alert((1))");
   });
 
+  it.each(["[foo\\]](javascript:alert(1))", "[foo [bar]](javascript:alert(1))"])(
+    "removes and records a destination after an escaped or nested label bracket: %s",
+    (text) => {
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).not.toContain("javascript:");
+      expect(collectFinanceChatLinks(text)).toContain("javascript:alert(1)");
+    },
+  );
+
+  it.each(["`[x](https://example.com)`", "```md\n[x](https://example.com)\n```"])(
+    "preserves a Markdown link literal inside Markdown code: %s",
+    (text) => {
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+      expect(collectFinanceChatLinks(text)).toEqual([]);
+    },
+  );
+
   it.each(["https://例.exampleです。", "<https://例.example/path>。"])(
     "removes a Unicode-host bare or autolink URL: %s",
     (text) => {

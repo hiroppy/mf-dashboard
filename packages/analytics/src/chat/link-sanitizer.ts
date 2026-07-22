@@ -52,28 +52,62 @@ interface RawHtmlAnchor {
   start: number;
 }
 
-function isInsideMarkdownCode(text: string, targetIndex: number): boolean {
-  let delimiterLength = 0;
-  for (let index = 0; index < targetIndex; index += 1) {
+interface MarkdownCodeRange {
+  end: number;
+  start: number;
+}
+
+function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
+  const ranges: MarkdownCodeRange[] = [];
+  for (let index = 0; index < text.length; index += 1) {
     if (text[index] !== "`") continue;
-    let runLength = 1;
-    while (text[index + runLength] === "`") runLength += 1;
-    if (delimiterLength === 0) {
-      delimiterLength = runLength;
-    } else if (runLength >= delimiterLength) {
-      delimiterLength = 0;
+    let delimiterLength = 1;
+    while (text[index + delimiterLength] === "`") delimiterLength += 1;
+    let matched = false;
+    for (
+      let closingStart = index + delimiterLength;
+      closingStart < text.length;
+      closingStart += 1
+    ) {
+      if (text[closingStart] !== "`") continue;
+      let closingLength = 1;
+      while (text[closingStart + closingLength] === "`") closingLength += 1;
+      if (closingLength >= delimiterLength) {
+        const end = closingStart + closingLength;
+        ranges.push({ start: index, end });
+        index = end - 1;
+        matched = true;
+        break;
+      }
+      closingStart += closingLength - 1;
     }
-    index += runLength - 1;
+    if (!matched) index += delimiterLength - 1;
   }
-  if (delimiterLength === 0) return false;
-  for (let index = targetIndex; index < text.length; index += 1) {
-    if (text[index] !== "`") continue;
-    let runLength = 1;
-    while (text[index + runLength] === "`") runLength += 1;
-    if (runLength >= delimiterLength) return true;
-    index += runLength - 1;
+  return ranges;
+}
+
+function maskMarkdownCode(text: string): { masked: string; restore: (value: string) => string } {
+  const replacements = new Map<string, string>();
+  let masked = "";
+  let cursor = 0;
+  for (const range of findMarkdownCodeRanges(text)) {
+    let placeholder = `\uE000${replacements.size}\uE001`;
+    while (text.includes(placeholder)) placeholder = `\uE000${placeholder}\uE001`;
+    masked += text.slice(cursor, range.start) + placeholder;
+    replacements.set(placeholder, text.slice(range.start, range.end));
+    cursor = range.end;
   }
-  return false;
+
+  masked += text.slice(cursor);
+  return {
+    masked,
+    restore: (value) => {
+      let restored = value;
+      for (const [placeholder, code] of replacements)
+        restored = restored.replaceAll(placeholder, code);
+      return restored;
+    },
+  };
 }
 
 function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
@@ -81,7 +115,6 @@ function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
   const openingPattern = /<a\b/giu;
   let openingMatch: RegExpExecArray | null;
   while ((openingMatch = openingPattern.exec(text)) !== null) {
-    if (isInsideMarkdownCode(text, openingMatch.index)) continue;
     let quote: '"' | "'" | undefined;
     let openingEnd: number | undefined;
     for (let index = openingMatch.index + openingMatch[0].length; index < text.length; index += 1) {
@@ -161,8 +194,19 @@ function findMarkdownInlineLinks(text: string): MarkdownInlineLink[] {
     const image = text[index] === "!" && text[index + 1] === "[";
     const labelStart = image ? index + 1 : index;
     if (text[labelStart] !== "[" || (labelStart > 0 && text[labelStart - 1] === "\\")) continue;
-    const labelEnd = text.indexOf("]", labelStart + 1);
-    if (labelEnd < 0 || text[labelEnd + 1] !== "(") continue;
+    let labelDepth = 1;
+    let labelEnd = labelStart + 1;
+    for (; labelEnd < text.length && labelDepth > 0; labelEnd += 1) {
+      if (text[labelEnd] === "\\") {
+        labelEnd += 1;
+      } else if (text[labelEnd] === "[") {
+        labelDepth += 1;
+      } else if (text[labelEnd] === "]") {
+        labelDepth -= 1;
+      }
+    }
+    labelEnd -= 1;
+    if (labelDepth !== 0 || text[labelEnd + 1] !== "(") continue;
     let depth = 1;
     let destinationEnd = labelEnd + 2;
     for (; destinationEnd < text.length && depth > 0; destinationEnd += 1) {
@@ -212,7 +256,8 @@ function sanitizeMarkdownInlineLinks(text: string, allowedHrefs: Set<string>): s
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
-  const withoutHtmlLinks = sanitizeRawHtmlAnchors(text, allowedHrefs);
+  const { masked, restore } = maskMarkdownCode(text);
+  const withoutHtmlLinks = sanitizeRawHtmlAnchors(masked, allowedHrefs);
   const referenceDefinitions = new Map(
     Array.from(
       withoutHtmlLinks.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
@@ -246,40 +291,43 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
       (url) => sanitizeBareUrl(url, allowedHrefs),
     );
 
-  return withoutImplicitAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
-    sanitizeBareUrl(url, allowedHrefs),
+  return restore(
+    withoutImplicitAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
+      sanitizeBareUrl(url, allowedHrefs),
+    ),
   );
 }
 
 export function collectFinanceChatLinks(text: string): string[] {
+  const { masked } = maskMarkdownCode(text);
   return [
-    ...collectRawHtmlAnchorDestinations(text),
-    ...findMarkdownInlineLinks(text).map(({ destination }) =>
+    ...collectRawHtmlAnchorDestinations(masked),
+    ...findMarkdownInlineLinks(masked).map(({ destination }) =>
       /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(destination)
         ? `mailto:${destination}`
         : destination,
     ),
     ...Array.from(
-      text.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
+      masked.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
       ([, href]) => href,
     ),
     ...Array.from(
-      text.matchAll(
+      masked.matchAll(
         /<((?:(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+|www\.(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:\/[^>\s]*)?|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}))>/giu,
       ),
       ([, href]) =>
         /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
     ),
     ...Array.from(
-      text.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
+      masked.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
       ([href]) => splitBareUrl(href).destination,
     ),
     ...Array.from(
-      text.matchAll(/(?<![A-Z0-9._%+:/-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu),
+      masked.matchAll(/(?<![A-Z0-9._%+:/-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu),
       ([href]) => `mailto:${href}`,
     ),
     ...Array.from(
-      text.matchAll(
+      masked.matchAll(
         /(?<![A-Z0-9@._/-])www\.(?:[A-Z0-9-]+\.)+[A-Z]{2,}(?:\/[A-Z0-9\-._~:/?#[\]@!$&'*+,;=%]*)?/giu,
       ),
       ([href]) => splitBareUrl(href).destination,

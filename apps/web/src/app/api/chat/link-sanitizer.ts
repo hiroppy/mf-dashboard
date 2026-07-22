@@ -107,7 +107,7 @@ export function splitCompleteFinanceChatText(
       continue;
     }
 
-    if (character && boundaries.has(character)) lastBoundary = index;
+    if (codeDelimiterLength === 0 && character && boundaries.has(character)) lastBoundary = index;
   }
 
   if (lastBoundary < 0) return { complete: "", pending: text };
