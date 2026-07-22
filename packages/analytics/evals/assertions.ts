@@ -1733,6 +1733,79 @@ function collectUnsupportedCategoryCostClassClaims(
   });
 }
 
+function collectInvalidCategoryTrendClaims(
+  text: string,
+  knownCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+  availableCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+): string[] {
+  const knownCategories = [
+    ...new Set(knownCategoryGroups.flatMap((group) => group.rows.map(({ category }) => category))),
+  ];
+  return knownCategories.flatMap((category) => {
+    const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return Array.from(
+      text.matchAll(
+        new RegExp(
+          `${categoryPattern}(?:は|が)[^。！？\\n、,]{0,12}(増加|減少|上昇|低下|増え|減り|上が|下が)(?:しました|しています|ました|りました|っています|った|ったまま)?`,
+          "gu",
+        ),
+      ),
+    ).flatMap((match) => {
+      const endIndex = match.index + match[0].length;
+      if (
+        hasNegatedSuffix(text, endIndex, collectClauseBounds(text, match.index, endIndex).clauseEnd)
+      ) {
+        return [];
+      }
+      const amounts = availableCategoryGroups
+        .filter((group) => group.month !== undefined)
+        .map((group) => ({
+          amount: group.rows.find((row) => row.category === category)?.totalAmount,
+          month: group.month ?? "",
+        }))
+        .filter((row): row is { amount: number; month: string } => row.amount !== undefined)
+        .sort((left, right) => left.month.localeCompare(right.month));
+      const previous = amounts.at(-2);
+      const current = amounts.at(-1);
+      if (previous === undefined || current === undefined) return [match[0]];
+      const claimsIncrease = /(?:増加|上昇|増え|上が)/u.test(match[1]);
+      const trendIsValid = claimsIncrease
+        ? current.amount > previous.amount
+        : current.amount < previous.amount;
+      return trendIsValid ? [] : [match[0]];
+    });
+  });
+}
+
+function collectUnsupportedCategoryBudgetClaims(
+  text: string,
+  knownCategoryGroups: ReturnType<typeof collectCategoryGroups>,
+): string[] {
+  const knownCategories = [
+    ...new Set(knownCategoryGroups.flatMap((group) => group.rows.map(({ category }) => category))),
+  ];
+  return knownCategories.flatMap((category) => {
+    const categoryPattern = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return Array.from(
+      text.matchAll(
+        new RegExp(
+          `${categoryPattern}(?:は|が).{0,8}予算(?:を|より|に対して)?.{0,8}(超過|超え|上回|以内|下回|達成)(?:しています|している|しました|です|でした)?`,
+          "gu",
+        ),
+      ),
+    ).flatMap((match) => {
+      const endIndex = match.index + match[0].length;
+      return hasNegatedSuffix(
+        text,
+        endIndex,
+        collectClauseBounds(text, match.index, endIndex).clauseEnd,
+      )
+        ? []
+        : [match[0]];
+    });
+  });
+}
+
 function collectMonthlySavingsRates(results: DataToolResult[]) {
   return results.flatMap((result) => {
     if (
@@ -1786,8 +1859,10 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
       return [];
     }
     const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);
-    const actuallyIncreased = current.rate > previous.rate;
-    return claimsIncrease === actuallyIncreased ? [] : [match[0]];
+    const directionIsValid = claimsIncrease
+      ? current.rate > previous.rate
+      : current.rate < previous.rate;
+    return directionIsValid ? [] : [match[0]];
   });
 }
 
@@ -2032,6 +2107,20 @@ export default function assertFinanceResponse(output: string, context: Assertion
       collectUnsupportedCategoryCostClassClaims(text, knownCategoryGroups),
     ),
   ];
+  const invalidCategoryStateClaims = [
+    ...categoryTextEvidence.flatMap((evidence) => [
+      ...collectInvalidCategoryTrendClaims(
+        evidence.text,
+        knownCategoryGroups,
+        collectCategoryGroups(evidence.dataToolResults),
+      ),
+      ...collectUnsupportedCategoryBudgetClaims(evidence.text, knownCategoryGroups),
+    ]),
+    ...collectFacts(parsed.cards).flatMap((text) => [
+      ...collectInvalidCategoryTrendClaims(text, knownCategoryGroups, knownCategoryGroups),
+      ...collectUnsupportedCategoryBudgetClaims(text, knownCategoryGroups),
+    ]),
+  ];
   const invalidSavingsRateDirections = [
     ...categoryTextEvidence.flatMap((evidence) =>
       collectInvalidSavingsRateDirections(evidence.text, evidence.dataToolResults),
@@ -2095,6 +2184,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
               (expected) =>
                 collectNumericValues(expected.value).includes(amount) &&
                 dataToolFactSupportsLabel(expected, series.name) &&
+                dataToolFactSupportsAmountType(expected, series.amountType) &&
                 chartPointMatchesFactMonth(
                   point.label,
                   expected,
@@ -2418,6 +2508,53 @@ export default function assertFinanceResponse(output: string, context: Assertion
           "description" in transaction &&
           normalize(String(transaction.description)) === normalize(description),
       );
+  const collectInvalidTransactionSuperlatives = (text: string, results: DataToolResult[]) => {
+    const rows = results
+      .flatMap((result) =>
+        result.toolName === "searchTransactions"
+          ? collectValuesAtPath(result.output, "$.transactions.*")
+          : [],
+      )
+      .flatMap((transaction) =>
+        typeof transaction === "object" &&
+        transaction !== null &&
+        "description" in transaction &&
+        typeof transaction.description === "string" &&
+        "amount" in transaction &&
+        typeof transaction.amount === "number"
+          ? [{ amount: transaction.amount, description: transaction.description }]
+          : [],
+      );
+    return [...new Set(rows.map(({ description }) => description))].flatMap((description) => {
+      const descriptionPattern = description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return Array.from(
+        text.matchAll(
+          new RegExp(
+            `${descriptionPattern}(?:は|が).{0,8}(?:最も|一番)(安い|高い|少ない|多い)(?:明細|取引)?`,
+            "gu",
+          ),
+        ),
+      ).flatMap((match) => {
+        const endIndex = match.index + match[0].length;
+        if (
+          hasNegatedSuffix(
+            text,
+            endIndex,
+            collectClauseBounds(text, match.index, endIndex).clauseEnd,
+          )
+        ) {
+          return [];
+        }
+        const claimsLowest = /(?:安い|少ない)/u.test(match[1]);
+        const extremeAmount = Math[claimsLowest ? "min" : "max"](
+          ...rows.map(({ amount }) => amount),
+        );
+        return rows.some((row) => row.description === description && row.amount === extremeAmount)
+          ? []
+          : [match[0]];
+      });
+    });
+  };
   const unsupportedTextTransactionDescriptions = config.requireTransactionToolGrounding
     ? [
         ...(parsed.textEvidence.length > 0
@@ -2431,6 +2568,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
         ),
         ...collectClaimedTransactionDescriptions(collectFacts(parsed.cards)).filter(
           (description) => !transactionDescriptionIsRetrieved(description, parsed.dataToolResults),
+        ),
+      ]
+    : [];
+  const invalidTransactionSuperlatives = config.requireTransactionToolGrounding
+    ? [
+        ...parsed.textEvidence.flatMap((evidence) =>
+          collectInvalidTransactionSuperlatives(evidence.text, evidence.dataToolResults),
+        ),
+        ...collectFacts(parsed.cards).flatMap((text) =>
+          collectInvalidTransactionSuperlatives(text, parsed.dataToolResults),
         ),
       ]
     : [];
@@ -2702,6 +2849,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     invalidCategoryTypeClaims.length > 0
       ? `誤ったカテゴリ種別: ${[...new Set(invalidCategoryTypeClaims)].join(",")}`
       : undefined,
+    invalidCategoryStateClaims.length > 0
+      ? `未根拠のカテゴリ状態: ${[...new Set(invalidCategoryStateClaims)].join(",")}`
+      : undefined,
     invalidSavingsRateDirections.length > 0
       ? `誤った貯蓄率方向: ${[...new Set(invalidSavingsRateDirections)].join(",")}`
       : undefined,
@@ -2748,6 +2898,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     unsupportedTextTransactionDescriptions.length > 0
       ? `本文中の未取得明細: ${unsupportedTextTransactionDescriptions.join(", ")}`
+      : undefined,
+    invalidTransactionSuperlatives.length > 0
+      ? `誤った明細最上級: ${[...new Set(invalidTransactionSuperlatives)].join(", ")}`
       : undefined,
     mismatchedTransactionAttributes.length > 0
       ? `誤った明細属性: ${[...new Set(mismatchedTransactionAttributes)].join(", ")}`
