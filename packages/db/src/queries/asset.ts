@@ -9,6 +9,44 @@ import { getDb, type Db, schema } from "../index";
 import { resolveGroupId } from "../shared/group-filter";
 import { getHoldingsWithLatestValues } from "./holding";
 
+const DEPOSIT_CATEGORY_NAMES = new Set(["預金・現金", "預金・現金・暗号資産"]);
+
+/** Keep category totals within the authoritative asset-history total. */
+function reconcileAssetBreakdown(
+  categories: Array<{ categoryName: string; amount: number }>,
+  totalAssets: number,
+) {
+  const positiveCategories = categories.filter((category) => category.amount > 0);
+  const categoryTotal = positiveCategories.reduce((sum, category) => sum + category.amount, 0);
+  const overcount = categoryTotal - totalAssets;
+
+  if (overcount <= 0) {
+    return positiveCategories;
+  }
+
+  const depositTotal = positiveCategories.reduce(
+    (sum, category) =>
+      DEPOSIT_CATEGORY_NAMES.has(category.categoryName) ? sum + category.amount : sum,
+    0,
+  );
+  if (depositTotal < overcount) {
+    return positiveCategories;
+  }
+
+  let remainingOvercount = overcount;
+  return positiveCategories
+    .map((category) => {
+      if (!DEPOSIT_CATEGORY_NAMES.has(category.categoryName) || remainingOvercount === 0) {
+        return category;
+      }
+
+      const deduction = Math.min(category.amount, remainingOvercount);
+      remainingOvercount -= deduction;
+      return { ...category, amount: category.amount - deduction };
+    })
+    .filter((category) => category.amount > 0);
+}
+
 /**
  * 日付文字列をパース
  */
@@ -64,8 +102,7 @@ export async function getAssetBreakdownByCategory(groupIdParam?: string, db: Db 
     .where(eq(schema.assetHistoryCategories.assetHistoryId, latestHistory.id))
     .all();
 
-  return categories
-    .filter((c) => c.amount > 0)
+  return reconcileAssetBreakdown(categories, latestHistory.totalAssets)
     .map((c) => ({ category: c.categoryName, amount: c.amount }))
     .sort((a, b) => b.amount - a.amount);
 }

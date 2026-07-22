@@ -360,6 +360,45 @@ describe("getAssetBreakdownByCategory", () => {
     expect(result).toEqual([{ category: "預金", amount: 500000 }]);
   });
 
+  it("カテゴリ合計が総資産を超える場合は預金・現金から超過分を除外する", async () => {
+    const historyId = await createAssetHistory({ date: "2025-04-15", totalAssets: 1000000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "預金・現金",
+      amount: 800000,
+    });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "株式(現物)",
+      amount: 400000,
+    });
+
+    const result = await getAssetBreakdownByCategory(undefined, db);
+
+    expect(result).toEqual([
+      { category: "預金・現金", amount: 600000 },
+      { category: "株式(現物)", amount: 400000 },
+    ]);
+  });
+
+  it("超過分が結合済み預金カテゴリの全額と一致する場合はカテゴリを除外する", async () => {
+    const historyId = await createAssetHistory({ date: "2025-04-15", totalAssets: 400000 });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "預金・現金・暗号資産",
+      amount: 200000,
+    });
+    await createAssetHistoryCategory({
+      assetHistoryId: historyId,
+      categoryName: "株式(現物)",
+      amount: 400000,
+    });
+
+    const result = await getAssetBreakdownByCategory(undefined, db);
+
+    expect(result).toEqual([{ category: "株式(現物)", amount: 400000 }]);
+  });
+
   it("履歴がない場合は空配列を返す", async () => {
     const result = await getAssetBreakdownByCategory(undefined, db);
     expect(result).toEqual([]);
