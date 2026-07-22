@@ -123,6 +123,40 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("requires source evidence for every allowlisted improvement category", () => {
+    const clothingOnlyOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [
+        {
+          toolName: "getMonthlyCategoryTotals",
+          input: { month: "2026-07" },
+          output: [{ category: "衣服・美容", type: "expense", totalAmount: 19475 }],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(clothingOnlyOutput, {
+        config: {
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 19475 },
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "食費", type: "expense", totalAmount: 41837 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects malformed evaluation output", () => {
     expect(assertFinanceResponse("not-json")).toMatchObject({
       pass: false,
@@ -227,6 +261,29 @@ describe("assertFinanceResponse", () => {
     });
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("未許可の可視金額: 999999");
+  });
+
+  it("does not treat a month duration as a bare monetary claim", () => {
+    const durationOutput = JSON.stringify({
+      text: "総資産を3か月ごとに確認しましょう。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(durationOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it("rejects a bare unsupported amount with an unconfigured finance label", () => {
@@ -1299,6 +1356,53 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("allows a source total written as N件中M件", () => {
+    const transactionOutput = JSON.stringify({
+      text: "2件中1件を表示します。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細（2件中1件を表示）",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [2],
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("requires disclosure for a truncated transaction group", () => {
     const transactionOutput = JSON.stringify({
       text: "食費明細です。",
@@ -2248,6 +2352,38 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("validates a Gregorian month written in kanji in its configured role", () => {
+    const kanjiMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description:
+            "2026年7月の衣服・美容は前月より増加しました。2026年六月の衣服・美容は19,475円です。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(kanjiMonthOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("carries an amount label into an explicit current-month clause", () => {
     const currentMonthOutput = JSON.stringify({
       text: "回答",
@@ -3057,6 +3193,26 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("不足 card text facts");
   });
 
+  it("allows truthful start and end dates for a monthly range", () => {
+    const rangeOutput = JSON.stringify({
+      text: "集計期間は2026年7月1日から7月31日です。",
+      cards: [
+        {
+          type: "summary",
+          title: "2026年7月の収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(rangeOutput, {
+        config: { allowedVisibleDates: ["2026-07-01", "2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("recognizes conflicting slash-form visible dates", () => {
     const slashDateOutput = JSON.stringify({
       text: "回答",
@@ -3521,6 +3677,38 @@ describe("assertFinanceResponse", () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("insight metrics 不一致");
     expect(result.reason).toContain("insight action 不一致");
+  });
+
+  it("rejects an insight label that asserts a reducible amount", () => {
+    const insightOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "衣服・美容の支出改善",
+          description: "衣服・美容は前月より増加したため見直せそうです。",
+          amount: 19475,
+          amountLabel: "衣服・美容の削減可能額",
+          amountType: "balance",
+          action: { label: "衣服・美容の内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(insightOutput, {
+        config: {
+          allowedInsightMetrics: [
+            {
+              amount: 19475,
+              amountType: "balance",
+              labelPattern: "(?=.*(衣服・美容|衣服))(?=.*(候補|見直し|参考|対象))",
+            },
+          ],
+          forbiddenVisiblePatterns: ["(削減可能額|削減額|節約可能額)"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("allows an insight metric when exact validation is not configured", () => {

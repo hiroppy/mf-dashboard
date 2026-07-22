@@ -306,7 +306,7 @@ function collectBareVisibleAmountMatches(
         ...Array.from(
           text.matchAll(
             new RegExp(
-              `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
+              `${labelPattern}.{0,8}?([+\\-−▲△▼▽]?[\\d,]+)(?![\\d,]|[./-]\\d|\\s*(?:円|億|万|千|[%％]|年|月|か月|ヶ月|ケ月|箇月|日|件|項目|種類|個|つ|位|回|人|社|本|枚))`,
               "gu",
             ),
           ),
@@ -846,7 +846,7 @@ function collectMislabeledVisibleMonths(
     const text = rawText.normalize("NFKC");
     const monthMatches = Array.from(
       text.matchAll(
-        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g,
+        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|(\d{4})年([〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月/g,
       ),
       (match) => ({
         endIndex: match.index + match[0].length,
@@ -855,10 +855,12 @@ function collectMislabeledVisibleMonths(
           match[1] !== undefined
             ? `${toGregorianYear(match[1], match[2])}-${String(parseJapaneseInteger(match[3])).padStart(2, "0")}`
             : match[4] !== undefined
-              ? `${match[4]}-${String(match[5]).padStart(2, "0")}`
+              ? `${match[4]}-${String(parseJapaneseInteger(match[5])).padStart(2, "0")}`
               : match[6] !== undefined
                 ? `${match[6]}-${String(match[7]).padStart(2, "0")}`
-                : `*-${String(match[8]).padStart(2, "0")}`,
+                : match[8] !== undefined
+                  ? `${match[8]}-${String(match[9]).padStart(2, "0")}`
+                  : `*-${String(match[10]).padStart(2, "0")}`,
       }),
     );
     return monthMatches.flatMap((monthMatch, monthIndex) => {
@@ -1220,12 +1222,10 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const isExplicitSourceTotal = ({
     count,
     endIndex,
-    index,
     text,
   }: (typeof visibleTransactionCounts)[number]) =>
     config.allowedVisibleTransactionCounts?.includes(count) === true &&
-    ((/全\s*$/u.test(text.slice(0, index)) && /^\s*中/u.test(text.slice(endIndex))) ||
-      /^\s*の?うち/u.test(text.slice(endIndex)));
+    (/^\s*中\s*\d+\s*件/u.test(text.slice(endIndex)) || /^\s*の?うち/u.test(text.slice(endIndex)));
   const unexpectedVisibleTransactionCounts =
     expectedVisibleTransactionCount === undefined
       ? []

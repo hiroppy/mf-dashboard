@@ -10,7 +10,7 @@
       value: file://./assertions.ts
       config:
         allowedVisibleAmounts: [313235, 219894, 93341]
-        allowedVisibleDates: ["2026-07-31"]
+        allowedVisibleDates: ["2026-07-01", "2026-07-31"]
         allowedVisibleMonths: ["2026-07"]
         allowedVisiblePercentages: [29.8, 30]
         visibleAmountClaims:
@@ -501,11 +501,15 @@
           - { label: 貯蓄率, amount: 34.68, rolePattern: (低下|減少|下落) }
           - { label: 貯蓄率, amount: 34.7, rolePattern: (低下|減少|下落) }
         allowedInsightMetrics:
-          - { amount: 19475, amountType: balance, labelPattern: (衣服・美容|衣服) }
+          - {
+              amount: 19475,
+              amountType: balance,
+              labelPattern: (?=.*(衣服・美容|衣服))(?=.*(候補|見直し|参考|対象)),
+            }
           - {
               amount: 7364,
               amountType: balance,
-              labelPattern: ((衣服・美容|衣服).*(差|増|前月|比較)|(差|増|前月|比較).*(衣服・美容|衣服)),
+              labelPattern: (?=.*(衣服・美容|衣服))(?=.*(差|増|前月|比較))(?=.*(候補|見直し|参考|対象)),
             }
         expectedDataToolFacts:
           - {
@@ -520,6 +524,30 @@
               path: $.*,
               value: { category: 衣服・美容, type: expense, totalAmount: 12111 },
             }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-07" },
+              path: $.*,
+              value: { category: 食費, type: expense, totalAmount: 41837 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-06" },
+              path: $.*,
+              value: { category: 食費, type: expense, totalAmount: 49922 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-07" },
+              path: $.*,
+              value: { category: 日用品, type: expense, totalAmount: 11198 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-06" },
+              path: $.*,
+              value: { category: 日用品, type: expense, totalAmount: 11495 },
+            }
         requireInsightMetric: true
         expectedInsightFacts: [2026-07]
         expectedCardTitleFacts:
@@ -533,5 +561,6 @@
           - (増加|上回|高い|多い)(していない|していません|とは限りません|とは言えません|とは認められません|[がは]?確認できません|ではない|でない|ではありません|対象外)
           - ((衣服・美容|衣服).{0,30}(前月|先月).{0,20}|(前月|先月).{0,20}(衣服・美容|衣服).{0,20})(減少|下回)(?!\s*.{0,10}(していない|していません|ではなく|ではない|ではありません|でない|わけではない|訳ではない))
           - (削れそうな支出|改善候補|見直し候補).{0,10}(ありません|ない|なし)
+          - (削減可能額|削減額|節約可能額)
         expectedCardTypes: [insight]
         expectedRoute: /0/cf/2026-07
