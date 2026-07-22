@@ -1689,7 +1689,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
         claimLabels.some((claimLabel) => dataToolFactSupportsLabel(expected, claimLabel)),
       );
       const directSupportingFacts =
-        labelSupportingFacts.length > 0 ? labelSupportingFacts : numericSupportingFacts;
+        claimLabels.length > 0 ? labelSupportingFacts : numericSupportingFacts;
       const hasDirectEvidence = directSupportingFacts.some((expected) =>
         evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
       );

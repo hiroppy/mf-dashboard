@@ -420,6 +420,37 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=313235" });
   });
 
+  it("does not fall back to an unrelated same-number fact for a labeled claim", () => {
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [{ category: "その他", type: "expense", totalAmount: 313235 }],
+    };
+    const wrongEvidenceOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [categoryResult],
+      text: "収入は313,235円です。",
+      textEvidence: [{ text: "収入は313,235円です。", dataToolResults: [categoryResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(wrongEvidenceOutput, {
+        config: {
+          allowedVisibleAmounts: [313235],
+          visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "その他", totalAmount: 313235 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=313235" });
+  });
+
   it("uses the visible label to distinguish equal income and expense facts", () => {
     const incomeResult = {
       toolName: "getMonthlySummaryByMonth",
