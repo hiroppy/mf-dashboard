@@ -1271,6 +1271,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects an exclusion-form snapshot date", () => {
+    const excludedDateOutput = JSON.stringify({
+      text: "7月31日以外の時点の総資産は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(excludedDateOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("否定された可視日付・月") });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -5153,6 +5178,29 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a percentage-point change as a configured rate level", () => {
+    const pointOutput = JSON.stringify({
+      text: "貯蓄率の上昇幅は29.8ポイントです。",
+      cards: [
+        {
+          type: "insight",
+          title: "家計状況",
+          description: "貯蓄率を確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(pointOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("貯蓄率=29.8") });
   });
 
   it("validates a comparison-qualified percentage-point claim", () => {

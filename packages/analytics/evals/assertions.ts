@@ -1061,7 +1061,7 @@ function collectNegatedTemporalClaims(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return Array.from(
       text.matchAll(
-        /((?:(?:\d{4}年)?\d{1,2}月(?:\d{1,2}日|初|末)?|\d{4}[-/.]\d{1,2}(?:[-/.]\d{1,2})?|\d{4}年(?:度|初|末)?|(?:令和|平成|昭和)(?:元|\d+|[〇零一二三四五六七八九十百]+)年(?:度|初|末)?|(?:昨日|一昨日|前日|明日|明後日|翌日|先月|前月|来月|翌月)))(?:時点|現在|分)?\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|でない)/g,
+        /((?:(?:\d{4}年)?\d{1,2}月(?:\d{1,2}日|初|末)?|\d{4}[-/.]\d{1,2}(?:[-/.]\d{1,2})?|\d{4}年(?:度|初|末)?|(?:令和|平成|昭和)(?:元|\d+|[〇零一二三四五六七八九十百]+)年(?:度|初|末)?|(?:昨日|一昨日|前日|明日|明後日|翌日|先月|前月|来月|翌月)))(?:時点|現在|分)?\s*(?:以外|では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|でない)/g,
       ),
       ([, claim]) => claim,
     );
@@ -1275,6 +1275,7 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
               : (parseJapaneseInteger(match[2]) / parseJapaneseInteger(match[1])) * 100,
           endIndex: match.index + match[0].length,
           index: match.index,
+          isPoint: false,
           strength: undefined,
           text,
         }),
@@ -1291,116 +1292,125 @@ function collectMislabeledVisiblePercentages(
   output: EvaluationOutput,
   expectedClaims: VisibleAmountClaim[],
 ): string[] {
-  return collectVisiblePercentageMatches(output).flatMap(({ amount, endIndex, index, text }) => {
-    const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
-    let nearbyClaims = expectedClaims
-      .map((claim) => {
-        const foundBeforeIndex = text.lastIndexOf(claim.label, index);
-        const foundAfterIndex = text.indexOf(claim.label, endIndex);
-        const beforeIndex = foundBeforeIndex >= clauseStart ? foundBeforeIndex : -1;
-        const afterIndex =
-          foundAfterIndex !== -1 && foundAfterIndex < clauseEnd ? foundAfterIndex : -1;
-        return {
-          claim,
-          distance: Math.min(
-            beforeIndex === -1
-              ? Number.POSITIVE_INFINITY
-              : index - (beforeIndex + claim.label.length),
-            afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - endIndex,
-          ),
-        };
-      })
-      .filter(({ distance }) => distance <= 20)
-      .sort(
-        (left, right) =>
-          left.distance - right.distance || right.claim.label.length - left.claim.label.length,
-      );
-    if (nearbyClaims.length === 0) {
-      const clauseText = text.slice(clauseStart + 1, clauseEnd);
-      const carriedLabel = collectCarriedClaimLabel(text, clauseStart, clauseText, expectedClaims);
-      if (carriedLabel !== undefined) {
-        nearbyClaims = expectedClaims
-          .filter(({ label }) => label === carriedLabel)
-          .map((claim) => ({ claim, distance: 0 }));
+  return collectVisiblePercentageMatches(output).flatMap(
+    ({ amount, endIndex, index, isPoint, text }) => {
+      const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
+      let nearbyClaims = expectedClaims
+        .map((claim) => {
+          const foundBeforeIndex = text.lastIndexOf(claim.label, index);
+          const foundAfterIndex = text.indexOf(claim.label, endIndex);
+          const beforeIndex = foundBeforeIndex >= clauseStart ? foundBeforeIndex : -1;
+          const afterIndex =
+            foundAfterIndex !== -1 && foundAfterIndex < clauseEnd ? foundAfterIndex : -1;
+          return {
+            claim,
+            distance: Math.min(
+              beforeIndex === -1
+                ? Number.POSITIVE_INFINITY
+                : index - (beforeIndex + claim.label.length),
+              afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - endIndex,
+            ),
+          };
+        })
+        .filter(({ distance }) => distance <= 20)
+        .sort(
+          (left, right) =>
+            left.distance - right.distance || right.claim.label.length - left.claim.label.length,
+        );
+      if (nearbyClaims.length === 0) {
+        const clauseText = text.slice(clauseStart + 1, clauseEnd);
+        const carriedLabel = collectCarriedClaimLabel(
+          text,
+          clauseStart,
+          clauseText,
+          expectedClaims,
+        );
+        if (carriedLabel !== undefined) {
+          nearbyClaims = expectedClaims
+            .filter(({ label }) => label === carriedLabel)
+            .map((claim) => ({ claim, distance: 0 }));
+        }
       }
-    }
-    if (nearbyClaims.length === 0) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
-    const nearestLabel = nearbyClaims[0]?.claim.label;
-    const claimsForLabel = nearbyClaims
-      .filter(({ claim }) => claim.label === nearestLabel)
-      .map(({ claim }) => claim);
-    const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
-    if (
-      labelBeforeIndex >= clauseStart &&
-      /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
-        text.slice(labelBeforeIndex + nearestLabel.length, index),
-      )
-    ) {
-      return [`${nearestLabel}=${amount}(否定)`];
-    }
-    const nearestExpectedDistance = nearbyClaims[0]?.distance ?? Number.POSITIVE_INFINITY;
-    const dynamicPercentageLabels = Array.from(
-      text.matchAll(/[\p{L}・]{1,12}?率/gu),
-      ([label]) => label.split(/(?:ではなく|でなく|と比べ|に比べ|より|は|が|の)/u).at(-1) ?? label,
-    );
-    const nearerUnexpectedLabel = [...new Set(dynamicPercentageLabels)]
-      .filter((label) => !expectedClaims.some((claim) => claim.label.includes(label)))
-      .map((label) => {
-        const foundBeforeIndex = text.lastIndexOf(label, index);
-        const foundAfterIndex = text.indexOf(label, endIndex);
-        return {
-          label,
-          distance: Math.min(
-            foundBeforeIndex !== -1 && foundBeforeIndex >= clauseStart
-              ? index - (foundBeforeIndex + label.length)
-              : Number.POSITIVE_INFINITY,
-            foundAfterIndex !== -1 && foundAfterIndex < clauseEnd
-              ? foundAfterIndex - endIndex
-              : Number.POSITIVE_INFINITY,
-          ),
-        };
-      })
-      .filter(({ distance }) => distance < nearestExpectedDistance)
-      .sort(
-        (left, right) => left.distance - right.distance || right.label.length - left.label.length,
-      )[0]?.label;
-    if (nearerUnexpectedLabel !== undefined) return [`${nearerUnexpectedLabel}=${amount}`];
-    const explicitBasis = Array.from(
-      text
-        .slice(clauseStart + 1, index)
-        .matchAll(/(収入|所得|支出|出費|総支出|売上|資産|負債)(?:に対する|に占める|の)/gu),
-    ).at(-1)?.[1];
-    if (
-      explicitBasis !== undefined &&
-      claimsForLabel.some(({ basisPattern }) => basisPattern !== undefined) &&
-      !claimsForLabel.some(
-        ({ basisPattern }) =>
-          basisPattern !== undefined && new RegExp(basisPattern, "u").test(explicitBasis),
-      )
-    ) {
-      return [`${nearestLabel}=${amount}(分母:${explicitBasis})`];
-    }
-    const context = collectClaimContext(text, index, endIndex);
-    const roleSpecificClaims = claimsForLabel.filter(
-      ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
-    );
-    const hasDirectionalSuffix =
-      /^\s*(?:ポイント)?(?:(?:の|から|より)\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
-        text.slice(endIndex, clauseEnd),
+      if (nearbyClaims.length === 0) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
+      const nearestLabel = nearbyClaims[0]?.claim.label;
+      const claimsForLabel = nearbyClaims
+        .filter(({ claim }) => claim.label === nearestLabel)
+        .map(({ claim }) => claim);
+      const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
+      if (
+        labelBeforeIndex >= clauseStart &&
+        /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
+          text.slice(labelBeforeIndex + nearestLabel.length, index),
+        )
+      ) {
+        return [`${nearestLabel}=${amount}(否定)`];
+      }
+      const nearestExpectedDistance = nearbyClaims[0]?.distance ?? Number.POSITIVE_INFINITY;
+      const dynamicPercentageLabels = Array.from(
+        text.matchAll(/[\p{L}・]{1,12}?率/gu),
+        ([label]) =>
+          label.split(/(?:ではなく|でなく|と比べ|に比べ|より|は|が|の)/u).at(-1) ?? label,
       );
-    const applicableClaims =
-      roleSpecificClaims.length > 0
-        ? roleSpecificClaims
-        : hasDirectionalSuffix
-          ? []
-          : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
-    if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
-      return [`${nearestLabel}=${amount}(否定)`];
-    }
-    return applicableClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
-      ? []
-      : [`${nearestLabel}=${amount}`];
-  });
+      const nearerUnexpectedLabel = [...new Set(dynamicPercentageLabels)]
+        .filter((label) => !expectedClaims.some((claim) => claim.label.includes(label)))
+        .map((label) => {
+          const foundBeforeIndex = text.lastIndexOf(label, index);
+          const foundAfterIndex = text.indexOf(label, endIndex);
+          return {
+            label,
+            distance: Math.min(
+              foundBeforeIndex !== -1 && foundBeforeIndex >= clauseStart
+                ? index - (foundBeforeIndex + label.length)
+                : Number.POSITIVE_INFINITY,
+              foundAfterIndex !== -1 && foundAfterIndex < clauseEnd
+                ? foundAfterIndex - endIndex
+                : Number.POSITIVE_INFINITY,
+            ),
+          };
+        })
+        .filter(({ distance }) => distance < nearestExpectedDistance)
+        .sort(
+          (left, right) => left.distance - right.distance || right.label.length - left.label.length,
+        )[0]?.label;
+      if (nearerUnexpectedLabel !== undefined) return [`${nearerUnexpectedLabel}=${amount}`];
+      const explicitBasis = Array.from(
+        text
+          .slice(clauseStart + 1, index)
+          .matchAll(/(収入|所得|支出|出費|総支出|売上|資産|負債)(?:に対する|に占める|の)/gu),
+      ).at(-1)?.[1];
+      if (
+        explicitBasis !== undefined &&
+        claimsForLabel.some(({ basisPattern }) => basisPattern !== undefined) &&
+        !claimsForLabel.some(
+          ({ basisPattern }) =>
+            basisPattern !== undefined && new RegExp(basisPattern, "u").test(explicitBasis),
+        )
+      ) {
+        return [`${nearestLabel}=${amount}(分母:${explicitBasis})`];
+      }
+      const context = collectClaimContext(text, index, endIndex);
+      const roleSpecificClaims = claimsForLabel.filter(
+        ({ rolePattern }) =>
+          rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
+      );
+      const hasDirectionalSuffix =
+        /^\s*(?:ポイント)?(?:(?:の|から|より)\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
+          text.slice(endIndex, clauseEnd),
+        );
+      const applicableClaims =
+        roleSpecificClaims.length > 0
+          ? roleSpecificClaims
+          : hasDirectionalSuffix || isPoint
+            ? []
+            : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+      if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
+        return [`${nearestLabel}=${amount}(否定)`];
+      }
+      return applicableClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
+        ? []
+        : [`${nearestLabel}=${amount}`];
+    },
+  );
 }
 
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
