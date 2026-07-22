@@ -334,6 +334,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a unitless unsupported amount after an income synonym", () => {
+    const salaryOutput = JSON.stringify({
+      text: "給与は999999です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収入", amount: 313235, amountType: "income" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(salaryOutput, {
+        config: {
+          allowedVisibleAmounts: [313235],
+          visibleAmountClaims: [{ label: "収入", amount: 313235 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
       text: `収支は${amount}です。`,
@@ -646,6 +669,29 @@ describe("assertFinanceResponse", () => {
           forbiddenVisiblePatterns: [
             "(総資産|資産).{0,8}(ありません|ない|なし|保有していません|ゼロです)",
           ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it.each(["未満", "超"])("rejects a strict %s qualifier at the grounded boundary", (qualifier) => {
+    const boundedOutput = JSON.stringify({
+      text: `総資産は5,683,100円${qualifier}です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(boundedOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
         },
       }),
     ).toMatchObject({ pass: false });
@@ -3063,6 +3109,29 @@ describe("assertFinanceResponse", () => {
         {
           type: "summary",
           title: "二〇二七年七月三十一日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("preserves a unit-style kanji Gregorian year on a snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "二千二十七年七月三十一日時点の総資産",
           metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
           href: "/0/bs",
         },

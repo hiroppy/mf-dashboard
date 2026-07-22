@@ -348,7 +348,7 @@ function collectBareVisibleAmountMatches(
   return visibleTexts.flatMap((text) => {
     const labelPatterns = [
       ...new Set(expectedClaims.map(({ label }) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))),
-      "(?:収入|支出|収支|総資産|保有資産|資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
+      "(?:収入|給与|給料|所得|支出|収支|総資産|保有資産|資産|総負債|黒字|赤字|余剰|手残り|残高|差額|金額|[\\p{L}・]{1,12}費)",
     ];
     const directMatches = labelPatterns.flatMap((labelPattern) => {
       return [
@@ -632,7 +632,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
-  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない)/u.test(
+  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|超(?:です|である)?)/u.test(
     text.slice(endIndex, clauseEnd),
   );
 }
@@ -780,6 +780,13 @@ function collectDates(rawTexts: string[]): string[] {
           `${parseKanjiDigitSequence(year)}-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(
+          /((?=[〇零一二三四五六七八九十百千]*[十百千])[〇零一二三四五六七八九十百千]+)年([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g,
+        ),
+        ([, year, month, day]) =>
+          `${parseKanjiAmount(year)}-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g),
         ([, month, day]) =>
           `*-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
@@ -908,6 +915,13 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
           `${parseKanjiDigitSequence(year)}-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(
+          /((?=[〇零一二三四五六七八九十百千]*[十百千])[〇零一二三四五六七八九十百千]+)年([〇零一二三四五六七八九十]+)月/g,
+        ),
+        ([, year, month]) =>
+          `${parseKanjiAmount(year)}-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/([〇零一二三四五六七八九十]+)月/g),
         ([, month]) => `*-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
       ),
@@ -956,7 +970,7 @@ function collectMislabeledVisibleMonths(
     const text = rawText.normalize("NFKC");
     const monthMatches = Array.from(
       text.matchAll(
-        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|(\d{4})年([〇零一二三四五六七八九十]+)月|([〇零一二三四五六七八九]{4})年([〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月|([〇零一二三四五六七八九十]+)月/g,
+        /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2}|[〇零一二三四五六七八九十]+)月|(\d{4})年([〇零一二三四五六七八九十]+)月|([〇零一二三四五六七八九]{4})年([〇零一二三四五六七八九十]+)月|((?=[〇零一二三四五六七八九十百千]*[十百千])[〇零一二三四五六七八九十百千]+)年([〇零一二三四五六七八九十]+)月|\b(\d{4})[-/.](\d{1,2})\b|(\d{4})年(\d{1,2})月|(?<![\d年])(\d{1,2})月|([〇零一二三四五六七八九十]+)月/g,
       ),
       (match) => ({
         endIndex: match.index + match[0].length,
@@ -969,12 +983,14 @@ function collectMislabeledVisibleMonths(
               : match[6] !== undefined
                 ? `${parseKanjiDigitSequence(match[6])}-${String(parseKanjiAmount(match[7])).padStart(2, "0")}`
                 : match[8] !== undefined
-                  ? `${match[8]}-${String(match[9]).padStart(2, "0")}`
+                  ? `${parseKanjiAmount(match[8])}-${String(parseKanjiAmount(match[9])).padStart(2, "0")}`
                   : match[10] !== undefined
                     ? `${match[10]}-${String(match[11]).padStart(2, "0")}`
                     : match[12] !== undefined
-                      ? `*-${String(match[12]).padStart(2, "0")}`
-                      : `*-${String(parseKanjiAmount(match[13])).padStart(2, "0")}`,
+                      ? `${match[12]}-${String(match[13]).padStart(2, "0")}`
+                      : match[14] !== undefined
+                        ? `*-${String(match[14]).padStart(2, "0")}`
+                        : `*-${String(parseKanjiAmount(match[15])).padStart(2, "0")}`,
       }),
     );
     return monthMatches.flatMap((monthMatch, monthIndex) => {
