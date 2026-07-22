@@ -262,7 +262,10 @@ function collectVisibleAmountMatches(output: EvaluationOutput) {
       (match) => ({
         amount:
           parseVisibleAmount(match[3], match[5]) *
-          (/[-−▲△▼▽]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ? -1 : 1),
+          (/[-−▲△▼▽]/.test(`${match[1] ?? ""}${match[2] ?? ""}${match[4] ?? ""}`) ||
+          (text[match.index - 1] === "(" && text[match.index + match[0].length] === ")")
+            ? -1
+            : 1),
         endIndex: match.index + match[0].length,
         index: match.index,
         text,
@@ -436,7 +439,11 @@ function collectMislabeledVisibleMonths(
     return monthMatches.flatMap((monthMatch, monthIndex) => {
       const adjacentRoleContext =
         monthMatches.length < 2
-          ? ""
+          ? `${text.slice(Math.max(0, monthMatch.index - 8), monthMatch.index)} ${
+              /^\s*[（(]?(前月|先月|比較)/.exec(
+                text.slice(monthMatch.endIndex, monthMatch.endIndex + 8),
+              )?.[0] ?? ""
+            }`
           : roleMarkers
               .filter((marker) => {
                 const markerEnd = marker.index + marker[0].length;

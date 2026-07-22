@@ -204,6 +204,26 @@ describe("assertFinanceResponse", () => {
     },
   );
 
+  it("treats an accounting-parenthesized amount as negative", () => {
+    const parenthesizedAmountOutput = JSON.stringify({
+      text: "収支は(93,341円)です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(parenthesizedAmountOutput, {
+        config: { allowedVisibleAmounts: [93341] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視金額: -93341" });
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
@@ -1050,6 +1070,32 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          visibleMonthClaims: [
+            { month: "2026-07" },
+            { month: "2026-06", rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("honors a preceding role marker for a standalone month", () => {
+    const splitMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "前月2026年6月との比較",
+          description: "2026年7月の衣服・美容は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(splitMonthOutput, {
         config: {
           allowedVisibleMonths: ["2026-06", "2026-07"],
           visibleMonthClaims: [
