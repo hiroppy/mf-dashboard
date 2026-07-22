@@ -300,8 +300,9 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     );
 
   return restore(
-    withoutImplicitAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
-      sanitizeBareUrl(url, allowedHrefs),
+    withoutImplicitAutolinks.replace(
+      /(?:https?:\/\/|\/\/)[^\s<>()[\]{}"'。、，！？；：]+/giu,
+      (url) => sanitizeBareUrl(url, allowedHrefs),
     ),
   );
 }
@@ -327,7 +328,7 @@ export function collectFinanceChatLinks(text: string): string[] {
         /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
     ),
     ...Array.from(
-      masked.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
+      masked.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"'。、，！？；：]+/giu),
       ([href]) => splitBareUrl(href).destination,
     ),
     ...Array.from(

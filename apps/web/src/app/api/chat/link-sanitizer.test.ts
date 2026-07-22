@@ -171,6 +171,39 @@ describe("splitCompleteFinanceChatText", () => {
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
+  it("streams past an unmatched quote in a raw anchor label", async () => {
+    const onSanitizedText = vi.fn<(text: string) => void>();
+    const transform = createFinanceChatLinkSanitizer(
+      "group-a",
+      onSanitizedText,
+    )({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: '<a href="/group-a/cf/2026-07">don',
+    });
+    await writer.write({ type: "text-delta", id: "text-a", text: "'t</a>。続き。" });
+
+    expect(onSanitizedText).toHaveBeenCalledWith("don't。続き。");
+
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+  });
+
   it("buffers a raw anchor whose first attribute starts after a streamed newline", async () => {
     const transform = createFinanceChatLinkSanitizer("group-a")({
       stopStream: vi.fn<() => void>(),

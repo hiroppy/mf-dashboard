@@ -53,6 +53,12 @@ describe("sanitizeFinanceChatLinks", () => {
     },
   );
 
+  it.each(["、", "，"])("preserves prose following a bare URL at %s", (delimiter) => {
+    const text = `https://example.com${delimiter}続きです。`;
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(`${delimiter}続きです。`);
+    expect(collectFinanceChatLinks(text)).toContain("https://example.com");
+  });
+
   it("removes a reference-style link with a non-route URI", () => {
     expect(
       sanitizeFinanceChatLinks("[メール][ref]\n\n[ref]: mailto:evil@example.com", allowedHrefs),

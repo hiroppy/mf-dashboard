@@ -1986,6 +1986,8 @@ describe("assertFinanceResponse", () => {
     ["貯蓄率は前月から横ばいです。", false, "誤った貯蓄率方向"],
     ["貯蓄率は前月を上回りました。", false, "誤った貯蓄率方向"],
     ["貯蓄率は前月を下回りました。", true, "期待する最終応答です。"],
+    ["貯蓄率は前月より高いです。", false, "誤った貯蓄率方向"],
+    ["貯蓄率は前月より低いです。", true, "期待する最終応答です。"],
   ])("validates a qualitative savings-rate direction: %s", (text, pass, expectedReason) => {
     const juneResult = {
       toolName: "getMonthlySummaryByMonth",
@@ -2040,6 +2042,10 @@ describe("assertFinanceResponse", () => {
     ["収支は前月より悪化しました。", true, true],
     ["収入は前月を上回りました。", true, false],
     ["収入は前月を下回りました。", true, true],
+    ["支出は前月より多いです。", true, false],
+    ["支出は前月より少ないです。", true, true],
+    ["支出は前月より高いです。", true, false],
+    ["支出は前月より低いです。", true, true],
   ])("validates a monthly summary trend: %s", (text, includePrevious, pass) => {
     const juneResult = {
       toolName: "getMonthlySummaryByMonth",
