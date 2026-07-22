@@ -41,13 +41,7 @@ function collectGeneratedLinks(text: string): string[] {
 }
 
 function isAllowedGeneratedLink(destination: string, allowedHrefs: Set<string>) {
-  try {
-    const pathname =
-      new URL(destination, "https://invalid.local").pathname.replace(/\/$/, "") || "/";
-    return [...allowedHrefs].some((href) => (href.replace(/\/$/, "") || "/") === pathname);
-  } catch {
-    return false;
-  }
+  return !/^(?:https?:)?\/\//iu.test(destination) && allowedHrefs.has(destination);
 }
 
 interface DataToolResult {

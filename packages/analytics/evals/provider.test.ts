@@ -141,7 +141,32 @@ describe("toEvaluationOutput", () => {
     expect(toEvaluationOutput(response, "test-group")).toMatchObject({
       allowedHrefs: ["/test-group/cf/2026-07"],
       text: "[詳細](/test-group/cf/2026-07) 外部",
-      unauthorizedLinks: ["https://example.com"],
+      unauthorizedLinks: ["https://example.com/test-group/cf/2026-07", "https://example.com"],
+    });
+  });
+
+  it("rejects an external origin even when its pathname matches an allowed route", () => {
+    const response: ChatResponse = {
+      text: "回答",
+      steps: [
+        {
+          toolResults: [
+            {
+              toolName: "getFinanceDashboardRoute",
+              output: { href: "/test-group/cf/2026-07" },
+            },
+          ],
+        },
+        {
+          text: "[詳細](https://attacker.example/test-group/cf/2026-07)",
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "[詳細](/test-group/cf/2026-07)",
+      unauthorizedLinks: ["https://attacker.example/test-group/cf/2026-07"],
     });
   });
 
