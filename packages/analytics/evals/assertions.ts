@@ -514,14 +514,12 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
 }
 
 function collectCardHeadingDates(output: EvaluationOutput): string[] {
-  return collectDates([
-    output.text,
-    ...output.cards.flatMap((card) => [
+  return collectDates(
+    output.cards.flatMap((card) => [
       card.title,
       "description" in card && typeof card.description === "string" ? card.description : "",
-      "action" in card && card.action !== undefined ? card.action.label : "",
     ]),
-  ]);
+  );
 }
 
 function collectVisibleMonths(output: EvaluationOutput): string[] {

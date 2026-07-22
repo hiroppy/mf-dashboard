@@ -1031,7 +1031,7 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
-  it("validates fallback text dates with card heading dates", () => {
+  it("does not validate fallback text dates as card heading dates", () => {
     const partialMonthOutput = JSON.stringify({
       text: "2026年7月10日時点の食費です。",
       cards: [
@@ -1048,10 +1048,10 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(partialMonthOutput, {
         config: { allowedCardHeadingDates: ["2026-07-31"] },
       }),
-    ).toMatchObject({ pass: false });
+    ).toMatchObject({ pass: true });
   });
 
-  it("validates insight action label dates with card heading dates", () => {
+  it("validates insight action label dates as visible dates", () => {
     const partialMonthOutput = JSON.stringify({
       text: "回答",
       cards: [
@@ -1069,7 +1069,10 @@ describe("assertFinanceResponse", () => {
 
     expect(
       assertFinanceResponse(partialMonthOutput, {
-        config: { allowedCardHeadingDates: ["2026-07-31"] },
+        config: {
+          allowedCardHeadingDates: ["2026-07-31"],
+          allowedVisibleDates: ["2026-07-31"],
+        },
       }),
     ).toMatchObject({ pass: false });
   });

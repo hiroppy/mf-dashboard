@@ -403,6 +403,7 @@
       value: file://./assertions.ts
       config:
         allowedVisibleAmounts: [41837, 19475, 11198, 49922, 12111, 11495, 8085, 7364, 297]
+        allowedVisibleDates: ["2026-06-30", "2026-07-31"]
         allowedVisiblePercentages: [29.8, 30, 64, 64.48, 64.5]
         allowedVisibleMonths: ["2026-06", "2026-07"]
         allowedCardHeadingDates: ["2026-07-31"]
