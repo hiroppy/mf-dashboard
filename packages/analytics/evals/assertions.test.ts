@@ -186,6 +186,54 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 金額=7364" });
   });
 
+  it("allows direct values as each supporting tool fact becomes available", () => {
+    const incomeResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalIncome: 313235 },
+    };
+    const expenseResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalExpense: 219894 },
+    };
+    const stagedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [incomeResult, expenseResult],
+      text: "収入は313,235円です。支出は219,894円です。",
+      textEvidence: [
+        { text: "収入は313,235円です。", dataToolResults: [incomeResult] },
+        { text: "支出は219,894円です。", dataToolResults: [incomeResult, expenseResult] },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(stagedOutput, {
+        config: {
+          allowedVisibleAmounts: [313235, 219894],
+          visibleAmountClaims: [
+            { label: "収入", amount: 313235 },
+            { label: "支出", amount: 219894 },
+          ],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalIncome",
+              value: 313235,
+            },
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalExpense",
+              value: 219894,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("requires identity fields and values on the same data-tool row", () => {
     const splitEvidenceOutput = JSON.stringify({
       ...JSON.parse(output),

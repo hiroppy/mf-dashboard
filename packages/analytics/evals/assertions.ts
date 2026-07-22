@@ -218,6 +218,15 @@ function dataToolResultMatches(result: DataToolResult, expected: DataToolFactExp
   );
 }
 
+function collectNumericValues(value: unknown): number[] {
+  if (typeof value === "number") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectNumericValues);
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap(collectNumericValues);
+  }
+  return [];
+}
+
 function includesFact(actualFacts: string[], expected: string): boolean {
   const expectedMonth = /^(\d{4})-(\d{2})$/.exec(expected);
   if (expectedMonth) {
@@ -1250,15 +1259,29 @@ export default function assertFinanceResponse(output: string, context: Assertion
     const amounts = [
       ...collectVisibleAmountMatches(evidenceOutput),
       ...collectBareVisibleAmountMatches(evidenceOutput, config.visibleAmountClaims ?? []),
-    ].map(({ amount }) => `金額=${amount}`);
-    const percentages = collectVisiblePercentageMatches(evidenceOutput).map(
-      ({ amount }) => `割合=${amount}`,
-    );
-    const hasMissingEvidence = expectedDataToolFacts.some(
-      (expected) =>
-        !evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
-    );
-    return hasMissingEvidence ? [...amounts, ...percentages] : [];
+    ].map(({ amount }) => ({ label: `金額=${amount}`, value: amount }));
+    const percentages = collectVisiblePercentageMatches(evidenceOutput).map(({ amount }) => ({
+      label: `割合=${amount}`,
+      value: amount,
+    }));
+    return [...amounts, ...percentages].flatMap(({ label, value }) => {
+      const directSupportingFacts = expectedDataToolFacts.filter((expected) =>
+        collectNumericValues(expected.value).some(
+          (expectedValue) =>
+            value === expectedValue ||
+            Math.abs(value - expectedValue) <= Math.max(0.01, Math.abs(expectedValue) * 0.001),
+        ),
+      );
+      const hasEvidence =
+        directSupportingFacts.length > 0
+          ? directSupportingFacts.some((expected) =>
+              evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+            )
+          : expectedDataToolFacts.every((expected) =>
+              evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+            );
+      return hasEvidence ? [] : [label];
+    });
   });
   const missingCardFacts = (config.expectedCardFacts ?? []).filter(
     (expected) => !includesFact(cardFacts, expected),
