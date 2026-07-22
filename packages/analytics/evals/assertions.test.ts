@@ -1539,6 +1539,10 @@ describe("assertFinanceResponse", () => {
   it.each([
     ["支出で最も多いのは住宅です。", true],
     ["支出で最も多いのは食費です。", false],
+    ["最も多い支出は住宅です。", true],
+    ["最も多い支出は食費です。", false],
+    ["支出で最も多いのは住宅ではなく食費です。", false],
+    ["支出で最も多いのは食費ではなく住宅です。", true],
   ])("validates a category superlative against retrieved totals: %s", (text, pass) => {
     const categoryResult = {
       toolName: "getMonthlyCategoryTotals",

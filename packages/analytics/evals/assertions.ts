@@ -1686,16 +1686,22 @@ function collectInvalidCategoryTypeClaims(
 function collectCategorySuperlativeClaims(text: string): string[] {
   return [
     ...text.matchAll(
-      /(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)(?:の)?(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
+      /(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)(?:の)?(?:は|が)[\p{L}・]{1,24}?(?=\s*(?:です|である|だ|。|、|$))/gu,
     ),
     ...text.matchAll(
-      /(?:(?:最大|最小)(?:の)?(?:支出|出費)(?:カテゴリ)?|(?:支出|出費)(?:で)?(?:最大|最小)(?:なもの|なの)?)(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
+      /(?:(?:最大|最小)(?:の)?(?:支出|出費)(?:カテゴリ)?|(?:支出|出費)(?:で)?(?:最大|最小)(?:なもの|なの)?)(?:は|が)[\p{L}・]{1,24}?(?=\s*(?:です|である|だ|。|、|$))/gu,
     ),
     ...text.matchAll(
       /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)/gu,
     ),
+    ...text.matchAll(
+      /(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)(?:支出|出費)(?:カテゴリ)?(?:は|が)[\p{L}・]{1,24}?(?=\s*(?:です|である|だ|。|、|$))/gu,
+    ),
   ]
     .filter((match) => {
+      if (/(?:ではありません|ではない|じゃありません|じゃない|でない)$/u.test(match[0])) {
+        return false;
+      }
       const endIndex = match.index + match[0].length;
       return !hasNegatedSuffix(
         text,
@@ -1736,7 +1742,10 @@ function categorySuperlativeIsGrounded(
     }
     const expenseRows = group.rows.filter(({ type }) => type === "expense");
     const candidates = expenseRows.length > 0 ? expenseRows : group.rows;
-    const claimedRows = candidates.filter(({ category }) => claim.includes(category));
+    const assertedCategoryText = claim.split(/(?:ではなく|でなく)/u).at(-1) ?? claim;
+    const claimedRows = candidates.filter(({ category }) =>
+      assertedCategoryText.includes(category),
+    );
     if (claimedRows.length === 0 || candidates.length === 0) return false;
     const extremeAmount = Math[claimsLowest ? "min" : "max"](
       ...candidates.map(({ totalAmount }) => totalAmount),
