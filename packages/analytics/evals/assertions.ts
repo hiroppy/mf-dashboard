@@ -727,7 +727,7 @@ function collectMislabeledVisibleAmounts(
 }
 
 function hasNegatedSuffix(text: string, endIndex: number, clauseEnd: number): boolean {
-  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
+  return /^\s*(?:(?:ほど|程度|くらい|ぐらい)\s*)?(?:では(?:ありません|ございません|ない|なく)|じゃ(?:ありません|ない)|とは(?:限りません|言えません)|でない|未満|以下|以上|(?:を\s*)?超(?:え(?:ています|ます|る)?|です|である)?|より\s*(?:多い|少ない|上|下))/u.test(
     text.slice(endIndex, clauseEnd),
   );
 }
@@ -896,6 +896,14 @@ function collectDates(rawTexts: string[]): string[] {
       ...Array.from(
         text.matchAll(/(?:先月|前月|来月|翌月)\d{1,2}日/g),
         ([relativeDate]) => `relative-${relativeDate}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:先々週|先週|今週|来週|翌週)/g),
+        ([relativeWeek]) => `relative-${relativeWeek}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:\d+|[〇零一二三四五六七八九十百]+)週間(?:前|後)/g),
+        ([relativeWeek]) => `relative-${relativeWeek}`,
       ),
       ...Array.from(
         text.matchAll(/(\d{4})年(\d{1,2})月(初|末)(?=の|は|が|時点|現在)/g),
@@ -1290,6 +1298,42 @@ function collectMislabeledVisiblePercentages(
     const claimsForLabel = nearbyClaims
       .filter(({ claim }) => claim.label === nearestLabel)
       .map(({ claim }) => claim);
+    const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
+    if (
+      labelBeforeIndex >= clauseStart &&
+      /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
+        text.slice(labelBeforeIndex + nearestLabel.length, index),
+      )
+    ) {
+      return [`${nearestLabel}=${amount}(否定)`];
+    }
+    const nearestExpectedDistance = nearbyClaims[0]?.distance ?? Number.POSITIVE_INFINITY;
+    const dynamicPercentageLabels = Array.from(
+      text.matchAll(/[\p{L}・]{1,12}?率/gu),
+      ([label]) => label.split(/(?:ではなく|でなく|と比べ|に比べ|より|は|が|の)/u).at(-1) ?? label,
+    );
+    const nearerUnexpectedLabel = [...new Set(dynamicPercentageLabels)]
+      .filter((label) => !expectedClaims.some((claim) => claim.label.includes(label)))
+      .map((label) => {
+        const foundBeforeIndex = text.lastIndexOf(label, index);
+        const foundAfterIndex = text.indexOf(label, endIndex);
+        return {
+          label,
+          distance: Math.min(
+            foundBeforeIndex !== -1 && foundBeforeIndex >= clauseStart
+              ? index - (foundBeforeIndex + label.length)
+              : Number.POSITIVE_INFINITY,
+            foundAfterIndex !== -1 && foundAfterIndex < clauseEnd
+              ? foundAfterIndex - endIndex
+              : Number.POSITIVE_INFINITY,
+          ),
+        };
+      })
+      .filter(({ distance }) => distance < nearestExpectedDistance)
+      .sort(
+        (left, right) => left.distance - right.distance || right.label.length - left.label.length,
+      )[0]?.label;
+    if (nearerUnexpectedLabel !== undefined) return [`${nearerUnexpectedLabel}=${amount}`];
     const context = collectClaimContext(text, index, endIndex);
     const roleSpecificClaims = claimsForLabel.filter(
       ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
@@ -1304,15 +1348,6 @@ function collectMislabeledVisiblePercentages(
         : hasDirectionalSuffix
           ? []
           : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
-    const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
-    if (
-      labelBeforeIndex >= clauseStart &&
-      /^\s*(?:ではなく|でなく|ではない|でない)/u.test(
-        text.slice(labelBeforeIndex + nearestLabel.length, index),
-      )
-    ) {
-      return [`${nearestLabel}=${amount}(否定)`];
-    }
     if (hasNegatedSuffix(text, endIndex, clauseEnd)) {
       return [`${nearestLabel}=${amount}(否定)`];
     }

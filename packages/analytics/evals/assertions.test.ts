@@ -2209,6 +2209,51 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects a relational qualifier on a displayed transaction count", () => {
+    const transactionOutput = JSON.stringify({
+      text: "明細総数は1件以下です。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("rejects an arbitrary allowed row instead of the deterministic truncated prefix", () => {
     const transactionOutput = JSON.stringify({
       text: "全2件中1件を表示します。",
@@ -3852,6 +3897,30 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("relative-昨日") });
   });
 
+  it.each(["1週間前", "先週"])("rejects a week-based relative date: %s", (period) => {
+    const relativeDateOutput = JSON.stringify({
+      text: `${period}の総資産は5,683,100円です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeDateOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining(`relative-${period}`) });
+  });
+
   it("rejects a negated expected date", () => {
     const negatedDateOutput = JSON.stringify({
       text: "対象日は7月10日ではありません。",
@@ -5059,6 +5128,29 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: "誤ラベルの可視割合: 貯蓄率=29.8(否定)" });
+  });
+
+  it("prefers an intervening unconfigured percentage label", () => {
+    const mislabeledOutput = JSON.stringify({
+      text: "貯蓄率と比べ税率は29.8%です。",
+      cards: [
+        {
+          type: "summary",
+          title: "月次収支",
+          metrics: [{ label: "貯蓄率", amount: 29.8, amountType: "balance" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(mislabeledOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("税率=29.8") });
   });
 
   it("accepts a percentage delta with a directional claim", () => {
