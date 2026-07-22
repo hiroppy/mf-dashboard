@@ -112,6 +112,7 @@ describe("generateWithCodexExec", () => {
     expect(args).toContain("--strict-config");
     expect(args).toContain("--ignore-user-config");
     expect(args).toContain("tools.view_image=false");
+    expect(args).toContain("tools.web_search=false");
     expect(await readFile(join(root, "auth.json"), "utf8")).toBe('{"token":"test"}');
   });
 

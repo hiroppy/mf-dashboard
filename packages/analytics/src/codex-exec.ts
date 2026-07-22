@@ -101,6 +101,7 @@ const CODEX_CONFIG = [
   "mcp_servers={}",
   'permissions.isolated.filesystem={":workspace_roots"={ "."="read"}}',
   "tools.view_image=false",
+  "tools.web_search=false",
 ] as const;
 
 function parseTimeout(): number {
