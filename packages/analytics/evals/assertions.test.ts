@@ -4199,6 +4199,59 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining(expectedYear) });
   });
 
+  it.each(["2026年", "令和8年"])("rejects a denial of an expected standalone year: %s", (year) => {
+    const negatedYearOutput = JSON.stringify({
+      text: `対象年は${year}ではありません。総資産は5,683,100円です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(negatedYearOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("否定された可視日付・月") });
+  });
+
+  it.each([
+    ["2026年初", "2026-01-01"],
+    ["2026年末", "2026-12-31"],
+    ["令和8年末", "2026-12-31"],
+  ])("maps a year boundary to a concrete date: %s", (boundary, expectedDate) => {
+    const boundaryOutput = JSON.stringify({
+      text: `${boundary}時点の総資産は5,683,100円です。`,
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(boundaryOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining(expectedDate) });
+  });
+
   it("requires action facts in the visible action label", () => {
     const unrelatedActionOutput = JSON.stringify({
       text: "回答",

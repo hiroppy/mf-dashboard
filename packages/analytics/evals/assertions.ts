@@ -907,6 +907,17 @@ function collectDates(rawTexts: string[]): string[] {
         ([relativeWeek]) => `relative-${relativeWeek}`,
       ),
       ...Array.from(
+        text.matchAll(/(\d{4})年(初|末)(?=の|は|が|時点|現在)/g),
+        ([, year, boundary]) => `${year}-${boundary === "初" ? "01-01" : "12-31"}`,
+      ),
+      ...Array.from(
+        text.matchAll(
+          /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(初|末)(?=の|は|が|時点|現在)/g,
+        ),
+        ([, era, eraYear, boundary]) =>
+          `${toGregorianYear(era, eraYear)}-${boundary === "初" ? "01-01" : "12-31"}`,
+      ),
+      ...Array.from(
         text.matchAll(/(\d{4})年(\d{1,2})月(初|末)(?=の|は|が|時点|現在)/g),
         ([, year, month, boundary]) => {
           const numericMonth = Number(month);
@@ -1049,7 +1060,7 @@ function collectNegatedTemporalClaims(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return Array.from(
       text.matchAll(
-        /((?:(?:\d{4}年)?\d{1,2}月(?:\d{1,2}日|初|末)?|\d{4}[-/.]\d{1,2}(?:[-/.]\d{1,2})?|(?:昨日|一昨日|前日|明日|明後日|翌日|先月|前月|来月|翌月)))(?:時点|現在|分)?\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|でない)/g,
+        /((?:(?:\d{4}年)?\d{1,2}月(?:\d{1,2}日|初|末)?|\d{4}[-/.]\d{1,2}(?:[-/.]\d{1,2})?|\d{4}年(?:度|初|末)?|(?:令和|平成|昭和)(?:元|\d+|[〇零一二三四五六七八九十百]+)年(?:度|初|末)?|(?:昨日|一昨日|前日|明日|明後日|翌日|先月|前月|来月|翌月)))(?:時点|現在|分)?\s*(?:では(?:ありません|ない|なく)|じゃ(?:ありません|ない)|でない)/g,
       ),
       ([, claim]) => claim,
     );
