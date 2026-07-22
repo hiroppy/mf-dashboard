@@ -60,6 +60,7 @@ interface AssertionContext {
     allowedVisiblePercentages?: number[];
     allowedVisibleTransactionCounts?: number[];
     expectedCardFacts?: string[];
+    expectedCardActionFacts?: CardTextFactExpectation[];
     expectedCardHeadingFacts?: CardTextFactExpectation[];
     expectedCardTextFacts?: CardTextFactExpectation[];
     expectedCardTitleFacts?: CardTextFactExpectation[];
@@ -303,6 +304,22 @@ function collectBareVisibleAmountMatches(
                 : 1),
             endIndex: match.index + match[0].length,
             index: match.index + match[0].lastIndexOf(String(match[2])),
+            text,
+          }),
+        ),
+        ...Array.from(
+          text.matchAll(
+            new RegExp(
+              `${labelPattern}.{0,8}?(?<![\\d,.])([〇零一二三四五六七八九十百千万億兆]*[兆億万千][〇零一二三四五六七八九十百千万億兆]*)(?![〇零一二三四五六七八九十百千万億兆]|\\s*円)`,
+              "gu",
+            ),
+          ),
+          (match) => ({
+            amount:
+              parseKanjiAmount(match[1]) *
+              (/マイナス\s*$/u.test(match[0].slice(0, match[0].lastIndexOf(match[1]))) ? -1 : 1),
+            endIndex: match.index + match[0].length,
+            index: match.index + match[0].lastIndexOf(match[1]),
             text,
           }),
         ),
@@ -707,6 +724,10 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
+        text.matchAll(/(?:先月|前月|来月|翌月)(?=末|の|時点|現在|\s|$)/g),
+        ([relativeMonth]) => `relative-${relativeMonth}`,
+      ),
+      ...Array.from(
         text.matchAll(/(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2})月/g),
         ([, era, eraYear, month]) =>
           `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}`,
@@ -990,6 +1011,16 @@ export default function assertFinanceResponse(output: string, context: Assertion
           card.type === cardType && new RegExp(pattern, "u").test(collectFacts(card).join("\n")),
       ),
   );
+  const missingCardActionFacts = (config.expectedCardActionFacts ?? []).filter(
+    ({ cardType, pattern }) =>
+      !parsed.cards.some(
+        (card) =>
+          card.type === cardType &&
+          "action" in card &&
+          card.action !== undefined &&
+          new RegExp(pattern, "u").test(card.action.label),
+      ),
+  );
   const missingCardHeadingFacts = (config.expectedCardHeadingFacts ?? []).filter(
     ({ cardType, pattern }) =>
       !parsed.cards.some((card) => {
@@ -1165,6 +1196,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     missingCardTextFacts.length > 0
       ? `不足 card text facts: ${missingCardTextFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
+      : undefined,
+    missingCardActionFacts.length > 0
+      ? `不足 card action facts: ${missingCardActionFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`
       : undefined,
     missingCardHeadingFacts.length > 0
       ? `不足 card heading facts: ${missingCardHeadingFacts.map(({ cardType, pattern }) => `${cardType}=${pattern}`).join(",")}`

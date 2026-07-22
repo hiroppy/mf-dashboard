@@ -410,6 +410,29 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects an unallowlisted kanji monetary unit without 円", () => {
+    const unitAmountOutput = JSON.stringify({
+      text: "総資産は五百万です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unitAmountOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -2284,6 +2307,53 @@ describe("assertFinanceResponse", () => {
         config: {
           allowedVisibleDates: ["2026-07-31"],
           allowedVisibleMonths: ["2026-07"],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects relative-month snapshot headings", () => {
+    const relativeMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "来月末時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(relativeMonthOutput, {
+        config: { allowedVisibleMonths: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視月: relative-来月" });
+  });
+
+  it("requires action facts in the visible action label", () => {
+    const unrelatedActionOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "action",
+          title: "7月10日の支出",
+          description: "対象日の明細です",
+          action: { label: "負債を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unrelatedActionOutput, {
+        config: {
+          expectedCardActionFacts: [
+            {
+              cardType: "action",
+              pattern: "(?=.*(2026[-/]07[-/]10|7月10日|7/10))(?=.*(支出|明細|内訳))",
+            },
+          ],
         },
       }),
     ).toMatchObject({ pass: false });

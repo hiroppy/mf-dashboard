@@ -351,8 +351,11 @@
         expectedCardTextFacts:
           - { cardType: summary, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
           - { cardType: transactionList, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
-          - { cardType: action, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
-          - { cardType: action, pattern: "(支出|明細|内訳)" }
+        expectedCardActionFacts:
+          - {
+              cardType: action,
+              pattern: "(?=.*(2026[-/]07[-/]10|7月10日|7/10))(?=.*(支出|明細|内訳))",
+            }
         expectedCardTitleFacts:
           - { cardType: summary, pattern: "(支出|出金|支払い)" }
           - { cardType: transactionList, pattern: "(支出|出金|支払い)" }
