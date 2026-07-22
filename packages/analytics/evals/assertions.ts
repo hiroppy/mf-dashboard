@@ -1701,8 +1701,8 @@ export default function assertFinanceResponse(output: string, context: Assertion
       )
     : [];
   const unsupportedTextTransactionDescriptions = config.requireTransactionToolGrounding
-    ? parsed.text
-        .split(/[。！？\n]/u)
+    ? collectVisibleClaimTexts(parsed)
+        .flatMap((text) => text.split(/[。！？\n]/u))
         .flatMap((sentence) =>
           Array.from(
             sentence.matchAll(

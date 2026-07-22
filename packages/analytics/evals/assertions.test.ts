@@ -6035,6 +6035,27 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
   });
 
+  it("rejects an unsupported transaction description in card prose", () => {
+    const cardProseOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "7月10日の支出",
+          description: "明細には7月10日の架空店があります。",
+          metrics: [{ label: "支出", amount: 3435, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(cardProseOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
+  });
+
   it.each(["豪ドル", "NZドル", "カナダドル"])(
     "rejects a prefixed foreign currency: %s",
     (currency) => {
