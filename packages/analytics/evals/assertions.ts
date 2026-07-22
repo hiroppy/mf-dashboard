@@ -129,7 +129,7 @@ function includesFact(actualFacts: string[], expected: string): boolean {
     const [, year, month] = expectedMonth;
     const numericMonth = String(Number(month));
     const monthPattern = new RegExp(
-      `${year}(?:[-/]0?${numericMonth}(?!\\d)|年0?${numericMonth}月)`,
+      `${year}(?:[-/.]0?${numericMonth}(?!\\d)|年0?${numericMonth}月)`,
       "u",
     );
     return actualFacts.some((actual) => monthPattern.test(normalize(actual)));
@@ -502,6 +502,11 @@ function collectDates(rawTexts: string[]): string[] {
           `last-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
       ),
       ...Array.from(
+        text.matchAll(/(?:来年|翌年)(\d{1,2})月(\d{1,2})日/g),
+        ([, month, day]) =>
+          `next-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
         text.matchAll(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g),
         ([, year, month, day]) =>
           `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
@@ -556,6 +561,10 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
       ...Array.from(
         text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月/g),
         ([, month]) => `last-${String(month).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:来年|翌年)(\d{1,2})月/g),
+        ([, month]) => `next-${String(month).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/\b(\d{4})[-/.](\d{1,2})\b/g),

@@ -595,6 +595,33 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("does not classify a current amount followed by に増加 as a delta", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "衣服・美容は19,475円に増加しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475, 7364],
+          visibleAmountClaims: [
+            { label: "衣服・美容", amount: 19475 },
+            { label: "衣服・美容", amount: 12111, rolePattern: "(前月|先月|比較)" },
+            { label: "衣服・美容", amount: 7364, rolePattern: "(差額|差|円\\s*(増|増加))" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("scopes a period marker to its adjacent amount in one clause", () => {
     const comparisonOutput = JSON.stringify({
       text: "衣服・美容は前月12,111円から19,475円に増加しました。",
@@ -1562,6 +1589,26 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("accepts a dotted numeric month for an expected insight month", () => {
+    const dottedMonthOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "2026.7の衣服・美容は前月より増加しました。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(dottedMonthOutput, {
+        config: { expectedInsightFacts: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("binds visible months to current and comparison roles", () => {
     const reversedMonthsOutput = JSON.stringify({
       text: "回答",
@@ -1803,6 +1850,29 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(staleSnapshotOutput, {
         config: { allowedVisibleMonths: ["2026-07"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a snapshot date qualified as next year", () => {
+    const futureSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "来年7月31日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(futureSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
       }),
     ).toMatchObject({ pass: false });
   });

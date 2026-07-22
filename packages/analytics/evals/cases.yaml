@@ -29,9 +29,11 @@
           - { amount: 93341, amountType: balance, labelPattern: (黒字|収支|余剰|手残り) }
         expectedCardTextFacts:
           - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: "(家計|収支|月次|キャッシュフロー)" }
         forbiddenVisiblePatterns:
           - (赤字(?!\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
-          - (黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|でない|ではありません)
+          - (黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|ではなく|でない|ではありません)
         expectedMetrics:
           - { label: 収入, amount: 313235, amountType: income }
           - { label: 支出, amount: 219894, amountType: expense }
@@ -420,13 +422,17 @@
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
           - { label: 食費, amount: 49922, rolePattern: (前月|先月|比較) }
-          - { label: 食費, amount: 8085, rolePattern: (差額|差|増減|変化|減少|下回|減) }
+          - { label: 食費, amount: 8085, rolePattern: (差額|差|増減|変化|円\s*(減|減少)|下回) }
           - { label: 衣服・美容, amount: 19475 }
           - { label: 衣服・美容, amount: 12111, rolePattern: (前月|先月|比較) }
-          - { label: 衣服・美容, amount: 7364, rolePattern: (差額|差|増減|変化|増加|上回|増) }
+          - {
+              label: 衣服・美容,
+              amount: 7364,
+              rolePattern: (差額|差|増減|変化|円\s*(増|増加)|上回),
+            }
           - { label: 日用品, amount: 11198 }
           - { label: 日用品, amount: 11495, rolePattern: (前月|先月|比較) }
-          - { label: 日用品, amount: 297, rolePattern: (差額|差|増減|変化|減少|下回|減) }
+          - { label: 日用品, amount: 297, rolePattern: (差額|差|増減|変化|円\s*(減|減少)|下回) }
         visiblePercentageClaims:
           - { label: 貯蓄率, amount: 29.8 }
           - { label: 貯蓄率, amount: 30 }
@@ -435,7 +441,11 @@
           - { label: 貯蓄率, amount: 64.5, rolePattern: (前月|先月|比較) }
         allowedInsightMetrics:
           - { amount: 19475, amountType: balance, labelPattern: (衣服・美容|衣服) }
-          - { amount: 7364, amountType: balance, labelPattern: (衣服・美容|衣服) }
+          - {
+              amount: 7364,
+              amountType: balance,
+              labelPattern: ((衣服・美容|衣服).*(差|増|前月|比較)|(差|増|前月|比較).*(衣服・美容|衣服)),
+            }
         requireInsightMetric: true
         expectedInsightFacts: [2026-07]
         expectedCardTitleFacts:
