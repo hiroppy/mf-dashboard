@@ -15,6 +15,12 @@ interface VisibleAmountClaim {
   amount: number;
 }
 
+interface InsightMetricAllowance {
+  amount: number;
+  amountType: string;
+  labelPattern: string;
+}
+
 interface TransactionExpectation {
   ids: string[];
   date: string;
@@ -39,7 +45,7 @@ interface AssertionContext {
     expectedCategories?: CategoryExpectation[];
     expectedInsightActionPattern?: string;
     expectedInsightFacts?: string[];
-    expectedInsightMetrics?: MetricExpectation[];
+    allowedInsightMetrics?: InsightMetricAllowance[];
     expectedMetrics?: MetricExpectation[];
     expectedRoute?: string;
     expectedTransactionGroup?: TransactionGroupExpectation;
@@ -79,7 +85,7 @@ function collectFacts(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(collectFacts);
   if (typeof value === "object" && value !== null) {
     return Object.entries(value).flatMap(([key, item]) =>
-      key === "href" || key === "action" || key === "type" ? [] : collectFacts(item),
+      key === "href" || key === "type" ? [] : collectFacts(item),
     );
   }
   return [];
@@ -166,8 +172,10 @@ function collectVisibleAmounts(output: EvaluationOutput): number[] {
 function collectVisibleAmountMatches(output: EvaluationOutput) {
   const visibleTexts = [output.text, ...collectFacts(output.cards)];
   return visibleTexts.flatMap((text) =>
-    Array.from(text.matchAll(/(?:[¥￥]\s*([\d,]+)|([\d,]+)\s*円)/g), (match) => ({
-      amount: Number(String(match[1] ?? match[2]).replaceAll(",", "")),
+    Array.from(text.matchAll(/(?:[¥￥]\s*([\d,.]+)|([\d,.]+)\s*(億|万|千)?円)/g), (match) => ({
+      amount:
+        Number(String(match[1] ?? match[2]).replaceAll(",", "")) *
+        ({ 億: 100_000_000, 万: 10_000, 千: 1000 }[match[3] ?? ""] ?? 1),
       index: match.index,
       text,
     })),
@@ -277,12 +285,18 @@ export default function assertFinanceResponse(output: string, context: Assertion
       ? []
       : [{ label: card.amountLabel, amount: card.amount, amountType: card.amountType }],
   );
-  const expectedInsightMetrics = config.expectedInsightMetrics ?? [];
-  const insightMetricsMismatch = !multisetsMatch(
-    insightMetrics,
-    expectedInsightMetrics,
-    metricMatches,
-  );
+  const allowedInsightMetrics = config.allowedInsightMetrics;
+  const insightMetricsMismatch =
+    allowedInsightMetrics !== undefined &&
+    insightMetrics.some(
+      (actual) =>
+        !allowedInsightMetrics.some(
+          (allowed) =>
+            actual.amount === allowed.amount &&
+            actual.amountType === allowed.amountType &&
+            new RegExp(allowed.labelPattern, "u").test(actual.label),
+        ),
+    );
   const expectedInsightActionPattern = config.expectedInsightActionPattern;
   const insightActionMismatch =
     expectedInsightActionPattern !== undefined &&

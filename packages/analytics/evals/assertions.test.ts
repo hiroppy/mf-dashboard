@@ -130,7 +130,6 @@ describe("assertFinanceResponse", () => {
       assertFinanceResponse(misplacedAmountOutput, {
         config: {
           expectedMetrics: [{ label: "収支", amount: 93341, amountType: "balance" }],
-          expectedInsightMetrics: [{ label: "参考額", amount: 93341, amountType: "balance" }],
         },
       }),
     ).toMatchObject({ pass: false, reason: "summary metrics 不一致: expected=収支=93341" });
@@ -619,11 +618,75 @@ describe("assertFinanceResponse", () => {
     });
 
     const result = assertFinanceResponse(insightOutput, {
-      config: { expectedInsightActionPattern: "(内訳|支出|食費)" },
+      config: {
+        allowedInsightMetrics: [],
+        expectedInsightActionPattern: "(内訳|支出|食費)",
+      },
     });
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("insight metrics 不一致");
     expect(result.reason).toContain("insight action 不一致");
+  });
+
+  it("allows an insight metric when exact validation is not configured", () => {
+    const insightOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          amount: 19475,
+          amountLabel: "見直し候補額",
+          amountType: "expense",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(assertFinanceResponse(insightOutput)).toMatchObject({ pass: true });
+  });
+
+  it.each([
+    ["見直し候補は999万円です。", 9_990_000],
+    ["見直し候補は2億円です。", 200_000_000],
+    ["見直し候補は50千円です。", 50_000],
+  ])("normalizes unsupported Japanese monetary units: %s", (text, normalizedAmount) => {
+    const unitOutput = JSON.stringify({
+      text,
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "支出を見直しましょう。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unitOutput, { config: { allowedVisibleAmounts: [93341] } }),
+    ).toMatchObject({ pass: false, reason: `未許可の可視金額: ${normalizedAmount}` });
+  });
+
+  it("validates monetary claims in action labels", () => {
+    const actionAmountOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "支出を見直しましょう。",
+          action: { label: "999,999円節約の内訳を確認", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(actionAmountOutput, {
+        config: { allowedVisibleAmounts: [93341] },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視金額: 999999" });
   });
 
   it("does not use hidden Markdown reference definitions as card facts", () => {
