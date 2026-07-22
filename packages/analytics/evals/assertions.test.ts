@@ -1284,6 +1284,38 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("scopes each category comparison to its own clause", () => {
+    const juneResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-06" },
+      output: [
+        { category: "健康・医療", type: "expense", totalAmount: 30000 },
+        { category: "衣服・美容", type: "expense", totalAmount: 12000 },
+      ],
+    };
+    const julyResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "健康・医療", type: "expense", totalAmount: 8000 },
+        { category: "衣服・美容", type: "expense", totalAmount: 19000 },
+      ],
+    };
+    const text =
+      "2026年6月は健康・医療が衣服・美容より多いです。2026年7月は健康・医療が衣服・美容より多いです。";
+    const comparisonOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [juneResult, julyResult] }],
+    });
+
+    expect(assertFinanceResponse(comparisonOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤ったカテゴリ間比較"),
+    });
+  });
+
   it("recognizes a のほうが category comparison", () => {
     const categoryResult = {
       toolName: "getMonthlyCategoryTotals",
@@ -1823,6 +1855,31 @@ describe("assertFinanceResponse", () => {
       text,
       dataToolResults: [julyResult],
       textEvidence: [{ text, allowedHrefs: [], dataToolResults: [julyResult] }],
+    });
+
+    expect(assertFinanceResponse(directionOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("誤った貯蓄率方向"),
+    });
+  });
+
+  it("binds a savings-rate trend to its explicitly claimed month", () => {
+    const juneResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-06" },
+      output: { month: "2026-06", totalIncome: 637637, netIncome: 411133 },
+    };
+    const julyResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { month: "2026-07", totalIncome: 313235, netIncome: 93341 },
+    };
+    const text = "2026年6月は前月より貯蓄率が低下しました。";
+    const directionOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [juneResult, julyResult] }],
     });
 
     expect(assertFinanceResponse(directionOutput)).toMatchObject({
@@ -4648,6 +4705,60 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("未根拠の chart values") });
   });
 
+  it("rejects chart values whose point labels do not resolve to a fact month", () => {
+    const juneResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-06" },
+      output: [{ category: "衣服・美容", type: "expense", totalAmount: 12111 }],
+    };
+    const julyResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [{ category: "衣服・美容", type: "expense", totalAmount: 19475 }],
+    };
+    const chartOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "chart",
+          title: "衣服・美容",
+          chartType: "bar",
+          href: "/0/cf/2026-07",
+          series: [{ name: "衣服・美容", amountType: "expense" }],
+          data: [
+            { label: "現在", values: [12111] },
+            { label: "以前", values: [19475] },
+          ],
+        },
+      ],
+      dataToolResults: [juneResult, julyResult],
+      textEvidence: [{ text: "回答", dataToolResults: [juneResult, julyResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(chartOutput, {
+        config: {
+          allowedVisibleAmounts: [12111, 19475],
+          allowedVisibleMonths: ["2026-06", "2026-07"],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-06" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 12111 },
+            },
+            {
+              toolName: "getMonthlyCategoryTotals",
+              input: { month: "2026-07" },
+              path: "$.*",
+              value: { category: "衣服・美容", type: "expense", totalAmount: 19475 },
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("未根拠の chart values") });
+  });
+
   it("rejects an unexpected route on any card", () => {
     const mixedRouteOutput = JSON.stringify({
       text: "回答",
@@ -6328,6 +6439,31 @@ describe("assertFinanceResponse", () => {
         config: {
           allowedVisibleAmounts: [5683100],
           forbiddenVisiblePatterns: ["(総資産|保有資産|資産).{0,16}(過去|史上)(?:最高|最低)"],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it("rejects an unsupported affirmative liability claim from an asset scalar", () => {
+    const liabilityOutput = JSON.stringify({
+      text: "総資産は5,683,100円で、負債があります。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(liabilityOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          forbiddenVisiblePatterns: [
+            "(総負債|負債|借入|ローン)(?:は|が)?.{0,6}(あります|ある|存在しています|残っています)(?![^。！？\\n]{0,16}(とは限|とは言え|確認でき|不明))",
+          ],
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });

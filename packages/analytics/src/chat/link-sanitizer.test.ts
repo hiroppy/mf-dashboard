@@ -52,6 +52,12 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("メール");
   });
 
+  it("respects a quoted greater-than sign when removing a dangerous raw HTML anchor", () => {
+    expect(
+      sanitizeFinanceChatLinks('<a title=">" href="javascript:alert(1)">click</a>', allowedHrefs),
+    ).toBe("click");
+  });
+
   it.each([
     ['<a href="mailto:evil@example.com">メール', "メール"],
     ['<a href="javascript:alert(1)"/>メール', "メール"],
@@ -99,6 +105,12 @@ describe("collectFinanceChatLinks", () => {
   it("collects a raw HTML link destination", () => {
     expect(collectFinanceChatLinks('<a href="mailto:evil@example.com">メール</a>')).toContain(
       "mailto:evil@example.com",
+    );
+  });
+
+  it("collects a dangerous raw HTML destination after a quoted greater-than sign", () => {
+    expect(collectFinanceChatLinks('<a title=">" href="javascript:alert(1)">click</a>')).toContain(
+      "javascript:alert(1)",
     );
   });
 

@@ -44,18 +44,73 @@ function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
   return href ? `${href}${trailingText}` : trailingText;
 }
 
+interface RawHtmlAnchor {
+  closingEnd?: number;
+  closingStart?: number;
+  destination?: string;
+  openingEnd: number;
+  start: number;
+}
+
+function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
+  const anchors: RawHtmlAnchor[] = [];
+  const openingPattern = /<a\b/giu;
+  let openingMatch: RegExpExecArray | null;
+  while ((openingMatch = openingPattern.exec(text)) !== null) {
+    let quote: '"' | "'" | undefined;
+    let openingEnd = text.length;
+    for (let index = openingMatch.index + openingMatch[0].length; index < text.length; index += 1) {
+      const character = text[index];
+      if (quote !== undefined) {
+        if (character === quote) quote = undefined;
+      } else if (character === '"' || character === "'") {
+        quote = character;
+      } else if (character === ">") {
+        openingEnd = index + 1;
+        break;
+      }
+    }
+    const openingTag = text.slice(openingMatch.index, openingEnd);
+    const hrefMatch = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/iu.exec(openingTag);
+    const selfClosing = /\/\s*>\s*$/u.test(openingTag);
+    const closingMatch = selfClosing ? undefined : /<\/a\s*>/iu.exec(text.slice(openingEnd));
+    anchors.push({
+      start: openingMatch.index,
+      openingEnd,
+      destination: hrefMatch?.[1] ?? hrefMatch?.[2] ?? hrefMatch?.[3],
+      closingStart: closingMatch?.index === undefined ? undefined : openingEnd + closingMatch.index,
+      closingEnd:
+        closingMatch?.index === undefined
+          ? undefined
+          : openingEnd + closingMatch.index + closingMatch[0].length,
+    });
+    openingPattern.lastIndex = anchors.at(-1)?.closingEnd ?? openingEnd;
+  }
+  return anchors;
+}
+
+function sanitizeRawHtmlAnchors(text: string, allowedHrefs: Set<string>): string {
+  let cursor = 0;
+  let sanitized = "";
+  for (const anchor of findRawHtmlAnchors(text)) {
+    sanitized += text.slice(cursor, anchor.start);
+    if (anchor.closingStart !== undefined && anchor.closingEnd !== undefined) {
+      const label = text.slice(anchor.openingEnd, anchor.closingStart);
+      const href =
+        anchor.destination === undefined
+          ? undefined
+          : resolveAllowedHref(anchor.destination, allowedHrefs);
+      sanitized += href === undefined ? label : `[${label}](${href})`;
+      cursor = anchor.closingEnd;
+    } else {
+      cursor = anchor.openingEnd;
+    }
+  }
+  return `${sanitized}${text.slice(cursor)}`.replace(/<\/a\s*>/giu, "");
+}
+
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
-  const withoutHtmlLinks = text
-    .replace(
-      /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)<\/a>/gisu,
-      (_match, doubleQuoted: string, singleQuoted: string, unquoted: string, label: string) => {
-        const destination = doubleQuoted ?? singleQuoted ?? unquoted;
-        const href = resolveAllowedHref(destination, allowedHrefs);
-        return href ? `[${label}](${href})` : label;
-      },
-    )
-    .replace(/<a\b[^>]*\bhref\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>/gisu, "")
-    .replace(/<\/a\s*>/giu, "");
+  const withoutHtmlLinks = sanitizeRawHtmlAnchors(text, allowedHrefs);
   const referenceDefinitions = new Map(
     Array.from(
       withoutHtmlLinks.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
@@ -101,9 +156,8 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
 
 export function collectFinanceChatLinks(text: string): string[] {
   return [
-    ...Array.from(
-      text.matchAll(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>/gisu),
-      ([, doubleQuoted, singleQuoted, unquoted]) => doubleQuoted ?? singleQuoted ?? unquoted,
+    ...findRawHtmlAnchors(text).flatMap(({ destination }) =>
+      destination === undefined ? [] : [destination],
     ),
     ...Array.from(
       text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),

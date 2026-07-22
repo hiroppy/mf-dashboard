@@ -1657,8 +1657,10 @@ function collectInvalidCategoryComparisons(
           }
           const claimsHigher = /(?:多い|高い|大きい|上回|以上)/u.test(match[1]);
           const includesEquality = /(?:以上|以下)/u.test(match[1]);
+          const { clauseEnd, clauseStart } = collectClauseBounds(text, match.index, endIndex);
+          const claimClause = text.slice(Math.max(0, clauseStart + 1), clauseEnd);
           const relationIsValid = availableCategoryGroups.some((group) => {
-            if (!categoryGroupMatchesTemporalScope(text, group)) return false;
+            if (!categoryGroupMatchesTemporalScope(claimClause, group)) return false;
             const subject = group.rows.find(({ category }) => category === subjectCategory);
             const comparison = group.rows.find(({ category }) => category === comparisonCategory);
             if (subject === undefined || comparison === undefined) return false;
@@ -1877,11 +1879,25 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
   const rates = [
     ...new Map(collectMonthlySavingsRates(results).map((rate) => [rate.month, rate])).values(),
   ].sort((left, right) => left.month.localeCompare(right.month));
-  if (rates.length < 2) return directionMatches.map(([claim]) => claim);
-  const previous = rates.at(-2);
-  const current = rates.at(-1);
-  if (previous === undefined || current === undefined) return [];
   return directionMatches.flatMap((match) => {
+    const endIndex = match.index + match[0].length;
+    const { clauseEnd, clauseStart } = collectClauseBounds(text, match.index, endIndex);
+    const scope = collectTemporalMonthScope(text.slice(Math.max(0, clauseStart + 1), clauseEnd));
+    const scopedRates =
+      scope === undefined
+        ? rates
+        : rates.filter(
+            ({ month }) =>
+              month === scope || (scope.startsWith("*-") && month.endsWith(scope.slice(1))),
+          );
+    const current =
+      scopedRates.length === 1 ? scopedRates[0] : scope === undefined ? rates.at(-1) : undefined;
+    if (current === undefined) return [match[0]];
+    const [year, month] = current.month.split("-").map(Number);
+    const previousDate = new Date(Date.UTC(year, month - 2, 1));
+    const previousMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
+    const previous = rates.find((rate) => rate.month === previousMonth);
+    if (previous === undefined) return [match[0]];
     const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);
     const directionIsValid = claimsIncrease
       ? current.rate > previous.rate
@@ -1914,7 +1930,7 @@ function chartPointMatchesFactMonth(
   }
   if (/(?:今月|当月)/u.test(label)) return expectedMonth === sortedMonths.at(-1);
   if (/(?:前月|先月)/u.test(label)) return expectedMonth === sortedMonths.at(-2);
-  return true;
+  return false;
 }
 
 function collectCategorySuperlativeClaims(text: string): string[] {
