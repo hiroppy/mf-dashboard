@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import type { GenerationOptions, GenerationResult } from "./generation.js";
 
@@ -241,7 +241,10 @@ async function readBoundedFile(
   signal: AbortSignal,
   errorMessage: string,
 ): Promise<Buffer> {
-  const handle = await raceSignal(open(path, "r"), signal);
+  const handle = await raceSignal(
+    open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK),
+    signal,
+  );
   try {
     const metadata = await raceSignal(handle.stat(), signal);
     if (!metadata.isFile() || metadata.size > limit) throw new Error(errorMessage);
@@ -254,12 +257,25 @@ async function readBoundedFile(
 async function readAuth(signal: AbortSignal): Promise<Buffer> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
+    const uid = process.getuid?.();
+    if (uid === undefined) throw new Error("missing uid");
+    const configuredPath = sourceAuthPath();
+    const path = join(
+      await raceSignal(realpath(dirname(configuredPath)), signal),
+      basename(configuredPath),
+    );
+    await assertTrustedAncestors(path, uid, signal);
     handle = await raceSignal(
-      open(sourceAuthPath(), constants.O_RDONLY | constants.O_NOFOLLOW),
+      open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK),
       signal,
     );
     const metadata = await raceSignal(handle.stat(), signal);
-    if (!metadata.isFile() || metadata.size > MAX_AUTH_BYTES) throw new Error("invalid file");
+    if (
+      !metadata.isFile() ||
+      (metadata.uid !== 0 && metadata.uid !== uid) ||
+      metadata.size > MAX_AUTH_BYTES
+    )
+      throw new Error("invalid file");
     if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
       throw new Error("insecure mode");
     }

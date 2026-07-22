@@ -103,6 +103,19 @@ describe("generateWithCodexExec", () => {
     );
   });
 
+  test("rejects credentials below a writable ancestor", async () => {
+    const root = await createFixture(`cat >/dev/null`);
+    const authRoot = join(root, "untrusted-auth");
+    await mkdir(authRoot, { mode: 0o777 });
+    await chmod(authRoot, 0o777);
+    await writeFile(join(authRoot, "auth.json"), '{"token":"test"}', { mode: 0o600 });
+    process.env.CODEX_HOME = authRoot;
+
+    await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
+      "codex exec requires valid file-backed Codex credentials",
+    );
+  });
+
   test("preloads bounded tool data and returns structured output", async () => {
     const root = await createFixture(`
       printf '%s\\n' "$@" > __ARGS_PATH__
@@ -187,6 +200,21 @@ describe("generateWithCodexExec", () => {
 
     await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
       "codex exec isolated credentials exceeded its size limit",
+    );
+  });
+
+  test("rejects a special output file without blocking", async () => {
+    await createFixture(`
+      while [ "$#" -gt 0 ]; do
+        if [ "$1" = "--output-last-message" ]; then shift; output="$1"; fi
+        shift
+      done
+      cat >/dev/null
+      mkfifo "$output"
+    `);
+
+    await expect(generateWithCodexExec({ system: "System", prompt: "Prompt" })).rejects.toThrow(
+      "codex exec output exceeded its size limit",
     );
   });
 
