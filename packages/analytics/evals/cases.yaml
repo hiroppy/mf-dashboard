@@ -363,18 +363,18 @@
         allowedVisibleAmounts: [41837, 19475, 11198, 49922, 12111, 11495, 8085, 7364, 297]
         visibleAmountClaims:
           - { label: 食費, amount: 41837 }
-          - { label: 食費, amount: 49922 }
-          - { label: 食費, amount: 8085 }
+          - { label: 食費, amount: 49922, rolePattern: (前月|先月|比較) }
+          - { label: 食費, amount: 8085, rolePattern: (差額|差|増減|変化|減少|下回) }
           - { label: 衣服・美容, amount: 19475 }
-          - { label: 衣服・美容, amount: 12111 }
-          - { label: 衣服・美容, amount: 7364 }
+          - { label: 衣服・美容, amount: 12111, rolePattern: (前月|先月|比較) }
+          - { label: 衣服・美容, amount: 7364, rolePattern: (差額|差|増減|変化|増加|上回) }
           - { label: 日用品, amount: 11198 }
-          - { label: 日用品, amount: 11495 }
-          - { label: 日用品, amount: 297 }
+          - { label: 日用品, amount: 11495, rolePattern: (前月|先月|比較) }
+          - { label: 日用品, amount: 297, rolePattern: (差額|差|増減|変化|減少|下回) }
         allowedInsightMetrics:
-          - { amount: 41837, amountType: expense, labelPattern: (見直し|候補|支出|食費) }
-          - { amount: 19475, amountType: expense, labelPattern: (見直し|候補|支出|衣服) }
-          - { amount: 11198, amountType: expense, labelPattern: (見直し|候補|支出|日用品) }
+          - { amount: 41837, amountType: balance, labelPattern: (見直し|候補|支出|食費) }
+          - { amount: 19475, amountType: balance, labelPattern: (見直し|候補|支出|衣服) }
+          - { amount: 11198, amountType: balance, labelPattern: (見直し|候補|支出|日用品) }
           - { amount: 8085, amountType: balance, labelPattern: (差額|変化|減少|削減) }
           - { amount: 7364, amountType: balance, labelPattern: (差額|変化|増加|削減) }
           - { amount: 297, amountType: balance, labelPattern: (差額|変化|減少|削減) }

@@ -13,6 +13,7 @@ interface CategoryExpectation extends MetricExpectation {
 interface VisibleAmountClaim {
   label: string;
   amount: number;
+  rolePattern?: string;
 }
 
 interface InsightMetricAllowance {
@@ -172,14 +173,29 @@ function collectVisibleAmounts(output: EvaluationOutput): number[] {
 function collectVisibleAmountMatches(output: EvaluationOutput) {
   const visibleTexts = [output.text, ...collectFacts(output.cards)];
   return visibleTexts.flatMap((text) =>
-    Array.from(text.matchAll(/(?:[¥￥]\s*([\d,.]+)|([\d,.]+)\s*(億|万|千)?円)/g), (match) => ({
-      amount:
-        Number(String(match[1] ?? match[2]).replaceAll(",", "")) *
-        ({ 億: 100_000_000, 万: 10_000, 千: 1000 }[match[3] ?? ""] ?? 1),
-      index: match.index,
-      text,
-    })),
+    Array.from(
+      text.matchAll(/(?:[¥￥]\s*([\d,.]+)|((?:[\d,.]+\s*(?:億|万|千)\s*)+[\d,.]*|[\d,.]+)\s*円)/g),
+      (match) => ({
+        amount: parseVisibleAmount(match[1], match[2]),
+        index: match.index,
+        text,
+      }),
+    ),
   );
+}
+
+function parseVisibleAmount(prefixedAmount?: string, japaneseAmount?: string): number {
+  if (prefixedAmount !== undefined) return Number(prefixedAmount.replaceAll(",", ""));
+  let total = 0;
+  const withoutUnits = (japaneseAmount ?? "").replace(
+    /([\d,.]+)\s*(億|万|千)/g,
+    (_, value: string, unit: "億" | "万" | "千") => {
+      total += Number(value.replaceAll(",", "")) * { 億: 100_000_000, 万: 10_000, 千: 1000 }[unit];
+      return "";
+    },
+  );
+  const remainder = withoutUnits.trim();
+  return total + (remainder === "" ? 0 : Number(remainder.replaceAll(",", "")));
 }
 
 function collectMislabeledVisibleAmounts(
@@ -187,24 +203,35 @@ function collectMislabeledVisibleAmounts(
   expectedClaims: VisibleAmountClaim[],
 ): string[] {
   return collectVisibleAmountMatches(output).flatMap(({ amount, index, text }) => {
-    const nearbyLabels = expectedClaims
-      .map(({ label }) => {
+    const nearbyClaims = expectedClaims
+      .map((claim) => {
+        const { label } = claim;
         const beforeIndex = text.lastIndexOf(label, index);
         const afterIndex = text.indexOf(label, index);
         const distance = Math.min(
           beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
           afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
         );
-        return { label, distance };
+        return { claim, distance };
       })
       .filter(({ distance }) => distance <= 20)
       .sort((left, right) => left.distance - right.distance);
-    const nearestLabel = nearbyLabels[0]?.label;
+    const nearestLabel = nearbyClaims[0]?.claim.label;
+    if (nearestLabel === undefined) return [];
+    const claimsForLabel = nearbyClaims
+      .filter(({ claim }) => claim.label === nearestLabel)
+      .map(({ claim }) => claim);
+    const context = text.slice(Math.max(0, index - 30), index + 30);
+    const roleSpecificClaims = claimsForLabel.filter(
+      ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
+    );
+    const applicableClaims =
+      roleSpecificClaims.length > 0
+        ? roleSpecificClaims
+        : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
     if (
-      nearestLabel === undefined ||
-      expectedClaims.some(
-        ({ label, amount: expectedAmount }) => label === nearestLabel && expectedAmount === amount,
-      )
+      applicableClaims.length === 0 ||
+      applicableClaims.some((claim) => claim.amount === amount)
     ) {
       return [];
     }

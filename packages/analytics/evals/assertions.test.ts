@@ -88,6 +88,33 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 支出=313235" });
   });
 
+  it("distinguishes current totals from comparison deltas", () => {
+    const wrongRoleOutput = JSON.stringify({
+      text: "2026-07の食費は8,085円です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "食費を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(wrongRoleOutput, {
+        config: {
+          allowedVisibleAmounts: [41837, 49922, 8085],
+          visibleAmountClaims: [
+            { label: "食費", amount: 41837 },
+            { label: "食費", amount: 49922, rolePattern: "(前月|先月|比較)" },
+            { label: "食費", amount: 8085, rolePattern: "(差額|差|減少)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "誤ラベルの可視金額: 食費=8085" });
+  });
+
   it("reports every missing expectation", () => {
     const result = assertFinanceResponse(output, {
       config: {
@@ -645,6 +672,53 @@ describe("assertFinanceResponse", () => {
     });
 
     expect(assertFinanceResponse(insightOutput)).toMatchObject({ pass: true });
+  });
+
+  it("rejects an insight metric with a disallowed semantic amount type", () => {
+    const insightOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "食費を見直せそうです。",
+          amount: 41837,
+          amountLabel: "見直し候補額",
+          amountType: "expense",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(insightOutput, {
+        config: {
+          allowedInsightMetrics: [
+            { amount: 41837, amountType: "balance", labelPattern: "(見直し|候補)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "insight metrics 不一致" });
+  });
+
+  it("parses compound Japanese monetary units", () => {
+    const compoundAmountOutput = JSON.stringify({
+      text: "総資産は1億2,000万円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 120000000, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(compoundAmountOutput, {
+        config: { allowedVisibleAmounts: [120000000] },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   it.each([
