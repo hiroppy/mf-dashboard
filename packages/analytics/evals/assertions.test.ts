@@ -822,6 +822,61 @@ describe("assertFinanceResponse", () => {
     },
   );
 
+  it.each(["スイスフラン", "タイバーツ", "インドルピー"])(
+    "rejects another named foreign currency after an amount: %s",
+    (currency) => {
+      const foreignCurrencyOutput = JSON.stringify({
+        text: `総資産は5,683,100${currency}です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(foreignCurrencyOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining(currency) });
+    },
+  );
+
+  it.each(["支出の大半は食費です。", "食費が支出の過半数です。"])(
+    "rejects an unsupported qualitative spending-composition claim: %s",
+    (text) => {
+      const qualitativeOutput = JSON.stringify({
+        text,
+        cards: [
+          {
+            type: "summary",
+            title: "月次収支",
+            metrics: [{ label: "支出", amount: 219894, amountType: "expense" }],
+            href: "/0/cf/2026-07",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(qualitativeOutput, {
+          config: {
+            allowedVisibleAmounts: [219894],
+            visibleAmountClaims: [{ label: "支出", amount: 219894 }],
+          },
+        }),
+      ).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining("未根拠の定性的支出構成"),
+      });
+    },
+  );
+
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
       text: `収支は${amount}です。`,

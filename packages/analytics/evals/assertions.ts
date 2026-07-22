@@ -1560,7 +1560,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n").normalize("NFKC");
   const foreignCurrencyClaims = [
     ...visibleText.matchAll(
-      /(?:[$€£]\s*[\d]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW))/gu,
+      /(?:[$€£]\s*[\d]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|(?:スイス)?フラン|(?:タイ)?バーツ|(?:インド|パキスタン|スリランカ|ネパール)?ルピー|ペソ|レアル|ランド|ルーブル|リラ|ドン|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|(?:スイス)?フラン|(?:タイ)?バーツ|(?:インド|パキスタン|スリランカ|ネパール)?ルピー|ペソ|レアル|ランド|ルーブル|リラ|ドン|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW))/gu,
     ),
     ...visibleText.matchAll(
       /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*[A-Z]{3})/gu,
@@ -1568,6 +1568,14 @@ export default function assertFinanceResponse(output: string, context: Assertion
   ]
     .map(([claim]) => claim)
     .filter((claim) => !/JPY/u.test(claim));
+  const unsupportedQualitativeDominanceClaims = [
+    ...visibleText.matchAll(
+      /(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)(?:は|が)[^。！？\n]{1,16}/gu,
+    ),
+    ...visibleText.matchAll(
+      /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)/gu,
+    ),
+  ].map(([claim]) => claim);
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
@@ -1928,6 +1936,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     foreignCurrencyClaims.length > 0
       ? `外貨建ての可視金額: ${[...new Set(foreignCurrencyClaims)].join(",")}`
+      : undefined,
+    unsupportedQualitativeDominanceClaims.length > 0
+      ? `未根拠の定性的支出構成: ${[...new Set(unsupportedQualitativeDominanceClaims)].join(",")}`
       : undefined,
     missingCardFacts.length > 0 ? `不足 card facts: ${missingCardFacts.join(", ")}` : undefined,
     missingDataToolFacts.length > 0
