@@ -256,6 +256,11 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
   return [output.text, ...collectFacts(output.cards)].flatMap((text) => [
     ...Array.from(text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), ([date]) => date),
     ...Array.from(
+      text.matchAll(/(?<!\d)(?:(\d{4})\/)?(\d{1,2})\/(\d{1,2})(?!\d)/g),
+      ([, year, month, day]) =>
+        `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    ),
+    ...Array.from(
       text.matchAll(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g),
       ([, year, month, day]) =>
         `${year ?? "*"}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
@@ -265,7 +270,7 @@ function collectVisibleDates(output: EvaluationOutput): string[] {
 
 function collectVisiblePercentageMatches(output: EvaluationOutput) {
   return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
-    Array.from(text.matchAll(/([+＋\-−]?)\s*([\d,.]+)\s*%/g), (match) => ({
+    Array.from(text.matchAll(/([+＋\-−]?)\s*([\d,.]+)\s*[%％]/g), (match) => ({
       amount: Number(match[2]?.replaceAll(",", "")) * (/[-−]/.test(match[1] ?? "") ? -1 : 1),
       index: match.index,
       text,
@@ -278,20 +283,36 @@ function collectMislabeledVisiblePercentages(
   expectedClaims: VisibleAmountClaim[],
 ): string[] {
   return collectVisiblePercentageMatches(output).flatMap(({ amount, index, text }) => {
-    const nearbyClaims = expectedClaims.filter(({ label }) => {
-      const beforeIndex = text.lastIndexOf(label, index);
-      const afterIndex = text.indexOf(label, index);
-      return (
-        Math.min(
-          beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
-          afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
-        ) <= 20
-      );
-    });
+    const nearbyClaims = expectedClaims
+      .map((claim) => {
+        const beforeIndex = text.lastIndexOf(claim.label, index);
+        const afterIndex = text.indexOf(claim.label, index);
+        return {
+          claim,
+          distance: Math.min(
+            beforeIndex === -1 ? Number.POSITIVE_INFINITY : index - beforeIndex,
+            afterIndex === -1 ? Number.POSITIVE_INFINITY : afterIndex - index,
+          ),
+        };
+      })
+      .filter(({ distance }) => distance <= 20)
+      .sort((left, right) => left.distance - right.distance);
     if (nearbyClaims.length === 0) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
-    return nearbyClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
+    const nearestLabel = nearbyClaims[0]?.claim.label;
+    const claimsForLabel = nearbyClaims
+      .filter(({ claim }) => claim.label === nearestLabel)
+      .map(({ claim }) => claim);
+    const context = text.slice(Math.max(0, index - 30), index + 30);
+    const roleSpecificClaims = claimsForLabel.filter(
+      ({ rolePattern }) => rolePattern !== undefined && new RegExp(rolePattern, "u").test(context),
+    );
+    const applicableClaims =
+      roleSpecificClaims.length > 0
+        ? roleSpecificClaims
+        : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
+    return applicableClaims.some((claim) => Math.abs(claim.amount - amount) <= 0.01)
       ? []
-      : [`${nearbyClaims[0]?.label}=${amount}`];
+      : [`${nearestLabel}=${amount}`];
   });
 }
 

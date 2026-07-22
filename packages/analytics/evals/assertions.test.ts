@@ -762,6 +762,31 @@ describe("assertFinanceResponse", () => {
     expect(result.reason).toContain("不足 card text facts");
   });
 
+  it("recognizes conflicting slash-form visible dates", () => {
+    const slashDateOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "7/11集計（対象7月10日）",
+          metrics: [{ label: "支出", amount: 3435, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(slashDateOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-10"],
+          expectedCardTextFacts: [
+            { cardType: "summary", pattern: "(2026[-/]07[-/]10|7月10日|7/10)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: "未許可の可視日付: *-07-11" });
+  });
+
   it("rejects an unsupported visible percentage claim", () => {
     const percentageOutput = JSON.stringify({
       text: "貯蓄率は99%です。",
@@ -783,6 +808,55 @@ describe("assertFinanceResponse", () => {
     });
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("未許可の可視割合: 99");
+  });
+
+  it("recognizes full-width percentage signs", () => {
+    const percentageOutput = JSON.stringify({
+      text: "貯蓄率は99％です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(percentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects swapped current and comparison-period percentages", () => {
+    const swappedPercentageOutput = JSON.stringify({
+      text: "前月の貯蓄率は29.8%、今月の貯蓄率は64%です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "衣服・美容を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(swappedPercentageOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8, 64],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 29.8 },
+            { label: "貯蓄率", amount: 64, rolePattern: "(前月|先月|比較)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("rejects undeclared insight amounts and generic actions", () => {

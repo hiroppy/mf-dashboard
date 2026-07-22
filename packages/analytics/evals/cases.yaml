@@ -310,8 +310,8 @@
         expectedMetrics:
           - { label: 支出, amount: 6587, amountType: expense }
         expectedCardTextFacts:
-          - { cardType: summary, pattern: (2026-07-10|7月10日) }
-          - { cardType: transactionList, pattern: (2026-07-10|7月10日) }
+          - { cardType: summary, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
+          - { cardType: transactionList, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
         expectedTransactions:
           - {
               ids: ["1229", demo_001260],
