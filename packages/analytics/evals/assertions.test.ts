@@ -964,6 +964,29 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it.each([
+    "支出で最も少ないのは食費です。",
+    "最小の支出カテゴリは食費です。",
+    "食費が支出で一番低いです。",
+  ])("rejects an unsupported low-side category superlative: %s", (text) => {
+    const qualitativeOutput = JSON.stringify({
+      text,
+      cards: [
+        {
+          type: "summary",
+          title: "食費",
+          metrics: [{ label: "食費", amount: 41837, amountType: "expense" }],
+          href: "/0/cf/2026-07",
+        },
+      ],
+    });
+
+    expect(assertFinanceResponse(qualitativeOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠の定性的支出構成"),
+    });
+  });
+
   it("accepts an explicitly denied superlative category claim", () => {
     const deniedOutput = JSON.stringify({
       text: "支出で最も多いのは食費ではありません。",
@@ -978,6 +1001,59 @@ describe("assertFinanceResponse", () => {
     });
 
     expect(assertFinanceResponse(deniedOutput)).toMatchObject({ pass: true });
+  });
+
+  it("rejects a liability-absence claim for the demo fixture", () => {
+    const liabilityOutput = JSON.stringify({
+      text: "総資産は5,683,100円で、負債はありません。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(liabilityOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          forbiddenVisiblePatterns: [
+            "(総負債|負債|借入|ローン)(?:は|が)?.{0,6}(ありません|ない|なし|ゼロ)",
+          ],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止された可視表現") });
+  });
+
+  it.each([
+    ["貯蓄は不要です。", false],
+    ["貯蓄は不要ではありません。", true],
+  ])("handles the savings-necessity partition: %s", (text, pass) => {
+    const savingsOutput = JSON.stringify({
+      text,
+      cards: [
+        {
+          type: "insight",
+          title: "貯蓄",
+          description: "家計を確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(savingsOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "(貯蓄|積立|予算|見直し).{0,12}(不要(?!\\s*(?:では|じゃ)(?:ありません|ない|なく))|必要ありません|必要ない)",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass });
   });
 
   it.each(["支出の大半は食費ではありません。", "食費は支出の過半数ではありません。"])(
