@@ -84,11 +84,17 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
   );
 
   const withoutInvalidAutolinks = withoutReferenceDefinitions.replace(
-    /<((?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+)>/giu,
+    /<((?:(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+|www\.(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:\/[^>\s]*)?|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}))>/giu,
     (_match, url: string) => sanitizeBareUrl(url, allowedHrefs),
   );
+  const withoutImplicitAutolinks = withoutInvalidAutolinks
+    .replace(/(?<![A-Z0-9._%+:/-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "")
+    .replace(
+      /(?<![A-Z0-9@._/-])www\.(?:[A-Z0-9-]+\.)+[A-Z]{2,}(?:\/[A-Z0-9\-._~:/?#[\]@!$&'*+,;=%]*)?/giu,
+      (url) => sanitizeBareUrl(url, allowedHrefs),
+    );
 
-  return withoutInvalidAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
+  return withoutImplicitAutolinks.replace(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu, (url) =>
     sanitizeBareUrl(url, allowedHrefs),
   );
 }
@@ -101,18 +107,32 @@ export function collectFinanceChatLinks(text: string): string[] {
     ),
     ...Array.from(
       text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
-      ([, href]) => href,
+      ([, href]) =>
+        /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
     ),
     ...Array.from(
       text.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
       ([, href]) => href,
     ),
     ...Array.from(
-      text.matchAll(/<((?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+)>/giu),
-      ([, href]) => href,
+      text.matchAll(
+        /<((?:(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+|www\.(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:\/[^>\s]*)?|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}))>/giu,
+      ),
+      ([, href]) =>
+        /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
     ),
     ...Array.from(
       text.matchAll(/(?:https?:\/\/|\/\/)[^\s<>()[\]{}"']+/giu),
+      ([href]) => splitBareUrl(href).destination,
+    ),
+    ...Array.from(
+      text.matchAll(/(?<![A-Z0-9._%+:/-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu),
+      ([href]) => `mailto:${href}`,
+    ),
+    ...Array.from(
+      text.matchAll(
+        /(?<![A-Z0-9@._/-])www\.(?:[A-Z0-9-]+\.)+[A-Z]{2,}(?:\/[A-Z0-9\-._~:/?#[\]@!$&'*+,;=%]*)?/giu,
+      ),
       ([href]) => splitBareUrl(href).destination,
     ),
   ];

@@ -66,6 +66,15 @@ describe("sanitizeFinanceChatLinks", () => {
     },
   );
 
+  it.each([
+    ["www.attacker.exampleです。", "です。"],
+    ["<www.attacker.example>。", "。"],
+    ["user@example.comへ送信", "へ送信"],
+    ["<user@example.com>。", "。"],
+  ])("removes an implicit GFM autolink: %s", (text, expected) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(expected);
+  });
+
   it("preserves ordinary prose containing a colon", () => {
     expect(sanitizeFinanceChatLinks("NISA:100万円です。Note:important", allowedHrefs)).toBe(
       "NISA:100万円です。Note:important",
@@ -97,6 +106,15 @@ describe("collectFinanceChatLinks", () => {
     ['<a href="mailto:evil@example.com">メール', "mailto:evil@example.com"],
     ['<a href="javascript:alert(1)"/>メール', "javascript:alert(1)"],
   ])("collects a malformed raw HTML anchor destination: %s", (text, expected) => {
+    expect(collectFinanceChatLinks(text)).toContain(expected);
+  });
+
+  it.each([
+    ["www.attacker.example", "www.attacker.example"],
+    ["<www.attacker.example>", "www.attacker.example"],
+    ["user@example.com", "mailto:user@example.com"],
+    ["<user@example.com>", "mailto:user@example.com"],
+  ])("collects an implicit GFM autolink destination: %s", (text, expected) => {
     expect(collectFinanceChatLinks(text)).toContain(expected);
   });
 });
