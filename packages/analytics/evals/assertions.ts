@@ -308,7 +308,7 @@ function collectMislabeledVisibleAmounts(
   ];
   return matches.flatMap(({ amount, endIndex, index, text }) => {
     const { clauseEnd, clauseStart } = collectClauseBounds(text, index, endIndex);
-    const nearbyClaims = expectedClaims
+    let nearbyClaims = expectedClaims
       .map((claim) => {
         const { label } = claim;
         const foundBeforeIndex = text.lastIndexOf(label, index);
@@ -338,6 +338,27 @@ function collectMislabeledVisibleAmounts(
           left.distance - right.distance ||
           right.claim.label.length - left.claim.label.length,
       );
+    const clauseText = text.slice(clauseStart + 1, clauseEnd);
+    if (
+      nearbyClaims.length === 0 &&
+      (text[clauseStart] === "、" || text[clauseStart] === "，") &&
+      /^(?:前月|先月|比較|差額|差|増減|変化)/u.test(clauseText.trimStart())
+    ) {
+      const sentenceStart = Math.max(
+        ...["。", "．", "\n"].map((separator) => text.lastIndexOf(separator, clauseStart - 1)),
+      );
+      const carriedLabel = expectedClaims
+        .map(({ label }) => ({ label, index: text.lastIndexOf(label, clauseStart - 1) }))
+        .filter(({ index }) => index > sentenceStart)
+        .sort(
+          (left, right) => right.index - left.index || right.label.length - left.label.length,
+        )[0]?.label;
+      if (carriedLabel !== undefined) {
+        nearbyClaims = expectedClaims
+          .filter(({ label }) => label === carriedLabel)
+          .map((claim) => ({ claim, compoundPriority: 0, distance: 0 }));
+      }
+    }
     const nearestLabel = nearbyClaims[0]?.claim.label;
     if (nearestLabel === undefined) return expectedClaims.length > 0 ? [`不明=${amount}`] : [];
     const claimsForLabel = nearbyClaims

@@ -365,6 +365,33 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("carries a comparison subject across adjacent clauses", () => {
+    const compactComparisonOutput = JSON.stringify({
+      text: "食費は41,837円、前月は49,922円、差額は8,085円減少です。",
+      cards: [
+        {
+          type: "insight",
+          title: "食費の比較",
+          description: "食費を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(compactComparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837, 49922, 8085],
+          visibleAmountClaims: [
+            { label: "食費", amount: 41837 },
+            { label: "食費", amount: 49922, rolePattern: "(前月|先月|比較)" },
+            { label: "食費", amount: 8085, rolePattern: "(差額|差|減少)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("distinguishes current totals from comparison deltas", () => {
     const wrongRoleOutput = JSON.stringify({
       text: "2026-07の食費は8,085円です。",
