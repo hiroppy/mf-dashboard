@@ -318,4 +318,27 @@ describe("assertFinanceResponse", () => {
       reason: "route 不一致: expected=/0/cf/2026-07 actual=/0/cf/2026-07,/0/bs",
     });
   });
+
+  it("requires insight facts to appear in the insight card", () => {
+    const fallbackOnlyOutput = JSON.stringify({
+      text: "2026-07の支出改善です。",
+      cards: [
+        {
+          type: "insight",
+          title: "支出改善",
+          description: "食費を見直せそうです。",
+          action: { label: "内訳を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fallbackOnlyOutput, {
+        config: { expectedInsightFacts: ["2026-07"] },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: "不足 insight facts: 2026-07",
+    });
+  });
 });

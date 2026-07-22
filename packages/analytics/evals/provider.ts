@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
@@ -32,6 +33,7 @@ export interface ProviderDependencies {
   getDb: typeof getDb;
   getModel: typeof getModel;
   isDatabaseAvailable: typeof isDatabaseAvailable;
+  isDemoDatabasePath: (databasePath: string) => boolean;
   isLLMEnabled: typeof isLLMEnabled;
 }
 
@@ -42,11 +44,29 @@ const dependencies: ProviderDependencies = {
   getDb,
   getModel,
   isDatabaseAvailable,
+  isDemoDatabasePath,
   isLLMEnabled,
 };
 
 const DEMO_DB_PATH = resolve(import.meta.dirname, "../../../data/demo.db");
 const evaluationDateSchema = z.iso.datetime({ offset: true });
+
+export function isDemoDatabasePath(databasePath: string) {
+  try {
+    const resolvedPath = resolve(process.cwd(), databasePath);
+    const databaseStat = lstatSync(resolvedPath);
+    const demoStat = lstatSync(DEMO_DB_PATH);
+    return (
+      databaseStat.isFile() &&
+      !databaseStat.isSymbolicLink() &&
+      demoStat.isFile() &&
+      !demoStat.isSymbolicLink() &&
+      realpathSync(resolvedPath) === realpathSync(DEMO_DB_PATH)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const presentations = response.steps.flatMap(({ toolResults }) =>
@@ -149,6 +169,9 @@ export default class FinanceChatProvider {
       throw new Error(
         "demo.db がありません。先に pnpm --filter @mf-dashboard/db build:demo を実行してください。",
       );
+    }
+    if (!this.providerDependencies.isDemoDatabasePath(databasePath)) {
+      throw new Error("評価には通常ファイルの data/demo.db を DB_PATH に指定してください。");
     }
   }
 

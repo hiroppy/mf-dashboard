@@ -1,8 +1,10 @@
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FinanceChatProvider, {
   type ChatResponse,
   type ProviderDependencies,
+  isDemoDatabasePath,
   toEvaluationOutput,
 } from "./provider";
 
@@ -39,6 +41,7 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
       .fn<ProviderDependencies["getModel"]>()
       .mockReturnValue({} as ReturnType<ProviderDependencies["getModel"]>),
     isDatabaseAvailable: () => true,
+    isDemoDatabasePath: () => true,
     isLLMEnabled: () => true,
     ...overrides,
   } as unknown as ProviderDependencies;
@@ -184,13 +187,40 @@ describe("FinanceChatProvider", () => {
   it("rejects databases other than the demo fixture", async () => {
     const provider = new FinanceChatProvider(
       {},
-      createDependencies({ getDatabasePath: () => "../../data/moneyforward.db" }),
+      createDependencies({
+        getDatabasePath: () => "../../data/moneyforward.db",
+        isDemoDatabasePath: () => false,
+      }),
     );
 
     const result = await provider.callApi("質問", { vars: { evaluationDate: "2026-07-31" } });
     expect(result).toEqual({
       error: "評価にはリポジトリの data/demo.db を DB_PATH に指定してください。",
     });
+  });
+
+  it("rejects a demo database path that fails canonical file validation", async () => {
+    const provider = new FinanceChatProvider(
+      {},
+      createDependencies({ isDemoDatabasePath: () => false }),
+    );
+
+    const result = await provider.callApi("質問", { vars: { evaluationDate: "2026-07-31" } });
+    expect(result).toEqual({
+      error: "評価には通常ファイルの data/demo.db を DB_PATH に指定してください。",
+    });
+  });
+
+  it("rejects a symlink to the demo database", () => {
+    const temporaryDirectory = mkdtempSync(join(import.meta.dirname, ".provider-test-"));
+    const symlinkPath = join(temporaryDirectory, "demo.db");
+
+    try {
+      symlinkSync(demoDatabasePath, symlinkPath);
+      expect(isDemoDatabasePath(symlinkPath)).toBe(false);
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true });
+    }
   });
 
   it("explains a missing demo fixture", async () => {

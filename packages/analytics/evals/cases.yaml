@@ -93,6 +93,6 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedFacts: [2026-07]
+        expectedInsightFacts: [2026-07]
         expectedCardTypes: [insight]
         expectedRoute: /0/cf/2026-07

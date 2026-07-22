@@ -23,6 +23,7 @@ interface AssertionContext {
     expectedCardTypes?: string[];
     expectedCategories?: MetricExpectation[];
     expectedFacts?: string[];
+    expectedInsightFacts?: string[];
     expectedMetrics?: MetricExpectation[];
     expectedRoute?: string;
     expectedTransactionGroup?: TransactionGroupExpectation;
@@ -156,6 +157,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     .filter((card) => card.type === "insight")
     .map(({ title, description }) => `${title}\n${description}`)
     .join("\n");
+  const missingInsightFacts = (config.expectedInsightFacts ?? []).filter(
+    (expected) => !includesFact([insightText], expected),
+  );
   const missingInsightPatterns = (config.requiredInsightPatterns ?? []).filter(
     (pattern) => !new RegExp(pattern, "u").test(insightText),
   );
@@ -186,6 +190,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     missingInsightPatterns.length > 0
       ? `不足 insight patterns: ${missingInsightPatterns.join(", ")}`
+      : undefined,
+    missingInsightFacts.length > 0
+      ? `不足 insight facts: ${missingInsightFacts.join(", ")}`
       : undefined,
     cardTypesMismatch
       ? `card types 不一致: expected=${expectedTypes.join(",")} actual=${actualTypes.join(",")}`
