@@ -11,11 +11,26 @@ export function splitCompleteFinanceChatText(text: string): {
   const boundaries = new Set(["\n", "。", "！", "？"]);
   let labelStart = -1;
   let destinationDepth = 0;
+  let htmlAnchorOpen = false;
   let lastBoundary = -1;
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
     const escaped = index > 0 && text[index - 1] === "\\";
+
+    if (!escaped && !htmlAnchorOpen && /^<a\b/iu.test(text.slice(index))) {
+      htmlAnchorOpen = true;
+      continue;
+    }
+
+    if (htmlAnchorOpen) {
+      const closingAnchor = /^<\/a\s*>/iu.exec(text.slice(index));
+      if (!escaped && closingAnchor) {
+        htmlAnchorOpen = false;
+        index += closingAnchor[0].length - 1;
+      }
+      continue;
+    }
 
     if (!escaped && destinationDepth > 0) {
       if (character === "(") destinationDepth += 1;

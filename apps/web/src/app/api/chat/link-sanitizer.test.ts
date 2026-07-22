@@ -122,6 +122,19 @@ describe("splitCompleteFinanceChatText", () => {
       pending: "[詳細][route]\n[route]: /group-a/cf/2026-07",
     });
   });
+
+  it("keeps a raw HTML anchor buffered until its closing tag arrives", () => {
+    const openingChunk = '<a href="mailto:evil@example.com">詳細。';
+    expect(splitCompleteFinanceChatText(openingChunk)).toEqual({
+      complete: "",
+      pending: openingChunk,
+    });
+    expect(splitCompleteFinanceChatText(`${openingChunk}</a>続き。`)).toEqual({
+      complete: `${openingChunk}</a>続き。`,
+      pending: "",
+    });
+    expect(sanitizeFinanceChatLinks(`${openingChunk}</a>続き。`, new Set())).toBe("詳細。続き。");
+  });
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
