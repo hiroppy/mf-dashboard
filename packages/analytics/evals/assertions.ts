@@ -1508,8 +1508,8 @@ function collectMislabeledVisiblePercentages(
   );
 }
 
-function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
-  const categoryGroups = output.dataToolResults.flatMap((result) =>
+function collectCategoryGroups(output: EvaluationOutput) {
+  return output.dataToolResults.flatMap((result) =>
     result.toolName === "getMonthlyCategoryTotals" && Array.isArray(result.output)
       ? [
           result.output.flatMap((row) =>
@@ -1519,12 +1519,22 @@ function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
             typeof row.category === "string" &&
             "totalAmount" in row &&
             typeof row.totalAmount === "number"
-              ? [{ category: row.category, totalAmount: row.totalAmount }]
+              ? [
+                  {
+                    category: row.category,
+                    totalAmount: row.totalAmount,
+                    type: "type" in row && typeof row.type === "string" ? row.type : undefined,
+                  },
+                ]
               : [],
           ),
         ]
       : [],
   );
+}
+
+function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
+  const categoryGroups = collectCategoryGroups(output);
   const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const claims = [output.text, ...collectFacts(output.cards)].flatMap((text) =>
     categoryGroups.flatMap((categoryTotals) =>
@@ -1574,6 +1584,37 @@ function collectInvalidCategoryComparisons(output: EvaluationOutput): string[] {
     ),
   );
   return [...new Set(claims)];
+}
+
+function collectInvalidCategoryTypeClaims(output: EvaluationOutput): string[] {
+  return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
+    collectCategoryGroups(output).flatMap((categories) =>
+      categories.flatMap((category) => {
+        const categoryPattern = category.category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return Array.from(
+          text.matchAll(
+            new RegExp(
+              `${categoryPattern}(?:は|が)\\s*(収入|支出)(?:カテゴリ|区分|扱い)?(?:です|でした|である|だ)`,
+              "gu",
+            ),
+          ),
+        ).flatMap((match) => {
+          const endIndex = match.index + match[0].length;
+          if (
+            hasNegatedSuffix(
+              text,
+              endIndex,
+              collectClauseBounds(text, match.index, endIndex).clauseEnd,
+            )
+          ) {
+            return [];
+          }
+          const claimedType = match[1] === "収入" ? "income" : "expense";
+          return category.type === claimedType ? [] : [`${category.category}=${match[1]}`];
+        });
+      }),
+    ),
+  );
 }
 
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
@@ -1717,6 +1758,7 @@ export default function assertFinanceResponse(output: string, context: Assertion
     })
     .map(([claim]) => claim);
   const invalidCategoryComparisons = collectInvalidCategoryComparisons(parsed);
+  const invalidCategoryTypeClaims = collectInvalidCategoryTypeClaims(parsed);
   const unsupportedBareAmountUnits = collectBareVisibleAmountMatches(
     parsed,
     config.visibleAmountClaims ?? [],
@@ -2255,6 +2297,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     invalidCategoryComparisons.length > 0
       ? `誤ったカテゴリ間比較: ${invalidCategoryComparisons.join(",")}`
+      : undefined,
+    invalidCategoryTypeClaims.length > 0
+      ? `誤ったカテゴリ種別: ${[...new Set(invalidCategoryTypeClaims)].join(",")}`
       : undefined,
     unsupportedBareAmountUnits.length > 0
       ? `非金銭単位付き可視金額: ${[...new Set(unsupportedBareAmountUnits)].join(",")}`

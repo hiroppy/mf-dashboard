@@ -1079,12 +1079,31 @@ describe("assertFinanceResponse", () => {
   });
 
   it.each([
+    ["収入はすべて給与です。", false],
+    ["収入がすべて給与とは限りません。", true],
+  ])("validates an aggregate income-source composition claim: %s", (text, pass) => {
+    const compositionOutput = JSON.stringify({ text, cards: JSON.parse(output).cards });
+
+    expect(
+      assertFinanceResponse(compositionOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((収入|所得).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(給与|給料|賞与|ボーナス|事業収入|副業|利息|ポイント)(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))|(給与|給料|賞与|ボーナス|事業収入|副業|利息|ポイント).{0,12}(が|で)(収入|所得).{0,8}(すべて|全て|全部|全額|を構成|を占め))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass });
+  });
+
+  it.each([
     ["食費は住宅費より多いです。", false],
     ["食費は住宅費より少ないです。", true],
     ["食費は住宅費以上です。", false],
     ["住宅費以下なのは食費です。", true],
     ["住宅費より食費が多いとは限りません。", true],
-  ])("validates a grounded pairwise category comparison: %s", (text, pass) => {
+    ["食費は収入カテゴリです。", false],
+    ["食費は支出カテゴリです。", true],
+  ])("validates a grounded qualitative category claim: %s", (text, pass) => {
     const categoryResult = {
       toolName: "getMonthlyCategoryTotals",
       input: { month: "2026-07" },
@@ -5601,6 +5620,23 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+  });
+
+  it.each([
+    ["総資産には不動産が含まれています。", false],
+    ["総資産に不動産が含まれているとは限りません。", true],
+  ])("validates an asset-category presence claim from a scalar snapshot: %s", (text, pass) => {
+    const compositionOutput = JSON.stringify({ text, cards: JSON.parse(output).cards });
+
+    expect(
+      assertFinanceResponse(compositionOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((総資産|保有資産|資産)(?:には|に|は|が).{0,12}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が)?(含まれています|含まれます|含まれている|あります|保有されています)|(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が|は).{0,12}(総資産|保有資産|資産)(?:に|へ)(含まれています|含まれます|含まれている|あります))(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass });
   });
 
   it("rejects an unsupported majority asset-composition claim from a scalar snapshot", () => {
