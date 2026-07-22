@@ -280,9 +280,32 @@ function collectValuesAtPath(value: unknown, path: string): unknown[] {
 }
 
 function dataToolResultMatches(result: DataToolResult, expected: DataToolFactExpectation): boolean {
+  const monthlySummaryTools = new Set(["getLatestMonthlySummary", "getMonthlySummaryByMonth"]);
+  const toolsMatch =
+    result.toolName === expected.toolName ||
+    (monthlySummaryTools.has(result.toolName) && monthlySummaryTools.has(expected.toolName));
+  const expectedMonth =
+    typeof expected.input === "object" &&
+    expected.input !== null &&
+    "month" in expected.input &&
+    typeof expected.input.month === "string"
+      ? expected.input.month
+      : undefined;
+  const latestSummaryMatchesMonth =
+    result.toolName === "getLatestMonthlySummary" &&
+    expected.toolName === "getMonthlySummaryByMonth" &&
+    expectedMonth !== undefined &&
+    typeof result.output === "object" &&
+    result.output !== null &&
+    "month" in result.output &&
+    result.output.month === expectedMonth;
+  const inputMatches =
+    expected.input === undefined ||
+    matchesPartial(result.input, expected.input) ||
+    latestSummaryMatchesMonth;
   return (
-    result.toolName === expected.toolName &&
-    (expected.input === undefined || matchesPartial(result.input, expected.input)) &&
+    toolsMatch &&
+    inputMatches &&
     collectValuesAtPath(result.output, expected.path).some((actual) =>
       matchesPartial(actual, expected.value),
     )
@@ -1651,6 +1674,47 @@ function collectInvalidCategoryTypeClaims(
   });
 }
 
+function collectCategorySuperlativeClaims(text: string): string[] {
+  return [
+    ...text.matchAll(
+      /(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)(?:の)?(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
+    ),
+    ...text.matchAll(
+      /(?:(?:最大|最小)(?:の)?(?:支出|出費)(?:カテゴリ)?|(?:支出|出費)(?:で)?(?:最大|最小)(?:なもの|なの)?)(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
+    ),
+    ...text.matchAll(
+      /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)/gu,
+    ),
+  ]
+    .filter((match) => {
+      const endIndex = match.index + match[0].length;
+      return !hasNegatedSuffix(
+        text,
+        endIndex,
+        collectClauseBounds(text, match.index, endIndex).clauseEnd,
+      );
+    })
+    .map(([claim]) => claim);
+}
+
+function categorySuperlativeIsGrounded(
+  claim: string,
+  categoryGroups: ReturnType<typeof collectCategoryGroups>,
+): boolean {
+  const claimsLowest =
+    /(?:最小|最も少ない|一番少ない|最も小さい|一番小さい|最も低い|一番低い)/u.test(claim);
+  return categoryGroups.some((group) => {
+    const expenseRows = group.filter(({ type }) => type === "expense");
+    const candidates = expenseRows.length > 0 ? expenseRows : group;
+    const claimedRows = candidates.filter(({ category }) => claim.includes(category));
+    if (claimedRows.length === 0 || candidates.length === 0) return false;
+    const extremeAmount = Math[claimsLowest ? "min" : "max"](
+      ...candidates.map(({ totalAmount }) => totalAmount),
+    );
+    return claimedRows.some(({ totalAmount }) => totalAmount === extremeAmount);
+  });
+}
+
 export default function assertFinanceResponse(output: string, context: AssertionContext = {}) {
   const parsed = parseOutput(output);
   if (!parsed) return { pass: false, score: 0, reason: "text/cards の評価 JSON が不正です。" };
@@ -1765,21 +1829,12 @@ export default function assertFinanceResponse(output: string, context: Assertion
     })
     .map(([claim]) => claim)
     .filter((claim) => !/JPY/u.test(claim));
-  const unsupportedQualitativeDominanceClaims = [
+  const unsupportedQualitativeMajorityClaims = [
     ...visibleText.matchAll(
       /(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
     ),
     ...visibleText.matchAll(
       /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:全体)?の(?:大半|ほとんど|過半数|半分以上)/gu,
-    ),
-    ...visibleText.matchAll(
-      /(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)(?:の)?(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
-    ),
-    ...visibleText.matchAll(
-      /(?:(?:最大|最小)(?:の)?(?:支出|出費)(?:カテゴリ)?|(?:支出|出費)(?:で)?(?:最大|最小)(?:なもの|なの)?)(?:は|が)[\p{L}・]{1,12}?(?=\s*(?:です|である|だ|では|じゃ|でない|。|、|$))/gu,
-    ),
-    ...visibleText.matchAll(
-      /[\p{L}・]{1,12}(?:は|が)(?:支出|出費)(?:で|の(?:うち|中で))?(?:最も|一番)(?:多い|大きい|高い|少ない|小さい|低い)/gu,
     ),
   ]
     .filter((match) => {
@@ -1819,6 +1874,23 @@ export default function assertFinanceResponse(output: string, context: Assertion
     ...collectFacts(parsed.cards).flatMap((text) =>
       collectInvalidCategoryTypeClaims(text, knownCategoryGroups, knownCategoryGroups),
     ),
+  ];
+  const invalidCategorySuperlativeClaims = [
+    ...categoryTextEvidence.flatMap((evidence) =>
+      collectCategorySuperlativeClaims(evidence.text).filter(
+        (claim) =>
+          !categorySuperlativeIsGrounded(claim, collectCategoryGroups(evidence.dataToolResults)),
+      ),
+    ),
+    ...collectFacts(parsed.cards).flatMap((text) =>
+      collectCategorySuperlativeClaims(text).filter(
+        (claim) => !categorySuperlativeIsGrounded(claim, knownCategoryGroups),
+      ),
+    ),
+  ];
+  const unsupportedQualitativeDominanceClaims = [
+    ...unsupportedQualitativeMajorityClaims,
+    ...invalidCategorySuperlativeClaims,
   ];
   const unsupportedBareAmountUnits = collectBareVisibleAmountMatches(
     parsed,
@@ -2118,14 +2190,20 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const collectClaimedTransactionDescriptions = (texts: string[]) =>
     texts
       .flatMap((text) => text.split(/[。！？\n]/u))
-      .flatMap((sentence) =>
-        Array.from(
+      .flatMap((sentence) => [
+        ...Array.from(
           sentence.matchAll(
             /(?:明細|取引)(?:には|に|は)?(?:\d{1,2}月\d{1,2}日の)?(.+?)(?:があります|がありました|が含まれます|が含まれています|を含みます|が記載されています|が載っています)/gu,
           ),
           ([, description]) => description.trim(),
         ),
-      );
+        ...Array.from(
+          sentence.matchAll(
+            /(?:\d{1,2}月\d{1,2}日|\d{4}[-/]\d{1,2}[-/]\d{1,2}日?)(?:は|に)\s*(.+?)(?:で|にて)(?:支払いました|支払っています|購入しました|買いました|利用しました)/gu,
+          ),
+          ([, description]) => description.trim(),
+        ),
+      ]);
   const transactionDescriptionIsRetrieved = (description: string, results: DataToolResult[]) =>
     results
       .flatMap((result) =>

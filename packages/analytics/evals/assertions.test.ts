@@ -248,6 +248,40 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("accepts a latest monthly summary for a matching by-month expectation", () => {
+    const latestResult = {
+      toolName: "getLatestMonthlySummary",
+      input: {},
+      output: { month: "2026-07", netIncome: 93341 },
+    };
+    const latestOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [latestResult],
+      textEvidence: [
+        {
+          text: "2026年7月の収支です。",
+          allowedHrefs: ["/0/cf/2026-07"],
+          dataToolResults: [latestResult],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(latestOutput, {
+        config: {
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.netIncome",
+              value: 93341,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("rejects transaction evidence retrieved with an unbounded input", () => {
     const transaction = {
       date: "2026-07-10",
@@ -1150,6 +1184,23 @@ describe("assertFinanceResponse", () => {
   });
 
   it.each([
+    ["支出はすべて住宅費です。", false],
+    ["支出がすべて住宅費とは限りません。", true],
+  ])("validates an aggregate expense-category composition claim: %s", (text, pass) => {
+    const compositionOutput = JSON.stringify({ text, cards: JSON.parse(output).cards });
+
+    expect(
+      assertFinanceResponse(compositionOutput, {
+        config: {
+          forbiddenVisiblePatterns: [
+            "((支出|出費).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(住宅費|食費|日用品|水道・光熱費|交通費|通信費|医療費|教育費|娯楽費)(?![^。！？\\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))|(住宅費|食費|日用品|水道・光熱費|交通費|通信費|医療費|教育費|娯楽費).{0,12}(が|で)(支出|出費).{0,8}(すべて|全て|全部|全額|を構成|を占め))",
+          ],
+        },
+      }),
+    ).toMatchObject({ pass });
+  });
+
+  it.each([
     ["食費は住宅費より多いです。", false],
     ["食費は住宅費より少ないです。", true],
     ["食費は住宅費以上です。", false],
@@ -1483,6 +1534,28 @@ describe("assertFinanceResponse", () => {
     });
 
     expect(assertFinanceResponse(deniedOutput)).toMatchObject({ pass: true });
+  });
+
+  it.each([
+    ["支出で最も多いのは住宅です。", true],
+    ["支出で最も多いのは食費です。", false],
+  ])("validates a category superlative against retrieved totals: %s", (text, pass) => {
+    const categoryResult = {
+      toolName: "getMonthlyCategoryTotals",
+      input: { month: "2026-07" },
+      output: [
+        { category: "食費", type: "expense", totalAmount: 41837 },
+        { category: "住宅", type: "expense", totalAmount: 75000 },
+      ],
+    };
+    const groundedOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [categoryResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [categoryResult] }],
+    });
+
+    expect(assertFinanceResponse(groundedOutput)).toMatchObject({ pass });
   });
 
   it("rejects a liability-absence claim for the demo fixture", () => {
@@ -7159,6 +7232,37 @@ describe("assertFinanceResponse", () => {
           },
           requireTransactionToolGrounding: true,
         },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
+  });
+
+  it("rejects an ordinary payment claim for an unretrieved merchant", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+        ],
+      },
+    };
+    const text = "7月10日は架空店で支払いました。";
+    const fabricatedPaymentOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [searchResult],
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedPaymentOutput, {
+        config: { requireTransactionToolGrounding: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
   });
