@@ -30,6 +30,12 @@ describe("sanitizeFinanceChatLinks", () => {
     },
   );
 
+  it("recursively strips and records a link nested inside an invalid link label", () => {
+    const text = "[outer [inner](/evil)](/invalid)";
+    expect(sanitizeFinanceChatLinks(text, new Set())).toBe("outer inner");
+    expect(collectFinanceChatLinks(text)).toEqual(expect.arrayContaining(["/invalid", "/evil"]));
+  });
+
   it.each(["`[x](https://example.com)`", "```md\n[x](https://example.com)\n```"])(
     "preserves a Markdown link literal inside Markdown code: %s",
     (text) => {

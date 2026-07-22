@@ -249,10 +249,18 @@ function sanitizeMarkdownInlineLinks(text: string, allowedHrefs: Set<string>): s
   for (const link of findMarkdownInlineLinks(text)) {
     sanitized += text.slice(cursor, link.start);
     const href = link.image ? undefined : resolveAllowedHref(link.destination, allowedHrefs);
-    sanitized += href ? `[${link.label}](${href})` : link.label;
+    const label = sanitizeMarkdownInlineLinks(link.label, new Set());
+    sanitized += href ? `[${label}](${href})` : label;
     cursor = link.end;
   }
   return sanitized + text.slice(cursor);
+}
+
+function collectMarkdownInlineLinkDestinations(text: string): string[] {
+  return findMarkdownInlineLinks(text).flatMap(({ destination, label }) => [
+    destination,
+    ...collectMarkdownInlineLinkDestinations(label),
+  ]);
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
@@ -302,7 +310,7 @@ export function collectFinanceChatLinks(text: string): string[] {
   const { masked } = maskMarkdownCode(text);
   return [
     ...collectRawHtmlAnchorDestinations(masked),
-    ...findMarkdownInlineLinks(masked).map(({ destination }) =>
+    ...collectMarkdownInlineLinkDestinations(masked).map((destination) =>
       /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(destination)
         ? `mailto:${destination}`
         : destination,
