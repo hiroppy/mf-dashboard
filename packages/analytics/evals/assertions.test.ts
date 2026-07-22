@@ -1152,6 +1152,53 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "明細の省略件数表示がありません" });
   });
 
+  it("accepts an のうち truncation disclosure", () => {
+    const transactionOutput = JSON.stringify({
+      text: "2件のうち1件を表示します。",
+      cards: [
+        {
+          type: "transactionList",
+          title: "食費明細",
+          href: "/0/cf/2026-07",
+          transactions: [
+            {
+              id: "tx-a",
+              date: "2026-07-10",
+              description: "店舗 A",
+              category: "食費",
+              amount: 3435,
+              amountType: "expense",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(transactionOutput, {
+        config: {
+          allowedVisibleTransactionCounts: [2],
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 1,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-10",
+                description: "店舗 A",
+                category: "食費",
+                amount: 3435,
+                amountType: "expense",
+              },
+            ],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("does not allow a source total as the displayed row count", () => {
     const transactionOutput = JSON.stringify({
       text: "2件表示します。",
@@ -2156,6 +2203,29 @@ describe("assertFinanceResponse", () => {
     expect(
       assertFinanceResponse(staleSnapshotOutput, {
         config: { allowedVisibleDates: ["2026-07-31"] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a kanji-written stale snapshot date", () => {
+    const staleSnapshotOutput = JSON.stringify({
+      text: "回答",
+      cards: [
+        {
+          type: "summary",
+          title: "七月三十日時点の総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(staleSnapshotOutput, {
+        config: {
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+        },
       }),
     ).toMatchObject({ pass: false });
   });

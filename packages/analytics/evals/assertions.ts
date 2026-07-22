@@ -584,9 +584,16 @@ function collectDates(rawTexts: string[]): string[] {
         ([relativeDay]) => `relative-${relativeDay}`,
       ),
       ...Array.from(
-        text.matchAll(/(令和|平成|昭和)(元|\d+)年(\d{1,2})月(\d{1,2})日/g),
+        text.matchAll(
+          /(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2})月(\d{1,2})日/g,
+        ),
         ([, era, eraYear, month, day]) =>
           `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/([〇零一二三四五六七八九十]+)月([〇零一二三四五六七八九十]+)日/g),
+        ([, month, day]) =>
+          `*-${String(parseKanjiAmount(month)).padStart(2, "0")}-${String(parseKanjiAmount(day)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月(\d{1,2})日/g),
@@ -627,7 +634,8 @@ function collectDates(rawTexts: string[]): string[] {
 }
 
 function toGregorianYear(era: string, rawYear: string): number {
-  const eraYear = rawYear === "元" ? 1 : Number(rawYear);
+  const eraYear =
+    rawYear === "元" ? 1 : /^\d+$/u.test(rawYear) ? Number(rawYear) : parseKanjiAmount(rawYear);
   const startYears: Record<string, number> = { 令和: 2018, 平成: 1988, 昭和: 1925 };
   return startYears[era]! + eraYear;
 }
@@ -650,9 +658,13 @@ function collectVisibleMonths(output: EvaluationOutput): string[] {
     const text = rawText.normalize("NFKC");
     return [
       ...Array.from(
-        text.matchAll(/(令和|平成|昭和)(元|\d+)年(\d{1,2})月/g),
+        text.matchAll(/(令和|平成|昭和)(元|\d+|[〇零一二三四五六七八九十百]+)年(\d{1,2})月/g),
         ([, era, eraYear, month]) =>
           `${toGregorianYear(era, eraYear)}-${String(month).padStart(2, "0")}`,
+      ),
+      ...Array.from(
+        text.matchAll(/([〇零一二三四五六七八九十]+)月/g),
+        ([, month]) => `*-${String(parseKanjiAmount(month)).padStart(2, "0")}`,
       ),
       ...Array.from(
         text.matchAll(/(?:昨年|去年|前年)(\d{1,2})月/g),
@@ -975,8 +987,8 @@ export default function assertFinanceResponse(output: string, context: Assertion
     text,
   }: (typeof visibleTransactionCounts)[number]) =>
     config.allowedVisibleTransactionCounts?.includes(count) === true &&
-    /全\s*$/u.test(text.slice(0, index)) &&
-    /^\s*中/u.test(text.slice(endIndex));
+    ((/全\s*$/u.test(text.slice(0, index)) && /^\s*中/u.test(text.slice(endIndex))) ||
+      /^\s*の?うち/u.test(text.slice(endIndex)));
   const unexpectedVisibleTransactionCounts =
     expectedVisibleTransactionCount === undefined
       ? []

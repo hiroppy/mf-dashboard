@@ -53,10 +53,10 @@ describe("toEvaluationOutput", () => {
       text: "回答",
       steps: [
         {
-          toolResults: [
-            { toolName: "getMonthlySummaryByMonth", output: { income: 100 } },
-            { toolName: "presentFinanceCards", output: [{ type: "summary" }] },
-          ],
+          toolResults: [{ toolName: "getMonthlySummaryByMonth", output: { income: 100 } }],
+        },
+        {
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
         },
       ],
     };
@@ -67,6 +67,22 @@ describe("toEvaluationOutput", () => {
       text: "回答",
       cards: [{ type: "summary" }],
     });
+  });
+
+  it("does not ground cards with data fetched after presentation", () => {
+    const response: ChatResponse = {
+      text: "回答",
+      steps: [
+        {
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+        {
+          toolResults: [{ toolName: "getMonthlySummaryByMonth", output: { income: 100 } }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").dataToolResults).toEqual([]);
   });
 
   it("requires exactly one card presentation", () => {

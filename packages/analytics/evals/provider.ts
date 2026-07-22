@@ -75,12 +75,14 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
   const allowedHrefs = new Set<string>();
   let allowedHrefsAtPresentation: string[] = [];
   const dataToolResults: Array<{ toolName: string; output: unknown }> = [];
+  let dataToolResultsAtPresentation: Array<{ toolName: string; output: unknown }> = [];
   const presentations: unknown[] = [];
   const visibleText: string[] = [];
   let hasStepText = false;
 
   for (const step of response.steps) {
     const allowedHrefsBeforeStep = [...allowedHrefs];
+    const dataToolResultsBeforeStep = [...dataToolResults];
     if (step.text !== undefined) {
       hasStepText = true;
       visibleText.push(sanitizeFinanceChatLinks(step.text, allowedHrefs));
@@ -103,6 +105,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
       if (toolName === "presentFinanceCards") {
         presentations.push(output);
         allowedHrefsAtPresentation = allowedHrefsBeforeStep;
+        dataToolResultsAtPresentation = dataToolResultsBeforeStep;
       }
     }
   }
@@ -115,7 +118,7 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
 
   return {
     allowedHrefs: allowedHrefsAtPresentation,
-    dataToolResults,
+    dataToolResults: dataToolResultsAtPresentation,
     text: hasStepText
       ? visibleText.join("")
       : sanitizeFinanceChatLinks(response.text, allowedHrefs),
