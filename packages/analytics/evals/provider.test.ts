@@ -175,6 +175,24 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it("records and removes a Markdown image destination before evaluation", () => {
+    const text = "![x](javascript:alert(1))";
+    const response: ChatResponse = {
+      text,
+      steps: [
+        {
+          text,
+          toolResults: [{ toolName: "presentFinanceCards", output: [{ type: "summary" }] }],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group")).toMatchObject({
+      text: "x",
+      unauthorizedLinks: ["javascript:alert(1)"],
+    });
+  });
+
   it("records and removes a raw HTML link before evaluation", () => {
     const response: ChatResponse = {
       text: '<a href="mailto:evil@example.com">メール</a>',

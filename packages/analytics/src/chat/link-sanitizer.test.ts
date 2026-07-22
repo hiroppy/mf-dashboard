@@ -31,6 +31,16 @@ describe("sanitizeFinanceChatLinks", () => {
     ).toBe("メール\n\n");
   });
 
+  it.each(["![x](javascript:alert(1))", "![x][ref]\n\n[ref]: javascript:alert(1)"])(
+    "strips a Markdown image destination: %s",
+    (text) => {
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(
+        text.includes("[ref]") ? "x\n\n" : "x",
+      );
+      expect(collectFinanceChatLinks(text)).toContain("javascript:alert(1)");
+    },
+  );
+
   it("resolves a reference-style link with an allowlisted route", () => {
     expect(sanitizeFinanceChatLinks("[詳細][route]\n\n[route]: /0/cf/2026-07", allowedHrefs)).toBe(
       "[詳細](/0/cf/2026-07)\n\n",

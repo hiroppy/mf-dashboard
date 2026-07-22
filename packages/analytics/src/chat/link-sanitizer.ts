@@ -131,15 +131,17 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     ),
   );
   const withoutInvalidMarkdownLinks = withoutHtmlLinks.replace(
-    /(?<!!)\[([^\]]+)]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g,
-    (_match, label: string, destination: string) => {
+    /(!?)\[([^\]]+)]\(((?:[^()\s]+|\([^()\s]*\))+)(?:\s+["'][^)]*["'])?\)/g,
+    (_match, imageMarker: string, label: string, destination: string) => {
+      if (imageMarker) return label;
       const href = resolveAllowedHref(destination, allowedHrefs);
       return href ? `[${label}](${href})` : label;
     },
   );
   const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(
-    /(?<!!)\[([^\]]+)\]\[([^\]]+)\]/gu,
-    (_match, label: string, id: string) => {
+    /(!?)\[([^\]]+)\]\[([^\]]+)\]/gu,
+    (_match, imageMarker: string, label: string, id: string) => {
+      if (imageMarker) return label;
       const destination = referenceDefinitions.get(id.toLowerCase());
       if (destination === undefined) return label;
       const href = resolveAllowedHref(destination, allowedHrefs);
@@ -171,7 +173,7 @@ export function collectFinanceChatLinks(text: string): string[] {
   return [
     ...collectRawHtmlAnchorDestinations(text),
     ...Array.from(
-      text.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g),
+      text.matchAll(/!?\[[^\]]+\]\(((?:[^()\s]+|\([^()\s]*\))+)(?:\s+["'][^)]*["'])?\)/g),
       ([, href]) =>
         /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu.test(href) ? `mailto:${href}` : href,
     ),
