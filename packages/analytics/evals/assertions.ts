@@ -40,6 +40,11 @@ interface DataToolFactExpectation {
   value: unknown;
 }
 
+interface DerivedVisibleClaim {
+  amount: number;
+  sourceValues: number[];
+}
+
 interface TransactionExpectation {
   ids: string[];
   date: string;
@@ -75,6 +80,7 @@ interface AssertionContext {
     expectedCardTypes?: string[];
     expectedCategories?: CategoryExpectation[];
     expectedDataToolFacts?: DataToolFactExpectation[];
+    derivedVisibleClaims?: DerivedVisibleClaim[];
     expectedInsightActionPattern?: string;
     expectedInsightFacts?: string[];
     expectedMetrics?: MetricExpectation[];
@@ -370,7 +376,7 @@ function isApproximateAmountClaim(text: string, index: number, endIndex: number)
 }
 
 function hasNegativeWordPrefix(value: string): boolean {
-  return /(?:マイナス(?:\s*の)?|負\s*の)\s*$/u.test(value);
+  return /(?:マイナス(?:\s*の)?|負\s*の)\s*(?:約|およそ|概ね|だいたい)?\s*$/u.test(value);
 }
 
 function collectVisibleClaimTexts(output: EvaluationOutput): string[] {
@@ -1554,9 +1560,14 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n");
   const foreignCurrencyClaims = [
     ...visibleText.matchAll(
-      /(?:[$＄€£]\s*[\d０-９]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|USD|EUR|GBP)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|USD|EUR|GBP))/giu,
+      /(?:[$＄€£]\s*[\d０-９]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW))/gu,
     ),
-  ].map(([claim]) => claim);
+    ...visibleText.matchAll(
+      /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*[A-Z]{3})/gu,
+    ),
+  ]
+    .map(([claim]) => claim)
+    .filter((claim) => !/JPY/u.test(claim));
   const matchedForbiddenVisiblePatterns = (config.forbiddenVisiblePatterns ?? []).filter(
     (pattern) => new RegExp(pattern, "u").test(visibleText),
   );
@@ -1569,7 +1580,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const missingDataToolFacts = expectedDataToolFacts.filter(
     (expected) => !parsed.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
   );
-  const ungroundedTextClaims = parsed.textEvidence.flatMap((evidence) => {
+  const ungroundedTextClaims = (
+    expectedDataToolFacts.length === 0 ? [] : parsed.textEvidence
+  ).flatMap((evidence) => {
     const evidenceOutput: EvaluationOutput = {
       allowedHrefs: [],
       cards: [],
@@ -1609,14 +1622,21 @@ export default function assertFinanceResponse(output: string, context: Assertion
       );
       const directSupportingFacts =
         labelSupportingFacts.length > 0 ? labelSupportingFacts : numericSupportingFacts;
-      const hasEvidence =
-        directSupportingFacts.length > 0
-          ? directSupportingFacts.some((expected) =>
-              evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
-            )
-          : expectedDataToolFacts.every((expected) =>
-              evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
-            );
+      const hasDirectEvidence = directSupportingFacts.some((expected) =>
+        evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+      );
+      const hasDerivedEvidence = (config.derivedVisibleClaims ?? []).some(
+        (derivedClaim) =>
+          Math.abs(derivedClaim.amount - value) <= 0.01 &&
+          derivedClaim.sourceValues.every((sourceValue) =>
+            expectedDataToolFacts.some(
+              (expected) =>
+                collectNumericValues(expected.value).includes(sourceValue) &&
+                evidence.dataToolResults.some((result) => dataToolResultMatches(result, expected)),
+            ),
+          ),
+      );
+      const hasEvidence = hasDirectEvidence || hasDerivedEvidence;
       return hasEvidence ? [] : [label];
     });
   });

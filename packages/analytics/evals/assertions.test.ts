@@ -173,6 +173,58 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: "取得前に主張された可視数値: 割合=29.8" });
   });
 
+  it("rejects a derived percentage without configured source evidence", () => {
+    const incomeResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalIncome: 313235 },
+    };
+    const expenseResult = {
+      toolName: "getMonthlySummaryByMonth",
+      input: { month: "2026-07" },
+      output: { totalExpense: 219894 },
+    };
+    const unsupportedRateOutput = JSON.stringify({
+      ...JSON.parse(output),
+      dataToolResults: [incomeResult, expenseResult],
+      text: "先月の貯蓄率は64.48%です。",
+      textEvidence: [
+        {
+          text: "先月の貯蓄率は64.48%です。",
+          dataToolResults: [incomeResult, expenseResult],
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(unsupportedRateOutput, {
+        config: {
+          allowedVisiblePercentages: [64.48],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 64.48, rolePattern: "(前月|先月|比較)" },
+          ],
+          expectedDataToolFacts: [
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalIncome",
+              value: 313235,
+            },
+            {
+              toolName: "getMonthlySummaryByMonth",
+              input: { month: "2026-07" },
+              path: "$.totalExpense",
+              value: 219894,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("取得前に主張された可視数値: 割合=64.48"),
+    });
+  });
+
   it("rejects a visible route stated before its navigation tool result", () => {
     const earlyRouteOutput = JSON.stringify({
       ...JSON.parse(output),
@@ -694,6 +746,32 @@ describe("assertFinanceResponse", () => {
 
   it.each(["米ドルで", "USD建てで", "ユーロ換算で"])(
     "rejects a foreign-currency name before an allowlisted amount: %s",
+    (currency) => {
+      const foreignCurrencyOutput = JSON.stringify({
+        text: `総資産は${currency}5,683,100です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(foreignCurrencyOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("外貨建ての可視金額") });
+    },
+  );
+
+  it.each(["CNY建てで", "人民元で", "ウォン換算で"])(
+    "rejects another foreign-currency identifier before an amount: %s",
     (currency) => {
       const foreignCurrencyOutput = JSON.stringify({
         text: `総資産は${currency}5,683,100です。`,
@@ -1460,6 +1538,32 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("-5683100") });
   });
+
+  it.each(["マイナス約", "負のおよそ"])(
+    "preserves a negative sign across an approximation qualifier: %s",
+    (prefix) => {
+      const negativeOutput = JSON.stringify({
+        text: `総資産は${prefix}5,683,100円です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(negativeOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("-5683100") });
+    },
+  );
 
   it("treats a unitless マイナス-prefixed amount as negative", () => {
     const negativeAmountOutput = JSON.stringify({

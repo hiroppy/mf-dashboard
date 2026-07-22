@@ -61,6 +61,9 @@
               path: $.netIncome,
               value: 93341,
             }
+        derivedVisibleClaims:
+          - { amount: 29.8, sourceValues: [93341, 313235] }
+          - { amount: 30, sourceValues: [93341, 313235] }
         requiredInsightPatterns:
           - (黒字|プラス|余剰|手残り)
           - (貯蓄|積立|予算|見直し|確保)
@@ -140,6 +143,15 @@
               path: $.transactions.*,
               value: { description: すき家, category: 食費, type: expense },
             }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalExpense,
+              value: 219894,
+            }
+        derivedVisibleClaims:
+          - { amount: 19, sourceValues: [41837, 219894] }
+          - { amount: 19.03, sourceValues: [41837, 219894] }
         expectedCategories:
           - { label: 食費, amount: 41837, amountType: expense, percentage: 19.03 }
         expectedCardTextFacts:
@@ -537,6 +549,18 @@
               value: 93341,
             }
           - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-06" },
+              path: $.totalIncome,
+              value: 637637,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-06" },
+              path: $.netIncome,
+              value: 411133,
+            }
+          - {
               toolName: getMonthlyCategoryTotals,
               input: { month: "2026-07" },
               path: $.*,
@@ -572,6 +596,18 @@
               path: $.*,
               value: { category: 日用品, type: expense, totalAmount: 11495 },
             }
+        derivedVisibleClaims:
+          - { amount: 29.8, sourceValues: [93341, 313235] }
+          - { amount: 30, sourceValues: [93341, 313235] }
+          - { amount: 64, sourceValues: [411133, 637637] }
+          - { amount: 64.48, sourceValues: [411133, 637637] }
+          - { amount: 64.5, sourceValues: [411133, 637637] }
+          - { amount: 34.2, sourceValues: [93341, 313235, 411133, 637637] }
+          - { amount: 34.68, sourceValues: [93341, 313235, 411133, 637637] }
+          - { amount: 34.7, sourceValues: [93341, 313235, 411133, 637637] }
+          - { amount: 8085, sourceValues: [41837, 49922] }
+          - { amount: 7364, sourceValues: [19475, 12111] }
+          - { amount: 297, sourceValues: [11198, 11495] }
         requireInsightMetric: true
         expectedInsightFacts: [2026-07]
         expectedCardTitleFacts:
