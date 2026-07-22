@@ -1557,13 +1557,13 @@ export default function assertFinanceResponse(output: string, context: Assertion
     parsed,
     config.visiblePercentageClaims ?? [],
   );
-  const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n");
+  const visibleText = [parsed.text, ...collectFacts(parsed.cards)].join("\n").normalize("NFKC");
   const foreignCurrencyClaims = [
     ...visibleText.matchAll(
-      /(?:[$＄€£]\s*[\d０-９]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW))/gu,
+      /(?:[$€£]\s*[\d]|(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW)\s*(?:で|建て(?:で)?|換算(?:で)?|の)?\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*(?:(?:米|豪|NZ|カナダ|香港|シンガポール|オーストラリア|ニュージーランド)?ドル|ユーロ|ポンド|人民元|中国元|(?:韓国)?ウォン|USD|EUR|GBP|CNY|KRW))/gu,
     ),
     ...visibleText.matchAll(
-      /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[\d０-９]|[\d０-９][\d０-９,.，]*\s*[A-Z]{3})/gu,
+      /(?:[A-Z]{3}\s*(?:で|建て(?:で)?|換算(?:で)?|の)\s*[、,:：]?\s*(?:約|およそ|概ね|だいたい)?\s*[\d]|[\d][\d,.]*\s*[A-Z]{3})/gu,
     ),
   ]
     .map(([claim]) => claim)

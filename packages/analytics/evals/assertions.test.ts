@@ -796,6 +796,32 @@ describe("assertFinanceResponse", () => {
     },
   );
 
+  it.each(["USD換算で約", "USD建てで、約", "ＵＳＤ建てで"])(
+    "rejects a normalized or qualified foreign-currency prefix: %s",
+    (currency) => {
+      const foreignCurrencyOutput = JSON.stringify({
+        text: `総資産は${currency}5,683,100円です。`,
+        cards: [
+          {
+            type: "summary",
+            title: "総資産",
+            metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+            href: "/0/bs",
+          },
+        ],
+      });
+
+      expect(
+        assertFinanceResponse(foreignCurrencyOutput, {
+          config: {
+            allowedVisibleAmounts: [5683100],
+            visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+          },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("外貨建ての可視金額") });
+    },
+  );
+
   it.each([0, 99])("rejects a short bare unsupported monetary claim: %s", (amount) => {
     const bareAmountOutput = JSON.stringify({
       text: `収支は${amount}です。`,
