@@ -408,25 +408,49 @@ function collectClaimContext(text: string, startIndex: number, endIndex: number)
 }
 
 function collectClauseBounds(text: string, startIndex: number, endIndex: number) {
-  const separators = ["、", "。", "，", "．", "\n"];
-  const clauseStart = Math.max(
-    ...separators.map((separator) => text.lastIndexOf(separator, startIndex - 1)),
-  );
-  const followingBoundaries = separators
-    .map((separator) => text.indexOf(separator, endIndex))
-    .filter((boundary) => boundary !== -1);
+  const isSeparator = (index: number) => {
+    const character = text[index];
+    if (character === "," || character === ".") {
+      return !(/\d/u.test(text[index - 1] ?? "") && /\d/u.test(text[index + 1] ?? ""));
+    }
+    return (
+      character === "、" ||
+      character === "。" ||
+      character === "!" ||
+      character === "?" ||
+      character === "\n"
+    );
+  };
+  let clauseStart = -1;
+  for (let index = startIndex - 1; index >= 0; index -= 1) {
+    if (isSeparator(index)) {
+      clauseStart = index;
+      break;
+    }
+  }
+  let clauseEnd = text.length;
+  for (let index = endIndex; index < text.length; index += 1) {
+    if (isSeparator(index)) {
+      clauseEnd = index;
+      break;
+    }
+  }
   return {
-    clauseEnd: followingBoundaries.length === 0 ? text.length : Math.min(...followingBoundaries),
+    clauseEnd,
     clauseStart,
   };
 }
 
-function collectVisibleTransactionCounts(output: EvaluationOutput): number[] {
-  return [output.text, ...collectFacts(output.cards)].flatMap((text) =>
-    Array.from(text.normalize("NFKC").matchAll(/(?<![\d,])([\d,]+)\s*件/g), ([, count]) =>
-      Number(count?.replaceAll(",", "")),
-    ),
-  );
+function collectVisibleTransactionCounts(output: EvaluationOutput) {
+  return [output.text, ...collectFacts(output.cards)].flatMap((rawText) => {
+    const text = rawText.normalize("NFKC");
+    return Array.from(text.matchAll(/(?<![\d,])([\d,]+)\s*件/g), (match) => ({
+      count: Number(match[1]?.replaceAll(",", "")),
+      endIndex: match.index + match[0].length,
+      index: match.index,
+      text,
+    }));
+  });
 }
 
 function collectDates(rawTexts: string[]): string[] {
@@ -733,11 +757,14 @@ export default function assertFinanceResponse(output: string, context: Assertion
   const unexpectedVisibleTransactionCounts =
     expectedVisibleTransactionCount === undefined
       ? []
-      : collectVisibleTransactionCounts(parsed).filter(
-          (count) =>
-            count !== expectedVisibleTransactionCount &&
-            !config.allowedVisibleTransactionCounts?.includes(count),
-        );
+      : collectVisibleTransactionCounts(parsed).filter(({ count, endIndex, index, text }) => {
+          if (count === expectedVisibleTransactionCount) return false;
+          const isExplicitSourceTotal =
+            config.allowedVisibleTransactionCounts?.includes(count) === true &&
+            /全\s*$/u.test(text.slice(0, index)) &&
+            /^\s*中/u.test(text.slice(endIndex));
+          return !isExplicitSourceTotal;
+        });
   const transactionsMismatch =
     expectedTransactions.length > 0 &&
     !transactionsMatchExactly(transactionRows, expectedTransactions);
@@ -845,7 +872,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
       : undefined,
     transactionsMismatch ? "transactions 不一致" : undefined,
     unexpectedVisibleTransactionCounts.length > 0
-      ? `明細件数 不一致: expected=${expectedVisibleTransactionCount} actual=${[...new Set(unexpectedVisibleTransactionCounts)].join(",")}`
+      ? `明細件数 不一致: expected=${expectedVisibleTransactionCount} actual=${[
+          ...new Set(unexpectedVisibleTransactionCounts.map(({ count }) => count)),
+        ].join(",")}`
       : undefined,
     transactionGroupMismatch
       ? `transaction group 不一致: ${expectedTransactionGroup?.month}/${expectedTransactionGroup?.category}/${expectedTransactionGroup?.amountType}`
