@@ -692,10 +692,13 @@ function collectMislabeledVisibleAmounts(
       /^\s*(?:(?:の|から|より)\s*)?(?:増|減|上昇|低下|増加|減少|上が|下が)/u.test(
         text.slice(endIndex, clauseEnd),
       );
+    const hasPrecedingComparisonDifference =
+      /より/u.test(text.slice(clauseStart + 1, index)) &&
+      /^\s*(?:多い|少ない)/u.test(text.slice(endIndex, clauseEnd));
     const applicableClaims =
       roleSpecificClaims.length > 0
         ? roleSpecificClaims
-        : hasDirectionalSuffix
+        : hasDirectionalSuffix || hasPrecedingComparisonDifference
           ? []
           : claimsForLabel.filter(({ rolePattern }) => rolePattern === undefined);
     const labelBeforeIndex = text.lastIndexOf(nearestLabel, index);
@@ -711,7 +714,9 @@ function collectMislabeledVisibleAmounts(
       return [`${nearestLabel}=${amount}(否定)`];
     }
     if (applicableClaims.length === 0) {
-      return hasDirectionalSuffix ? [`${nearestLabel}=${amount}(増減)`] : [];
+      return hasDirectionalSuffix || hasPrecedingComparisonDifference
+        ? [`${nearestLabel}=${amount}(増減)`]
+        : [];
     }
     if (
       applicableClaims.some(
@@ -906,6 +911,11 @@ function collectDates(rawTexts: string[]): string[] {
       ...Array.from(
         text.matchAll(/(?:\d+|[〇零一二三四五六七八九十百]+)週間(?:前|後)/g),
         ([relativeWeek]) => `relative-${relativeWeek}`,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:(\d{4})年)?(\d{1,2})月(上旬|中旬|下旬)(?=の|は|が|時点|現在)/g),
+        ([, year, month, period]) =>
+          `period-${year ?? "*"}-${String(month).padStart(2, "0")}-${period}`,
       ),
       ...Array.from(
         text.matchAll(/(\d{4})年(初|末)(?=の|は|が|時点|現在)/g),
@@ -1284,6 +1294,17 @@ function collectVisiblePercentageMatches(output: EvaluationOutput) {
           match.text
             .slice(Math.max(0, match.index - 16), match.endIndex + 8)
             .match(/(?:率|割合|比率|パーセント)/u) !== null,
+      ),
+      ...Array.from(
+        text.matchAll(/(?:率|割合|比率)[^。！？\n]{0,8}?小数(?:表記)?で\s*(0?\.\d+)/gu),
+        (match) => ({
+          amount: Number(match[1]) * 100,
+          endIndex: match.index + match[0].length,
+          index: match.index + match[0].lastIndexOf(match[1] ?? ""),
+          isPoint: false,
+          strength: undefined,
+          text,
+        }),
       ),
     ]);
 }
@@ -1675,6 +1696,19 @@ export default function assertFinanceResponse(output: string, context: Assertion
           ),
       )
     : [];
+  const unsupportedTextTransactionDescriptions =
+    config.requireTransactionToolGrounding && config.expectedTransactionGroup !== undefined
+      ? Array.from(
+          parsed.text.matchAll(/([\p{L}・ー]{2,20})(?:があります|がありました)/gu),
+          ([, description]) => description.replace(/^(?:日の|には?)/u, ""),
+        ).filter(
+          (description) =>
+            /(?:明細|取引)/u.test(parsed.text) &&
+            !config.expectedTransactionGroup?.allowedTransactions.some(
+              (transaction) => normalize(transaction.description) === normalize(description),
+            ),
+        )
+      : [];
   const expectedTransactions = config.expectedTransactions ?? [];
   const expectedTransactionGroup = config.expectedTransactionGroup;
   const retrievedGroupTransactionIds =
@@ -1869,6 +1903,9 @@ export default function assertFinanceResponse(output: string, context: Assertion
     transactionsMismatch ? "transactions 不一致" : undefined,
     ungroundedTransactionRows.length > 0
       ? `tool未取得の明細: ${ungroundedTransactionRows.map(({ description }) => description).join(", ")}`
+      : undefined,
+    unsupportedTextTransactionDescriptions.length > 0
+      ? `本文中の未取得明細: ${unsupportedTextTransactionDescriptions.join(", ")}`
       : undefined,
     unexpectedVisibleTransactionCounts.length > 0
       ? `明細件数 不一致: expected=${expectedVisibleTransactionCount} actual=${[

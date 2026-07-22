@@ -5774,4 +5774,113 @@ describe("assertFinanceResponse", () => {
       }),
     ).toMatchObject({ pass: false, reason: "不足 card facts: 食費" });
   });
+
+  it("rejects an amount framed as a comparison difference", () => {
+    const comparisonOutput = JSON.stringify({
+      text: "交通費より食費は41,837円多いです。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(comparisonOutput, {
+        config: {
+          allowedVisibleAmounts: [41837],
+          visibleAmountClaims: [{ label: "食費", amount: 41837 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("食費=41837(増減)") });
+  });
+
+  it.each(["上旬", "中旬", "下旬"])("rejects a non-exact month period: %s", (period) => {
+    const periodOutput = JSON.stringify({
+      text: `7月${period}時点の総資産は5,683,100円です。`,
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(periodOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining(`period-*-07-${period}`) });
+  });
+
+  it("validates a percentage written as a decimal ratio", () => {
+    const ratioOutput = JSON.stringify({
+      text: "貯蓄率は小数で0.5です。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(ratioOutput, {
+        config: {
+          allowedVisiblePercentages: [29.8],
+          visiblePercentageClaims: [{ label: "貯蓄率", amount: 29.8 }],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("50") });
+  });
+
+  it("rejects an unsupported transaction description in fallback text", () => {
+    const fabricatedTransactionOutput = JSON.stringify({
+      text: "明細には7月31日の架空店があります。",
+      cards: [
+        {
+          type: "insight",
+          title: "確認",
+          description: "確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(fabricatedTransactionOutput, {
+        config: {
+          expectedTransactionGroup: {
+            month: "2026-07",
+            category: "食費",
+            amountType: "expense",
+            expectedCount: 0,
+            allowedTransactions: [
+              {
+                ids: ["tx-a"],
+                date: "2026-07-31",
+                description: "すき家",
+                amount: 2638,
+                amountType: "expense",
+                category: "食費",
+              },
+            ],
+          },
+          requireTransactionToolGrounding: true,
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("本文中の未取得明細: 架空店") });
+  });
 });
