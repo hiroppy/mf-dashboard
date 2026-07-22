@@ -1605,6 +1605,12 @@ function collectTemporalMonthScope(text: string): string | undefined {
     : `*-${String(Number(yearlessMonth)).padStart(2, "0")}`;
 }
 
+function previousCalendarMonth(month: string): string {
+  const [year, numericMonth] = month.split("-").map(Number);
+  const previousDate = new Date(Date.UTC(year, numericMonth - 2, 1));
+  return `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function categoryGroupMatchesTemporalScope(
   text: string,
   group: ReturnType<typeof collectCategoryGroups>[number],
@@ -1790,9 +1796,10 @@ function collectInvalidCategoryTrendClaims(
               ({ month }) =>
                 month === scope || (scope.startsWith("*-") && month.endsWith(scope.slice(1))),
             );
-      const previous = amounts[currentIndex - 1];
       const current = amounts[currentIndex];
-      if (previous === undefined || current === undefined) return [match[0]];
+      if (current === undefined) return [match[0]];
+      const previous = amounts.find(({ month }) => month === previousCalendarMonth(current.month));
+      if (previous === undefined) return [match[0]];
       const claimsUnchanged = /(?:横ばい|変化|同額)/u.test(match[1]);
       const claimsIncrease = /(?:増加|上昇|増え|上が)/u.test(match[1]);
       const trendIsValid = claimsUnchanged
@@ -1936,10 +1943,7 @@ function collectInvalidMonthlySummaryTrends(text: string, results: DataToolResul
                 month === scope || (scope.startsWith("*-") && month.endsWith(scope.slice(1))),
             );
       if (current === undefined) return [match[0]];
-      const [year, month] = current.month.split("-").map(Number);
-      const previousDate = new Date(Date.UTC(year, month - 2, 1));
-      const previousMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
-      const previous = rows.find((row) => row.month === previousMonth);
+      const previous = rows.find((row) => row.month === previousCalendarMonth(current.month));
       if (previous === undefined) return [match[0]];
       const claimsUnchanged = /(?:横ばい|変化|同額|同じ)/u.test(match[1]);
       const claimsIncrease = /(?:上昇|増加|改善|増え|上が)/u.test(match[1]);
@@ -1987,10 +1991,7 @@ function collectInvalidSavingsRateDirections(text: string, results: DataToolResu
     const current =
       scopedRates.length === 1 ? scopedRates[0] : scope === undefined ? rates.at(-1) : undefined;
     if (current === undefined) return [match[0]];
-    const [year, month] = current.month.split("-").map(Number);
-    const previousDate = new Date(Date.UTC(year, month - 2, 1));
-    const previousMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`;
-    const previous = rates.find((rate) => rate.month === previousMonth);
+    const previous = rates.find((rate) => rate.month === previousCalendarMonth(current.month));
     if (previous === undefined) return [match[0]];
     const claimsUnchanged = /(?:横ばい|変化|同額|同じ)/u.test(match[1]);
     const claimsIncrease = /(?:上昇|増加|改善|上が)/u.test(match[1]);

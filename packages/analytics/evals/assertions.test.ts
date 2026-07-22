@@ -1830,6 +1830,29 @@ describe("assertFinanceResponse", () => {
     expect(assertFinanceResponse(trendOutput)).toMatchObject({ pass: true });
   });
 
+  it("rejects a category trend without the previous calendar month", () => {
+    const results = [
+      ["2026-05", 100],
+      ["2026-07", 120],
+    ].map(([month, totalAmount]) => ({
+      toolName: "getMonthlyCategoryTotals",
+      input: { month },
+      output: [{ category: "食費", type: "expense", totalAmount }],
+    }));
+    const text = "2026年7月の食費は前月より増加しています。";
+    const trendOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: results,
+      textEvidence: [{ text, allowedHrefs: [], dataToolResults: results }],
+    });
+
+    expect(assertFinanceResponse(trendOutput)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未根拠のカテゴリ状態"),
+    });
+  });
+
   it("scopes each category trend to its own clause", () => {
     const results = [
       ["2026-06", 49922],
