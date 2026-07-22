@@ -1296,6 +1296,31 @@ describe("assertFinanceResponse", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("否定された可視日付・月") });
   });
 
+  it("accepts a double-negated snapshot date exclusion", () => {
+    const affirmedDateOutput = JSON.stringify({
+      text: "対象日は7月31日以外ではありません。総資産は5,683,100円です。",
+      cards: [
+        {
+          type: "summary",
+          title: "総資産",
+          metrics: [{ label: "総資産", amount: 5683100, amountType: "balance" }],
+          href: "/0/bs",
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(affirmedDateOutput, {
+        config: {
+          allowedVisibleAmounts: [5683100],
+          allowedVisibleDates: ["2026-07-31"],
+          allowedVisibleMonths: ["2026-07"],
+          visibleAmountClaims: [{ label: "総資産", amount: 5683100 }],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("associates a card title label with its description amount", () => {
     const splitClaimOutput = JSON.stringify({
       text: "回答",
@@ -5309,6 +5334,31 @@ describe("assertFinanceResponse", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+  });
+
+  it("rejects a negated percentage-point direction marker", () => {
+    const contradictedDirectionOutput = JSON.stringify({
+      text: "貯蓄率は34.68ポイント低下ではなく上昇しました。",
+      cards: [
+        {
+          type: "insight",
+          title: "家計状況",
+          description: "貯蓄率を確認します。",
+          action: { label: "詳細を見る", href: "/0/cf/2026-07" },
+        },
+      ],
+    });
+
+    expect(
+      assertFinanceResponse(contradictedDirectionOutput, {
+        config: {
+          allowedVisiblePercentages: [34.68],
+          visiblePercentageClaims: [
+            { label: "貯蓄率", amount: 34.68, rolePattern: "(低下|減少|下落)" },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("否定") });
   });
 
   it("validates a word-based fractional percentage claim", () => {
