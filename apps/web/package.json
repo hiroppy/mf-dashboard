@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
     "dev:e2e": "DB_PATH=../../data/demo.db AI_PROVIDER=openai AI_MODEL=e2e-mock AI_API_KEY=e2e-mock-key next dev",
+    "dev:prod": "DB_PATH=../../data/moneyforward.db CRAWLER_URL=http://127.0.0.1:8766 next dev",
     "build": "next build",
     "build:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next build",
     "start": "next start",

@@ -4,42 +4,37 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { formatDateTime } from "../../lib/format";
+import type {
+  CrawlerRunStepDetails,
+  CrawlerRunStepStatus,
+  CrawlerRunTimelineItem,
+} from "../../../../crawler/src/crawler-run-state";
+import {
+  parseCrawlerRefreshStatus,
+  unavailableCrawlerRefreshStatus,
+  type CrawlerRefreshStatus,
+} from "../../lib/crawler-refresh-status";
+import { formatDateTime, formatElapsedTime, formatTime } from "../../lib/format";
+import { Button } from "../ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
-const STATUS_POLL_INTERVAL_MS = 15_000;
+const STATUS_POLL_INTERVAL_MS = 5_000;
 
 interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
 }
 
-interface CrawlerRefreshStatus {
-  available: boolean;
-  running: boolean;
-  startedAt: string | null;
-}
-
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
   isPending: boolean;
 }
 
-const unavailableStatus: CrawlerRefreshStatus = {
-  available: false,
-  running: false,
-  startedAt: null,
-};
-
 async function readCrawlerRefreshStatus(): Promise<CrawlerRefreshStatus> {
   const res = await fetch("/api/crawler/refresh/", { cache: "no-store" });
-  const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
-
-  return {
-    available: res.ok && body.available !== false,
-    running: Boolean(body.running),
-    startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
-  };
+  const body: unknown = await res.json().catch(() => null);
+  return parseCrawlerRefreshStatus(body, res.ok);
 }
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
@@ -56,18 +51,21 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
   return (
     <div className="flex items-center gap-1">
       {notifications}
-      <RefreshButton iconSize={iconSize} />
+      <RefreshControl iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
   );
 }
 
-function RefreshButton({ iconSize }: { iconSize: string }) {
+function RefreshControl({ iconSize }: { iconSize: string }) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
+  const requestSequenceRef = useRef(0);
+  const startRefreshInFlightRef = useRef(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
-    ...unavailableStatus,
+    ...unavailableCrawlerRefreshStatus,
     isPending: true,
   });
 
@@ -75,18 +73,27 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
     let isMounted = true;
 
     async function updateStatus() {
+      if (startRefreshInFlightRef.current) {
+        return;
+      }
+      const requestSequence = ++requestSequenceRef.current;
+
       try {
         const nextStatus = await readCrawlerRefreshStatus();
-        if (isMounted) {
+        if (isMounted && requestSequence === requestSequenceRef.current) {
           setState({ ...nextStatus, isPending: false });
+          if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
+            setPopoverOpen(false);
+          }
           if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
             router.refresh();
           }
           wasRunningRef.current = nextStatus.running;
         }
       } catch {
-        if (isMounted) {
-          setState({ ...unavailableStatus, isPending: false });
+        if (isMounted && requestSequence === requestSequenceRef.current) {
+          setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+          setPopoverOpen(false);
           wasRunningRef.current = false;
         }
       }
@@ -102,50 +109,236 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
   }, [router]);
 
   async function startRefresh() {
-    if (!state.available || state.running || state.isPending) {
+    if (!state.available || state.isPending) {
       return;
     }
 
-    setState((prev) => ({ ...prev, running: true, isPending: true }));
+    startRefreshInFlightRef.current = true;
+    const requestSequence = ++requestSequenceRef.current;
+    setPopoverOpen(false);
+    setState((prev) => ({
+      ...prev,
+      running: true,
+      latestRun: null,
+      isPending: true,
+    }));
 
     try {
       const res = await fetch("/api/crawler/refresh/", { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
+      const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
-        setState({ ...unavailableStatus, isPending: false });
+        if (requestSequence === requestSequenceRef.current) {
+          setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+        }
         return;
       }
 
-      const running = Boolean(body.running ?? true);
-      wasRunningRef.current ||= running;
-      setState({
-        available: body.available !== false,
-        running,
-        startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
-        isPending: false,
-      });
+      const nextStatus = parseCrawlerRefreshStatus(body, true);
+      const runningStatus = nextStatus.running ? nextStatus : { ...nextStatus, running: true };
+      if (requestSequence === requestSequenceRef.current) {
+        wasRunningRef.current = true;
+        setState({
+          ...runningStatus,
+          isPending: false,
+        });
+      }
     } catch {
-      setState({ ...unavailableStatus, isPending: false });
+      if (requestSequence === requestSequenceRef.current) {
+        setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      }
+    } finally {
+      startRefreshInFlightRef.current = false;
     }
   }
 
-  const isBusy = state.isPending || state.running;
-  const isDisabled = isBusy || !state.available;
-  let title = state.available ? "更新" : "更新サービス未接続";
+  const isFailed = !state.running && state.latestRun?.runStatus === "failed";
+  const showsTimeline = state.running || isFailed;
+  const isDisabled = state.isPending || !state.available;
+
+  function handlePopoverOpenChange(open: boolean) {
+    if (!open || showsTimeline) {
+      setPopoverOpen(open);
+      return;
+    }
+    void startRefresh();
+  }
+
+  let title = state.available ? "金融機関データを更新" : "更新サービス未接続";
+  let ariaLabel = title;
   if (state.running) {
-    title = state.startedAt ? `更新中（開始: ${formatDateTime(state.startedAt)}）` : "更新中";
+    title = state.startedAt
+      ? `同期タイムラインを表示（開始 ${formatDateTime(state.startedAt)}）`
+      : "同期タイムラインを表示";
+    ariaLabel = "同期タイムラインを表示";
+  } else if (isFailed) {
+    title = "同期失敗の詳細を表示";
+    ariaLabel = title;
   }
 
   return (
-    <IconButton
-      icon={<RefreshCw className={`${iconSize} ${isBusy ? "animate-spin" : ""}`} />}
-      onClick={() => void startRefresh()}
-      ariaLabel="金融機関データを更新"
-      disabled={isDisabled}
-      title={title}
-    />
+    <>
+      <Popover open={popoverOpen && showsTimeline} onOpenChange={handlePopoverOpenChange}>
+        <PopoverTrigger>
+          <IconButton
+            icon={
+              <span className="relative block">
+                <RefreshCw
+                  className={`${iconSize} ${state.running ? "animate-spin text-primary/90" : ""}`}
+                />
+                {isFailed && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background"
+                  />
+                )}
+              </span>
+            }
+            ariaLabel={ariaLabel}
+            disabled={isDisabled}
+            title={title}
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          ariaLabel={isFailed ? "同期失敗の詳細" : "同期タイムライン"}
+          align="end"
+          className="h-[min(32rem,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto"
+        >
+          <SyncTimelinePopover state={state} onRetry={() => void startRefresh()} />
+        </PopoverContent>
+      </Popover>
+    </>
   );
+}
+
+const stepStatusPresentation: Record<CrawlerRunStepStatus, { label: string; className: string }> = {
+  pending: { label: "待機中", className: "font-semibold text-warning-foreground" },
+  running: { label: "実行中", className: "font-semibold text-primary" },
+  done: { label: "完了", className: "font-semibold text-success" },
+  warning: { label: "警告", className: "font-semibold text-warning-foreground" },
+  failed: { label: "失敗", className: "font-semibold text-destructive" },
+  skipped: { label: "スキップ", className: "font-semibold text-transfer" },
+};
+
+function SyncTimelinePopover({
+  state,
+  onRetry,
+}: {
+  state: CrawlerRefreshStatus;
+  onRetry: () => void;
+}) {
+  const run = state.running && state.latestRun?.runStatus !== "running" ? null : state.latestRun;
+  const failed = run?.runStatus === "failed";
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!state.running) return;
+
+    setNow(Date.now());
+    const intervalId = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(intervalId);
+  }, [state.running]);
+
+  const elapsedTime = state.startedAt
+    ? formatElapsedTime(state.startedAt, run?.finishedAt ?? null, now)
+    : null;
+
+  return (
+    <>
+      {failed && <h2 className="font-semibold">同期に失敗しました</h2>}
+      <div
+        className={`${failed ? "mt-1" : ""} flex items-center justify-between gap-4 text-sm text-muted-foreground`}
+      >
+        <p className="ml-auto tabular-nums">
+          {state.startedAt ? `開始 ${formatTime(state.startedAt)}` : "最新の同期状況です。"}
+          {elapsedTime && ` (${elapsedTime})`}
+        </p>
+      </div>
+
+      <div className="mt-5 space-y-5 text-sm">
+        <section aria-label="タイムライン">
+          {run && run.timeline.length > 0 ? (
+            <TimelineList
+              items={run.timeline}
+              currentTimelineItemId={run.current?.timelineItemId ?? null}
+            />
+          ) : (
+            <p className="mt-2 text-muted-foreground">タイムラインはまだありません。</p>
+          )}
+        </section>
+
+        {run?.runStatus === "failed" && (
+          <div className="flex justify-end border-t pt-4">
+            <Button onClick={onRetry}>再度更新</Button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function TimelineList({
+  items,
+  currentTimelineItemId,
+}: {
+  items: CrawlerRunTimelineItem[];
+  currentTimelineItemId: string | null;
+}) {
+  return (
+    <ol className="mt-2 space-y-2">
+      {[...items].reverse().map((item) => (
+        <TimelineListItem
+          key={item.id}
+          item={item}
+          isCurrent={item.id === currentTimelineItemId}
+          hideStatus={item.status === "running" && item.id !== currentTimelineItemId}
+        />
+      ))}
+    </ol>
+  );
+}
+
+function TimelineListItem({
+  item,
+  isCurrent = false,
+  hideStatus = false,
+}: {
+  item: CrawlerRunTimelineItem;
+  isCurrent?: boolean;
+  hideStatus?: boolean;
+}) {
+  const detail = formatStepMetadata(item);
+  const status = stepStatusPresentation[item.status];
+
+  return (
+    <li className={`min-w-0 rounded-md border p-3 ${isCurrent ? "bg-muted/40" : ""}`}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <span className="min-w-0 break-words font-medium">{item.label}</span>
+        {!hideStatus && (
+          <span className={`shrink-0 text-xs ${status.className}`}>{status.label}</span>
+        )}
+      </div>
+      {detail && <p className="mt-1 break-words text-muted-foreground">{detail}</p>}
+      {item.reason && <p className="mt-1 break-words text-destructive">{item.reason.message}</p>}
+    </li>
+  );
+}
+
+function formatStepMetadata(item: CrawlerRunStepDetails): string | null {
+  switch (item.metadata?.kind) {
+    case "group":
+      return item.metadata.groupName;
+    case "month":
+      return item.metadata.month;
+    case "refresh": {
+      const accounts = item.metadata.incompleteAccounts.join("、");
+      return accounts
+        ? `残り ${item.metadata.remainingAccounts}件: ${accounts}`
+        : `残り ${item.metadata.remainingAccounts}件`;
+    }
+    default:
+      return null;
+  }
 }
 
 function HelpButton({ iconSize, className }: { iconSize: string; className?: string }) {

@@ -2,6 +2,7 @@ import { getJstDateParts } from "@mf-dashboard/date-utils";
 import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
+import { getHistoryMonth } from "../history-months.js";
 import { log, debug } from "../logger.js";
 import { parseJapaneseNumber, convertDateToIso } from "../parsers.js";
 import type { CashFlowHistoryResult } from "../types.js";
@@ -279,6 +280,11 @@ async function getMonthFromCsvLink(page: Page): Promise<string | null> {
 export async function scrapeCashFlowHistory(
   page: Page,
   monthsToScrape: number = 12,
+  callbacks: {
+    onMonthStart?: (month: string) => Promise<void> | void;
+    onMonthComplete?: (month: string) => Promise<void> | void;
+    onMonthFailure?: (month: string, error: unknown) => Promise<void> | void;
+  } = {},
 ): Promise<CashFlowHistoryResult[]> {
   log(`Scraping cash flow history for ${monthsToScrape} months...`);
 
@@ -289,28 +295,37 @@ export async function scrapeCashFlowHistory(
   const results: CashFlowHistoryResult[] = [];
 
   for (let i = 0; i < monthsToScrape; i++) {
-    const data = await extractCashFlowFromPage(page);
-    results.push({ month: data.month, data });
-    log(`  ${data.month}: ${data.items.length} transactions`);
+    const targetMonth = (await getMonthFromCsvLink(page)) ?? getHistoryMonth(new Date(), i);
+    await callbacks.onMonthStart?.(targetMonth);
+    try {
+      const data = await extractCashFlowFromPage(page);
+      results.push({ month: data.month, progressMonth: targetMonth, data });
+      log(`  ${data.month}: ${data.items.length} transactions`);
 
-    if (i < monthsToScrape - 1) {
-      const currentMonth = await getMonthFromCsvLink(page);
-      const prevButton = page.locator("button.fc-button-prev, span.fc-button-prev").first();
+      if (i < monthsToScrape - 1) {
+        const currentMonth = await getMonthFromCsvLink(page);
+        const prevButton = page.locator("button.fc-button-prev, span.fc-button-prev").first();
 
-      // 月が変わるまで待機（CSV linkのURLパラメータで判定）
-      // クリックで /cf/fetch が発火するため、取りこぼさないよう先にリスナーを登録し、
-      // レスポンス到着後にCSV linkの月パラメータが変わったかを確認する
-      await Promise.all([
-        page.waitForResponse((res) => res.url().includes("/cf/fetch") && res.status() === 200),
-        prevButton.click(),
-      ]);
+        // 月が変わるまで待機（CSV linkのURLパラメータで判定）
+        // クリックで /cf/fetch が発火するため、取りこぼさないよう先にリスナーを登録し、
+        // レスポンス到着後にCSV linkの月パラメータが変わったかを確認する
+        await Promise.all([
+          page.waitForResponse((res) => res.url().includes("/cf/fetch") && res.status() === 200),
+          prevButton.click(),
+        ]);
 
-      // /cf/fetch 後も月が変わらなければ、これ以上データがないことを意味する
-      const newMonth = await getMonthFromCsvLink(page);
-      if (newMonth === currentMonth) {
-        log(`  No more months available after ${currentMonth}, stopping.`);
-        break;
+        // /cf/fetch 後も月が変わらなければ、これ以上データがないことを意味する
+        const newMonth = await getMonthFromCsvLink(page);
+        if (newMonth === currentMonth) {
+          log(`  No more months available after ${currentMonth}, stopping.`);
+          await callbacks.onMonthComplete?.(targetMonth);
+          break;
+        }
       }
+      await callbacks.onMonthComplete?.(targetMonth);
+    } catch (error) {
+      await callbacks.onMonthFailure?.(targetMonth, error);
+      throw error;
     }
   }
 

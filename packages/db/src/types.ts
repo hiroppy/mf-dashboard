@@ -166,6 +166,7 @@ export interface SpendingTargetsData {
 export interface RefreshResult {
   completed: boolean;
   incompleteAccounts: string[];
+  remainingCount?: number;
 }
 
 // --- Scraped Data ---

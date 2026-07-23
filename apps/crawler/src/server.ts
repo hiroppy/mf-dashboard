@@ -1,18 +1,31 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
+import { createCrawlerProgressReporter } from "./crawler-progress.js";
 import {
   acquireCrawlerRunLock,
   CrawlerAlreadyRunningError,
   getCrawlerRunState,
   type CrawlerRunState,
 } from "./crawler-run-lock.js";
+import { getCrawlerRunStatePath } from "./crawler-run-state.js";
 import { error, info } from "./logger.js";
 
 const DEFAULT_PORT = 8766;
+const DEFAULT_HOST = "127.0.0.1";
 
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
   startRun?: () => Promise<CrawlerRunState>;
+}
+
+type ProgressReporter = Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
+
+export async function recordManualRunFailure(progress: ProgressReporter): Promise<void> {
+  try {
+    await progress.finish("failed");
+  } catch (err) {
+    error("Failed to record manual crawler failure:", err);
+  }
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -27,25 +40,33 @@ function methodNotAllowed(response: ServerResponse): void {
 
 export async function startCrawlerRun(): Promise<CrawlerRunState> {
   const lock = await acquireCrawlerRunLock("manual");
-  const state: CrawlerRunState = {
-    running: true,
-    pid: lock.record.pid,
-    source: lock.record.source,
-    startedAt: lock.record.startedAt,
-  };
+  let progress: Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
+  try {
+    progress = await createCrawlerProgressReporter(
+      process.env.CRAWLER_STATE_PATH ?? getCrawlerRunStatePath(),
+      lock.record,
+    );
+  } catch (err) {
+    await lock.release();
+    throw err;
+  }
 
   void (async () => {
     try {
       const { runCrawler } = await import("./run.js");
-      await runCrawler();
+      await runCrawler(progress);
+      await progress.finish("success");
     } catch (err) {
+      await recordManualRunFailure(progress);
       error("Manual crawler run failed:", err);
     } finally {
       await lock.release();
     }
-  })();
+  })().catch((err) => {
+    error("Manual crawler run finalization failed:", err);
+  });
 
-  return state;
+  return { ...progress.getState(), running: true, pid: lock.record.pid };
 }
 
 export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions = {}): Server {
@@ -94,14 +115,17 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
   });
 }
 
-export function listenCrawlerTriggerServer(port = DEFAULT_PORT): Server {
+export function listenCrawlerTriggerServer(port = DEFAULT_PORT, host = DEFAULT_HOST): Server {
   const server = createCrawlerTriggerServer();
-  server.listen(port, "0.0.0.0", () => {
-    info(`Crawler trigger server listening on ${port}`);
+  server.listen(port, host, () => {
+    info(`Crawler trigger server listening on ${host}:${port}`);
   });
   return server;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  listenCrawlerTriggerServer(Number(process.env.CRAWLER_PORT) || DEFAULT_PORT);
+  listenCrawlerTriggerServer(
+    Number(process.env.CRAWLER_PORT) || DEFAULT_PORT,
+    process.env.CRAWLER_HOST?.trim() || DEFAULT_HOST,
+  );
 }
