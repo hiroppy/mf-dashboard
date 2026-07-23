@@ -167,7 +167,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
             icon={
               <span className="relative block">
                 <RefreshCw
-                  className={`${iconSize} ${state.running ? "animate-spin text-primary/80" : ""}`}
+                  className={`${iconSize} ${state.running ? "animate-spin text-primary/90" : ""}`}
                 />
                 {isFailed && (
                   <span
