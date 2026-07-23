@@ -204,7 +204,8 @@ export async function createCrawlerProgressReporter(
           finishedAt: new Date().toISOString(),
           reason: null,
         });
-        draft.current = null;
+        const nextRunningStep = draft.timeline.findLast(({ status }) => status === "running");
+        draft.current = nextRunningStep ? toCurrent(nextRunningStep) : null;
         draft.waitingFor = null;
         draft.progress = runningProgressFor(draft.timeline);
       });

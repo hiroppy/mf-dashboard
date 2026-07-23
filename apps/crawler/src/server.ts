@@ -17,6 +17,16 @@ interface CrawlerTriggerServerOptions {
   startRun?: () => Promise<CrawlerRunState>;
 }
 
+type ProgressReporter = Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
+
+export async function recordManualRunFailure(progress: ProgressReporter): Promise<void> {
+  try {
+    await progress.finish("failed");
+  } catch (err) {
+    error("Failed to record manual crawler failure:", err);
+  }
+}
+
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(body));
@@ -46,7 +56,7 @@ export async function startCrawlerRun(): Promise<CrawlerRunState> {
       await runCrawler(progress);
       await progress.finish("success");
     } catch (err) {
-      await progress.finish("failed");
+      await recordManualRunFailure(progress);
       error("Manual crawler run failed:", err);
     } finally {
       await lock.release();

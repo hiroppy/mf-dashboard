@@ -67,6 +67,30 @@ describe("crawler progress", () => {
     }
   });
 
+  test("並行 step の一つを完了しても別の running step を current に保つ", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-current-"));
+    try {
+      const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      const firstStep = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, {
+        month: "2026-06",
+      });
+      await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month: "2026-05" });
+
+      await progress.completeStep(firstStep);
+
+      expect(progress.getState().current).toMatchObject({
+        step: "cash_flow_history",
+        metadata: { kind: "month", month: "2026-05" },
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("認証失敗を authentication step と安全な reason に記録する", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-auth-"));
     const statePath = path.join(tempDir, "crawler.state");
