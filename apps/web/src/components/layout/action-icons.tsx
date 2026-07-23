@@ -290,6 +290,7 @@ function TimelineList({
         <TimelineListItem
           key={item.id}
           item={item}
+          isCurrent={item.id === currentTimelineItemId}
           hideStatus={item.status === "running" && item.id !== currentTimelineItemId}
         />
       ))}
@@ -299,16 +300,18 @@ function TimelineList({
 
 function TimelineListItem({
   item,
+  isCurrent = false,
   hideStatus = false,
 }: {
   item: CrawlerRunTimelineItem;
+  isCurrent?: boolean;
   hideStatus?: boolean;
 }) {
   const detail = formatStepMetadata(item);
   const status = stepStatusPresentation[item.status];
 
   return (
-    <li className="min-w-0 rounded-md border p-3">
+    <li className={`min-w-0 rounded-md border p-3 ${isCurrent ? "bg-muted/40" : ""}`}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <span className="min-w-0 break-words font-medium">{item.label}</span>
         {!hideStatus && (

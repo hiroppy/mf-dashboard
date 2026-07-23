@@ -296,6 +296,9 @@ describe("ActionIcons", () => {
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.getByText("2/5")).toBeTruthy();
     expect(screen.getAllByText("実行中")).toHaveLength(1);
+    expect(screen.getByText("金融機関データを一括更新").closest("li")?.className).toContain(
+      "bg-muted/40",
+    );
     expect(screen.getByText("完了").className).toContain("font-semibold text-success");
     const accountsStep = screen.getByText("登録口座を取得").closest("li");
     expect(accountsStep?.textContent).not.toContain("実行中");
