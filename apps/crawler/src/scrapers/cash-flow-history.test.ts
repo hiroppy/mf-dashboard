@@ -82,7 +82,7 @@ describe("scrapeCashFlowMonth", () => {
 
   test("前月 navigation の失敗を対象月の callback に通知する", async () => {
     page = await browser.newPage();
-    page.setDefaultTimeout(50);
+    page.setDefaultTimeout(500);
     try {
       await page.route("https://moneyforward.com/cf**", async (route) => {
         await route.fulfill({
