@@ -258,7 +258,6 @@ describe("runCashFlowHistoryPhase", () => {
     try {
       const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
         id: "run-a",
-        pid: 123,
         source: "test",
         startedAt: "2026-07-01T00:00:00.000Z",
       });
@@ -281,9 +280,9 @@ describe("runCashFlowHistoryPhase", () => {
 
       expect(progress.getState().timeline).toEqual([
         expect.objectContaining({
-          code: "monthly_cash_flow",
-          status: "success",
-          metadata: { month: "2026-06" },
+          step: "cash_flow_history",
+          status: "done",
+          metadata: { kind: "month", month: "2026-06" },
         }),
       ]);
     } finally {

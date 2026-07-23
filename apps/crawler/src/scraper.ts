@@ -98,6 +98,8 @@ async function scrapeGlobalData(
           {
             code: "refresh_timeout",
             message: "金融機関の一括更新が待機時間を超えました",
+            maxWaitMinutes: getMaxWaitMinutes(),
+            incompleteAccounts: refreshResult.incompleteAccounts,
           },
           {
             maxWaitMinutes: getMaxWaitMinutes(),

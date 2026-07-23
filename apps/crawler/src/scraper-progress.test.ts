@@ -79,7 +79,6 @@ describe("scraper progress", () => {
   test("refresh timeout を warning にし、未完了機関と group name を保持する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
-      pid: 123,
       source: "test",
       startedAt: "2026-07-01T00:00:00.000Z",
     });
@@ -104,10 +103,11 @@ describe("scraper progress", () => {
     expect(waitingState).toMatchObject({
       waitingFor: "更新中の金融機関が0件になるのを待機",
       current: {
-        code: "refresh",
+        step: "moneyforward_refresh",
         metadata: expect.objectContaining({
+          kind: "refresh",
           maxWaitMinutes: 20,
-          remainingCount: 2,
+          remainingAccounts: 2,
           incompleteAccounts: ["Institution A", "Institution B"],
         }),
       },
@@ -115,19 +115,20 @@ describe("scraper progress", () => {
     expect(progress.getState().timeline).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "refresh",
+          step: "moneyforward_refresh",
           status: "warning",
           reason: expect.objectContaining({ code: "refresh_timeout" }),
           metadata: expect.objectContaining({
+            kind: "refresh",
             maxWaitMinutes: 20,
-            remainingCount: 2,
+            remainingAccounts: 2,
             incompleteAccounts: ["Institution A", "Institution B"],
           }),
         }),
         expect.objectContaining({
-          code: "group_data",
-          status: "success",
-          metadata: { groupName: "Group A" },
+          step: "group_data",
+          status: "done",
+          metadata: { kind: "group", groupName: "Group A" },
         }),
       ]),
     );

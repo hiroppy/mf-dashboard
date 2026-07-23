@@ -31,7 +31,7 @@ describe("crawler progress", () => {
       });
       expect(state.finishedAt).toEqual(expect.any(String));
       expect(state.timeline).toEqual([
-        expect.objectContaining({ code: "analytics", status: "success" }),
+        expect.objectContaining({ step: "analytics", status: "done" }),
       ]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -44,7 +44,6 @@ describe("crawler progress", () => {
     try {
       const progress = await createCrawlerProgressReporter(statePath, {
         id: "run-a",
-        pid: 123,
         source: "test",
         startedAt: "2026-07-01T00:00:00.000Z",
       });
@@ -64,16 +63,19 @@ describe("crawler progress", () => {
       expect(progress.getState()).toMatchObject({
         runStatus: "failed",
         finishedAt: expect.any(String),
-        current: expect.objectContaining({ code: "authentication" }),
+        current: expect.objectContaining({ step: "authentication" }),
         reason: {
           code: "auth_failed",
-          message: "処理中にエラーが発生しました",
+          message: "MoneyForward の認証に失敗しました",
         },
         timeline: [
           expect.objectContaining({
-            code: "authentication",
+            step: "authentication",
             status: "failed",
-            reason: { code: "auth_failed", message: "処理中にエラーが発生しました" },
+            reason: {
+              code: "auth_failed",
+              message: "MoneyForward の認証に失敗しました",
+            },
           }),
         ],
       });

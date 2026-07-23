@@ -1,16 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
-import {
-  createCrawlerProgressReporter,
-  DEFAULT_CRAWLER_STATE_PATH,
-  normalizeCrawlerError,
-} from "./crawler-progress.js";
+import { createCrawlerProgressReporter } from "./crawler-progress.js";
 import {
   acquireCrawlerRunLock,
   CrawlerAlreadyRunningError,
   getCrawlerRunState,
   type CrawlerRunState,
 } from "./crawler-run-lock.js";
+import { getCrawlerRunStatePath } from "./crawler-run-state.js";
 import { error, info } from "./logger.js";
 
 const DEFAULT_PORT = 8766;
@@ -35,7 +32,7 @@ export async function startCrawlerRun(): Promise<CrawlerRunState> {
   let progress: Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
   try {
     progress = await createCrawlerProgressReporter(
-      process.env.CRAWLER_STATE_PATH ?? DEFAULT_CRAWLER_STATE_PATH,
+      process.env.CRAWLER_STATE_PATH ?? getCrawlerRunStatePath(),
       lock.record,
     );
   } catch (err) {
@@ -49,17 +46,14 @@ export async function startCrawlerRun(): Promise<CrawlerRunState> {
       await runCrawler(progress);
       await progress.finish("success");
     } catch (err) {
-      await progress.finish(
-        "failed",
-        progress.getState().reason ?? normalizeCrawlerError(err, "run_failed"),
-      );
+      await progress.finish("failed");
       error("Manual crawler run failed:", err);
     } finally {
       await lock.release();
     }
   })();
 
-  return progress.getState();
+  return { ...progress.getState(), running: true, pid: lock.record.pid };
 }
 
 export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions = {}): Server {

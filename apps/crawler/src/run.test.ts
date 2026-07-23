@@ -102,7 +102,6 @@ describe("runCrawler progress", () => {
   test("通常成功でユーザー向けの全 step を順に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
-      pid: 123,
       source: "test",
       startedAt: "2026-07-01T00:00:00.000Z",
     });
@@ -111,17 +110,17 @@ describe("runCrawler progress", () => {
     await progress.finish("success");
 
     expect(progress.getState().runStatus).toBe("success");
-    expect(progress.getState().timeline.map(({ code, status }) => ({ code, status }))).toEqual([
-      { code: "authentication", status: "success" },
-      { code: "refresh", status: "success" },
-      { code: "global_data", status: "success" },
-      { code: "monthly_cash_flow", status: "success" },
-      { code: "group_data", status: "success" },
-      { code: "database_save", status: "success" },
-      { code: "institution_categories", status: "success" },
-      { code: "analytics", status: "success" },
-      { code: "notification", status: "success" },
-      { code: "web_cache_refresh", status: "success" },
+    expect(progress.getState().timeline.map(({ step, status }) => ({ step, status }))).toEqual([
+      { step: "authentication", status: "done" },
+      { step: "moneyforward_refresh", status: "done" },
+      { step: "global_data", status: "done" },
+      { step: "cash_flow_history", status: "done" },
+      { step: "group_data", status: "done" },
+      { step: "database_save", status: "done" },
+      { step: "institution_categories", status: "done" },
+      { step: "analytics", status: "done" },
+      { step: "notification", status: "done" },
+      { step: "web_cache_refresh", status: "done" },
     ]);
     expect(runAuthPhase).toHaveBeenCalledOnce();
     expect(runSavePhase).toHaveBeenCalledOnce();
