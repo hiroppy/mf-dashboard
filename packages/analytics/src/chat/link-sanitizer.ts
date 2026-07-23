@@ -55,6 +55,7 @@ interface RawHtmlAnchor {
   closingEnd?: number;
   closingStart?: number;
   destination?: string;
+  escaped: boolean;
   openingEnd: number;
   start: number;
 }
@@ -100,10 +101,21 @@ function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRang
 }
 
 function findIndentedCodeRanges(text: string): MarkdownCodeRange[] {
-  return Array.from(text.matchAll(/^(?:(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gmu), (match) => ({
-    start: match.index,
-    end: match.index + match[0].length,
-  })).filter(({ start }) => start === 0 || /(?:^|\r?\n)[ \t]*\r?\n$/u.test(text.slice(0, start)));
+  const topLevelRanges = Array.from(
+    text.matchAll(/^(?:(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gmu),
+    (match) => ({
+      start: match.index,
+      end: match.index + match[0].length,
+    }),
+  ).filter(({ start }) => start === 0 || /(?:^|\r?\n)[ \t]*\r?\n$/u.test(text.slice(0, start)));
+  const blockquoteRanges = Array.from(
+    text.matchAll(/^(?:(?: {0,3}>[ \t]?)+(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gmu),
+    (match) => ({
+      start: match.index,
+      end: match.index + match[0].length,
+    }),
+  );
+  return [...topLevelRanges, ...blockquoteRanges];
 }
 
 function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
@@ -111,6 +123,9 @@ function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
     ...findFencedCodeRanges(text, "`"),
     ...findFencedCodeRanges(text, "~"),
     ...findIndentedCodeRanges(text),
+    ...findRawHtmlAnchors(text)
+      .filter((anchor) => anchor.escaped)
+      .map((anchor) => ({ start: anchor.start, end: anchor.closingEnd ?? anchor.openingEnd })),
   ]
     .sort((left, right) => left.start - right.start)
     .reduce<MarkdownCodeRange[]>((selected, range) => {
@@ -203,6 +218,7 @@ function findRawHtmlAnchors(text: string): RawHtmlAnchor[] {
       start: openingMatch.index,
       openingEnd,
       destination: hrefMatch?.[1] ?? hrefMatch?.[2] ?? hrefMatch?.[3],
+      escaped: isEscaped(text, openingMatch.index),
       closingStart: closingMatch?.index === undefined ? undefined : openingEnd + closingMatch.index,
       closingEnd:
         closingMatch?.index === undefined
@@ -335,7 +351,7 @@ function collectMarkdownInlineLinkDestinations(text: string): string[] {
   ]);
 }
 
-const referenceDefinitionPattern = String.raw`^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?(?:\r?\n[ \t]{1,3}(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\))[ \t]*(?=\r?$))?`;
+const referenceDefinitionPattern = String.raw`^(?: {0,3}>[ \t]?)*(?: {0,3}(?:[-+*]|\d{1,9}[.)])[ \t]+)?[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?(?:\r?\n[ \t]{1,3}(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\))[ \t]*(?=\r?$))?`;
 
 export function findFinanceChatReferenceDefinitions(text: string): Array<{
   destination: string;

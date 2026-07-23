@@ -54,6 +54,7 @@ export function splitCompleteFinanceChatText(
       !escaped &&
       character === "`" &&
       codeDelimiterLength === 0 &&
+      tildeFenceLength === 0 &&
       fenceContainerPrefix.test(linePrefix)
     ) {
       let runLength = 1;
@@ -195,9 +196,15 @@ export function splitCompleteFinanceChatText(
 
   const complete = text.slice(0, lastBoundary + 1);
   const referenceIds = Array.from(
-    complete.matchAll(/(?<!!)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu),
-    ([, label, explicitId]) => normalizeFinanceChatReferenceId(explicitId || label),
-  );
+    complete.matchAll(/(!?)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu),
+  )
+    .filter((match) => {
+      const offset = match.index;
+      const imageMarker = match[1];
+      if (imageMarker && !isEscaped(complete, offset)) return false;
+      return !isEscaped(complete, offset + imageMarker.length);
+    })
+    .map(([, , label, explicitId]) => normalizeFinanceChatReferenceId(explicitId || label));
   const definedReferenceIds = new Set(
     findFinanceChatReferenceDefinitions(complete).map(({ id }) => id),
   );

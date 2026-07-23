@@ -46,6 +46,7 @@ describe("sanitizeFinanceChatLinks", () => {
     "    https://example.com",
     "\tuser@example.com",
     "> ~~~\n> https://example.com\n> ~~~",
+    ">     https://example.com",
   ])("preserves a Markdown link literal inside Markdown code: %s", (text) => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
     expect(collectFinanceChatLinks(text)).toEqual([]);
@@ -136,6 +137,11 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("\\[詳細]\n");
   });
 
+  it("resolves a reference definition inside a blockquote", () => {
+    const text = "> [詳細][route]\n> [route]: /0/cf/2026-07";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("> [詳細](/0/cf/2026-07)\n");
+  });
+
   it("unwraps an angle-bracketed inline link destination", () => {
     const text = "[詳細](</0/cf/2026-07>)";
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[詳細](/0/cf/2026-07)");
@@ -176,6 +182,12 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(
       sanitizeFinanceChatLinks('<a href="mailto:evil@example.com">メール</a>', allowedHrefs),
     ).toBe("メール");
+  });
+
+  it("preserves an escaped raw HTML anchor example", () => {
+    const text = '\\<a href="https://example.com">x</a>';
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+    expect(collectFinanceChatLinks(text)).toEqual([]);
   });
 
   it("respects a quoted greater-than sign when removing a dangerous raw HTML anchor", () => {

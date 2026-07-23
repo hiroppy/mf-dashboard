@@ -181,6 +181,11 @@ describe("splitCompleteFinanceChatText", () => {
     expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
   });
 
+  it("ignores a backtick fence-looking line inside a tilde fence", () => {
+    const text = "~~~\n```\n~~~\n次の文です。";
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+  });
+
   it("buffers a trailing newline until indented-block context is known", () => {
     expect(splitCompleteFinanceChatText("paragraph\n")).toEqual({
       complete: "",
@@ -190,6 +195,11 @@ describe("splitCompleteFinanceChatText", () => {
       complete: "",
       pending: "paragraph\n    https://attacker.example",
     });
+  });
+
+  it("buffers a reference after an escaped image marker", () => {
+    const text = "\\![詳細][]\n中間です。";
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: "", pending: text });
   });
 
   it("does not close a Markdown code span with a longer backtick run", () => {
