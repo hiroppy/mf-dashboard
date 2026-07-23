@@ -23,6 +23,36 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+const failedLatestRun = {
+  version: 1,
+  runId: "run-failed",
+  runStatus: "failed",
+  source: "manual",
+  startedAt: "2026-01-01T00:00:00.000Z",
+  finishedAt: "2026-01-01T00:00:10.000Z",
+  current: {
+    timelineItemId: "auth",
+    label: "認証",
+    step: "authentication",
+    metadata: null,
+  },
+  waitingFor: null,
+  progress: null,
+  timeline: [
+    {
+      id: "auth",
+      label: "認証",
+      step: "authentication",
+      metadata: null,
+      status: "failed",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      finishedAt: "2026-01-01T00:00:10.000Z",
+      reason: { code: "auth_failed", message: "認証できませんでした" },
+    },
+  ],
+  reason: { code: "auth_failed", message: "認証できませんでした" },
+};
+
 beforeEach(() => {
   refreshMock.mockReset();
   global.fetch = vi
@@ -153,6 +183,38 @@ describe("ActionIcons", () => {
     }
   });
 
+  it("refreshes the dashboard when a crawler run fails after partial updates", async () => {
+    const intervalCallbacks: Array<() => unknown> = [];
+    const setIntervalSpy = vi.spyOn(window, "setInterval").mockImplementation((handler) => {
+      if (typeof handler === "function") {
+        intervalCallbacks.push(handler as () => unknown);
+      }
+      return 1 as unknown as ReturnType<typeof window.setInterval>;
+    });
+    const clearIntervalSpy = vi.spyOn(window, "clearInterval").mockImplementation(() => undefined);
+
+    try {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ available: true, running: true }))
+        .mockResolvedValueOnce(
+          jsonResponse({ available: true, running: false, latestRun: failedLatestRun }),
+        );
+
+      render(<ActionIcons variant="header" />);
+      await screen.findByRole("button", { name: "同期タイムラインを表示" });
+
+      await act(async () => {
+        await intervalCallbacks[0]?.();
+      });
+
+      await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole("button", { name: "同期失敗の詳細を表示" })).toBeTruthy();
+    } finally {
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+    }
+  });
+
   it("opens the latest running timeline without starting another refresh", async () => {
     const startedAt = "2026-01-01T00:00:00.000Z";
     vi.mocked(global.fetch).mockResolvedValueOnce(
@@ -219,6 +281,7 @@ describe("ActionIcons", () => {
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "進捗" })).toBeTruthy();
     expect(screen.getByText("更新中の金融機関が0件になるのを待機")).toBeTruthy();
     expect(screen.getAllByText("非常に長いグループ名 Group A Group A Group A")).toHaveLength(2);
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -231,35 +294,7 @@ describe("ActionIcons", () => {
         jsonResponse({
           available: true,
           running: false,
-          latestRun: {
-            version: 1,
-            runId: "run-2",
-            runStatus: "failed",
-            source: "manual",
-            startedAt: "2026-01-01T00:00:00.000Z",
-            finishedAt: "2026-01-01T00:00:10.000Z",
-            current: {
-              timelineItemId: "auth",
-              label: "認証",
-              step: "authentication",
-              metadata: null,
-            },
-            waitingFor: null,
-            progress: null,
-            timeline: [
-              {
-                id: "auth",
-                label: "認証",
-                step: "authentication",
-                metadata: null,
-                status: "failed",
-                startedAt: "2026-01-01T00:00:00.000Z",
-                finishedAt: "2026-01-01T00:00:10.000Z",
-                reason: { code: "auth_failed", message: "認証できませんでした" },
-              },
-            ],
-            reason: { code: "auth_failed", message: "認証できませんでした" },
-          },
+          latestRun: failedLatestRun,
         }),
       )
       .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));

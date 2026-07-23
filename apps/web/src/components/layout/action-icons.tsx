@@ -72,12 +72,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
         const nextStatus = await readCrawlerRefreshStatus();
         if (isMounted) {
           setState({ ...nextStatus, isPending: false });
-          if (
-            nextStatus.available &&
-            wasRunningRef.current &&
-            !nextStatus.running &&
-            nextStatus.latestRun?.runStatus !== "failed"
-          ) {
+          if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
             router.refresh();
           }
           wasRunningRef.current = nextStatus.running;
@@ -242,6 +237,7 @@ function SyncTimelineDialog({
                 </span>
               </div>
               <progress
+                aria-labelledby="sync-progress-heading"
                 value={Math.min(run.progress.completed, run.progress.total)}
                 max={run.progress.total || 1}
                 className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
