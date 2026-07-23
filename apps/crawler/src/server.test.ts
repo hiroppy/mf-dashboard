@@ -70,6 +70,90 @@ describe("crawler trigger server", () => {
     await expect(res.json()).resolves.toEqual(idleState);
   });
 
+  test("streams crawler state changes and releases the watcher on disconnect", async () => {
+    let state = idleState;
+    let notifyChange = () => {};
+    const stopWatching = vi.fn<() => void>();
+    const baseUrl = await listen(
+      createCrawlerTriggerServer({
+        getState: async () => state,
+        watchState: async (onChange) => {
+          notifyChange = onChange;
+          return stopWatching;
+        },
+      }),
+    );
+
+    const res = await fetch(`${baseUrl}/events`);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+
+    await expect(reader.read()).resolves.toMatchObject({
+      value: expect.any(Uint8Array),
+      done: false,
+    });
+
+    state = runningState;
+    notifyChange();
+    const update = await reader.read();
+    expect(decoder.decode(update.value)).toContain(JSON.stringify(runningState));
+
+    await reader.cancel();
+    await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
+  });
+
+  test("releases a watcher that finishes setup after the client disconnects", async () => {
+    let finishWatching: ((stop: () => void) => void) | undefined;
+    const stopWatching = vi.fn<() => void>();
+    const watcherSetup = new Promise<() => void>((resolve) => {
+      finishWatching = resolve;
+    });
+    let markSetupStarted: (() => void) | undefined;
+    const setupStarted = new Promise<void>((resolve) => {
+      markSetupStarted = resolve;
+    });
+    const baseUrl = await listen(
+      createCrawlerTriggerServer({
+        getState: async () => idleState,
+        watchState: async () => {
+          markSetupStarted?.();
+          return watcherSetup;
+        },
+      }),
+    );
+    const controller = new AbortController();
+
+    const request = fetch(`${baseUrl}/events`, { signal: controller.signal });
+    await setupStarted;
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    finishWatching?.(stopWatching);
+
+    await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
+  });
+
+  test("closes the SSE stream when its filesystem watcher fails", async () => {
+    let reportWatcherError: ((err: Error) => void) | undefined;
+    const stopWatching = vi.fn<() => void>();
+    const baseUrl = await listen(
+      createCrawlerTriggerServer({
+        getState: async () => idleState,
+        watchState: async (_onChange, onError) => {
+          reportWatcherError = onError;
+          return stopWatching;
+        },
+      }),
+    );
+
+    const res = await fetch(`${baseUrl}/events`);
+    const reader = res.body!.getReader();
+    await reader.read();
+    reportWatcherError?.(new Error("watch failed"));
+
+    await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
+  });
+
   test("starts a manual run", async () => {
     const startRun = vi.fn<() => Promise<CrawlerRunState>>(async () => runningState);
     const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));

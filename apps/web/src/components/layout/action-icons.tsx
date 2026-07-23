@@ -3,7 +3,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   CrawlerRunStepDetails,
   CrawlerRunStepStatus,
@@ -20,8 +20,6 @@ import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } 
 import { IconButton } from "../ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
-const STATUS_POLL_INTERVAL_MS = 5_000;
-
 interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
@@ -29,12 +27,6 @@ interface ActionIconsProps {
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
   isPending: boolean;
-}
-
-async function readCrawlerRefreshStatus(): Promise<CrawlerRefreshStatus> {
-  const res = await fetch("/api/crawler/refresh/", { cache: "no-store" });
-  const body: unknown = await res.json().catch(() => null);
-  return parseCrawlerRefreshStatus(body, res.ok);
 }
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
@@ -61,60 +53,76 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 function RefreshControl({ iconSize }: { iconSize: string }) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
-  const requestSequenceRef = useRef(0);
   const startRefreshInFlightRef = useRef(false);
+  const pendingStatusRef = useRef<CrawlerRefreshStatus | null>(null);
+  const pendingWasRunningRef = useRef(false);
+  const previousRunIdRef = useRef<string | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
     ...unavailableCrawlerRefreshStatus,
     isPending: true,
   });
 
+  const applyStatus = useCallback(
+    (nextStatus: CrawlerRefreshStatus) => {
+      setState({ ...nextStatus, isPending: false });
+      if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
+        setPopoverOpen(false);
+      }
+      if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
+        router.refresh();
+      }
+      if (nextStatus.available) {
+        wasRunningRef.current = nextStatus.running;
+      }
+    },
+    [router],
+  );
+
   useEffect(() => {
-    let isMounted = true;
+    const events = new EventSource("/api/crawler/refresh/");
 
-    async function updateStatus() {
-      if (startRefreshInFlightRef.current) {
-        return;
-      }
-      const requestSequence = ++requestSequenceRef.current;
-
-      try {
-        const nextStatus = await readCrawlerRefreshStatus();
-        if (isMounted && requestSequence === requestSequenceRef.current) {
-          setState({ ...nextStatus, isPending: false });
-          if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
-            setPopoverOpen(false);
-          }
-          if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
-            router.refresh();
-          }
-          wasRunningRef.current = nextStatus.running;
-        }
-      } catch {
-        if (isMounted && requestSequence === requestSequenceRef.current) {
-          setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
-          setPopoverOpen(false);
-          wasRunningRef.current = false;
-        }
-      }
+    function setUnavailable() {
+      setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      setPopoverOpen(false);
+      wasRunningRef.current = false;
     }
 
-    void updateStatus();
-    const intervalId = window.setInterval(updateStatus, STATUS_POLL_INTERVAL_MS);
+    events.onmessage = (event) => {
+      try {
+        const nextStatus = parseCrawlerRefreshStatus(JSON.parse(event.data) as unknown, true);
+        if (startRefreshInFlightRef.current) {
+          pendingStatusRef.current = nextStatus;
+          pendingWasRunningRef.current ||= nextStatus.running;
+          return;
+        }
+        applyStatus(nextStatus);
+      } catch {
+        setUnavailable();
+      }
+    };
+    events.onerror = () => {
+      if (startRefreshInFlightRef.current) return;
+      setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      setPopoverOpen(false);
+    };
 
     return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
+      events.close();
     };
-  }, [router]);
+  }, [applyStatus]);
 
   async function startRefresh() {
-    if (!state.available || state.isPending) {
+    if (!state.available || state.isPending || startRefreshInFlightRef.current) {
       return;
     }
 
+    const statusBeforeRefresh = state;
     startRefreshInFlightRef.current = true;
-    const requestSequence = ++requestSequenceRef.current;
+    pendingStatusRef.current = null;
+    pendingWasRunningRef.current = false;
+    previousRunIdRef.current = state.latestRun?.runId ?? null;
+    wasRunningRef.current = true;
     setPopoverOpen(false);
     setState((prev) => ({
       ...prev,
@@ -128,27 +136,35 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
-        if (requestSequence === requestSequenceRef.current) {
-          setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
-        }
+        setState({ ...statusBeforeRefresh, isPending: false });
         return;
       }
 
       const nextStatus = parseCrawlerRefreshStatus(body, true);
       const runningStatus = nextStatus.running ? nextStatus : { ...nextStatus, running: true };
-      if (requestSequence === requestSequenceRef.current) {
-        wasRunningRef.current = true;
-        setState({
-          ...runningStatus,
-          isPending: false,
-        });
-      }
+      wasRunningRef.current = true;
+      setState({
+        ...runningStatus,
+        isPending: false,
+      });
     } catch {
-      if (requestSequence === requestSequenceRef.current) {
-        setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
-      }
+      setState({ ...statusBeforeRefresh, isPending: false });
     } finally {
       startRefreshInFlightRef.current = false;
+      const pendingStatus = pendingStatusRef.current as CrawlerRefreshStatus | null;
+      const pendingRun = pendingStatus?.latestRun;
+      const isNewTerminalRun =
+        pendingRun !== null &&
+        pendingRun !== undefined &&
+        pendingRun.runStatus !== "running" &&
+        pendingRun.runId !== previousRunIdRef.current;
+      const shouldApplyPendingStatus = pendingWasRunningRef.current || isNewTerminalRun;
+      pendingStatusRef.current = null;
+      pendingWasRunningRef.current = false;
+      previousRunIdRef.current = null;
+      if (pendingStatus && shouldApplyPendingStatus) {
+        applyStatus(pendingStatus);
+      }
     }
   }
 
