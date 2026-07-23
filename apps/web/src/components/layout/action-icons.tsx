@@ -3,7 +3,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   CrawlerRunStepDetails,
   CrawlerRunStepStatus,
@@ -54,11 +54,26 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
   const startRefreshInFlightRef = useRef(false);
+  const pendingStatusRef = useRef<CrawlerRefreshStatus | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
     ...unavailableCrawlerRefreshStatus,
     isPending: true,
   });
+
+  const applyStatus = useCallback(
+    (nextStatus: CrawlerRefreshStatus) => {
+      setState({ ...nextStatus, isPending: false });
+      if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
+        setPopoverOpen(false);
+      }
+      if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
+        router.refresh();
+      }
+      wasRunningRef.current = nextStatus.running;
+    },
+    [router],
+  );
 
   useEffect(() => {
     const events = new EventSource("/api/crawler/refresh/");
@@ -70,20 +85,13 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     }
 
     events.onmessage = (event) => {
-      if (startRefreshInFlightRef.current) {
-        return;
-      }
-
       try {
         const nextStatus = parseCrawlerRefreshStatus(JSON.parse(event.data) as unknown, true);
-        setState({ ...nextStatus, isPending: false });
-        if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
-          setPopoverOpen(false);
+        if (startRefreshInFlightRef.current) {
+          pendingStatusRef.current = nextStatus;
+          return;
         }
-        if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
-          router.refresh();
-        }
-        wasRunningRef.current = nextStatus.running;
+        applyStatus(nextStatus);
       } catch {
         setUnavailable();
       }
@@ -96,7 +104,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     return () => {
       events.close();
     };
-  }, [router]);
+  }, [applyStatus]);
 
   async function startRefresh() {
     if (!state.available || state.isPending || startRefreshInFlightRef.current) {
@@ -104,6 +112,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     }
 
     startRefreshInFlightRef.current = true;
+    pendingStatusRef.current = null;
     setPopoverOpen(false);
     setState((prev) => ({
       ...prev,
@@ -132,6 +141,11 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
     } finally {
       startRefreshInFlightRef.current = false;
+      const pendingStatus = pendingStatusRef.current;
+      pendingStatusRef.current = null;
+      if (pendingStatus) {
+        applyStatus(pendingStatus);
+      }
     }
   }
 

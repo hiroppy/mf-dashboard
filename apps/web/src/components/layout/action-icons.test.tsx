@@ -147,7 +147,7 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  it("ignores a status event while starting a refresh", async () => {
+  it("applies a terminal status received while starting a refresh", async () => {
     let resolvePost: ((response: Response) => void) | undefined;
     vi.mocked(global.fetch).mockReturnValueOnce(
       new Promise<Response>((resolve) => {
@@ -165,6 +165,9 @@ describe("ActionIcons", () => {
     await act(async () => {
       resolvePost?.(jsonResponse({ available: true, running: true }, 202));
     });
+
+    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+    expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
   it("starts another refresh after the latest run succeeded", async () => {
