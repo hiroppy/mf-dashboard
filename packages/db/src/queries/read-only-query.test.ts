@@ -280,7 +280,7 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
-  it("holdingが選択group内でも他groupのsnapshotと評価額を公開しない", async () => {
+  it("選択groupのholding値を保持しつつsnapshotの外部group IDを匿名化する", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
       where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
@@ -341,13 +341,17 @@ describe("executeReadOnlyQuery", () => {
         db,
         `SELECT ds.group_id, hv.amount
          FROM daily_snapshots ds
-         JOIN holding_values hv ON hv.snapshot_id = ds.id`,
+         JOIN holding_values hv ON hv.snapshot_id = ds.id
+         ORDER BY hv.amount`,
         "group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
-      rows: [{ group_id: "group-a", amount: 10_000 }],
-      rowCount: 1,
+      rows: [
+        { group_id: "group-a", amount: 10_000 },
+        { group_id: "group-a", amount: 20_000 },
+      ],
+      rowCount: 2,
     });
   });
 
