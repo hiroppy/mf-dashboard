@@ -15,6 +15,7 @@
   },
   "scripts": {
     "dev:scrape": "DEBUG=true SKIP_REFRESH=true tsx src/index.ts",
+    "dev:prod": "tsx src/server.ts",
     "serve": "tsx src/server.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run --project unit",
