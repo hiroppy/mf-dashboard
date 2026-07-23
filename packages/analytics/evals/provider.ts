@@ -31,6 +31,13 @@ function isAllowedGeneratedLink(destination: string, allowedHrefs: Set<string>) 
   return !/^(?:https?:)?\/\//iu.test(destination) && allowedHrefs.has(destination);
 }
 
+function collectVisibleStrings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(collectVisibleStrings);
+  if (typeof value !== "object" || value === null) return [];
+  return Object.values(value).flatMap(collectVisibleStrings);
+}
+
 interface DataToolResult {
   toolName: string;
   input: unknown;
@@ -137,6 +144,13 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
         }
       }
       if (toolName === "presentFinanceCards") {
+        unauthorizedLinks.push(
+          ...collectVisibleStrings(output).flatMap((value) =>
+            collectFinanceChatLinks(value).filter(
+              (link) => !isAllowedGeneratedLink(link, allowedHrefs),
+            ),
+          ),
+        );
         presentations.push(output);
         allowedHrefsAtPresentation = allowedHrefsBeforeStep;
         dataToolResultsAtPresentation = dataToolResultsBeforeStep;

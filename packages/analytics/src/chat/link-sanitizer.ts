@@ -77,7 +77,10 @@ function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRang
     );
     closingPattern.lastIndex = openingPattern.lastIndex;
     const closing = closingPattern.exec(text);
-    if (closing === null) continue;
+    if (closing === null) {
+      ranges.push({ start: opening.index, end: text.length });
+      break;
+    }
     const end = closing.index + closing[0].length;
     ranges.push({ start: opening.index, end });
     openingPattern.lastIndex = end;
@@ -86,9 +89,12 @@ function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRang
 }
 
 function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
-  const fenceRanges = [...findFencedCodeRanges(text, "`"), ...findFencedCodeRanges(text, "~")].sort(
-    (left, right) => left.start - right.start,
-  );
+  const fenceRanges = [...findFencedCodeRanges(text, "`"), ...findFencedCodeRanges(text, "~")]
+    .sort((left, right) => left.start - right.start)
+    .reduce<MarkdownCodeRange[]>((selected, range) => {
+      if (range.start >= (selected.at(-1)?.end ?? 0)) selected.push(range);
+      return selected;
+    }, []);
   const ranges = [...fenceRanges];
   let excludedRangeIndex = 0;
   for (let index = 0; index < text.length; index += 1) {
@@ -229,7 +235,7 @@ interface MarkdownInlineLink {
 function findMarkdownInlineLinks(text: string): MarkdownInlineLink[] {
   const links: MarkdownInlineLink[] = [];
   for (let index = 0; index < text.length; index += 1) {
-    const image = text[index] === "!" && text[index + 1] === "[";
+    const image = text[index] === "!" && text[index + 1] === "[" && !isEscaped(text, index);
     const labelStart = image ? index + 1 : index;
     if (text[labelStart] !== "[" || isEscaped(text, labelStart)) continue;
     let labelDepth = 1;

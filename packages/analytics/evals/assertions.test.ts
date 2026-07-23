@@ -8547,6 +8547,47 @@ describe("assertFinanceResponse", () => {
     });
   });
 
+  it("rejects positional transaction attribute references that cannot be grounded", () => {
+    const searchResult = {
+      toolName: "searchTransactions",
+      input: { date: "2026-07-10", type: "expense" },
+      output: {
+        transactions: [
+          {
+            date: "2026-07-10",
+            description: "成城石井",
+            category: "食費",
+            type: "expense",
+            amount: 3152,
+          },
+          {
+            date: "2026-07-10",
+            description: "東京ガス ガス代",
+            category: "光熱費",
+            type: "expense",
+            amount: 3435,
+          },
+        ],
+      },
+    };
+    const text = "前者は食費、後者は水道・光熱費です。";
+    const positionalOutput = JSON.stringify({
+      ...JSON.parse(output),
+      text,
+      dataToolResults: [searchResult],
+      textEvidence: [{ text, dataToolResults: [searchResult] }],
+    });
+
+    expect(
+      assertFinanceResponse(positionalOutput, {
+        config: { requireTransactionToolGrounding: true },
+      }),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("未対応の明細照応"),
+    });
+  });
+
   it("accepts a transaction attribute when one same-description row matches", () => {
     const searchResult = {
       toolName: "searchTransactions",

@@ -264,6 +264,38 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it("records unauthorized links from every visible card string", () => {
+    const response: ChatResponse = {
+      text: "回答",
+      steps: [
+        {
+          text: "回答",
+          toolResults: [
+            {
+              toolName: "presentFinanceCards",
+              output: [
+                {
+                  type: "insight",
+                  title: "www.attacker.example",
+                  description: "user@attacker.example",
+                  href: "https://evil.example",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").unauthorizedLinks).toEqual(
+      expect.arrayContaining([
+        "www.attacker.example",
+        "mailto:user@attacker.example",
+        "https://evil.example",
+      ]),
+    );
+  });
+
   it("keeps visible text from every generation step in order", () => {
     const response: ChatResponse = {
       text: "最終回答",

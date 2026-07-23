@@ -2950,6 +2950,11 @@ export default function assertFinanceResponse(output: string, context: Assertion
         mismatches.push(`${description}:日付=${claimedDate}`);
       }
     }
+    for (const match of text.matchAll(
+      /(?:^|[。！？\n])\s*((?:(?:前|後)者|(?:前|後)の(?:明細|取引)|(?:1|2|一|二)(?:つ)?目)(?:は|が)[^。！？\n]{1,80}?(?:です|でした|である|だ))(?=[。！？\n]|$)/gu,
+    )) {
+      mismatches.push(`未対応の明細照応=${match[1]}`);
+    }
     return mismatches;
   };
   const mismatchedTransactionAttributes = config.requireTransactionToolGrounding

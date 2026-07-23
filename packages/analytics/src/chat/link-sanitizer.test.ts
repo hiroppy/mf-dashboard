@@ -41,7 +41,15 @@ describe("sanitizeFinanceChatLinks", () => {
     "```md\n[x](https://example.com)\n```",
     "```md\nhttps://example.com\n````",
     '~~~md\nhttps://example.com <a href="javascript:alert(1)">x</a>\n~~~~',
+    "```md\nhttps://example.com",
+    "~~~md\nuser@example.com",
   ])("preserves a Markdown link literal inside Markdown code: %s", (text) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+    expect(collectFinanceChatLinks(text)).toEqual([]);
+  });
+
+  it("preserves nested fence-like content without restoring it twice", () => {
+    const text = "```md\n~~~\nhttps://example.com\n~~~\n```";
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
     expect(collectFinanceChatLinks(text)).toEqual([]);
   });
@@ -90,6 +98,12 @@ describe("sanitizeFinanceChatLinks", () => {
       expect(collectFinanceChatLinks(text)).toContain("javascript:alert(1)");
     },
   );
+
+  it("treats a link after an escaped exclamation mark as a normal link", () => {
+    const text = "\\![詳細](/0/cf/2026-07)";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+    expect(collectFinanceChatLinks(text)).toContain("/0/cf/2026-07");
+  });
 
   it("resolves a reference-style link with an allowlisted route", () => {
     expect(sanitizeFinanceChatLinks("[詳細][route]\n\n[route]: /0/cf/2026-07", allowedHrefs)).toBe(

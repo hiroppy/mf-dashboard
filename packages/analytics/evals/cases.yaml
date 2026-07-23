@@ -225,7 +225,7 @@
       value: file://./assertions.ts
       config:
         allowedVisibleAmounts: [5683100]
-        allowedVisibleDates: ["2026-07-31"]
+        allowedVisibleDates: ["2026-07-24"]
         allowedVisibleMonths: ["2026-07"]
         allowedVisiblePercentages: []
         visibleAmountClaims:
