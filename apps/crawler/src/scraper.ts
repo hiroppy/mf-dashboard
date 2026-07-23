@@ -119,6 +119,8 @@ async function scrapeGlobalData(
   let portfolio: Awaited<ReturnType<typeof getPortfolio>>;
   let liabilities: Awaited<ReturnType<typeof getLiabilities>>;
   try {
+    await switchGroup(page, NO_GROUP_ID);
+
     // 全アカウント情報
     registeredAccounts = await getRegisteredAccounts(page);
     log(`Registered accounts: ${registeredAccounts.accounts.length}`);
@@ -270,7 +272,6 @@ export async function scrapeAllGroups(
   const groupsToProcess = buildGroupsToProcess(allGroups);
 
   phase("Scrape: Global Data");
-  await switchGroup(page, NO_GROUP_ID);
   const globalData = await scrapeGlobalData(page, options, progress);
   const groupDataList = await runPhase2(page, groupsToProcess, defaultGroup, progress);
 

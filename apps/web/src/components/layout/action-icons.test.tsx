@@ -151,6 +151,7 @@ describe("ActionIcons", () => {
           metadata: { remainingCount: 2 },
         },
         waitingFor: "更新中の金融機関が0件になるのを待機",
+        progress: { completed: 3, total: 10 },
       }),
     );
 
@@ -162,6 +163,7 @@ describe("ActionIcons", () => {
         "更新中（更新中の金融機関が0件になるのを待機）",
       ),
     );
+    expect(screen.getByText("同期中 · 3/10")).not.toBeNull();
   });
 
   it("shows the latest safe failure reason after the crawler stops", async () => {

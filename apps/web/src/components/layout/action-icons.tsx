@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   CrawlerRunCurrent,
+  CrawlerRunProgress,
   CrawlerRunReason,
   CrawlerRunStatus,
 } from "../../../../crawler/src/crawler-run-state";
@@ -29,6 +30,7 @@ interface CrawlerRefreshStatus {
   current: CrawlerRunCurrent | null;
   waitingFor: string | null;
   reason: CrawlerRunReason | null;
+  progress: CrawlerRunProgress | null;
 }
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
@@ -44,6 +46,7 @@ const unavailableStatus: CrawlerRefreshStatus = {
   current: null,
   waitingFor: null,
   reason: null,
+  progress: null,
 };
 
 function parseCrawlerRefreshStatus(
@@ -65,6 +68,12 @@ function parseCrawlerRefreshStatus(
     reason:
       body.reason && typeof body.reason.code === "string" && typeof body.reason.message === "string"
         ? body.reason
+        : null,
+    progress:
+      body.progress &&
+      Number.isInteger(body.progress.completed) &&
+      Number.isInteger(body.progress.total)
+        ? body.progress
         : null,
   };
 }
@@ -196,10 +205,20 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
   const isBusy = state.isPending || state.running;
   const isDisabled = isBusy || !state.available;
   const title = getRefreshTitle(state);
+  const progress = state.progress ?? { completed: 0, total: 10 };
 
   return (
     <IconButton
-      icon={<RefreshCw className={`${iconSize} ${isBusy ? "animate-spin" : ""}`} />}
+      icon={
+        <span className="flex items-center gap-2">
+          <RefreshCw className={`${iconSize} ${isBusy ? "animate-spin" : ""}`} />
+          {state.running && (
+            <span className="whitespace-nowrap text-xs font-medium">
+              同期中 · {progress.completed}/{progress.total}
+            </span>
+          )}
+        </span>
+      }
       onClick={() => void startRefresh()}
       ariaLabel="金融機関データを更新"
       disabled={isDisabled}
