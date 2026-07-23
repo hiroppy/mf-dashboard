@@ -305,7 +305,7 @@ describe("ActionIcons", () => {
     const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
     expect(refreshButton.querySelector("svg")?.getAttribute("class")).toContain(
-      "animate-spin text-primary/60",
+      "animate-spin text-primary/80",
     );
     expect(screen.queryByText("同期中 · 2/5")).toBeNull();
 
