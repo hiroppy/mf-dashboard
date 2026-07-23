@@ -166,12 +166,12 @@ export const DesktopRunning: Story = {
 
     await userEvent.click(canvas.getByRole("button", { name: "同期タイムラインを表示" }));
 
-    const dialog = within(canvasElement.ownerDocument.body).getByRole("dialog");
+    const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
     await waitFor(() =>
-      expect(within(dialog).getByRole("heading", { name: "同期タイムライン" })).toBeVisible(),
+      expect(within(popover).getByRole("heading", { name: "同期タイムライン" })).toBeVisible(),
     );
-    await expect(within(dialog).getAllByText("Group A")[0]).toBeVisible();
-    await expect(within(dialog).getByText("更新中の金融機関が0件になるのを待機")).toBeVisible();
+    await expect(within(popover).getAllByText("Group A")[0]).toBeVisible();
+    await expect(within(popover).getByText("更新中の金融機関が0件になるのを待機")).toBeVisible();
   },
 };
 
@@ -187,11 +187,11 @@ export const MobileRunning: Story = {
 
     await userEvent.click(canvas.getByRole("button", { name: "同期タイムラインを表示" }));
 
-    const dialog = within(canvasElement.ownerDocument.body).getByRole("dialog");
+    const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
     await waitFor(() =>
-      expect(within(dialog).getByRole("heading", { name: "同期タイムライン" })).toBeVisible(),
+      expect(within(popover).getByRole("heading", { name: "同期タイムライン" })).toBeVisible(),
     );
-    const bounds = dialog.getBoundingClientRect();
+    const bounds = popover.getBoundingClientRect();
     await expect(bounds.left).toBeGreaterThanOrEqual(0);
     await expect(bounds.right).toBeLessThanOrEqual(
       canvasElement.ownerDocument.defaultView!.innerWidth,
@@ -208,12 +208,14 @@ export const Failed: Story = {
 
     await userEvent.click(canvas.getByRole("button", { name: "同期失敗の詳細を表示" }));
 
-    const dialog = within(canvasElement.ownerDocument.body).getByRole("dialog");
+    const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
     await waitFor(() =>
-      expect(within(dialog).getByRole("heading", { name: "同期に失敗しました" })).toBeVisible(),
+      expect(within(popover).getByRole("heading", { name: "同期に失敗しました" })).toBeVisible(),
     );
-    await expect(within(dialog).getAllByText("MoneyForward の認証に失敗しました")[0]).toBeVisible();
-    await expect(within(dialog).getByRole("button", { name: "再度更新" })).toBeVisible();
+    await expect(
+      within(popover).getAllByText("MoneyForward の認証に失敗しました")[0],
+    ).toBeVisible();
+    await expect(within(popover).getByRole("button", { name: "再度更新" })).toBeVisible();
   },
 };
 

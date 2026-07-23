@@ -18,6 +18,7 @@ import { formatDateTime } from "../../lib/format";
 import { Button } from "../ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 const STATUS_POLL_INTERVAL_MS = 15_000;
 const SYNC_BASELINE_STEP_COUNT = 10;
@@ -61,7 +62,7 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 function RefreshControl({ iconSize }: { iconSize: string }) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
     ...unavailableCrawlerRefreshStatus,
     isPending: true,
@@ -75,6 +76,9 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
         const nextStatus = await readCrawlerRefreshStatus();
         if (isMounted) {
           setState({ ...nextStatus, isPending: false });
+          if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
+            setPopoverOpen(false);
+          }
           if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
             router.refresh();
           }
@@ -83,6 +87,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       } catch {
         if (isMounted) {
           setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+          setPopoverOpen(false);
           wasRunningRef.current = false;
         }
       }
@@ -102,7 +107,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       return;
     }
 
-    setDialogOpen(false);
+    setPopoverOpen(false);
     setState((prev) => ({
       ...prev,
       running: true,
@@ -134,6 +139,15 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   const isFailed = !state.running && state.latestRun?.runStatus === "failed";
   const showsTimeline = state.running || isFailed;
   const isDisabled = state.isPending || !state.available;
+
+  function handlePopoverOpenChange(open: boolean) {
+    if (!open || showsTimeline) {
+      setPopoverOpen(open);
+      return;
+    }
+    void startRefresh();
+  }
+
   let title = state.available ? "金融機関データを更新" : "更新サービス未接続";
   let ariaLabel = title;
   if (state.running) {
@@ -153,37 +167,35 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
           {isFailed ? "同期失敗" : formatProgressLabel(state)}
         </span>
       )}
-      <IconButton
-        icon={
-          <span className="relative block">
-            <RefreshCw
-              className={`${iconSize} ${state.running || state.isPending ? "animate-spin" : ""}`}
-            />
-            {isFailed && (
-              <span
-                aria-hidden="true"
-                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background"
-              />
-            )}
-          </span>
-        }
-        onClick={() => {
-          if (showsTimeline) {
-            setDialogOpen(true);
-          } else {
-            void startRefresh();
-          }
-        }}
-        ariaLabel={ariaLabel}
-        disabled={isDisabled}
-        title={title}
-      />
-      <SyncTimelineDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        state={state}
-        onRetry={() => void startRefresh()}
-      />
+      <Popover open={popoverOpen && showsTimeline} onOpenChange={handlePopoverOpenChange}>
+        <PopoverTrigger>
+          <IconButton
+            icon={
+              <span className="relative block">
+                <RefreshCw
+                  className={`${iconSize} ${state.running || state.isPending ? "animate-spin" : ""}`}
+                />
+                {isFailed && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background"
+                  />
+                )}
+              </span>
+            }
+            ariaLabel={ariaLabel}
+            disabled={isDisabled}
+            title={title}
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          ariaLabel={isFailed ? "同期失敗の詳細" : "同期タイムライン"}
+          align="end"
+          className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto"
+        >
+          <SyncTimelinePopover state={state} onRetry={() => void startRefresh()} />
+        </PopoverContent>
+      </Popover>
     </>
   );
 }
@@ -205,96 +217,88 @@ const stepStatusLabels: Record<CrawlerRunStepStatus, string> = {
   skipped: "スキップ",
 };
 
-function SyncTimelineDialog({
-  open,
-  onOpenChange,
+function SyncTimelinePopover({
   state,
   onRetry,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   state: CrawlerRefreshStatus;
   onRetry: () => void;
 }) {
   const run = state.running && state.latestRun?.runStatus !== "running" ? null : state.latestRun;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto">
-        <DialogTitle>
-          {run?.runStatus === "failed" ? "同期に失敗しました" : "同期タイムライン"}
-        </DialogTitle>
-        <DialogDescription>
-          {state.startedAt ? `開始: ${formatDateTime(state.startedAt)}` : "最新の同期状況です。"}
-        </DialogDescription>
+    <>
+      <h2 className="font-semibold">
+        {run?.runStatus === "failed" ? "同期に失敗しました" : "同期タイムライン"}
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {state.startedAt ? `開始: ${formatDateTime(state.startedAt)}` : "最新の同期状況です。"}
+      </p>
 
-        <div className="mt-5 space-y-5 text-sm">
-          {run?.progress && (
-            <section aria-labelledby="sync-progress-heading">
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <h3 id="sync-progress-heading" className="font-medium">
-                  進捗
-                </h3>
-                <span className="text-muted-foreground">
-                  {run.progress.completed}/{run.progress.total}
-                </span>
-              </div>
-              <progress
-                aria-labelledby="sync-progress-heading"
-                value={Math.min(run.progress.completed, run.progress.total)}
-                max={run.progress.total || 1}
-                className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
-              />
-            </section>
-          )}
-
-          {run?.current && (
-            <TimelineDetail
-              title="現在"
-              label={run.current.label}
-              detail={formatStepMetadata(run.current)}
-            />
-          )}
-
-          {run?.waitingFor && (
-            <TimelineDetail title="待機中" label={run.waitingFor} detail={null} />
-          )}
-
-          {run?.reason && (
-            <section
-              aria-labelledby="sync-reason-heading"
-              className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
-            >
-              <h3 id="sync-reason-heading" className="font-medium text-foreground">
-                理由
+      <div className="mt-5 space-y-5 text-sm">
+        {run?.progress && (
+          <section aria-labelledby="sync-progress-heading">
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <h3 id="sync-progress-heading" className="font-medium">
+                進捗
               </h3>
-              <p className="mt-1 break-words text-muted-foreground">{run.reason.message}</p>
-            </section>
-          )}
-
-          <section aria-labelledby="sync-timeline-heading">
-            <h3 id="sync-timeline-heading" className="font-medium">
-              タイムライン
-            </h3>
-            {run && run.timeline.length > 0 ? (
-              <ol className="mt-2 space-y-2">
-                {run.timeline.map((item) => (
-                  <TimelineListItem key={item.id} item={item} />
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-2 text-muted-foreground">タイムラインはまだありません。</p>
-            )}
-          </section>
-
-          {run?.runStatus === "failed" && (
-            <div className="flex justify-end border-t pt-4">
-              <Button onClick={onRetry}>再度更新</Button>
+              <span className="text-muted-foreground">
+                {run.progress.completed}/{run.progress.total}
+              </span>
             </div>
+            <progress
+              aria-labelledby="sync-progress-heading"
+              value={Math.min(run.progress.completed, run.progress.total)}
+              max={run.progress.total || 1}
+              className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
+            />
+          </section>
+        )}
+
+        {run?.current && (
+          <TimelineDetail
+            title="現在"
+            label={run.current.label}
+            detail={formatStepMetadata(run.current)}
+          />
+        )}
+
+        {run?.waitingFor && <TimelineDetail title="待機中" label={run.waitingFor} detail={null} />}
+
+        {run?.reason && (
+          <section
+            aria-labelledby="sync-reason-heading"
+            className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
+          >
+            <h3 id="sync-reason-heading" className="font-medium text-foreground">
+              理由
+            </h3>
+            <p className="mt-1 break-words text-muted-foreground">{run.reason.message}</p>
+          </section>
+        )}
+
+        <section aria-labelledby="sync-timeline-heading">
+          <h3 id="sync-timeline-heading" className="font-medium">
+            タイムライン
+          </h3>
+          {run && run.timeline.length > 0 ? (
+            <ol className="mt-2 space-y-2">
+              {run.timeline.map((item) => (
+                <TimelineListItem key={item.id} item={item} />
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-2 text-muted-foreground">タイムラインはまだありません。</p>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </section>
+
+        {run?.runStatus === "failed" && (
+          <div className="flex justify-end border-t pt-4">
+            <Button onClick={onRetry}>再度更新</Button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 

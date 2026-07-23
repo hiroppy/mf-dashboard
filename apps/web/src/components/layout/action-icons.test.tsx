@@ -280,7 +280,7 @@ describe("ActionIcons", () => {
 
     fireEvent.click(refreshButton);
 
-    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "同期タイムライン" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: "進捗" })).toBeTruthy();
     expect(screen.getByText("更新中の金融機関が0件になるのを待機")).toBeTruthy();
@@ -332,7 +332,7 @@ describe("ActionIcons", () => {
     });
   });
 
-  it("opens a failed timeline and retries from the dialog", async () => {
+  it("opens a failed timeline and retries from the popover", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(
         jsonResponse({
