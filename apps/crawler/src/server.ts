@@ -51,7 +51,9 @@ export async function startCrawlerRun(): Promise<CrawlerRunState> {
     } finally {
       await lock.release();
     }
-  })();
+  })().catch((err) => {
+    error("Manual crawler run finalization failed:", err);
+  });
 
   return { ...progress.getState(), running: true, pid: lock.record.pid };
 }

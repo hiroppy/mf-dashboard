@@ -307,6 +307,7 @@ describe("runCashFlowHistoryPhase", () => {
       vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
         await callbacks?.onMonthStart?.("2026-06");
         await callbacks?.onMonthComplete?.("2026-06");
+        expect(progress.getState().timeline[0]?.status).toBe("done");
         return [{ month: "2026-06", data: monthData }];
       });
       vi.mocked(saveTransactionsForMonth).mockResolvedValue(1);

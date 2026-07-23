@@ -309,6 +309,12 @@ export async function runCashFlowHistoryPhase(
         await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
       }
     },
+    onMonthComplete: async (month) => {
+      const stepId = monthSteps.get(month);
+      if (progress && stepId) {
+        await progress.completeStep(stepId);
+      }
+    },
   });
 
   for (const { month, data: monthData } of historyResults) {
@@ -333,7 +339,6 @@ export async function runCashFlowHistoryPhase(
         accountIdMap,
       );
       log(`  ${month}: saved ${savedCount} transactions`);
-      if (progress && stepId) await progress.completeStep(stepId);
     } catch (failure) {
       if (progress && stepId) {
         await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
