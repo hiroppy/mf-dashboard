@@ -295,14 +295,26 @@ function collectMarkdownInlineLinkDestinations(text: string): string[] {
   ]);
 }
 
+export function findFinanceChatReferenceDefinitions(text: string): Array<{
+  destination: string;
+  id: string;
+  source: string;
+}> {
+  const { masked } = maskMarkdownCode(text);
+  return Array.from(
+    masked.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
+    ([source, id, destination]) => ({ destination, id: id.toLowerCase(), source }),
+  );
+}
+
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
   const { masked, restore } = maskMarkdownCode(text);
   const withoutHtmlLinks = sanitizeRawHtmlAnchors(masked, allowedHrefs);
   const referenceDefinitions = new Map(
-    Array.from(
-      withoutHtmlLinks.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
-      ([, id, destination]) => [id.toLowerCase(), destination] as const,
-    ),
+    findFinanceChatReferenceDefinitions(withoutHtmlLinks).map(({ id, destination }) => [
+      id,
+      destination,
+    ]),
   );
   const withoutInvalidMarkdownLinks = sanitizeMarkdownInlineLinks(withoutHtmlLinks, allowedHrefs);
   const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(

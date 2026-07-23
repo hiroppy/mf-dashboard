@@ -1,5 +1,9 @@
 import { buildFinanceChatHref, financeChatHrefSchema } from "@mf-dashboard/analytics/chat/cards";
-import { isEscaped, sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
+import {
+  findFinanceChatReferenceDefinitions,
+  isEscaped,
+  sanitizeFinanceChatLinks,
+} from "@mf-dashboard/analytics/chat/link-sanitizer";
 import type { StreamTextTransform, ToolSet } from "ai";
 
 export { sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
@@ -186,11 +190,8 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
       text: string,
     ) => {
       const definitions = referenceDefinitionsById.get(id) ?? new Map<string, string>();
-      for (const match of text.matchAll(
-        /^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu,
-      )) {
-        definitions.set(match[1].toLowerCase(), match[0]);
-      }
+      for (const definition of findFinanceChatReferenceDefinitions(text))
+        definitions.set(definition.id, definition.source);
       referenceDefinitionsById.set(id, definitions);
       const definitionPrefix = [...definitions.values()].join("\n");
       const sanitizedText = sanitizeFinanceChatLinks(

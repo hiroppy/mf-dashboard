@@ -376,6 +376,48 @@ describe("createFinanceChatLinkSanitizer", () => {
     ).toBe("[詳細](/group-a/cf/2026-07)\n");
   });
 
+  it("does not retain a reference definition from fenced code", async () => {
+    const transform = createFinanceChatLinkSanitizer("group-a")({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: Array<{ type: string; text?: string }> = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({
+      type: "tool-result",
+      toolCallId: "route-a",
+      toolName: "getFinanceDashboardRoute",
+      input: {},
+      output: { href: "/group-a/cf/2026-07" },
+    });
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: "```\n[route]: /group-a/cf/2026-07\n```\n",
+    });
+    await writer.write({ type: "text-delta", id: "text-a", text: "[詳細][route]\n" });
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.text)
+        .join(""),
+    ).toBe("```\n[route]: /group-a/cf/2026-07\n```\n詳細\n");
+  });
+
   it("flushes sanitized buffered text before an error chunk", async () => {
     const onSanitizedText = vi.fn<(text: string) => void>();
     const transform = createFinanceChatLinkSanitizer(
