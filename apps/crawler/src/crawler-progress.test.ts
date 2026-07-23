@@ -48,6 +48,27 @@ describe("crawler progress", () => {
     });
   });
 
+  test.each([
+    [
+      "timeout",
+      Object.assign(new Error("Timeout 2500ms: secret-value"), { name: "TimeoutError" }),
+      "moneyforward_refresh",
+      { code: "moneyforward_timeout", timeoutMs: 2_500 },
+    ],
+    [
+      "selector error",
+      new Error("locator not found: secret-value"),
+      "group_data",
+      { code: "selector_not_found" },
+    ],
+    ["unknown error", new Error("secret-value"), "analytics", { code: "unknown_error" }],
+  ])("%s を安全な reason に正規化する", (_case, error, fallbackCode, expected) => {
+    const reason = normalizeCrawlerError(error, fallbackCode);
+
+    expect(reason).toEqual(expect.objectContaining(expected));
+    expect(JSON.stringify(reason)).not.toContain("secret-value");
+  });
+
   test("nested step 完了後に外側の running step を current に戻す", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-nested-"));
     try {

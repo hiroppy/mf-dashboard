@@ -101,33 +101,6 @@ const failedState: CrawlerRunStateSnapshot = {
   },
 };
 
-const reasons = [
-  { code: "auth_failed", message: "認証に失敗しました" },
-  {
-    code: "refresh_timeout",
-    message: "更新がタイムアウトしました",
-    maxWaitMinutes: 20,
-    incompleteAccounts: ["Institution A"],
-  },
-  {
-    code: "moneyforward_timeout",
-    message: "応答がタイムアウトしました",
-    operation: "MoneyForward画面の応答待ち",
-    timeoutMs: 30_000,
-  },
-  {
-    code: "navigation_failed",
-    message: "画面遷移に失敗しました",
-    url: "MoneyForward画面",
-  },
-  {
-    code: "selector_not_found",
-    message: "必要な項目が見つかりませんでした",
-    selector: "MoneyForward画面の操作対象",
-  },
-  { code: "unknown_error", message: "処理中にエラーが発生しました" },
-] satisfies CrawlerRunReason[];
-
 describe("crawler run state file", () => {
   let directory: string;
   let statePath: string;
@@ -160,21 +133,67 @@ describe("crawler run state file", () => {
     await expect(readFile(statePath, "utf8")).resolves.toBe(`${JSON.stringify(state, null, 2)}\n`);
   });
 
-  test.each(reasons)("persists the $code reason union variant", async (reason) => {
-    const failedItem = failedState.timeline[0];
-    if (!failedItem || failedItem.status !== "failed") {
-      throw new Error("failed state fixture must contain a failed timeline item");
-    }
-    const state: CrawlerRunStateSnapshot = {
-      ...failedState,
-      reason,
-      timeline: [{ ...failedItem, reason }],
-    };
+  test.each([
+    ["auth_failed", { code: "auth_failed", message: "認証に失敗しました" }],
+    [
+      "refresh_timeout",
+      {
+        code: "refresh_timeout",
+        message: "更新が完了しませんでした",
+        maxWaitMinutes: 20,
+        incompleteAccounts: ["Institution A"],
+      },
+    ],
+    [
+      "moneyforward_timeout",
+      {
+        code: "moneyforward_timeout",
+        message: "画面の応答待ちがタイムアウトしました",
+        operation: "MoneyForward画面の応答待ち",
+        timeoutMs: 30_000,
+      },
+    ],
+    [
+      "navigation_failed",
+      {
+        code: "navigation_failed",
+        message: "画面を開けませんでした",
+        url: "https://example.com/path",
+      },
+    ],
+    [
+      "selector_not_found",
+      {
+        code: "selector_not_found",
+        message: "必要な画面要素を確認できませんでした",
+        selector: "[data-test=target]",
+      },
+    ],
+    ["unknown_error", { code: "unknown_error", message: "処理に失敗しました" }],
+  ] satisfies Array<[string, CrawlerRunReason]>)(
+    "reads a failed snapshot with a normalized %s reason",
+    async (_code, reason) => {
+      const state: CrawlerRunStateSnapshot = {
+        ...failedState,
+        timeline: [
+          {
+            id: "group-a",
+            step: "group_data",
+            label: "グループを取得",
+            status: "failed",
+            startedAt,
+            finishedAt,
+            reason,
+            metadata: { kind: "group", groupName: "Group A" },
+          },
+        ],
+        reason,
+      };
+      await writeCrawlerRunState(state, { statePath });
 
-    await writeCrawlerRunState(state, { statePath });
-
-    await expect(readCrawlerRunState({ statePath })).resolves.toEqual(state);
-  });
+      await expect(readCrawlerRunState({ statePath })).resolves.toEqual(state);
+    },
+  );
 
   test("returns null when the state file does not exist", async () => {
     await expect(readCrawlerRunState({ statePath })).resolves.toBeNull();

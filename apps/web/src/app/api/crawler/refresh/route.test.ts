@@ -251,13 +251,20 @@ describe("/api/crawler/refresh/", () => {
       ],
       reason: null,
     };
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ ...latestRun, running: false }));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ ...latestRun, running: false, pid: null }),
+    );
 
     const res = await GET(sameOriginGetRequest());
 
-    await expect(res.json()).resolves.toEqual(
-      expect.objectContaining({ available: true, running: false, latestRun }),
-    );
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      available: true,
+      running: false,
+      source: "manual",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      latestRun,
+    });
   });
 
   it("starts a crawler run through the crawler service", async () => {
