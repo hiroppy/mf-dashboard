@@ -206,7 +206,7 @@ describe("crawler run lock", () => {
         finishedAt: null,
         runStatus: "running",
         current: null,
-        progress: { completed: 0, total: 10 },
+        progress: { completed: 0, total: 13 },
         reason: null,
         timeline: [],
       },

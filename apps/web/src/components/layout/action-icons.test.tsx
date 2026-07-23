@@ -252,9 +252,9 @@ describe("ActionIcons", () => {
               reason: null,
             },
             {
-              id: "global",
-              label: "全体データを取得",
-              step: "global_data",
+              id: "accounts",
+              label: "登録口座を取得",
+              step: "registered_accounts",
               metadata: null,
               status: "running",
               startedAt: "2026-01-01T00:00:10.000Z",
@@ -297,14 +297,14 @@ describe("ActionIcons", () => {
     expect(screen.getByText("2/5")).toBeTruthy();
     expect(screen.getAllByText("実行中")).toHaveLength(1);
     expect(screen.getByText("完了").className).toContain("font-semibold text-success");
-    const globalStep = screen.getByText("全体データを取得").closest("li");
-    expect(globalStep?.textContent).not.toContain("実行中");
+    const accountsStep = screen.getByText("登録口座を取得").closest("li");
+    expect(accountsStep?.textContent).not.toContain("実行中");
     expect(screen.getByText("残り 1件: 金融機関 A")).toBeTruthy();
     const authenticationStep = screen.getByText("認証").closest("li");
-    expect(globalStep).not.toBeNull();
+    expect(accountsStep).not.toBeNull();
     expect(authenticationStep).not.toBeNull();
     expect(
-      globalStep!.compareDocumentPosition(authenticationStep!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      accountsStep!.compareDocumentPosition(authenticationStep!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(refreshMock).not.toHaveBeenCalled();

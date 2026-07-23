@@ -87,6 +87,10 @@ function readReason(value: unknown): CrawlerRunReason | null {
 function readStepDetails(value: Record<string, unknown>): CrawlerRunStepDetails | null {
   switch (value.step) {
     case "authentication":
+    case "group_list":
+    case "registered_accounts":
+    case "portfolio":
+    case "liabilities":
     case "global_data":
     case "database_save":
     case "institution_categories":

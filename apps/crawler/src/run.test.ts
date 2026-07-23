@@ -67,8 +67,11 @@ beforeEach(async () => {
   vi.mocked(notifyWebRefresh).mockResolvedValue(undefined);
   vi.mocked(runScrapePhase).mockImplementation(async (_page, _config, progress) => {
     for (const [step, metadata] of [
+      [CRAWLER_STEPS.groupList],
       [CRAWLER_STEPS.refresh],
-      [CRAWLER_STEPS.globalData],
+      [CRAWLER_STEPS.registeredAccounts],
+      [CRAWLER_STEPS.portfolio],
+      [CRAWLER_STEPS.liabilities],
       [CRAWLER_STEPS.monthlyCashFlow, { month: "2026-07" }],
       [CRAWLER_STEPS.groupData, { groupName: "Group A" }],
     ] as const) {
@@ -128,8 +131,11 @@ describe("runCrawler progress", () => {
     expect(progress.getState().runStatus).toBe("success");
     expect(progress.getState().timeline.map(({ step, status }) => ({ step, status }))).toEqual([
       { step: "authentication", status: "done" },
+      { step: "group_list", status: "done" },
       { step: "moneyforward_refresh", status: "done" },
-      { step: "global_data", status: "done" },
+      { step: "registered_accounts", status: "done" },
+      { step: "portfolio", status: "done" },
+      { step: "liabilities", status: "done" },
       { step: "cash_flow_history", status: "done" },
       { step: "group_data", status: "done" },
       { step: "database_save", status: "done" },

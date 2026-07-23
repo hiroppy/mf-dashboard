@@ -11,7 +11,6 @@ import {
 
 export type CrawlerStepMetadata = Record<string, string | number | string[]>;
 export type CrawlerReason = CrawlerRunReason;
-const BASELINE_STEP_COUNT = 10;
 
 export interface CrawlerCurrentStep {
   code: CrawlerRunStepDetails["step"];
@@ -21,8 +20,11 @@ export interface CrawlerCurrentStep {
 
 export const CRAWLER_STEPS = {
   authentication: { code: "authentication", label: "MoneyForward に認証" },
+  groupList: { code: "group_list", label: "グループ一覧を取得" },
   refresh: { code: "moneyforward_refresh", label: "金融機関データを一括更新" },
-  globalData: { code: "global_data", label: "全体データを取得" },
+  registeredAccounts: { code: "registered_accounts", label: "登録口座を取得" },
+  portfolio: { code: "portfolio", label: "ポートフォリオを取得" },
+  liabilities: { code: "liabilities", label: "負債を取得" },
   groupData: { code: "group_data", label: "グループデータを取得" },
   monthlyCashFlow: { code: "cash_flow_history", label: "月次入出金を取得" },
   databaseSave: { code: "database_save", label: "データベースに保存" },
@@ -34,6 +36,8 @@ export const CRAWLER_STEPS = {
   notification: { code: "notification", label: "更新結果を通知" },
   webCacheRefresh: { code: "web_cache_refresh", label: "Web キャッシュを更新" },
 } as const satisfies Record<string, CrawlerCurrentStep>;
+
+const BASELINE_STEP_COUNT = Object.keys(CRAWLER_STEPS).length;
 
 export interface CrawlerProgressReporter {
   getState: () => CrawlerRunStateSnapshot;

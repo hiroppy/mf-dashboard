@@ -47,7 +47,11 @@ interface CrawlerRunRefreshMetadata {
 
 export type CrawlerRunStepDetails =
   | { step: "authentication"; metadata: null }
+  | { step: "group_list"; metadata: null }
   | { step: "moneyforward_refresh"; metadata: CrawlerRunRefreshMetadata }
+  | { step: "registered_accounts"; metadata: null }
+  | { step: "portfolio"; metadata: null }
+  | { step: "liabilities"; metadata: null }
   | { step: "global_data"; metadata: null }
   | { step: "group_data"; metadata: CrawlerRunGroupMetadata }
   | { step: "cash_flow_history"; metadata: CrawlerRunMonthMetadata }
@@ -165,6 +169,10 @@ function isCrawlerRunStepDetails(value: Record<string, unknown>): boolean {
 
   switch (value.step) {
     case "authentication":
+    case "group_list":
+    case "registered_accounts":
+    case "portfolio":
+    case "liabilities":
     case "global_data":
     case "database_save":
     case "institution_categories":

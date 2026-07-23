@@ -77,14 +77,14 @@ describe("crawler progress", () => {
         source: "test",
         startedAt: "2026-07-01T00:00:00.000Z",
       });
-      const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
+      const accountsStep = await progress.startStep(CRAWLER_STEPS.registeredAccounts);
       const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh);
 
       await progress.completeStep(refreshStep);
 
       expect(progress.getState().current).toMatchObject({
-        timelineItemId: globalStep,
-        step: "global_data",
+        timelineItemId: accountsStep,
+        step: "registered_accounts",
       });
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -121,11 +121,11 @@ describe("crawler progress", () => {
       await runWithCrawlerRunLock(
         "test",
         async (progress) => {
-          expect(progress.getState().progress).toEqual({ completed: 0, total: 10 });
+          expect(progress.getState().progress).toEqual({ completed: 0, total: 13 });
           await runCrawlerStep(progress, CRAWLER_STEPS.analytics, async () => {
-            expect(progress.getState().progress).toEqual({ completed: 0, total: 10 });
+            expect(progress.getState().progress).toEqual({ completed: 0, total: 13 });
           });
-          expect(progress.getState().progress).toEqual({ completed: 1, total: 10 });
+          expect(progress.getState().progress).toEqual({ completed: 1, total: 13 });
         },
         { lockPath },
       );

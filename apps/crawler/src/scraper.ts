@@ -4,6 +4,7 @@ import type { Page } from "playwright";
 import {
   CRAWLER_STEPS,
   normalizeCrawlerError,
+  runCrawlerStep,
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
 import { log, warn, phase } from "./logger.js";
@@ -71,22 +72,21 @@ async function scrapeGlobalData(
   page: Page,
   options: ScrapeOptions,
   progress: CrawlerProgressReporter,
-  globalStep: string,
 ): Promise<GlobalData> {
   const { skipRefresh = false } = options;
-
-  try {
-    await switchGroup(page, NO_GROUP_ID);
-  } catch (error) {
-    await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
-    throw error;
-  }
 
   // Refresh
   let refreshResult = null;
   const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh, {
     maxWaitMinutes: getMaxWaitMinutes(),
   });
+  try {
+    await switchGroup(page, NO_GROUP_ID);
+  } catch (error) {
+    await progress.failStep(refreshStep, normalizeCrawlerError(error, "refresh_failed"));
+    throw error;
+  }
+
   if (skipRefresh) {
     log("Skipping refresh (SKIP_REFRESH=true)");
     await progress.skipStep(refreshStep);
@@ -121,31 +121,33 @@ async function scrapeGlobalData(
       }
     } catch (error) {
       await progress.failStep(refreshStep, normalizeCrawlerError(error, "refresh_failed"));
-      await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
       throw error;
     }
   }
 
-  let registeredAccounts: Awaited<ReturnType<typeof getRegisteredAccounts>>;
-  let portfolio: Awaited<ReturnType<typeof getPortfolio>>;
-  let liabilities: Awaited<ReturnType<typeof getLiabilities>>;
-  try {
-    // 全アカウント情報
-    registeredAccounts = await getRegisteredAccounts(page);
-    log(`Registered accounts: ${registeredAccounts.accounts.length}`);
+  const registeredAccounts = await runCrawlerStep(
+    progress,
+    CRAWLER_STEPS.registeredAccounts,
+    () => getRegisteredAccounts(page),
+    { failureCode: "registered_accounts_failed" },
+  );
+  log(`Registered accounts: ${registeredAccounts.accounts.length}`);
 
-    // Portfolio
-    portfolio = await getPortfolio(page);
-    log(`Portfolio: ${portfolio.items.length} items`);
+  const portfolio = await runCrawlerStep(
+    progress,
+    CRAWLER_STEPS.portfolio,
+    () => getPortfolio(page),
+    { failureCode: "portfolio_failed" },
+  );
+  log(`Portfolio: ${portfolio.items.length} items`);
 
-    // Liabilities
-    liabilities = await getLiabilities(page);
-    log(`Liabilities: ${liabilities.items.length} items`);
-    await progress.completeStep(globalStep);
-  } catch (error) {
-    await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
-    throw error;
-  }
+  const liabilities = await runCrawlerStep(
+    progress,
+    CRAWLER_STEPS.liabilities,
+    () => getLiabilities(page),
+    { failureCode: "liabilities_failed" },
+  );
+  log(`Liabilities: ${liabilities.items.length} items`);
 
   const { year, month: monthNumber } = getJstDateParts();
   const month = `${year}-${String(monthNumber).padStart(2, "0")}`;
@@ -270,27 +272,24 @@ export async function scrapeAllGroups(
   progress: CrawlerProgressReporter,
   options: ScrapeOptions = {},
 ): Promise<ScrapeResult> {
-  const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
+  const { defaultGroup, allGroups } = await runCrawlerStep(
+    progress,
+    CRAWLER_STEPS.groupList,
+    async () => {
+      const defaultGroup = await getCurrentGroup(page);
+      log(`Default group: ${defaultGroup?.name ?? "none"}`);
 
-  // 現在のグループを記憶
-  let defaultGroup: Group | null;
-  let allGroups: Group[];
-  try {
-    defaultGroup = await getCurrentGroup(page);
-    log(`Default group: ${defaultGroup?.name ?? "none"}`);
-
-    // 全グループの一覧を取得
-    allGroups = await getAllGroups(page);
-    log(`Found ${allGroups.length} groups`);
-  } catch (error) {
-    await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
-    throw error;
-  }
+      const allGroups = await getAllGroups(page);
+      log(`Found ${allGroups.length} groups`);
+      return { defaultGroup, allGroups };
+    },
+    { failureCode: "group_list_failed" },
+  );
 
   const groupsToProcess = buildGroupsToProcess(allGroups);
 
   phase("Scrape: Global Data");
-  const globalData = await scrapeGlobalData(page, options, progress, globalStep);
+  const globalData = await scrapeGlobalData(page, options, progress);
   const groupDataList = await runPhase2(page, groupsToProcess, defaultGroup, progress);
 
   return {

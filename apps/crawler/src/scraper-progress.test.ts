@@ -77,7 +77,7 @@ afterEach(async () => {
 });
 
 describe("scraper progress", () => {
-  test("group discovery 失敗を全体データ step に記録する", async () => {
+  test("group discovery 失敗をグループ一覧 step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
       source: "test",
@@ -90,12 +90,12 @@ describe("scraper progress", () => {
     ).rejects.toThrow("page closed");
 
     expect(progress.getState().timeline).toContainEqual(
-      expect.objectContaining({ step: "global_data", status: "failed" }),
+      expect.objectContaining({ step: "group_list", status: "failed" }),
     );
     expect(switchGroup).not.toHaveBeenCalled();
   });
 
-  test("初期 group 切り替え失敗を全体データ step に記録する", async () => {
+  test("初期 group 切り替え失敗を一括更新 step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
       source: "test",
@@ -109,7 +109,7 @@ describe("scraper progress", () => {
 
     expect(progress.getState().timeline).toContainEqual(
       expect.objectContaining({
-        step: "global_data",
+        step: "moneyforward_refresh",
         status: "failed",
         reason: expect.objectContaining({ code: "selector_not_found" }),
       }),
@@ -128,6 +128,27 @@ describe("scraper progress", () => {
 
     expect(vi.mocked(switchGroup).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(clickRefreshButton).mock.invocationCallOrder[0]!,
+    );
+  });
+
+  test.each([
+    ["登録口座", getRegisteredAccounts, "registered_accounts"],
+    ["ポートフォリオ", getPortfolio, "portfolio"],
+    ["負債", getLiabilities, "liabilities"],
+  ] as const)("%s の取得失敗を対応する step に記録する", async (_label, getData, step) => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(getData).mockRejectedValueOnce(new Error("request failed"));
+
+    await expect(
+      scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress),
+    ).rejects.toThrow("request failed");
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({ step, status: "failed" }),
     );
   });
 
