@@ -106,6 +106,50 @@ describe("crawler run lock", () => {
     await expect(readCrawlerRunState({ statePath })).resolves.toEqual(finishedState);
   });
 
+  test("does not finalize a new run while reconciling an absent lock", async () => {
+    const statePath = `${lockPath}.state`;
+    await writeCrawlerRunState(
+      {
+        version: 1,
+        runId: "orphaned-run",
+        source: "scheduled",
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: null,
+        runStatus: "running",
+        current: null,
+        waitingFor: null,
+        progress: null,
+        reason: null,
+        timeline: [],
+      },
+      { statePath },
+    );
+
+    let newRunPromise!: ReturnType<typeof runWithCrawlerRunLock>;
+    let newRunSettled = false;
+    const state = await getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        newRunPromise = runWithCrawlerRunLock("manual", async () => undefined, {
+          lockPath,
+          statePath,
+        });
+        void newRunPromise.finally(() => {
+          newRunSettled = true;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(newRunSettled).toBe(false);
+      },
+      lockPath,
+      statePath,
+    });
+
+    expect(state).toMatchObject({ runId: "orphaned-run", runStatus: "failed" });
+    await newRunPromise;
+    await expect(readCrawlerRunState({ statePath })).resolves.toMatchObject({
+      runStatus: "success",
+    });
+  });
+
   test("returns idle state when no lock exists", async () => {
     await expect(getCrawlerRunState({ lockPath })).resolves.toEqual({
       running: false,
