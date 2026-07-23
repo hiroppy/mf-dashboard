@@ -1,0 +1,85 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, test } from "vitest";
+import {
+  CRAWLER_STEPS,
+  createCrawlerProgressReporter,
+  runCrawlerStep,
+} from "./crawler-progress.js";
+import { getCrawlerRunState, runWithCrawlerRunLock } from "./crawler-run-lock.js";
+
+describe("crawler progress", () => {
+  test("通常終了後も success と finishedAt を latest state に残す", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-success-"));
+    const lockPath = path.join(tempDir, "crawler-run.lock");
+    try {
+      await runWithCrawlerRunLock(
+        "test",
+        async (progress) => {
+          await runCrawlerStep(progress, CRAWLER_STEPS.analytics, async () => undefined);
+        },
+        { lockPath },
+      );
+
+      const state = await getCrawlerRunState({ lockPath });
+      expect(state).toMatchObject({
+        running: false,
+        runStatus: "success",
+        current: null,
+        waitingFor: null,
+      });
+      expect(state.finishedAt).toEqual(expect.any(String));
+      expect(state.timeline).toEqual([
+        expect.objectContaining({ code: "analytics", status: "success" }),
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("認証失敗を authentication step と安全な reason に記録する", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-auth-"));
+    const statePath = path.join(tempDir, "crawler.state");
+    try {
+      const progress = await createCrawlerProgressReporter(statePath, {
+        id: "run-a",
+        pid: 123,
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+
+      await expect(
+        runCrawlerStep(
+          progress,
+          CRAWLER_STEPS.authentication,
+          async () => {
+            throw new Error("credentials: secret-value");
+          },
+          { failureCode: "auth_failed" },
+        ),
+      ).rejects.toThrow("credentials: secret-value");
+      await progress.finish("failed", progress.getState().reason ?? undefined);
+
+      expect(progress.getState()).toMatchObject({
+        runStatus: "failed",
+        finishedAt: expect.any(String),
+        current: expect.objectContaining({ code: "authentication" }),
+        reason: {
+          code: "auth_failed",
+          message: "処理中にエラーが発生しました",
+        },
+        timeline: [
+          expect.objectContaining({
+            code: "authentication",
+            status: "failed",
+            reason: { code: "auth_failed", message: "処理中にエラーが発生しました" },
+          }),
+        ],
+      });
+      expect(JSON.stringify(progress.getState())).not.toContain("secret-value");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});

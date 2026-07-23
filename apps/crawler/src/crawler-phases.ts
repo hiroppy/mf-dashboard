@@ -21,6 +21,11 @@ import type {
   NormalizedCategoryDecisionConfig,
 } from "./category-decision/types.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
+import {
+  CRAWLER_STEPS,
+  normalizeCrawlerError,
+  type CrawlerProgressReporter,
+} from "./crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
@@ -168,9 +173,10 @@ export async function runAuthPhase(page: Page, context: BrowserContext): Promise
 export async function runScrapePhase(
   page: Page,
   config: Pick<CrawlerConfig, "skipRefresh">,
+  progress: CrawlerProgressReporter,
 ): Promise<ScrapeResult> {
   phase("Scrape");
-  const scrapeResult = await scrapeAllGroups(page, {
+  const scrapeResult = await scrapeAllGroups(page, progress, {
     skipRefresh: config.skipRefresh,
   });
 
@@ -265,6 +271,7 @@ export async function runCashFlowHistoryPhase(
   page: Page,
   config: Pick<CrawlerConfig, "isHistoryMode">,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
+  progress?: CrawlerProgressReporter,
 ): Promise<void> {
   phase("Cash Flow History");
 
@@ -289,7 +296,24 @@ export async function runCashFlowHistoryPhase(
 
   await switchGroup(page, NO_GROUP_ID);
 
-  const historyResults = await scrapeCashFlowHistory(page, monthsToFetch);
+  const monthSteps = new Map<string, string>();
+  const historyResults = await scrapeCashFlowHistory(page, monthsToFetch, {
+    onMonthStart: async (month) => {
+      if (progress) {
+        monthSteps.set(month, await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month }));
+      }
+    },
+    onMonthComplete: async (month) => {
+      const stepId = monthSteps.get(month);
+      if (progress && stepId) await progress.completeStep(stepId);
+    },
+    onMonthFailure: async (month, failure) => {
+      const stepId = monthSteps.get(month);
+      if (progress && stepId) {
+        await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
+      }
+    },
+  });
 
   for (const { month, data: monthData } of historyResults) {
     const categorizedMonthData = categoryDecision.config
@@ -337,13 +361,15 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
 export async function runNotificationPhase(
   groupDataList: GroupData[],
   defaultGroup: ScrapeResult["defaultGroup"],
-): Promise<void> {
+): Promise<Error | null> {
   phase("Notification");
 
   try {
     await sendSuccessNotifications(groupDataList, defaultGroup);
+    return null;
   } catch (err) {
     error("Failed to send notification:", err);
+    return err instanceof Error ? err : new Error(String(err));
   }
 }
 

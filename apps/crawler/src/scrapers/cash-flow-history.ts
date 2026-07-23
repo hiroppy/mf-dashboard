@@ -2,6 +2,7 @@ import { getJstDateParts } from "@mf-dashboard/date-utils";
 import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
+import { getHistoryMonth } from "../history-months.js";
 import { log, debug } from "../logger.js";
 import { parseJapaneseNumber, convertDateToIso } from "../parsers.js";
 import type { CashFlowHistoryResult } from "../types.js";
@@ -279,6 +280,11 @@ async function getMonthFromCsvLink(page: Page): Promise<string | null> {
 export async function scrapeCashFlowHistory(
   page: Page,
   monthsToScrape: number = 12,
+  callbacks: {
+    onMonthStart?: (month: string) => Promise<void> | void;
+    onMonthComplete?: (month: string) => Promise<void> | void;
+    onMonthFailure?: (month: string, error: unknown) => Promise<void> | void;
+  } = {},
 ): Promise<CashFlowHistoryResult[]> {
   log(`Scraping cash flow history for ${monthsToScrape} months...`);
 
@@ -289,7 +295,16 @@ export async function scrapeCashFlowHistory(
   const results: CashFlowHistoryResult[] = [];
 
   for (let i = 0; i < monthsToScrape; i++) {
-    const data = await extractCashFlowFromPage(page);
+    const targetMonth = (await getMonthFromCsvLink(page)) ?? getHistoryMonth(new Date(), i);
+    await callbacks.onMonthStart?.(targetMonth);
+    let data: CashFlowSummary;
+    try {
+      data = await extractCashFlowFromPage(page);
+      await callbacks.onMonthComplete?.(targetMonth);
+    } catch (error) {
+      await callbacks.onMonthFailure?.(targetMonth, error);
+      throw error;
+    }
     results.push({ month: data.month, data });
     log(`  ${data.month}: ${data.items.length} transactions`);
 

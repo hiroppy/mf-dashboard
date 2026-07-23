@@ -19,6 +19,14 @@ interface CrawlerRefreshStatus {
   available: boolean;
   running: boolean;
   startedAt: string | null;
+  finishedAt: string | null;
+  runStatus: "running" | "success" | "failed" | null;
+  current: {
+    label: string;
+    metadata?: Record<string, string | number | string[]>;
+  } | null;
+  waitingFor: string | null;
+  reason: { code: string; message: string } | null;
 }
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
@@ -29,17 +37,64 @@ const unavailableStatus: CrawlerRefreshStatus = {
   available: false,
   running: false,
   startedAt: null,
+  finishedAt: null,
+  runStatus: null,
+  current: null,
+  waitingFor: null,
+  reason: null,
 };
+
+function parseCrawlerRefreshStatus(
+  body: Partial<CrawlerRefreshStatus>,
+  available: boolean,
+): CrawlerRefreshStatus {
+  const runStatus = body.runStatus;
+  return {
+    available,
+    running: Boolean(body.running),
+    startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
+    finishedAt: typeof body.finishedAt === "string" ? body.finishedAt : null,
+    runStatus:
+      runStatus === "running" || runStatus === "success" || runStatus === "failed"
+        ? runStatus
+        : null,
+    current: body.current && typeof body.current.label === "string" ? body.current : null,
+    waitingFor: typeof body.waitingFor === "string" ? body.waitingFor : null,
+    reason:
+      body.reason && typeof body.reason.code === "string" && typeof body.reason.message === "string"
+        ? body.reason
+        : null,
+  };
+}
 
 async function readCrawlerRefreshStatus(): Promise<CrawlerRefreshStatus> {
   const res = await fetch("/api/crawler/refresh/", { cache: "no-store" });
   const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
 
-  return {
-    available: res.ok && body.available !== false,
-    running: Boolean(body.running),
-    startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
-  };
+  return parseCrawlerRefreshStatus(body, res.ok && body.available !== false);
+}
+
+function getRefreshTitle(state: CrawlerRefreshStatus): string {
+  if (!state.available) return "更新サービス未接続";
+  if (!state.running) {
+    if (state.runStatus === "failed" && state.reason) {
+      return `前回の更新に失敗（${state.reason.message}）`;
+    }
+    if (state.runStatus === "success" && state.finishedAt) {
+      return `前回の更新完了（${formatDateTime(state.finishedAt)}）`;
+    }
+    return "更新";
+  }
+
+  const metadataTarget = state.current?.metadata?.groupName ?? state.current?.metadata?.month;
+  const currentTarget = typeof metadataTarget === "string" ? metadataTarget : null;
+  const current = state.current
+    ? `${state.current.label}${currentTarget ? `: ${currentTarget}` : ""}`
+    : null;
+  const detail = state.waitingFor ?? current;
+  if (detail) return `更新中（${detail}）`;
+  if (state.startedAt) return `更新中（開始: ${formatDateTime(state.startedAt)}）`;
+  return "更新中";
 }
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
@@ -120,9 +175,10 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
       const running = Boolean(body.running ?? true);
       wasRunningRef.current ||= running;
       setState({
-        available: body.available !== false,
-        running,
-        startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
+        ...parseCrawlerRefreshStatus(
+          { ...body, running, runStatus: body.runStatus ?? "running" },
+          body.available !== false,
+        ),
         isPending: false,
       });
     } catch {
@@ -132,10 +188,7 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
 
   const isBusy = state.isPending || state.running;
   const isDisabled = isBusy || !state.available;
-  let title = state.available ? "更新" : "更新サービス未接続";
-  if (state.running) {
-    title = state.startedAt ? `更新中（開始: ${formatDateTime(state.startedAt)}）` : "更新中";
-  }
+  const title = getRefreshTitle(state);
 
   return (
     <IconButton

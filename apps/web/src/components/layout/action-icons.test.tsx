@@ -140,6 +140,50 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("shows the current waiting reason while the crawler is running", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        available: true,
+        running: true,
+        runStatus: "running",
+        current: {
+          label: "金融機関データを一括更新",
+          metadata: { remainingCount: 2 },
+        },
+        waitingFor: "更新中の金融機関が0件になるのを待機",
+      }),
+    );
+
+    render(<ActionIcons variant="header" />);
+
+    const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
+    await waitFor(() =>
+      expect(refreshButton.getAttribute("title")).toBe(
+        "更新中（更新中の金融機関が0件になるのを待機）",
+      ),
+    );
+  });
+
+  it("shows the latest safe failure reason after the crawler stops", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        available: true,
+        running: false,
+        runStatus: "failed",
+        reason: { code: "auth_failed", message: "処理中にエラーが発生しました" },
+      }),
+    );
+
+    render(<ActionIcons variant="header" />);
+
+    const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
+    await waitFor(() =>
+      expect(refreshButton.getAttribute("title")).toBe(
+        "前回の更新に失敗（処理中にエラーが発生しました）",
+      ),
+    );
+  });
+
   it("disables the header refresh button when the crawler service is unavailable", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({ available: false, running: false }, 503),

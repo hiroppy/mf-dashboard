@@ -2,6 +2,16 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { link, mkdir, open, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import {
+  createCrawlerProgressReporter,
+  normalizeCrawlerError,
+  readCrawlerProgressState,
+  type CrawlerCurrentStep,
+  type CrawlerProgressReporter,
+  type CrawlerReason,
+  type CrawlerRunStatus,
+  type CrawlerTimelineStep,
+} from "./crawler-progress.js";
 
 const DEFAULT_LOCK_PATH = path.resolve(import.meta.dirname, "../../../data/crawler-run.lock");
 const DEFAULT_MAX_WAIT_MINUTES = 20;
@@ -9,10 +19,17 @@ const LOCK_STALE_BUFFER_MINUTES = 100;
 const LOCK_MUTATION_INTENT_STALE_MS = 60_000;
 
 export interface CrawlerRunState {
+  runId?: string;
   running: boolean;
   pid: number | null;
   source: string | null;
   startedAt: string | null;
+  finishedAt?: string | null;
+  runStatus?: CrawlerRunStatus;
+  current?: CrawlerCurrentStep | null;
+  waitingFor?: string | null;
+  reason?: CrawlerReason | null;
+  timeline?: CrawlerTimelineStep[];
 }
 
 interface CrawlerRunLockRecord {
@@ -34,6 +51,7 @@ interface CrawlerRunLockOptions {
   getPidStartedAt?: (pid: number) => string | null;
   pidExists?: (pid: number) => boolean;
   staleMs?: number;
+  statePath?: string;
 }
 
 export class CrawlerAlreadyRunningError extends Error {
@@ -112,6 +130,10 @@ function getOptions(options: CrawlerRunLockOptions = {}) {
     lockPath: options.lockPath ?? DEFAULT_LOCK_PATH,
     pidExists: options.pidExists ?? defaultPidExists,
     staleMs: options.staleMs ?? getDefaultStaleMs(),
+    statePath:
+      options.statePath ??
+      process.env.CRAWLER_STATE_PATH ??
+      `${options.lockPath ?? DEFAULT_LOCK_PATH}.state`,
   };
 }
 
@@ -467,6 +489,7 @@ export async function getCrawlerRunState(
   options: CrawlerRunLockOptions = {},
 ): Promise<CrawlerRunState> {
   const resolved = getOptions(options);
+  const progressState = await readCrawlerProgressState(resolved.statePath);
   await mkdir(path.dirname(resolved.lockPath), { recursive: true });
   let snapshot = await readLockSnapshot(resolved.lockPath);
 
@@ -483,7 +506,7 @@ export async function getCrawlerRunState(
 
     snapshot = await readLockSnapshot(resolved.lockPath);
     if (!snapshot) {
-      return { running: false, pid: null, source: null, startedAt: null };
+      return progressState ?? { running: false, pid: null, source: null, startedAt: null };
     }
   }
 
@@ -498,13 +521,16 @@ export async function getCrawlerRunState(
       };
 
   if (!isStaleSnapshot(snapshot, resolved)) {
+    if (record && progressState?.runId === record.id) {
+      return progressState;
+    }
     return snapshotState;
   }
 
   await resolved.beforeStaleLockCleanup?.();
   const removal = await removeStaleLockIfCurrent(snapshot, resolved);
   if (removal === "removed") {
-    return { running: false, pid: null, source: null, startedAt: null };
+    return progressState ?? { running: false, pid: null, source: null, startedAt: null };
   }
   if (removal === "changed") {
     return getCrawlerRunState(options);
@@ -584,12 +610,19 @@ export async function acquireCrawlerRunLock(
 
 export async function runWithCrawlerRunLock<T>(
   source: string,
-  task: () => Promise<T>,
+  task: (progress: CrawlerProgressReporter) => Promise<T>,
   options: CrawlerRunLockOptions = {},
 ): Promise<T> {
   const lock = await acquireCrawlerRunLock(source, options);
+  const progress = await createCrawlerProgressReporter(getOptions(options).statePath, lock.record);
   try {
-    return await task();
+    const result = await task(progress);
+    await progress.finish("success");
+    return result;
+  } catch (err) {
+    const reason = progress.getState().reason ?? normalizeCrawlerError(err, "run_failed");
+    await progress.finish("failed", reason);
+    throw err;
   } finally {
     await lock.release();
   }
