@@ -7,8 +7,6 @@ const DEFAULT_STATE_PATH = path.resolve(
   "../../../data/crawler-run-state.json",
 );
 
-export type CrawlerRunStatus = "running" | "success" | "failed";
-
 export type CrawlerRunStepStatus =
   | "pending"
   | "running"
@@ -30,17 +28,17 @@ export type CrawlerRunReason =
   | { code: "selector_not_found"; message: string; selector: string }
   | { code: "unknown_error"; message: string };
 
-export interface CrawlerRunGroupMetadata {
+interface CrawlerRunGroupMetadata {
   kind: "group";
   groupName: string;
 }
 
-export interface CrawlerRunMonthMetadata {
+interface CrawlerRunMonthMetadata {
   kind: "month";
   month: string;
 }
 
-export interface CrawlerRunRefreshMetadata {
+interface CrawlerRunRefreshMetadata {
   kind: "refresh";
   maxWaitMinutes: number;
   remainingAccounts: number;
@@ -253,7 +251,7 @@ function isCrawlerRunProgress(value: unknown): value is CrawlerRunProgress {
   );
 }
 
-export function isCrawlerRunStateSnapshot(value: unknown): value is CrawlerRunStateSnapshot {
+function isCrawlerRunStateSnapshot(value: unknown): value is CrawlerRunStateSnapshot {
   if (
     !isRecord(value) ||
     value.version !== 1 ||

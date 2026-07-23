@@ -8,7 +8,6 @@ import type {
 } from "../../../crawler/src/crawler-run-state";
 
 export type {
-  CrawlerRunStateSnapshot,
   CrawlerRunStepDetails,
   CrawlerRunStepStatus,
   CrawlerRunTimelineItem,

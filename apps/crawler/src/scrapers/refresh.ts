@@ -58,7 +58,7 @@ export async function getRefreshStatus(
   return { incompleteAccounts, remainingCount };
 }
 
-export interface RefreshWaitProgress {
+interface RefreshWaitProgress {
   elapsedSeconds: number;
   incompleteAccounts: string[];
   maxWaitMinutes: number;
