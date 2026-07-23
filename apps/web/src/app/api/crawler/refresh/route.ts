@@ -45,6 +45,15 @@ function getCrawlerUrl(): string | null {
   return crawlerUrl.replace(/\/+$/, "");
 }
 
+function unavailableCrawlerEvents() {
+  return new Response(`data: ${JSON.stringify(unavailableCrawlerRefreshStatus)}\n\n`, {
+    headers: {
+      "cache-control": "no-cache, no-transform",
+      "content-type": "text/event-stream",
+    },
+  });
+}
+
 async function proxyCrawlerRequest(path: "/runs", init?: RequestInit) {
   const crawlerUrl = getCrawlerUrl();
   if (!crawlerUrl) {
@@ -70,7 +79,7 @@ async function proxyCrawlerRequest(path: "/runs", init?: RequestInit) {
 async function proxyCrawlerEvents(request: Request) {
   const crawlerUrl = getCrawlerUrl();
   if (!crawlerUrl) {
-    return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
+    return unavailableCrawlerEvents();
   }
 
   const controller = new AbortController();
@@ -87,7 +96,7 @@ async function proxyCrawlerEvents(request: Request) {
     clearTimeout(handshakeTimeout);
     if (!response.ok || !response.body) {
       request.signal.removeEventListener("abort", abortUpstream);
-      return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
+      return unavailableCrawlerEvents();
     }
 
     return new Response(response.body, {
@@ -99,7 +108,7 @@ async function proxyCrawlerEvents(request: Request) {
   } catch {
     clearTimeout(handshakeTimeout);
     request.signal.removeEventListener("abort", abortUpstream);
-    return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
+    return unavailableCrawlerEvents();
   }
 }
 

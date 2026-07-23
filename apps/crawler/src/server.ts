@@ -20,7 +20,7 @@ const DEFAULT_HOST = "127.0.0.1";
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
   startRun?: () => Promise<CrawlerRunState>;
-  watchState?: (onChange: () => void) => Promise<() => void>;
+  watchState?: (onChange: () => void, onError: (err: Error) => void) => Promise<() => void>;
 }
 
 type ProgressReporter = Awaited<ReturnType<typeof createCrawlerProgressReporter>>;
@@ -43,9 +43,13 @@ function methodNotAllowed(response: ServerResponse): void {
   response.end();
 }
 
-async function watchCrawlerState(onChange: () => void): Promise<() => void> {
+async function watchCrawlerState(
+  onChange: () => void,
+  onError: (err: Error) => void,
+): Promise<() => void> {
   const statePath = process.env.CRAWLER_STATE_PATH ?? getCrawlerRunStatePath();
-  const watchedPaths = [statePath, getCrawlerRunLockPath()];
+  const lockPath = getCrawlerRunLockPath();
+  const watchedPaths = [statePath, lockPath];
   const targetsByDirectory = new Map<string, string[]>();
   for (const filePath of watchedPaths) {
     const directory = path.dirname(filePath);
@@ -54,27 +58,47 @@ async function watchCrawlerState(onChange: () => void): Promise<() => void> {
   await Promise.all(
     [...targetsByDirectory.keys()].map((directory) => mkdir(directory, { recursive: true })),
   );
-  const watchers = [...targetsByDirectory].map(([directory, targets]) => {
-    const filenames = new Set(targets.map((target) => path.basename(target)));
-    return watch(directory, (_event, filename) => {
-      if (!filename || filenames.has(filename.toString())) {
-        onChange();
-      }
-    });
-  });
-
-  return () => {
+  const watchers: ReturnType<typeof watch>[] = [];
+  const closeWatchers = () => {
     for (const watcher of watchers) {
       watcher.close();
     }
   };
+  const handleError = (err: Error) => {
+    closeWatchers();
+    onError(err);
+  };
+
+  try {
+    for (const [directory, targets] of targetsByDirectory) {
+      const filenames = new Set(targets.map((target) => path.basename(target)));
+      const lockFilename = path.basename(lockPath);
+      const watcher = watch(directory, (_event, filename) => {
+        const changedFilename = filename?.toString();
+        if (
+          !changedFilename ||
+          filenames.has(changedFilename) ||
+          changedFilename.startsWith(`${lockFilename}.mutation-`)
+        ) {
+          onChange();
+        }
+      });
+      watcher.once("error", handleError);
+      watchers.push(watcher);
+    }
+  } catch (err) {
+    closeWatchers();
+    throw err;
+  }
+
+  return closeWatchers;
 }
 
 async function streamCrawlerState(
   request: IncomingMessage,
   response: ServerResponse,
   getState: () => Promise<CrawlerRunState>,
-  watchState: (onChange: () => void) => Promise<() => void>,
+  watchState: (onChange: () => void, onError: (err: Error) => void) => Promise<() => void>,
 ): Promise<void> {
   let closed = false;
   let stopWatching: (() => void) | null = null;
@@ -111,12 +135,18 @@ async function streamCrawlerState(
     }
   }
 
-  const stopWatcher = await watchState(() => {
-    void sendLatestState().catch((err) => {
+  const stopWatcher = await watchState(
+    () => {
+      void sendLatestState().catch((err) => {
+        error("Failed to stream crawler state:", err);
+        response.destroy(err instanceof Error ? err : undefined);
+      });
+    },
+    (err) => {
       error("Failed to stream crawler state:", err);
-      response.destroy(err instanceof Error ? err : undefined);
-    });
-  });
+      response.destroy(err);
+    },
+  );
   if (closed) {
     stopWatcher();
     return;

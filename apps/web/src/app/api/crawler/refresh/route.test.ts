@@ -18,6 +18,8 @@ function eventStreamResponse(body: unknown): Response {
   });
 }
 
+const unavailableEvent = `data: ${JSON.stringify(unavailableCrawlerRefreshStatus)}\n\n`;
+
 function sameOriginPostRequest(headers: HeadersInit = {}): Request {
   const requestHeaders = new Headers({
     origin: "https://dashboard.example.com",
@@ -57,8 +59,9 @@ describe("/api/crawler/refresh/", () => {
 
     const res = await GET(sameOriginGetRequest());
 
-    expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    await expect(res.text()).resolves.toBe(unavailableEvent);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -88,8 +91,9 @@ describe("/api/crawler/refresh/", () => {
 
     const res = await GET(sameOriginGetRequest());
 
-    expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    await expect(res.text()).resolves.toBe(unavailableEvent);
   });
 
   it("starts a crawler run through the crawler service", async () => {
@@ -160,8 +164,9 @@ describe("/api/crawler/refresh/", () => {
 
     const res = await GET(sameOriginGetRequest());
 
-    expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    await expect(res.text()).resolves.toBe(unavailableEvent);
   });
 
   it("times out when the crawler does not complete the SSE handshake", async () => {
@@ -178,8 +183,9 @@ describe("/api/crawler/refresh/", () => {
       await vi.advanceTimersByTimeAsync(5_000);
       const res = await responsePromise;
 
-      expect(res.status).toBe(503);
-      await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/event-stream");
+      await expect(res.text()).resolves.toBe(unavailableEvent);
     } finally {
       vi.useRealTimers();
     }

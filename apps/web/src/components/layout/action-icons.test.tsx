@@ -170,6 +170,28 @@ describe("ActionIcons", () => {
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves buffered running and terminal statuses when the refresh POST fails", async () => {
+    let resolvePost: ((response: Response) => void) | undefined;
+    vi.mocked(global.fetch).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolvePost = resolve;
+      }),
+    );
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関データを更新" }));
+    await emitStatus({ running: true });
+    await emitStatus({ running: false });
+
+    await act(async () => {
+      resolvePost?.(jsonResponse({ error: "upstream response lost" }, 503));
+    });
+
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+  });
+
   it("starts another refresh after the latest run succeeded", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({ available: true, running: true }, 202),
@@ -407,6 +429,17 @@ describe("ActionIcons", () => {
     await emitStatus({ running: false });
 
     expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+  });
+
+  it("recovers after an unavailable SSE handshake event", async () => {
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false, available: false });
+
+    expect(screen.getByRole("button", { name: "更新サービス未接続" })).toBeTruthy();
+
+    await emitStatus({ running: false });
+
     expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
   });
 

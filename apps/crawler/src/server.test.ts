@@ -133,6 +133,27 @@ describe("crawler trigger server", () => {
     await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
   });
 
+  test("closes the SSE stream when its filesystem watcher fails", async () => {
+    let reportWatcherError: ((err: Error) => void) | undefined;
+    const stopWatching = vi.fn<() => void>();
+    const baseUrl = await listen(
+      createCrawlerTriggerServer({
+        getState: async () => idleState,
+        watchState: async (_onChange, onError) => {
+          reportWatcherError = onError;
+          return stopWatching;
+        },
+      }),
+    );
+
+    const res = await fetch(`${baseUrl}/events`);
+    const reader = res.body!.getReader();
+    await reader.read();
+    reportWatcherError?.(new Error("watch failed"));
+
+    await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
+  });
+
   test("starts a manual run", async () => {
     const startRun = vi.fn<() => Promise<CrawlerRunState>>(async () => runningState);
     const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));

@@ -55,6 +55,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   const wasRunningRef = useRef(false);
   const startRefreshInFlightRef = useRef(false);
   const pendingStatusRef = useRef<CrawlerRefreshStatus | null>(null);
+  const pendingWasRunningRef = useRef(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
     ...unavailableCrawlerRefreshStatus,
@@ -70,7 +71,9 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
         router.refresh();
       }
-      wasRunningRef.current = nextStatus.running;
+      if (nextStatus.available) {
+        wasRunningRef.current = nextStatus.running;
+      }
     },
     [router],
   );
@@ -89,6 +92,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
         const nextStatus = parseCrawlerRefreshStatus(JSON.parse(event.data) as unknown, true);
         if (startRefreshInFlightRef.current) {
           pendingStatusRef.current = nextStatus;
+          pendingWasRunningRef.current ||= nextStatus.running;
           return;
         }
         applyStatus(nextStatus);
@@ -114,6 +118,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
 
     startRefreshInFlightRef.current = true;
     pendingStatusRef.current = null;
+    pendingWasRunningRef.current = false;
     setPopoverOpen(false);
     setState((prev) => ({
       ...prev,
@@ -143,7 +148,11 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     } finally {
       startRefreshInFlightRef.current = false;
       const pendingStatus = pendingStatusRef.current;
+      if (pendingWasRunningRef.current) {
+        wasRunningRef.current = true;
+      }
       pendingStatusRef.current = null;
+      pendingWasRunningRef.current = false;
       if (pendingStatus) {
         applyStatus(pendingStatus);
       }
