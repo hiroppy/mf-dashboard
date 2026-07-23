@@ -28,12 +28,9 @@ export function describeDatabaseSchema(): string {
   const holdingValues = getTableName(schema.holdingValues);
   const dailySnapshots = getTableName(schema.dailySnapshots);
   const assetCategories = getTableName(schema.assetCategories);
-  const directlyGroupedTables = [
-    schema.assetHistory,
-    schema.dailySnapshots,
-    schema.spendingTargets,
-    schema.analyticsReports,
-  ]
+  const assetHistory = getTableName(schema.assetHistory);
+  const assetHistoryCategories = getTableName(schema.assetHistoryCategories);
+  const directlyGroupedTables = [schema.spendingTargets, schema.analyticsReports]
     .map(getTableName)
     .join(", ");
 
@@ -49,11 +46,14 @@ export function describeDatabaseSchema(): string {
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
 - 現在グループの取引は${transactions}.${schema.transactions.accountId.name}を${groupAccounts}.${schema.groupAccounts.accountId.name}へJOINし、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdで絞る
 - 現在グループの保有資産も${holdings}.${schema.holdings.accountId.name}を${groupAccounts}経由で絞る
+- 現在グループの総資産は${assetHistory}.${schema.assetHistory.groupId.name} = :groupIdで絞り、${schema.assetHistory.date.name}が最新の行の${schema.assetHistory.totalAssets.name}を使用する。保有銘柄の件数や評価額から総資産を推測・再計算しない
+- 総資産のカテゴリ内訳は最新の${assetHistory}を${assetHistoryCategories}.${schema.assetHistoryCategories.assetHistoryId.name} = ${assetHistory}.${schema.assetHistory.id.name}でJOINし、${schema.assetHistoryCategories.categoryName.name}と${schema.assetHistoryCategories.amount.name}を使用する
 - 銘柄名や資産・負債の区分は${holdings}、評価額・数量・単価・前日比・含み損益は${holdingValues}にある。${holdingValues}.${schema.holdingValues.holdingId.name} = ${holdings}.${schema.holdings.id.name}でJOINする
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
-- 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は最新スナップショットの${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
+- 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は各負債の最新${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
-- ${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINし、${dailySnapshots}.${schema.dailySnapshots.groupId.name} = :groupIdで絞る。現在値は${schema.dailySnapshots.refreshCompleted.name} = 1のうち${schema.dailySnapshots.date.name}が最新のスナップショットを使用する
+- 銘柄・負債・投資の現在値は、${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINし、${schema.dailySnapshots.refreshCompleted.name} = 1の中から銘柄ごとに${schema.dailySnapshots.date.name} DESC, ${dailySnapshots}.${schema.dailySnapshots.id.name} DESCの先頭1件を使用する
+- ${dailySnapshots}.${schema.dailySnapshots.groupId.name}は取得時のグループであり、選択中グループの口座と一致するとは限らない。銘柄・負債・投資を現在グループへ絞る目的で${dailySnapshots}.${schema.dailySnapshots.groupId.name} = :groupIdを使用してはいけない。必ず${holdings}から${groupAccounts}を経由して絞る
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
 
