@@ -85,7 +85,9 @@ interface LockMutationIntentRecord {
   pidStartedAt: string | null;
 }
 
-type StaleLockRemovalResult = "busy" | "changed" | "removed";
+type StaleLockRemovalResult =
+  | { kind: "busy" | "changed" }
+  | { kind: "removed"; state: CrawlerRunState };
 
 function defaultPidExists(pid: number): boolean {
   try {
@@ -476,7 +478,7 @@ async function removeStaleLockIfCurrent(
 ): Promise<StaleLockRemovalResult> {
   const mutationGuard = await tryAcquireLockMutationGuard(options);
   if (!mutationGuard) {
-    return "busy";
+    return { kind: "busy" };
   }
 
   const quarantinePath = `${options.lockPath}.stale-${randomUUID()}`;
@@ -488,7 +490,7 @@ async function removeStaleLockIfCurrent(
       await options.afterStaleLockQuarantine?.();
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return "changed";
+        return { kind: "changed" };
       }
       throw err;
     }
@@ -501,7 +503,11 @@ async function removeStaleLockIfCurrent(
       current.contents === expected.contents
     ) {
       await rm(quarantinePath, { force: true });
-      return "removed";
+      const latestProgressState = await readCrawlerRunState({ statePath: options.statePath });
+      const state = latestProgressState
+        ? await toStoppedRunState(latestProgressState, options.statePath)
+        : { running: false as const, pid: null, source: null, startedAt: null };
+      return { kind: "removed", state };
     }
 
     try {
@@ -513,7 +519,7 @@ async function removeStaleLockIfCurrent(
       }
     }
 
-    return "changed";
+    return { kind: "changed" };
   } finally {
     await mutationGuard.release();
   }
@@ -565,10 +571,10 @@ export async function getCrawlerRunState(
 
   await resolved.beforeStaleLockCleanup?.();
   const removal = await removeStaleLockIfCurrent(snapshot, resolved);
-  if (removal === "removed") {
-    return getCrawlerRunState(options);
+  if (removal.kind === "removed") {
+    return removal.state;
   }
-  if (removal === "changed") {
+  if (removal.kind === "changed") {
     return getCrawlerRunState(options);
   }
 

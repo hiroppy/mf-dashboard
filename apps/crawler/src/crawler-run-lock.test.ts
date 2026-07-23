@@ -714,6 +714,7 @@ describe("crawler run lock", () => {
     finishCleanup();
 
     await expect(statePromise).resolves.toMatchObject({
+      running: false,
       pid: null,
       source: null,
       startedAt: null,
