@@ -1,107 +1,18 @@
-export type CrawlerRunStatus = "running" | "success" | "failed";
+import type {
+  CrawlerRunCurrent,
+  CrawlerRunProgress,
+  CrawlerRunReason,
+  CrawlerRunStateSnapshot,
+  CrawlerRunStepDetails,
+  CrawlerRunTimelineItem,
+} from "../../../crawler/src/crawler-run-state";
 
-export type CrawlerRunStepStatus =
-  | "pending"
-  | "running"
-  | "done"
-  | "warning"
-  | "failed"
-  | "skipped";
-
-export type CrawlerRunReason =
-  | { code: "auth_failed"; message: string }
-  | {
-      code: "refresh_timeout";
-      message: string;
-      maxWaitMinutes: number;
-      incompleteAccounts: string[];
-    }
-  | { code: "moneyforward_timeout"; message: string; operation: string; timeoutMs: number }
-  | { code: "navigation_failed"; message: string; url: string }
-  | { code: "selector_not_found"; message: string; selector: string }
-  | { code: "unknown_error"; message: string };
-
-export type CrawlerRunStepDetails =
-  | { step: "authentication"; metadata: null }
-  | {
-      step: "moneyforward_refresh";
-      metadata: {
-        kind: "refresh";
-        maxWaitMinutes: number;
-        remainingAccounts: number;
-        incompleteAccounts: string[];
-      };
-    }
-  | { step: "global_data"; metadata: null }
-  | { step: "group_data"; metadata: { kind: "group"; groupName: string } }
-  | { step: "cash_flow_history"; metadata: { kind: "month"; month: string } }
-  | { step: "database_save"; metadata: null }
-  | { step: "institution_categories"; metadata: null }
-  | { step: "analytics"; metadata: null }
-  | { step: "notification"; metadata: null }
-  | { step: "web_cache_refresh"; metadata: null };
-
-type CrawlerRunTimelineStatusDetails =
-  | { status: "pending"; startedAt: null; finishedAt: null; reason: null }
-  | { status: "running"; startedAt: string; finishedAt: null; reason: null }
-  | { status: "done"; startedAt: string; finishedAt: string; reason: null }
-  | {
-      status: "warning" | "failed";
-      startedAt: string;
-      finishedAt: string;
-      reason: CrawlerRunReason;
-    }
-  | { status: "skipped"; startedAt: null; finishedAt: string; reason: null };
-
-export type CrawlerRunTimelineItem = {
-  id: string;
-  label: string;
-} & CrawlerRunStepDetails &
-  CrawlerRunTimelineStatusDetails;
-
-export type CrawlerRunCurrent = {
-  timelineItemId: string;
-  label: string;
-} & CrawlerRunStepDetails;
-
-export interface CrawlerRunProgress {
-  completed: number;
-  total: number;
-}
-
-interface CrawlerRunStateBase {
-  version: 1;
-  runId: string;
-  source: string;
-  startedAt: string;
-  timeline: CrawlerRunTimelineItem[];
-}
-
-export type CrawlerRunStateSnapshot =
-  | (CrawlerRunStateBase & {
-      runStatus: "running";
-      finishedAt: null;
-      current: CrawlerRunCurrent | null;
-      waitingFor: string | null;
-      progress: CrawlerRunProgress | null;
-      reason: null;
-    })
-  | (CrawlerRunStateBase & {
-      runStatus: "success";
-      finishedAt: string;
-      current: null;
-      waitingFor: null;
-      progress: CrawlerRunProgress;
-      reason: null;
-    })
-  | (CrawlerRunStateBase & {
-      runStatus: "failed";
-      finishedAt: string;
-      current: CrawlerRunCurrent | null;
-      waitingFor: null;
-      progress: CrawlerRunProgress | null;
-      reason: CrawlerRunReason;
-    });
+export type {
+  CrawlerRunStateSnapshot,
+  CrawlerRunStepDetails,
+  CrawlerRunStepStatus,
+  CrawlerRunTimelineItem,
+} from "../../../crawler/src/crawler-run-state";
 
 export interface CrawlerRefreshStatus {
   available: boolean;
