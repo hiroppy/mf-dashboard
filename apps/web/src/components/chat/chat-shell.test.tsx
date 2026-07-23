@@ -273,6 +273,33 @@ describe("ChatShell", () => {
     expect(setDraft).not.toHaveBeenCalled();
   });
 
+  it("keeps an overlong draft out of chat history", () => {
+    const addUserMessage = vi.fn<(text: string) => void>();
+    const setDraft = vi.fn<(draft: string) => void>();
+    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+      addUserMessage,
+      close: vi.fn<() => void>(),
+      draft: "x".repeat(8_001),
+      isOpen: true,
+      isSubmitting: false,
+      messages: [],
+      open: vi.fn<() => void>(),
+      setDraft,
+    });
+
+    render(<ChatShell />);
+
+    const input = screen.getByLabelText("家計AIへのメッセージ") as HTMLTextAreaElement;
+    expect(input.maxLength).toBe(8_000);
+    expect(
+      (screen.getByRole("button", { name: "メッセージを送信" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.submit(input.closest("form")!);
+
+    expect(addUserMessage).not.toHaveBeenCalled();
+    expect(setDraft).not.toHaveBeenCalled();
+  });
+
   it.each([
     { isComposing: true, keyCode: 13 },
     { isComposing: false, keyCode: 229 },

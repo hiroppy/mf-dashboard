@@ -15,6 +15,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { DEFAULT_CHAT_SUGGESTED_PROMPTS } from "../../lib/chat-config";
+import { CHAT_MESSAGE_MAX_LENGTH } from "../../lib/chat-limits";
 import { cn } from "../../lib/utils";
 import { FinanceChatChart } from "../charts/finance-chat-chart";
 import { Button } from "../ui/button";
@@ -194,7 +195,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     event.preventDefault();
     const message = draft.trim();
 
-    if (!message || isSubmitting) return;
+    if (!message || message.length > CHAT_MESSAGE_MAX_LENGTH || isSubmitting) return;
 
     shouldFollowLatestRef.current = true;
     addUserMessage(message);
@@ -214,6 +215,8 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     isResizingRef.current = true;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
+
+  const draftLength = draft.trim().length;
 
   const handleResizeMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!isResizingRef.current) return;
@@ -425,6 +428,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                   ref={inputRef}
                   id="finance-chat-input"
                   value={draft}
+                  maxLength={CHAT_MESSAGE_MAX_LENGTH}
                   rows={1}
                   placeholder="メッセージを入力"
                   className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-2.5 py-2.5 text-sm leading-5 outline-none [field-sizing:content]"
@@ -436,7 +440,9 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                   size="icon"
                   className="size-10 shrink-0 rounded-lg shadow-none"
                   aria-label="メッセージを送信"
-                  disabled={isSubmitting || !draft.trim()}
+                  disabled={
+                    isSubmitting || draftLength === 0 || draftLength > CHAT_MESSAGE_MAX_LENGTH
+                  }
                 >
                   <Send aria-hidden="true" />
                 </Button>

@@ -8,8 +8,8 @@ import * as schema from "../schema/schema";
 export const READ_ONLY_QUERY_MAX_ROWS = 200;
 export const READ_ONLY_QUERY_MAX_BYTES = 64 * 1024;
 export const READ_ONLY_QUERY_TIMEOUT_MS = 1_000;
+export const READ_ONLY_QUERY_MAX_SQL_LENGTH = 5_000;
 
-const MAX_SQL_LENGTH = 5_000;
 const MAX_RESULT_COLUMNS = 32;
 const MAX_JOIN_COUNT = 8;
 const MAX_UNION_COUNT = 8;
@@ -122,6 +122,7 @@ export function describeDatabaseSchema(): string {
 - 振替元の${transactions}.${schema.transactions.accountId.name}だけが現在グループ内なら収入、${schema.transactions.transferTargetAccountId.name}だけが現在グループ内なら支出として扱う。両口座が同じユーザー定義グループ（group_id = '0'を除く）に属する内部振替は集計から除外する
 - 収支は上記で分類した収入合計から支出合計を引いた値であり、全取引の単純なSUMではない。同一の振替や対応する通常明細を重複集計しない
 - 通常の収支集計では${schema.transactions.isTransfer.name} = 0かつ${schema.transactions.isExcludedFromCalculation.name} = 0を使用する
+- chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（group_id = '0'を除く）に属する内部振替であり、収支集計から除外する
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
 - 現在グループの取引は${transactions}.${schema.transactions.accountId.name}を${groupAccounts}.${schema.groupAccounts.accountId.name}へJOINし、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdで絞る
@@ -194,8 +195,8 @@ export function normalizeReadOnlySql(sql: string): string {
   const normalized = sql.trim().replace(/;\s*$/, "");
   const masked = maskCommentsAndQuotedText(normalized);
 
-  if (normalized.length > MAX_SQL_LENGTH) {
-    throw new Error(`SQLは${MAX_SQL_LENGTH}文字以内で指定してください。`);
+  if (normalized.length > READ_ONLY_QUERY_MAX_SQL_LENGTH) {
+    throw new Error(`SQLは${READ_ONLY_QUERY_MAX_SQL_LENGTH}文字以内で指定してください。`);
   }
   if (!/^\s*(?:select|with)\b/i.test(masked)) {
     throw new Error("SELECTまたはWITHで始まるread-only SQLだけを実行できます。");
@@ -235,6 +236,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
 
   return `
     ATTACH DATABASE ${sourceDatabase} AS source;
+    BEGIN;
     CREATE TABLE groups AS
       SELECT * FROM source.groups WHERE id = ${selectedGroup};
     CREATE TABLE group_accounts AS
@@ -290,6 +292,19 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
           AS transfer_target,
         CASE WHEN transfer_target_account_id IN (${accountIds}) THEN transfer_target_account_id END
           AS transfer_target_account_id,
+        CASE
+          WHEN type = 'transfer' AND EXISTS (
+            SELECT 1
+            FROM source.group_accounts source_group
+            JOIN source.group_accounts target_group
+              ON target_group.group_id = source_group.group_id
+            WHERE source_group.account_id = source.transactions.account_id
+              AND target_group.account_id = source.transactions.transfer_target_account_id
+              AND source_group.group_id <> '0'
+          )
+          THEN 1
+          ELSE 0
+        END AS is_internal_transfer,
         created_at,
         updated_at
       FROM source.transactions
@@ -309,6 +324,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE INDEX transactions_account_id_idx ON transactions(account_id);
     CREATE INDEX transactions_date_idx ON transactions(date);
     CREATE INDEX asset_history_group_id_idx ON asset_history(group_id);
+    COMMIT;
     DETACH DATABASE source;
     PRAGMA query_only = ON;
   `;

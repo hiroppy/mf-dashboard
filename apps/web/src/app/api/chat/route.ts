@@ -11,13 +11,13 @@ import {
   streamText,
   type UIMessage,
 } from "ai";
+import { CHAT_MESSAGE_MAX_LENGTH } from "../../../lib/chat-limits";
 
 export const maxDuration = 60;
 
 const MAX_TOOL_STEPS = 8;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_MESSAGES = 20;
-const MAX_MESSAGE_TEXT_LENGTH = 8_000;
 const MAX_CONVERSATION_TEXT_LENGTH = 32_000;
 const SIGNATURE_METADATA_KEY = "serverSignature";
 
@@ -26,7 +26,7 @@ const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタン�
 - 回答前に必要な家計データをツールで取得し、提案には根拠となる期間・項目・数値を明記してください。
 - 家計データの取得にはqueryDatabaseを使用し、ツール説明に含まれる現在のDBスキーマから質問に必要なread-only SQLを組み立ててください。
 - 現在のグループに属するデータを扱うSQLでは、ツールがbindする:groupIdを必ず使用してください。
-- 通常明細の収入・支出はtransactions.typeに従ってください。振替は選択中グループとの口座境界で分類し、振替元だけがグループ内なら収入、振替先だけがグループ内なら支出、両口座が同じユーザー定義グループに属する内部振替なら集計から除外してください。amountは全種別で正数なので、符号、説明、カテゴリ、入出金らしい文言から種別を推測してはいけません。収支は分類後の収入合計から支出合計を引いてください。
+- 通常明細の収入・支出はtransactions.typeに従ってください。振替は選択中グループとの口座境界で分類し、振替元だけがグループ内なら収入、振替先だけがグループ内なら支出、両口座が同じユーザー定義グループに属する内部振替なら集計から除外してください。queryDatabaseのtransactions.is_internal_transfer = 1はこの内部振替を示します。amountは全種別で正数なので、符号、説明、カテゴリ、入出金らしい文言から種別を推測してはいけません。収支は分類後の収入合計から支出合計を引いてください。
 - 順位、最大・最小、増減など順序を扱う場合は、対象となる指標と昇順・降順を質問の意図から決めてください。
 - 資産、負債、投資、収入、支出など金額を持つ対象について単に「教えて」「どのくらい」と聞かれた場合は、件数や登録状況ではなく対象時点の合計金額を回答し、複数項目があれば金額の内訳も示してください。「何件」「いくつ」「登録状況」など件数を明示された場合だけ件数を回答してください。
 - 高レベルの要約、比較、傾向分析、改善提案では集計結果を優先してください。
@@ -102,7 +102,7 @@ function hasValidConversationBounds(messages: UIMessage[]): boolean {
   for (const message of messages) {
     if (message.role === "user" && message.parts.some((part) => part.type !== "text")) return false;
     const textLength = getMessageText(message).length;
-    if (textLength > MAX_MESSAGE_TEXT_LENGTH) return false;
+    if (textLength > CHAT_MESSAGE_MAX_LENGTH) return false;
     conversationTextLength += textLength;
   }
 

@@ -205,7 +205,7 @@ describe("executeReadOnlyQuery", () => {
     await expect(
       executeReadOnlyQuery(
         db,
-        `SELECT mf_id, account_id, transfer_target, transfer_target_account_id
+        `SELECT mf_id, account_id, transfer_target, transfer_target_account_id, is_internal_transfer
          FROM transactions
          WHERE description = 'Boundary transfer'`,
         "group-a",
@@ -218,8 +218,65 @@ describe("executeReadOnlyQuery", () => {
           account_id: null,
           transfer_target: "Card A",
           transfer_target_account_id: selectedAccount.id,
+          is_internal_transfer: 0,
         },
       ],
+    });
+  });
+
+  it("group境界transferでも両口座に共通groupがあれば内部振替として公開する", async () => {
+    const now = new Date().toISOString();
+    const accounts = await db.query.accounts.findMany();
+    const selectedAccount = accounts.find(({ mfId }) => mfId === "account-a");
+    const externalAccount = accounts.find(({ mfId }) => mfId === "account-b");
+    if (!selectedAccount || !externalAccount) throw new Error("Test accounts were not created.");
+
+    await db.insert(schema.groups).values({
+      id: "group-c",
+      name: "Group C",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.groupAccounts).values([
+      {
+        groupId: "group-c",
+        accountId: selectedAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        groupId: "group-c",
+        accountId: externalAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.insert(schema.transactions).values({
+      mfId: "internal-boundary-transfer",
+      date: "2026-07-12",
+      accountId: externalAccount.id,
+      description: "Internal boundary transfer",
+      amount: 10_000,
+      type: "transfer",
+      isTransfer: true,
+      transferTarget: "Card A",
+      transferTargetAccountId: selectedAccount.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `SELECT is_internal_transfer
+         FROM transactions
+         WHERE description = 'Internal boundary transfer'`,
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ is_internal_transfer: 1 }],
     });
   });
 

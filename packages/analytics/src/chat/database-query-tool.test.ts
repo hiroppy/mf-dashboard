@@ -2,8 +2,10 @@ import type { Db } from "@mf-dashboard/db";
 import {
   describeDatabaseSchema,
   executeReadOnlyQuery,
+  READ_ONLY_QUERY_MAX_SQL_LENGTH,
 } from "@mf-dashboard/db/queries/read-only-query";
 import { describe, expect, it, vi } from "vitest";
+import type { ZodType } from "zod";
 import { createDatabaseQueryTool } from "./database-query-tool";
 
 vi.mock("@mf-dashboard/db/queries/read-only-query", async (importOriginal) => ({
@@ -35,7 +37,20 @@ describe("createDatabaseQueryTool", () => {
     expect(description).toContain("投資情報には主に「株式(現物)」「投資信託」");
     expect(description).toContain("refresh_completed = 1");
     expect(description).toContain("daily_snapshots.group_id = :groupIdを使用してはいけない");
+    expect(description).toContain("transactions.is_internal_transfer = 1");
     expect(description).not.toContain("transactionsRelations");
+  });
+
+  it("executorと同じSQL文字数上限を入力時に検証する", () => {
+    const queryTool = createDatabaseQueryTool(db, "group-a");
+    const inputSchema = queryTool.inputSchema as ZodType<{ sql: string }>;
+
+    expect(queryTool.description).toContain(`SQLは最大${READ_ONLY_QUERY_MAX_SQL_LENGTH}文字`);
+    expect(
+      inputSchema.safeParse({
+        sql: `SELECT '${"x".repeat(READ_ONLY_QUERY_MAX_SQL_LENGTH)}'`,
+      }).success,
+    ).toBe(false);
   });
 
   it("groupIdをAI入力に公開せずSQL実行時に渡す", async () => {

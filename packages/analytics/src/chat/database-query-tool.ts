@@ -4,6 +4,7 @@ import {
   executeReadOnlyQuery,
   READ_ONLY_QUERY_MAX_BYTES,
   READ_ONLY_QUERY_MAX_ROWS,
+  READ_ONLY_QUERY_MAX_SQL_LENGTH,
   READ_ONLY_QUERY_TIMEOUT_MS,
 } from "@mf-dashboard/db/queries/read-only-query";
 import { tool } from "ai";
@@ -18,7 +19,7 @@ ${describeDatabaseSchema()}
 
 - 具体的な明細、内訳、最大・最小、比較、推移など、質問に必要なSQLを自由に組み立ててよい
 
-SELECTまたはWITHで始まる単一SQLだけを実行できる。結果は最大${READ_ONLY_QUERY_MAX_ROWS}行・${READ_ONLY_QUERY_MAX_BYTES / 1024} KiB、実行時間は最大${READ_ONLY_QUERY_TIMEOUT_MS / 1_000}秒。`;
+SELECTまたはWITHで始まる単一SQLだけを実行できる。SQLは最大${READ_ONLY_QUERY_MAX_SQL_LENGTH}文字、結果は最大${READ_ONLY_QUERY_MAX_ROWS}行・${READ_ONLY_QUERY_MAX_BYTES / 1024} KiB、実行時間は最大${READ_ONLY_QUERY_TIMEOUT_MS / 1_000}秒。`;
 }
 
 export function createDatabaseQueryTool(
@@ -33,7 +34,7 @@ export function createDatabaseQueryTool(
         .string()
         .trim()
         .min(1)
-        .max(20_000)
+        .max(READ_ONLY_QUERY_MAX_SQL_LENGTH)
         .describe("実行するSQLiteのSELECTまたはWITH文。現在グループには:groupIdを使用する"),
     }),
     execute: async ({ sql }) => {
