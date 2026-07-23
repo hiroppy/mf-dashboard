@@ -89,6 +89,24 @@ describe("ActionIcons", () => {
     expect(screen.queryByLabelText("ワークフローを実行")).toBeNull();
   });
 
+  it("does not show the updating state while loading the initial status", async () => {
+    let resolveStatus: ((response: Response) => void) | undefined;
+    vi.mocked(global.fetch).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolveStatus = resolve;
+      }),
+    );
+
+    render(<ActionIcons variant="header" />);
+
+    const refreshButton = screen.getByRole("button", { name: "更新サービス未接続" });
+    expect(refreshButton.querySelector("svg")?.getAttribute("class")).not.toContain("animate-spin");
+
+    await act(async () => {
+      resolveStatus?.(jsonResponse({ available: true, running: false }));
+    });
+  });
+
   it("starts a crawler refresh from the header refresh button", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
