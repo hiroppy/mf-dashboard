@@ -250,6 +250,52 @@ describe("runSavePhase", () => {
 });
 
 describe("runCashFlowHistoryPhase", () => {
+  test("後続月の取得失敗時に未保存の月 step をすべて failed にする", async () => {
+    const page = {};
+    const db = {};
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-history-later-failure-"));
+    try {
+      const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
+      vi.mocked(hasTransactionsForMonth).mockResolvedValue(false);
+      vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
+        await callbacks?.onMonthStart?.("2026-06");
+        await callbacks?.onMonthComplete?.("2026-06");
+        await callbacks?.onMonthStart?.("2026-05");
+        const failure = new Error("history page unavailable");
+        await callbacks?.onMonthFailure?.("2026-05", failure);
+        throw failure;
+      });
+
+      await expect(
+        runCashFlowHistoryPhase(
+          db as Parameters<typeof runCashFlowHistoryPhase>[0],
+          page as Parameters<typeof runCashFlowHistoryPhase>[1],
+          { isHistoryMode: true },
+          undefined,
+          progress,
+        ),
+      ).rejects.toThrow("history page unavailable");
+
+      expect(progress.getState().timeline).toEqual([
+        expect.objectContaining({
+          status: "failed",
+          metadata: { kind: "month", month: "2026-06" },
+        }),
+        expect.objectContaining({
+          status: "failed",
+          metadata: { kind: "month", month: "2026-05" },
+        }),
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("履歴月の保存失敗を対象月の failed step にする", async () => {
     const page = {};
     const db = {};
