@@ -109,6 +109,35 @@ describe("/api/crawler/refresh/", () => {
     await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
   });
 
+  it("drops a latest run snapshot with an invalid timestamp", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        running: false,
+        version: 1,
+        runId: "corrupt-run",
+        runStatus: "failed",
+        source: "manual",
+        startedAt: "not-a-date",
+        finishedAt: "also-not-a-date",
+        current: null,
+        waitingFor: null,
+        progress: null,
+        timeline: [],
+        reason: { code: "unknown_error", message: "処理に失敗しました" },
+      }),
+    );
+
+    const res = await GET();
+
+    await expect(res.json()).resolves.toEqual({
+      available: true,
+      running: false,
+      source: "manual",
+      startedAt: null,
+      latestRun: null,
+    });
+  });
+
   it("proxies a typed latest run state", async () => {
     const latestRun = {
       version: 1,

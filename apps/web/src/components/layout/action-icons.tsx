@@ -128,7 +128,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     }
   }
 
-  const isFailed = state.latestRun?.runStatus === "failed";
+  const isFailed = !state.running && state.latestRun?.runStatus === "failed";
   const showsTimeline = state.running || isFailed;
   const isDisabled = state.isPending || !state.available;
   let title = state.available ? "金融機関データを更新" : "更新サービス未接続";
@@ -186,7 +186,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
 }
 
 function formatProgressLabel(state: CrawlerRefreshStatus): string {
-  const progress = state.latestRun?.progress;
+  const progress = state.latestRun?.runStatus === "running" ? state.latestRun.progress : null;
   if (!progress) {
     return "同期中";
   }
@@ -213,7 +213,7 @@ function SyncTimelineDialog({
   state: CrawlerRefreshStatus;
   onRetry: () => void;
 }) {
-  const run = state.latestRun;
+  const run = state.running && state.latestRun?.runStatus !== "running" ? null : state.latestRun;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

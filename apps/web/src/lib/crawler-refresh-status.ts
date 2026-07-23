@@ -38,6 +38,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
@@ -142,8 +146,8 @@ function readTimelineItem(value: unknown): CrawlerRunTimelineItem | null {
     return null;
   }
 
-  const startedAt = typeof value.startedAt === "string" ? value.startedAt : null;
-  const finishedAt = typeof value.finishedAt === "string" ? value.finishedAt : null;
+  const startedAt = isTimestamp(value.startedAt) ? value.startedAt : null;
+  const finishedAt = isTimestamp(value.finishedAt) ? value.finishedAt : null;
   const reason = readReason(value.reason);
   switch (value.status) {
     case "pending":
@@ -205,7 +209,7 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
     value.version !== 1 ||
     typeof value.runId !== "string" ||
     typeof value.source !== "string" ||
-    typeof value.startedAt !== "string" ||
+    !isTimestamp(value.startedAt) ||
     !Array.isArray(value.timeline)
   ) {
     return null;
@@ -247,7 +251,7 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
       };
     case "success":
       if (
-        typeof value.finishedAt !== "string" ||
+        !isTimestamp(value.finishedAt) ||
         value.current !== null ||
         value.waitingFor !== null ||
         !progress ||
@@ -267,7 +271,7 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
     case "failed": {
       const reason = readReason(value.reason);
       if (
-        typeof value.finishedAt !== "string" ||
+        !isTimestamp(value.finishedAt) ||
         (value.current !== null && !current) ||
         value.waitingFor !== null ||
         (value.progress !== null && !progress) ||
@@ -306,8 +310,7 @@ export function parseCrawlerRefreshStatus(value: unknown, responseOk = true): Cr
     available: responseOk && value.available !== false,
     running,
     source: typeof value.source === "string" ? value.source : (latestRun?.source ?? null),
-    startedAt:
-      typeof value.startedAt === "string" ? value.startedAt : (latestRun?.startedAt ?? null),
+    startedAt: isTimestamp(value.startedAt) ? value.startedAt : (latestRun?.startedAt ?? null),
     latestRun,
   };
 }

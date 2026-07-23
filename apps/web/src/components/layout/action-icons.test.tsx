@@ -288,6 +288,28 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("ignores a stale failed snapshot while a new run is active", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        available: true,
+        running: true,
+        latestRun: failedLatestRun,
+      }),
+    );
+
+    render(<ActionIcons variant="header" />);
+
+    const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
+    expect(screen.getByText("同期中")).toBeTruthy();
+    expect(screen.queryByText("同期失敗")).toBeNull();
+
+    fireEvent.click(refreshButton);
+
+    expect(await screen.findByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "再度更新" })).toBeNull();
+    expect(screen.getByText("タイムラインはまだありません。")).toBeTruthy();
+  });
+
   it("opens a failed timeline and retries from the dialog", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(
