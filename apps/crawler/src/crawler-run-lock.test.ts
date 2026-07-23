@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -7,7 +7,9 @@ import {
   acquireCrawlerRunLock,
   CrawlerAlreadyRunningError,
   getCrawlerRunState,
+  runWithCrawlerRunLock,
 } from "./crawler-run-lock.js";
+import { readCrawlerRunState, writeCrawlerRunState } from "./crawler-run-state.js";
 
 let tempDir: string;
 let lockPath: string;
@@ -22,6 +24,230 @@ afterEach(async () => {
 });
 
 describe("crawler run lock", () => {
+  test("keeps the live lock authoritative when progress is terminal", async () => {
+    const statePath = `${lockPath}.state`;
+    const lock = await acquireCrawlerRunLock("manual", { lockPath, statePath });
+    const finishedState = {
+      version: 1 as const,
+      runId: lock.record.id,
+      source: "manual",
+      startedAt: lock.record.startedAt,
+      finishedAt: "2026-07-01T00:01:00.000Z",
+      runStatus: "success" as const,
+      current: null,
+      progress: { completed: 0, total: 0 },
+      reason: null,
+      timeline: [],
+    };
+    await writeCrawlerRunState(finishedState, { statePath });
+
+    await expect(getCrawlerRunState({ lockPath, statePath })).resolves.toEqual({
+      ...finishedState,
+      running: true,
+      pid: process.pid,
+    });
+    await expect(
+      acquireCrawlerRunLock("scheduled", { lockPath, statePath }),
+    ).rejects.toBeInstanceOf(CrawlerAlreadyRunningError);
+
+    await lock.release();
+  });
+
+  test("releases the lock when progress reporter initialization fails", async () => {
+    await expect(
+      runWithCrawlerRunLock("manual", async () => undefined, {
+        lockPath,
+        statePath: tempDir,
+      }),
+    ).rejects.toThrow(/EISDIR|directory/);
+
+    const lock = await acquireCrawlerRunLock("manual", { lockPath });
+    await lock.release();
+  });
+
+  test("preserves the crawler error when failed state persistence also fails", async () => {
+    const statePath = `${lockPath}.state`;
+    const crawlerError = new Error("crawler failed");
+
+    const run = runWithCrawlerRunLock(
+      "manual",
+      async () => {
+        await rm(statePath);
+        await mkdir(statePath);
+        throw crawlerError;
+      },
+      { lockPath, statePath },
+    );
+
+    await expect(run).rejects.toMatchObject({
+      cause: crawlerError,
+      errors: [crawlerError, expect.any(Error)],
+    });
+
+    const lock = await acquireCrawlerRunLock("manual", { lockPath });
+    await lock.release();
+  });
+
+  test("marks an orphaned running state as failed when no lock exists", async () => {
+    const statePath = `${lockPath}.state`;
+    await writeCrawlerRunState(
+      {
+        version: 1,
+        runId: "run-a",
+        source: "scheduled",
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: null,
+        runStatus: "running",
+        current: null,
+        progress: null,
+        reason: null,
+        timeline: [],
+      },
+      { statePath },
+    );
+
+    await expect(getCrawlerRunState({ lockPath })).resolves.toMatchObject({
+      running: false,
+      runStatus: "failed",
+      finishedAt: expect.any(String),
+      reason: {
+        code: "unknown_error",
+        message: "前回の実行は完了を確認できませんでした",
+      },
+    });
+    await expect(readCrawlerRunState({ statePath })).resolves.toMatchObject({
+      runStatus: "failed",
+      finishedAt: expect.any(String),
+    });
+  });
+
+  test("preserves a run that finishes while checking an absent lock", async () => {
+    const statePath = `${lockPath}.state`;
+    const runningState = {
+      version: 1 as const,
+      runId: "run-a",
+      source: "scheduled",
+      startedAt: "2026-07-01T00:00:00.000Z",
+      finishedAt: null,
+      runStatus: "running" as const,
+      current: null,
+      progress: null,
+      reason: null,
+      timeline: [],
+    };
+    await writeCrawlerRunState(runningState, { statePath });
+
+    const finishedState = {
+      ...runningState,
+      finishedAt: "2026-07-01T00:01:00.000Z",
+      runStatus: "success" as const,
+      progress: { completed: 0, total: 0 },
+    };
+    const state = await getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        await writeCrawlerRunState(finishedState, { statePath });
+      },
+      lockPath,
+      statePath,
+    });
+
+    expect(state).toEqual({ ...finishedState, running: false, pid: null });
+    await expect(readCrawlerRunState({ statePath })).resolves.toEqual(finishedState);
+  });
+
+  test("does not finalize a new run while reconciling an absent lock", async () => {
+    const statePath = `${lockPath}.state`;
+    await writeCrawlerRunState(
+      {
+        version: 1,
+        runId: "orphaned-run",
+        source: "scheduled",
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: null,
+        runStatus: "running",
+        current: null,
+        progress: null,
+        reason: null,
+        timeline: [],
+      },
+      { statePath },
+    );
+
+    let newRunPromise!: ReturnType<typeof runWithCrawlerRunLock>;
+    let newRunSettled = false;
+    const state = await getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        newRunPromise = runWithCrawlerRunLock("manual", async () => undefined, {
+          lockPath,
+          statePath,
+        });
+        void newRunPromise.finally(() => {
+          newRunSettled = true;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(newRunSettled).toBe(false);
+      },
+      lockPath,
+      statePath,
+    });
+
+    expect(state).toMatchObject({ runId: "orphaned-run", runStatus: "failed" });
+    await newRunPromise;
+    await expect(readCrawlerRunState({ statePath })).resolves.toMatchObject({
+      runStatus: "success",
+    });
+  });
+
+  test("finalizes an absent-lock state before allowing a new run to acquire the lock", async () => {
+    const statePath = `${lockPath}.state`;
+    await writeCrawlerRunState(
+      {
+        version: 1,
+        runId: "old-run",
+        source: "scheduled",
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: null,
+        runStatus: "running",
+        current: null,
+        progress: { completed: 0, total: 13 },
+        reason: null,
+        timeline: [],
+      },
+      { statePath },
+    );
+
+    let acquisition: ReturnType<typeof acquireCrawlerRunLock> | undefined;
+    let markBlocked!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      markBlocked = resolve;
+    });
+    const status = getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        acquisition = acquireCrawlerRunLock("manual", {
+          afterLockMutationGuardBlocked: async () => markBlocked(),
+          lockPath,
+          statePath,
+        });
+        await blocked;
+      },
+      lockPath,
+      statePath,
+    });
+
+    await blocked;
+    if (!acquisition) throw new Error("Expected the competing lock acquisition to start");
+    await expect(
+      Promise.race([
+        status.then(() => "status" as const),
+        acquisition.then(() => "acquired" as const),
+      ]),
+    ).resolves.toBe("status");
+    await expect(status).resolves.toMatchObject({ running: false, runStatus: "failed" });
+
+    const newLock = await acquisition;
+    await newLock.release();
+  });
+
   test("returns idle state when no lock exists", async () => {
     await expect(getCrawlerRunState({ lockPath })).resolves.toEqual({
       running: false,
@@ -210,6 +436,36 @@ describe("crawler run lock", () => {
 
     const lock = await acquireCrawlerRunLock("scheduled", { lockPath });
     expect(lock.record.source).toBe("scheduled");
+    await lock.release();
+  });
+
+  test("expires an old lock when its live process start time still matches", async () => {
+    const startedAt = new Date(Date.now() - 120_000).toISOString();
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "live-lock",
+        pid: process.pid,
+        pidStartedAt: "current-process-start",
+        source: "scheduled",
+        startedAt,
+      }),
+    );
+    const options = {
+      getPidStartedAt: () => "current-process-start",
+      lockPath,
+      pidExists: () => true,
+      staleMs: 1_000,
+    };
+
+    await expect(getCrawlerRunState(options)).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+    const lock = await acquireCrawlerRunLock("manual", options);
+    expect(lock.record.source).toBe("manual");
     await lock.release();
   });
 
@@ -534,7 +790,7 @@ describe("crawler run lock", () => {
     await acquisitionBlocked;
     finishCleanup();
 
-    await expect(statePromise).resolves.toEqual({
+    await expect(statePromise).resolves.toMatchObject({
       running: false,
       pid: null,
       source: null,

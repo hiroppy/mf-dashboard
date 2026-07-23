@@ -6,6 +6,7 @@
     "setup": "corepack enable pnpm",
     "postinstall": "pnpm --filter @mf-dashboard/crawler exec playwright install chromium",
     "dev": "turbo dev --filter=@mf-dashboard/web",
+    "dev:prod": "pnpm --parallel --filter @mf-dashboard/web --filter @mf-dashboard/crawler run dev:prod",
     "build": "turbo build",
     "build:demo": "turbo build:demo",
     "generate:demo-insights": "pnpm --filter @mf-dashboard/analytics generate:demo-insights",

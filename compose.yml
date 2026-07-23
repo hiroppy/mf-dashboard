@@ -52,6 +52,7 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-}
       AUTH_STATE_PATH: /app/crawler-state/auth-state.json
       CLEANUP_GROUPS: ${CLEANUP_GROUPS:-}
+      CRAWLER_HOST: 0.0.0.0
       DASHBOARD_URL: ${DASHBOARD_URL:-}
       DEBUG: ${DEBUG:-}
       DISCORD_AVATAR_URL: ${DISCORD_AVATAR_URL:-}
