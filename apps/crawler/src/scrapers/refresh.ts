@@ -32,7 +32,7 @@ export async function navigateToAccountsPage(page: Page): Promise<void> {
   }
 }
 
-async function getRefreshStatus(
+export async function getRefreshStatus(
   page: Page,
 ): Promise<{ incompleteAccounts: string[]; remainingCount: number }> {
   const rows = page.locator("#account-table tr:has(td.account-status)");
@@ -45,10 +45,7 @@ async function getRefreshStatus(
     const statusCells = row.locator("td.account-status");
     // Multiple td.account-status cells may exist in the same row (e.g., info_msg and normal)
     const allTexts = await statusCells.allTextContents();
-    const statusText = allTexts.join(" ");
-
-    // Only count as updating if it exactly matches "更新中"
-    if (statusText?.trim() === "更新中") {
+    if (allTexts.some((text) => text.trim() === "更新中")) {
       remainingCount++;
       const nameCell = row.locator("td.service a").first();
       const name = await nameCell.textContent();

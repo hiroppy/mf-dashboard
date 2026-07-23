@@ -81,7 +81,7 @@ async function scrapeGlobalData(
   });
   if (skipRefresh) {
     log("Skipping refresh (SKIP_REFRESH=true)");
-    await progress.completeStep(refreshStep, { skipped: "true" });
+    await progress.skipStep(refreshStep);
   } else {
     try {
       refreshResult = await clickRefreshButton(page, {
@@ -219,17 +219,16 @@ async function runPhase2(
     const groupId = groupEntry.id;
     const groupName = groupEntry.name;
 
+    const groupStep = await progress.startStep(CRAWLER_STEPS.groupData, { groupName });
     log(`--- ${groupName} ---`);
-    await switchGroup(page, groupId);
-
     const group: Group = {
       id: groupId,
       name: groupName,
       isCurrent: groupId === defaultGroup?.id,
     };
 
-    const groupStep = await progress.startStep(CRAWLER_STEPS.groupData, { groupName });
     try {
+      await switchGroup(page, groupId);
       const groupData = await scrapeGroupData(page, group);
       groupDataList.push(groupData);
       await progress.completeStep(groupStep);

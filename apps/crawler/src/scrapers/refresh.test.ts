@@ -1,6 +1,6 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { navigateToAccountsPage } from "./refresh.js";
+import { getRefreshStatus, navigateToAccountsPage } from "./refresh.js";
 
 describe("refresh - 更新中セレクタ", () => {
   let browser: Browser;
@@ -69,6 +69,21 @@ describe("refresh - 更新中セレクタ", () => {
     }
 
     expect(updatingCount).toBe(2);
+  });
+
+  test("同じ行に非表示の正常セルがあっても更新中として数える", async () => {
+    await page.setContent(`
+      <table id="account-table"><tbody><tr>
+        <td class="service"><a>Institution A</a></td>
+        <td class="account-status">更新中</td>
+        <td class="account-status" hidden>正常</td>
+      </tr></tbody></table>
+    `);
+
+    await expect(getRefreshStatus(page)).resolves.toEqual({
+      incompleteAccounts: ["Institution A"],
+      remainingCount: 1,
+    });
   });
 
   test("更新中のアカウントがない場合は0を返す", async () => {

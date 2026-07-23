@@ -250,6 +250,47 @@ describe("runSavePhase", () => {
 });
 
 describe("runCashFlowHistoryPhase", () => {
+  test("履歴月の保存失敗を対象月の failed step にする", async () => {
+    const page = {};
+    const db = {};
+    const monthData = cashFlow("2026-06", "Service A");
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-history-failure-"));
+    try {
+      const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
+      vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+      vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
+        await callbacks?.onMonthStart?.("2026-06");
+        return [{ month: "2026-06", data: monthData }];
+      });
+      vi.mocked(saveTransactionsForMonth).mockRejectedValue(new Error("database unavailable"));
+
+      await expect(
+        runCashFlowHistoryPhase(
+          db as Parameters<typeof runCashFlowHistoryPhase>[0],
+          page as Parameters<typeof runCashFlowHistoryPhase>[1],
+          { isHistoryMode: true },
+          undefined,
+          progress,
+        ),
+      ).rejects.toThrow("database unavailable");
+
+      expect(progress.getState().timeline).toEqual([
+        expect.objectContaining({
+          step: "cash_flow_history",
+          status: "failed",
+          metadata: { kind: "month", month: "2026-06" },
+        }),
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("history mode の各対象月を YYYY-MM metadata として記録する", async () => {
     const page = {};
     const db = {};

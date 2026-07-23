@@ -43,6 +43,7 @@ export interface CrawlerProgressReporter {
     metadata?: CrawlerStepMetadata,
   ) => Promise<void>;
   completeStep: (stepId: string, metadata?: CrawlerStepMetadata) => Promise<void>;
+  skipStep: (stepId: string) => Promise<void>;
   warnStep: (
     stepId: string,
     reason: CrawlerReason,
@@ -172,7 +173,7 @@ export async function createCrawlerProgressReporter(
         draft.current = toCurrent(item);
         draft.waitingFor = null;
         draft.timeline.push(item);
-        draft.progress = progressFor(draft.timeline);
+        draft.progress = null;
       });
       return id;
     },
@@ -182,7 +183,7 @@ export async function createCrawlerProgressReporter(
         updateStepMetadata(step, metadata);
         draft.current = toCurrent(step);
         draft.waitingFor = waitingFor;
-        draft.progress = progressFor(draft.timeline);
+        draft.progress = null;
       });
     },
     completeStep: async (stepId, metadata) => {
@@ -196,7 +197,21 @@ export async function createCrawlerProgressReporter(
         });
         draft.current = null;
         draft.waitingFor = null;
-        draft.progress = progressFor(draft.timeline);
+        draft.progress = null;
+      });
+    },
+    skipStep: async (stepId) => {
+      await update((draft) => {
+        const step = findStep(draft, stepId);
+        Object.assign(step, {
+          status: "skipped",
+          startedAt: null,
+          finishedAt: new Date().toISOString(),
+          reason: null,
+        });
+        draft.current = null;
+        draft.waitingFor = null;
+        draft.progress = null;
       });
     },
     warnStep: async (stepId, reason, metadata) => {
@@ -206,7 +221,7 @@ export async function createCrawlerProgressReporter(
         Object.assign(step, { status: "warning", finishedAt: new Date().toISOString(), reason });
         draft.current = null;
         draft.waitingFor = null;
-        draft.progress = progressFor(draft.timeline);
+        draft.progress = null;
       });
     },
     failStep: async (stepId, reason) => {
@@ -215,7 +230,7 @@ export async function createCrawlerProgressReporter(
         Object.assign(step, { status: "failed", finishedAt: new Date().toISOString(), reason });
         draft.current = toCurrent(step);
         draft.waitingFor = null;
-        draft.progress = progressFor(draft.timeline);
+        draft.progress = null;
       });
     },
     finish: async (status, reason) => {
@@ -244,6 +259,9 @@ export async function createCrawlerProgressReporter(
 export function normalizeCrawlerError(error: unknown, fallbackCode: string): CrawlerReason {
   const name = error instanceof Error ? error.name : "";
   const message = error instanceof Error ? error.message : String(error);
+  if (fallbackCode === "auth_failed") {
+    return { code: "auth_failed", message: "MoneyForward の認証に失敗しました" };
+  }
   if (name === "TimeoutError" || /timeout|timed out/i.test(message)) {
     const timeoutMs = Number(message.match(/(\d+)\s*ms/i)?.[1] ?? 0);
     return {
@@ -259,9 +277,6 @@ export function normalizeCrawlerError(error: unknown, fallbackCode: string): Cra
       message: "必要な画面要素を確認できませんでした",
       selector: "MoneyForward画面の操作対象",
     };
-  }
-  if (fallbackCode === "auth_failed") {
-    return { code: "auth_failed", message: "MoneyForward の認証に失敗しました" };
   }
   return { code: "unknown_error", message: "処理中にエラーが発生しました" };
 }

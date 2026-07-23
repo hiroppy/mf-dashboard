@@ -303,10 +303,6 @@ export async function runCashFlowHistoryPhase(
         monthSteps.set(month, await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month }));
       }
     },
-    onMonthComplete: async (month) => {
-      const stepId = monthSteps.get(month);
-      if (progress && stepId) await progress.completeStep(stepId);
-    },
     onMonthFailure: async (month, failure) => {
       const stepId = monthSteps.get(month);
       if (progress && stepId) {
@@ -316,22 +312,34 @@ export async function runCashFlowHistoryPhase(
   });
 
   for (const { month, data: monthData } of historyResults) {
-    const categorizedMonthData = categoryDecision.config
-      ? await categorizeCashFlowMonth({
-          page,
-          db,
-          cashFlow: monthData,
-          config: categoryDecision.config,
-          usage: categoryDecision.usage,
-        })
-      : monthData;
-    const savedCount = await saveTransactionsForMonth(
-      db,
-      month,
-      categorizedMonthData.items,
-      accountIdMap,
-    );
-    log(`  ${month}: saved ${savedCount} transactions`);
+    let stepId = monthSteps.get(month);
+    if (progress && !stepId) {
+      stepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month });
+    }
+    try {
+      const categorizedMonthData = categoryDecision.config
+        ? await categorizeCashFlowMonth({
+            page,
+            db,
+            cashFlow: monthData,
+            config: categoryDecision.config,
+            usage: categoryDecision.usage,
+          })
+        : monthData;
+      const savedCount = await saveTransactionsForMonth(
+        db,
+        month,
+        categorizedMonthData.items,
+        accountIdMap,
+      );
+      log(`  ${month}: saved ${savedCount} transactions`);
+      if (progress && stepId) await progress.completeStep(stepId);
+    } catch (failure) {
+      if (progress && stepId) {
+        await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
+      }
+      throw failure;
+    }
   }
 }
 

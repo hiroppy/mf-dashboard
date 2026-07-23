@@ -8,7 +8,7 @@ import { getAssetHistory } from "./scrapers/asset-history.js";
 import { getAssetItems } from "./scrapers/asset-items.js";
 import { getAssetSummary } from "./scrapers/asset-summary.js";
 import { getCashFlow } from "./scrapers/cash-flow.js";
-import { getAllGroups, getCurrentGroup } from "./scrapers/group.js";
+import { getAllGroups, getCurrentGroup, switchGroup } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
 import { getPortfolio } from "./scrapers/portfolio.js";
 import { clickRefreshButton } from "./scrapers/refresh.js";
@@ -42,6 +42,7 @@ vi.mock("./scrapers/spending-targets.js", () => ({
 let tempDir: string;
 
 beforeEach(async () => {
+  vi.clearAllMocks();
   tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-scraper-progress-"));
   vi.mocked(getCurrentGroup).mockResolvedValue(null);
   vi.mocked(getAllGroups).mockResolvedValue([{ id: "group-a", name: "Group A", isCurrent: false }]);
@@ -76,6 +77,48 @@ afterEach(async () => {
 });
 
 describe("scraper progress", () => {
+  test("SKIP_REFRESH の refresh step を skipped にする", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress, {
+      skipRefresh: true,
+    });
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({ step: "moneyforward_refresh", status: "skipped" }),
+    );
+    expect(clickRefreshButton).not.toHaveBeenCalled();
+  });
+
+  test("group 切り替え失敗を対象 group name の failed step にする", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(switchGroup)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error("selector not found"));
+
+    await expect(
+      scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress),
+    ).rejects.toThrow("selector not found");
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({
+        step: "group_data",
+        status: "failed",
+        metadata: { kind: "group", groupName: "Group A" },
+        reason: expect.objectContaining({ code: "selector_not_found" }),
+      }),
+    );
+  });
+
   test("refresh timeout を warning にし、未完了機関と group name を保持する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",

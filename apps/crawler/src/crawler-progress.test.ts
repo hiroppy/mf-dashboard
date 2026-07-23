@@ -5,11 +5,22 @@ import { describe, expect, test } from "vitest";
 import {
   CRAWLER_STEPS,
   createCrawlerProgressReporter,
+  normalizeCrawlerError,
   runCrawlerStep,
 } from "./crawler-progress.js";
 import { getCrawlerRunState, runWithCrawlerRunLock } from "./crawler-run-lock.js";
 
 describe("crawler progress", () => {
+  test("認証中の Playwright timeout を auth_failed に分類する", () => {
+    const timeout = new Error("locator.waitFor: Timeout 30000ms exceeded");
+    timeout.name = "TimeoutError";
+
+    expect(normalizeCrawlerError(timeout, "auth_failed")).toEqual({
+      code: "auth_failed",
+      message: "MoneyForward の認証に失敗しました",
+    });
+  });
+
   test("通常終了後も success と finishedAt を latest state に残す", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-success-"));
     const lockPath = path.join(tempDir, "crawler-run.lock");
@@ -18,6 +29,7 @@ describe("crawler progress", () => {
         "test",
         async (progress) => {
           await runCrawlerStep(progress, CRAWLER_STEPS.analytics, async () => undefined);
+          expect(progress.getState().progress).toBeNull();
         },
         { lockPath },
       );
