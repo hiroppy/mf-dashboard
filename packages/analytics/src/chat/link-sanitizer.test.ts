@@ -45,6 +45,7 @@ describe("sanitizeFinanceChatLinks", () => {
     "~~~md\nuser@example.com",
     "    https://example.com",
     "\tuser@example.com",
+    "> ~~~\n> https://example.com\n> ~~~",
   ])("preserves a Markdown link literal inside Markdown code: %s", (text) => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
     expect(collectFinanceChatLinks(text)).toEqual([]);
@@ -54,6 +55,12 @@ describe("sanitizeFinanceChatLinks", () => {
     const text = "```md\n~~~\nhttps://example.com\n~~~\n```";
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
     expect(collectFinanceChatLinks(text)).toEqual([]);
+  });
+
+  it("does not treat indentation that continues a paragraph as code", () => {
+    const text = "paragraph\n    https://attacker.example";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("paragraph\n    ");
+    expect(collectFinanceChatLinks(text)).toContain("https://attacker.example");
   });
 
   it("does not treat an escaped backtick as a Markdown code delimiter", () => {
@@ -116,6 +123,17 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(sanitizeFinanceChatLinks("[詳細][route]\n\n[route]: /0/cf/2026-07", allowedHrefs)).toBe(
       "[詳細](/0/cf/2026-07)\n\n",
     );
+  });
+
+  it("does not resolve an escaped reference opening bracket", () => {
+    const text = "\\[詳細]\n[詳細]: /0/cf/2026-07";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("\\[詳細]\n");
+  });
+
+  it("unwraps an angle-bracketed inline link destination", () => {
+    const text = "[詳細](</0/cf/2026-07>)";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[詳細](/0/cf/2026-07)");
+    expect(collectFinanceChatLinks(text)).toContain("/0/cf/2026-07");
   });
 
   it.each(["[詳細][]\n\n[詳細]: /0/cf/2026-07", "[詳細]\n\n[詳細]: /0/cf/2026-07"])(
@@ -224,6 +242,11 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(sanitizeFinanceChatLinks("NISA:100万円です。Note:important", allowedHrefs)).toBe(
       "NISA:100万円です。Note:important",
     );
+  });
+
+  it("removes a reference definition continuation title", () => {
+    const text = '[詳細][route]\n[route]: /0/cf/2026-07\n  "dashboard"\n続き。';
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[詳細](/0/cf/2026-07)\n続き。");
   });
 });
 

@@ -9,6 +9,8 @@ import type { StreamTextTransform, ToolSet } from "ai";
 
 export { sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
 
+const fenceContainerPrefix = /^(?: {0,3}>[ \t]?)*(?: {0,3}(?:[-+*]|\d{1,9}[.)])[ \t]+)? {0,3}$/u;
+
 function hasCompleteRawHtmlAnchorOpening(text: string, start: number): boolean {
   let quote: '"' | "'" | undefined;
   for (let index = start + 2; index < text.length; index += 1) {
@@ -52,7 +54,7 @@ export function splitCompleteFinanceChatText(
       !escaped &&
       character === "`" &&
       codeDelimiterLength === 0 &&
-      /^ {0,3}$/u.test(linePrefix)
+      fenceContainerPrefix.test(linePrefix)
     ) {
       let runLength = 1;
       while (text[index + runLength] === "`") runLength += 1;
@@ -73,7 +75,7 @@ export function splitCompleteFinanceChatText(
       character === "~" &&
       codeDelimiterLength === 0 &&
       backtickFenceLength === 0 &&
-      /^ {0,3}$/u.test(linePrefix)
+      fenceContainerPrefix.test(linePrefix)
     ) {
       let runLength = 1;
       while (text[index + runLength] === "~") runLength += 1;
@@ -171,8 +173,22 @@ export function splitCompleteFinanceChatText(
       tildeFenceLength === 0 &&
       character &&
       boundaries.has(character)
-    )
+    ) {
+      const trailingLine = text.slice(lineStart, index);
+      const closesFence =
+        /^(?: {0,3}>[ \t]?)*(?: {0,3}(?:[-+*]|\d{1,9}[.)])[ \t]+)? {0,3}(?:`{3,}|~{3,})[ \t]*$/u.test(
+          trailingLine,
+        );
+      const completesReferenceDefinition =
+        findFinanceChatReferenceDefinitions(trailingLine).length > 0;
+      if (
+        character === "\n" &&
+        ((index === text.length - 1 && !closesFence && !completesReferenceDefinition) ||
+          /^(?: {4}|\t)/u.test(text.slice(index + 1)))
+      )
+        continue;
       lastBoundary = index;
+    }
   }
 
   if (lastBoundary < 0) return { complete: "", pending: text };

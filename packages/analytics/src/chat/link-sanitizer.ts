@@ -67,12 +67,16 @@ export function isEscaped(text: string, index: number): boolean {
 
 function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRange[] {
   const ranges: MarkdownCodeRange[] = [];
-  const openingPattern = new RegExp(`^ {0,3}(${marker}{3,})([^\\r\\n]*)(?:\\r?\\n|$)`, "gmu");
+  const containerPrefix = "(?:(?: {0,3}>[ \\t]?)*)(?: {0,3}(?:[-+*]|\\d{1,9}[.)])[ \\t]+)?";
+  const openingPattern = new RegExp(
+    `^${containerPrefix} {0,3}(${marker}{3,})([^\\r\\n]*)(?:\\r?\\n|$)`,
+    "gmu",
+  );
   let opening: RegExpExecArray | null;
   while ((opening = openingPattern.exec(text)) !== null) {
     if (marker === "`" && opening[2].includes("`")) continue;
     const closingPattern = new RegExp(
-      `^ {0,3}${marker}{${opening[1].length},}[ \\t]*(?:\\r?$)`,
+      `^${containerPrefix} {0,3}${marker}{${opening[1].length},}[ \\t]*(?:\\r?$)`,
       "gmu",
     );
     closingPattern.lastIndex = openingPattern.lastIndex;
@@ -89,10 +93,10 @@ function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRang
 }
 
 function findIndentedCodeRanges(text: string): MarkdownCodeRange[] {
-  return Array.from(text.matchAll(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gmu), (match) => ({
+  return Array.from(text.matchAll(/^(?:(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gmu), (match) => ({
     start: match.index,
     end: match.index + match[0].length,
-  }));
+  })).filter(({ start }) => start === 0 || /(?:^|\r?\n)[ \t]*\r?\n$/u.test(text.slice(0, start)));
 }
 
 function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
@@ -243,6 +247,12 @@ interface MarkdownInlineLink {
   start: number;
 }
 
+function unwrapMarkdownDestination(destination: string): string {
+  return destination.startsWith("<") && destination.endsWith(">")
+    ? destination.slice(1, -1)
+    : destination;
+}
+
 function findMarkdownInlineLinks(text: string): MarkdownInlineLink[] {
   const links: MarkdownInlineLink[] = [];
   for (let index = 0; index < text.length; index += 1) {
@@ -287,7 +297,7 @@ function findMarkdownInlineLinks(text: string): MarkdownInlineLink[] {
       }
     }
     links.push({
-      destination: content.slice(0, splitIndex),
+      destination: unwrapMarkdownDestination(content.slice(0, splitIndex)),
       end: destinationEnd,
       image,
       label: text.slice(labelStart + 1, labelEnd),
@@ -318,6 +328,8 @@ function collectMarkdownInlineLinkDestinations(text: string): string[] {
   ]);
 }
 
+const referenceDefinitionPattern = String.raw`^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?(?:\r?\n[ \t]{1,3}(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\))[ \t]*(?=\r?$))?`;
+
 export function findFinanceChatReferenceDefinitions(text: string): Array<{
   destination: string;
   id: string;
@@ -325,9 +337,9 @@ export function findFinanceChatReferenceDefinitions(text: string): Array<{
 }> {
   const { masked } = maskMarkdownCode(text);
   return Array.from(
-    masked.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
+    masked.matchAll(new RegExp(referenceDefinitionPattern, "gimu")),
     ([source, id, destination]) => ({
-      destination,
+      destination: unwrapMarkdownDestination(destination),
       id: normalizeFinanceChatReferenceId(id),
       source,
     }),
@@ -351,6 +363,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     (match, imageMarker: string, label: string, explicitId: string | undefined, offset: number) => {
       const escapedImageMarker = imageMarker && isEscaped(withoutInvalidMarkdownLinks, offset);
       if (imageMarker && !escapedImageMarker) return label;
+      if (isEscaped(withoutInvalidMarkdownLinks, offset + imageMarker.length)) return match;
       const id = normalizeFinanceChatReferenceId(explicitId || label);
       const destination = referenceDefinitions.get(id);
       if (destination === undefined)
@@ -363,7 +376,7 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     },
   );
   const withoutReferenceDefinitions = withoutReferenceLinks.replace(
-    /^[ \t]*\[[^\]]+\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?(?:\r?\n|$)/gimu,
+    new RegExp(`${referenceDefinitionPattern}(?:\\r?\\n|$)`, "gimu"),
     "",
   );
 
@@ -395,10 +408,7 @@ export function collectFinanceChatLinks(text: string): string[] {
         ? `mailto:${destination}`
         : destination,
     ),
-    ...Array.from(
-      masked.matchAll(/^[ \t]*\[[^\]]+\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
-      ([, href]) => href,
-    ),
+    ...findFinanceChatReferenceDefinitions(masked).map(({ destination }) => destination),
     ...Array.from(
       masked.matchAll(
         /<((?:(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:|\/\/)[^>\s]+|www\.(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:\/[^>\s]*)?|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}))>/giu,

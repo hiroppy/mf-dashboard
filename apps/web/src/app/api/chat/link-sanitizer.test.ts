@@ -176,6 +176,22 @@ describe("splitCompleteFinanceChatText", () => {
     expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
   });
 
+  it("keeps a blockquoted fenced code block together", () => {
+    const text = "> ~~~\n> https://example.com\n> ~~~\n";
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+  });
+
+  it("buffers a trailing newline until indented-block context is known", () => {
+    expect(splitCompleteFinanceChatText("paragraph\n")).toEqual({
+      complete: "",
+      pending: "paragraph\n",
+    });
+    expect(splitCompleteFinanceChatText("paragraph\n    https://attacker.example")).toEqual({
+      complete: "",
+      pending: "paragraph\n    https://attacker.example",
+    });
+  });
+
   it("does not close a Markdown code span with a longer backtick run", () => {
     const text = '``example ``` <a href="/0/cf">literal</a> ``。';
     expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
