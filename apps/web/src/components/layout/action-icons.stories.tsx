@@ -3,6 +3,78 @@ import { expect, userEvent, within } from "storybook/test";
 import { AccountNotificationsClient } from "../info/account-notifications.client";
 import { ActionIcons } from "./action-icons";
 
+const startedAt = "2026-07-01T00:00:00.000Z";
+const finishedAt = "2026-07-01T00:01:00.000Z";
+
+const runningStatus = {
+  available: true,
+  running: true,
+  source: "manual",
+  startedAt,
+  latestRun: {
+    version: 1,
+    runId: "run-story-running",
+    runStatus: "running",
+    source: "manual",
+    startedAt,
+    finishedAt: null,
+    current: {
+      timelineItemId: "group-a",
+      label: "グループデータを取得",
+      step: "group_data",
+      metadata: { kind: "group", groupName: "Group A" },
+    },
+    waitingFor: "MoneyForward の応答を待っています",
+    progress: { completed: 2, total: 5 },
+    timeline: [
+      {
+        id: "group-a",
+        label: "グループデータを取得",
+        step: "group_data",
+        metadata: { kind: "group", groupName: "Group A" },
+        status: "running",
+        startedAt,
+        finishedAt: null,
+        reason: null,
+      },
+    ],
+    reason: null,
+  },
+};
+
+const failedStatus = {
+  ...runningStatus,
+  running: false,
+  latestRun: {
+    ...runningStatus.latestRun,
+    runId: "run-story-failed",
+    runStatus: "failed",
+    finishedAt,
+    waitingFor: null,
+    timeline: [
+      {
+        ...runningStatus.latestRun.timeline[0],
+        status: "failed",
+        finishedAt,
+        reason: { code: "unknown_error", message: "グループの取得に失敗しました" },
+      },
+    ],
+    reason: { code: "unknown_error", message: "グループの取得に失敗しました" },
+  },
+};
+
+function mockStatus(status: object) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(status), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  return () => {
+    globalThis.fetch = originalFetch;
+  };
+}
+
 const meta = {
   title: "Layout/ActionIcons",
   component: ActionIcons,
@@ -85,5 +157,48 @@ export const Sidebar: Story = {
       canvasElement.ownerDocument.defaultView!.innerHeight,
     );
     await expect(dialog.scrollHeight).toBeGreaterThan(dialog.clientHeight);
+  },
+};
+
+export const DesktopRunningTimeline: Story = {
+  args: { variant: "header" },
+  parameters: { viewport: { defaultViewport: "desktop" } },
+  beforeEach: () => mockStatus(runningStatus),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("同期中 · 2/5")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "同期タイムラインを表示" }));
+    const dialog = within(canvasElement.ownerDocument.body).getByRole("dialog");
+    await expect(within(dialog).getAllByText("Group A")).toHaveLength(2);
+    await expect(within(dialog).getByText("MoneyForward の応答を待っています")).toBeInTheDocument();
+  },
+};
+
+export const MobileRunningTimeline: Story = {
+  args: { variant: "header" },
+  parameters: { viewport: { defaultViewport: "iphone14" } },
+  globals: { viewport: { value: "iphone14", isRotated: false } },
+  beforeEach: () => mockStatus(runningStatus),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("同期中 · 2/5")).not.toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "同期タイムラインを表示" }));
+    await expect(within(canvasElement.ownerDocument.body).getByRole("dialog")).toHaveAttribute(
+      "data-open",
+    );
+  },
+};
+
+export const FailedTimeline: Story = {
+  args: { variant: "header" },
+  parameters: { viewport: { defaultViewport: "desktop" } },
+  beforeEach: () => mockStatus(failedStatus),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("同期失敗")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "同期失敗の詳細を表示" }));
+    const dialog = within(canvasElement.ownerDocument.body).getByRole("dialog");
+    await expect(within(dialog).getAllByText("グループの取得に失敗しました")).toHaveLength(2);
+    await expect(within(dialog).getByRole("button", { name: "再度更新" })).toBeInTheDocument();
   },
 };
