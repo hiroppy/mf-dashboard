@@ -397,7 +397,7 @@ describe("ActionIcons", () => {
     expect(await screen.findByRole("heading", { name: "同期に失敗しました" })).toBeTruthy();
     expect(screen.getByText(/開始 .+ \(00:10\)/)).toBeTruthy();
     expect(screen.getByText("失敗").className).toContain("font-semibold text-destructive");
-    expect(screen.getAllByText("認証できませんでした")).toHaveLength(2);
+    expect(screen.getAllByText("認証できませんでした")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "再度更新" }));
 
     await waitFor(() =>
