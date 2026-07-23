@@ -251,9 +251,11 @@ describe("/api/crawler/refresh/", () => {
       ],
       reason: null,
     };
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ running: false, latestRun }));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ ...latestRun, running: false, pid: null }),
+    );
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({
