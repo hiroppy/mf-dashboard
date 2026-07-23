@@ -1,9 +1,13 @@
-import { describeDatabaseSchema, executeReadOnlyQuery, type Db } from "@mf-dashboard/db";
+import type { Db } from "@mf-dashboard/db";
+import {
+  describeDatabaseSchema,
+  executeReadOnlyQuery,
+} from "@mf-dashboard/db/queries/read-only-query";
 import { describe, expect, it, vi } from "vitest";
 import { createDatabaseQueryTool } from "./database-query-tool";
 
-vi.mock("@mf-dashboard/db", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@mf-dashboard/db")>()),
+vi.mock("@mf-dashboard/db/queries/read-only-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mf-dashboard/db/queries/read-only-query")>()),
   executeReadOnlyQuery: vi.fn<typeof executeReadOnlyQuery>(),
 }));
 
@@ -20,9 +24,9 @@ describe("createDatabaseQueryTool", () => {
     const description = describeDatabaseSchema();
 
     expect(description).toContain("transactions(");
-    expect(description).toContain("'income'だけが収入・入金");
-    expect(description).toContain("'expense'だけが支出・出金");
-    expect(description).toContain("収支は収入合計から支出合計を引いた値");
+    expect(description).toContain("'income'が収入・入金");
+    expect(description).toContain("'expense'が支出・出金");
+    expect(description).toContain("収入合計から支出合計を引いた値");
     expect(description).toContain("sub_category text");
     expect(description).toContain("is_excluded_from_calculation integer NOT NULL");
     expect(description).toContain("group_accounts(");

@@ -72,12 +72,16 @@ export function buildFinanceChatHref({
   }
 }
 
-export function createFinanceNavigationTool(groupId: string) {
+export function createFinanceNavigationTool(
+  groupId: string,
+  beforeExecute: () => void = () => undefined,
+) {
   return tool({
     description:
       "回答本文のMarkdownリンクに使う現在グループ内のURLを取得する。収支・収入・支出・取引・カテゴリはcashFlow、資産・負債・保有銘柄はbalanceSheet、口座はaccounts、分析はinsights、シミュレーションはsimulator、概要画面はdashboardを指定する。返されたhrefは変更せずに使う",
     inputSchema: navigationInputSchema,
     execute: async (route) => {
+      beforeExecute();
       const href = buildFinanceChatHref({ ...route, groupId });
       return { href };
     },

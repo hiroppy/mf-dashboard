@@ -38,9 +38,9 @@ export function describeDatabaseSchema(): string {
 
 リレーションと家計データの意味:
 - 金額は円。${transactions}.${schema.transactions.amount.name}は収入・支出とも常に正の値であり、符号から種別を判定してはいけない
-- ${transactions}.${schema.transactions.type.name} = 'income'だけが収入・入金、'expense'だけが支出・出金、'transfer'は振替である。説明、カテゴリ、金額、口座残高の増減から種別を推測してはいけない
-- 支出を問われたSQLには${transactions}.${schema.transactions.type.name} = 'expense'、収入・入金を問われたSQLには${transactions}.${schema.transactions.type.name} = 'income'を必ず条件として含める
-- 収支は収入合計から支出合計を引いた値（income - expense）であり、全取引の単純なSUMではない
+- 通常明細は${transactions}.${schema.transactions.type.name} = 'income'が収入・入金、'expense'が支出・出金、'transfer'が振替である。説明、カテゴリ、金額、口座残高の増減から種別を推測してはいけない
+- 振替元の${transactions}.${schema.transactions.accountId.name}だけが現在グループ内なら収入、${schema.transactions.transferTargetAccountId.name}だけが現在グループ内なら支出として扱う。両口座が同じユーザー定義グループ（group_id = '0'を除く）に属する内部振替は集計から除外する
+- 収支は上記で分類した収入合計から支出合計を引いた値であり、全取引の単純なSUMではない。同一の振替や対応する通常明細を重複集計しない
 - 通常の収支集計では${schema.transactions.isTransfer.name} = 0かつ${schema.transactions.isExcludedFromCalculation.name} = 0を使用する
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
@@ -135,7 +135,7 @@ export async function executeReadOnlyQuery(db: Db, sql: string, groupId: string)
   const query = normalizeReadOnlySql(sql);
   const client = (db as Db & { $client: Client }).$client;
   const result = await client.execute({
-    sql: `SELECT * FROM (${query}) AS query_result LIMIT ${READ_ONLY_QUERY_MAX_ROWS + 1}`,
+    sql: `SELECT * FROM (\n${query}\n) AS query_result LIMIT ${READ_ONLY_QUERY_MAX_ROWS + 1}`,
     args: /:groupId\b/.test(query) ? { groupId } : {},
   });
   const truncated = result.rows.length > READ_ONLY_QUERY_MAX_ROWS;

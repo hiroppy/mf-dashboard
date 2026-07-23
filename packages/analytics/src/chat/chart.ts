@@ -6,6 +6,7 @@ export const financeChartSchema = z
   .object({
     title: z.string().trim().min(1).max(100),
     chartType: z.enum(["line", "bar", "pie"]),
+    unit: z.enum(["currency", "count", "percent"]).optional(),
     series: z
       .array(
         z.object({
@@ -26,6 +27,13 @@ export const financeChartSchema = z
       .max(24),
   })
   .superRefine((chart, context) => {
+    if (new Set(chart.series.map((series) => series.name)).size !== chart.series.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Series names must be unique",
+        path: ["series"],
+      });
+    }
     if (chart.data.some((point) => point.values.length !== chart.series.length)) {
       context.addIssue({
         code: "custom",

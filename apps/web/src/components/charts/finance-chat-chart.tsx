@@ -1,6 +1,7 @@
 "use client";
 
 import type { FinanceChart } from "@mf-dashboard/analytics/chat/chart";
+import { useId } from "react";
 import {
   Bar,
   BarChart,
@@ -31,12 +32,23 @@ function seriesKey(index: number): string {
 function getSeriesColor(series: FinanceChart["series"][number], values: number[]): string {
   if (series.amountType === "income") return semanticColors.income;
   if (series.amountType === "expense") return semanticColors.expense;
-  return values.some((value) => value < 0)
+  return values.every((value) => value < 0)
     ? semanticColors.balanceNegative
     : semanticColors.balancePositive;
 }
 
-function formatAxisValue(value: number): string {
+function getBalanceGradientOffset(values: number[]): number | undefined {
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  if (minimum >= 0 || maximum <= 0) return undefined;
+  return (maximum / (maximum - minimum)) * 100;
+}
+
+function formatValue(value: number, unit: FinanceChart["unit"], compact = false): string {
+  if (unit === "count") return `${Math.round(value).toLocaleString("ja-JP")}件`;
+  if (unit === "percent") return `${Number(value.toFixed(1)).toLocaleString("ja-JP")}%`;
+  if (!compact) return formatCurrency(value);
+
   const absoluteValue = Math.abs(value);
   if (absoluteValue < 10_000) return `${Math.round(value).toLocaleString("ja-JP")}円`;
   if (absoluteValue < 100_000_000) return `${Math.round(value / 10_000)}万円`;
@@ -44,6 +56,8 @@ function formatAxisValue(value: number): string {
 }
 
 export function FinanceChatChart({ chart }: FinanceChatChartProps) {
+  const chartId = useId().replaceAll(":", "");
+  const unit = chart.unit ?? "currency";
   const data = chart.data.map((point) => ({
     label: point.label,
     ...Object.fromEntries(point.values.map((value, index) => [seriesKey(index), value])),
@@ -61,10 +75,10 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
         tick={{ fontSize: 11 }}
         tickLine={false}
         axisLine={false}
-        tickFormatter={(value) => formatAxisValue(Number(value))}
+        tickFormatter={(value) => formatValue(Number(value), unit, true)}
       />
       <Tooltip
-        formatter={(value) => formatCurrency(Number(value))}
+        formatter={(value) => formatValue(Number(value), unit)}
         contentStyle={chartTooltipStyle}
       />
       {chart.series.length > 1 && <Legend />}
@@ -75,6 +89,19 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
   if (chart.chartType === "line") {
     visualization = (
       <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+        <defs>
+          {chart.series.map((series, index) => {
+            const offset = getBalanceGradientOffset(seriesValues[index] ?? []);
+            if (series.amountType !== "balance" || offset === undefined) return null;
+
+            return (
+              <linearGradient key={series.name} id={`${chartId}-series-${index}`} x2="0" y2="1">
+                <stop offset={`${offset}%`} stopColor={semanticColors.balancePositive} />
+                <stop offset={`${offset}%`} stopColor={semanticColors.balanceNegative} />
+              </linearGradient>
+            );
+          })}
+        </defs>
         {commonAxes}
         {chart.series.map((series, index) => (
           <Line
@@ -82,7 +109,11 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
             type="monotone"
             dataKey={seriesKey(index)}
             name={series.name}
-            stroke={getSeriesColor(series, seriesValues[index] ?? [])}
+            stroke={
+              getBalanceGradientOffset(seriesValues[index] ?? []) === undefined
+                ? getSeriesColor(series, seriesValues[index] ?? [])
+                : `url(#${chartId}-series-${index})`
+            }
             strokeWidth={2}
           />
         ))}
@@ -99,7 +130,19 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
             name={series.name}
             fill={getSeriesColor(series, seriesValues[index] ?? [])}
             radius={[3, 3, 0, 0]}
-          />
+          >
+            {series.amountType === "balance" &&
+              chart.data.map((point) => (
+                <Cell
+                  key={point.label}
+                  fill={
+                    (point.values[index] ?? 0) < 0
+                      ? semanticColors.balanceNegative
+                      : semanticColors.balancePositive
+                  }
+                />
+              ))}
+          </Bar>
         ))}
       </BarChart>
     );
@@ -112,7 +155,7 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value) => formatCurrency(Number(value))}
+          formatter={(value) => formatValue(Number(value), unit)}
           contentStyle={chartTooltipStyle}
         />
       </PieChart>
@@ -147,7 +190,7 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
           <li key={point.label}>
             {point.label}:{" "}
             {point.values
-              .map((value, index) => `${chart.series[index]?.name}: ${formatCurrency(value)}`)
+              .map((value, index) => `${chart.series[index]?.name}: ${formatValue(value, unit)}`)
               .join("、")}
           </li>
         ))}

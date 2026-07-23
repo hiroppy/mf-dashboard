@@ -1,9 +1,9 @@
+import type { Db } from "@mf-dashboard/db";
 import {
   describeDatabaseSchema,
   executeReadOnlyQuery,
   READ_ONLY_QUERY_MAX_ROWS,
-  type Db,
-} from "@mf-dashboard/db";
+} from "@mf-dashboard/db/queries/read-only-query";
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -19,7 +19,11 @@ ${describeDatabaseSchema()}
 SELECTまたはWITHで始まる単一SQLだけを実行できる。結果は最大${READ_ONLY_QUERY_MAX_ROWS}行。`;
 }
 
-export function createDatabaseQueryTool(db: Db, groupId: string) {
+export function createDatabaseQueryTool(
+  db: Db,
+  groupId: string,
+  beforeExecute: () => void = () => undefined,
+) {
   return tool({
     description: getDatabaseDescription(),
     inputSchema: z.object({
@@ -30,6 +34,9 @@ export function createDatabaseQueryTool(db: Db, groupId: string) {
         .max(20_000)
         .describe("実行するSQLiteのSELECTまたはWITH文。現在グループには:groupIdを使用する"),
     }),
-    execute: async ({ sql }) => await executeReadOnlyQuery(db, sql, groupId),
+    execute: async ({ sql }) => {
+      beforeExecute();
+      return await executeReadOnlyQuery(db, sql, groupId);
+    },
   });
 }

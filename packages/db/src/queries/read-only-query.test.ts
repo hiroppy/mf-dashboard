@@ -89,6 +89,26 @@ describe("executeReadOnlyQuery", () => {
       truncated: false,
     });
   });
+
+  it("末尾の行コメントを外側のLIMITで壊さない", async () => {
+    await expect(executeReadOnlyQuery(db, "SELECT 1 AS value -- explanation", "")).resolves.toEqual(
+      {
+        columns: ["value"],
+        rows: [{ value: 1 }],
+        rowCount: 1,
+        truncated: false,
+      },
+    );
+  });
+
+  it("重複した結果列名を保持できるよう自動で区別する", async () => {
+    await expect(executeReadOnlyQuery(db, "SELECT 1 AS id, 2 AS id", "")).resolves.toEqual({
+      columns: ["id", "id:1"],
+      rows: [{ id: 1, "id:1": 2 }],
+      rowCount: 1,
+      truncated: false,
+    });
+  });
 });
 
 describe("normalizeReadOnlySql", () => {
