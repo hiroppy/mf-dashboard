@@ -6,7 +6,10 @@ import { createCrawlerProgressReporter, type CrawlerProgressReporter } from "./c
 import {
   getCrawlerRunStatePath,
   readCrawlerRunState,
+  writeCrawlerRunState,
+  type CrawlerRunReason,
   type CrawlerRunStateSnapshot,
+  type CrawlerRunTimelineItem,
 } from "./crawler-run-state.js";
 
 const DEFAULT_LOCK_PATH = path.resolve(import.meta.dirname, "../../../data/crawler-run.lock");
@@ -146,6 +149,39 @@ function toRunState(record: CrawlerRunLockRecord): CrawlerRunState {
 
 function toUnknownRunningState(): CrawlerRunState {
   return { running: true, pid: null, source: null, startedAt: null };
+}
+
+async function toStoppedRunState(
+  progressState: CrawlerRunStateSnapshot,
+  statePath: string,
+): Promise<CrawlerRunState> {
+  if (progressState.runStatus !== "running") {
+    return { ...progressState, running: false, pid: null };
+  }
+
+  const finishedAt = new Date().toISOString();
+  const reason: CrawlerRunReason = {
+    code: "unknown_error",
+    message: "前回の実行は完了を確認できませんでした",
+  };
+  const timeline = progressState.timeline.map((item): CrawlerRunTimelineItem => {
+    if (item.status !== "running") return item;
+    return { ...item, status: "failed", finishedAt, reason };
+  });
+  const failedState: CrawlerRunStateSnapshot = {
+    ...progressState,
+    runStatus: "failed",
+    finishedAt,
+    waitingFor: null,
+    reason,
+    progress: {
+      completed: timeline.filter(({ status }) => status !== "pending").length,
+      total: timeline.length,
+    },
+    timeline,
+  };
+  await writeCrawlerRunState(failedState, { statePath });
+  return { ...failedState, running: false, pid: null };
 }
 
 function isExpired(startedAt: string, staleMs: number): boolean {
@@ -505,7 +541,7 @@ export async function getCrawlerRunState(
     snapshot = await readLockSnapshot(resolved.lockPath);
     if (!snapshot) {
       return progressState
-        ? { ...progressState, running: false, pid: null }
+        ? toStoppedRunState(progressState, resolved.statePath)
         : { running: false, pid: null, source: null, startedAt: null };
     }
   }
@@ -531,7 +567,7 @@ export async function getCrawlerRunState(
   const removal = await removeStaleLockIfCurrent(snapshot, resolved);
   if (removal === "removed") {
     return progressState
-      ? { ...progressState, running: false, pid: null }
+      ? toStoppedRunState(progressState, resolved.statePath)
       : { running: false, pid: null, source: null, startedAt: null };
   }
   if (removal === "changed") {
@@ -616,7 +652,13 @@ export async function runWithCrawlerRunLock<T>(
   options: CrawlerRunLockOptions = {},
 ): Promise<T> {
   const lock = await acquireCrawlerRunLock(source, options);
-  const progress = await createCrawlerProgressReporter(getOptions(options).statePath, lock.record);
+  let progress: CrawlerProgressReporter;
+  try {
+    progress = await createCrawlerProgressReporter(getOptions(options).statePath, lock.record);
+  } catch (err) {
+    await lock.release();
+    throw err;
+  }
   try {
     const result = await task(progress);
     await progress.finish("success");
