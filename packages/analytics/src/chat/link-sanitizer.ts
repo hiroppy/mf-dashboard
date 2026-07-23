@@ -18,9 +18,13 @@ function resolveAllowedHref(destination: string, allowedHrefs: Set<string>): str
 }
 
 function splitBareUrl(url: string) {
-  const match = /^(.*?)([.,!?;:。、，！？；：]+)$/u.exec(url);
-  let destination = match?.[1] ?? url;
-  let trailingText = match?.[2] ?? "";
+  const splitPunctuation = (value: string) => {
+    const match = /^(.*?)([.,!?;:。、，！？；：]+)$/u.exec(value);
+    return { value: match?.[1] ?? value, punctuation: match?.[2] ?? "" };
+  };
+  const initial = splitPunctuation(url);
+  let destination = initial.value;
+  let trailingText = initial.punctuation;
   const adjacentJapaneseTextAfterIdn = new RegExp(
     `^((?:https?:\\/\\/|\\/\\/)(?:[^\\s./]+\\.)+[A-Za-z0-9-]+(?:[/?#][A-Za-z0-9\\-._~:/?#[\\]@!$&'*+,;=%]*)?)([\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Han}]+)$`,
     "iu",
@@ -34,6 +38,9 @@ function splitBareUrl(url: string) {
     destination = adjacentText[1];
     trailingText = `${adjacentText[2]}${trailingText}`;
   }
+  const separated = splitPunctuation(destination);
+  destination = separated.value;
+  trailingText = `${separated.punctuation}${trailingText}`;
   return { destination, trailingText };
 }
 

@@ -92,6 +92,12 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toContain("https://example.com");
   });
 
+  it("resolves an allowlisted bare URL before Japanese prose after punctuation", () => {
+    expect(sanitizeFinanceChatLinks("https://example.com/0/cf/2026-07.を見て", allowedHrefs)).toBe(
+      "/0/cf/2026-07.を見て",
+    );
+  });
+
   it("removes a reference-style link with a non-route URI", () => {
     expect(
       sanitizeFinanceChatLinks("[メール][ref]\n\n[ref]: mailto:evil@example.com", allowedHrefs),
