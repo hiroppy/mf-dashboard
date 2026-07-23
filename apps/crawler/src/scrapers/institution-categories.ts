@@ -57,7 +57,8 @@ export function parseInstitutionCategories(): Array<{
 export async function scrapeInstitutionCategories(page: Page): Promise<Map<string, string>> {
   debug("Scraping institution categories from top page...");
 
-  await page.goto(mfUrls.home, { waitUntil: "networkidle" });
+  await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
+  await page.locator(".facilities.accounts-list").first().waitFor({ state: "attached" });
 
   const categoryData = await page.evaluate(parseInstitutionCategories);
 
