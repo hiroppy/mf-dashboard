@@ -11,6 +11,7 @@ import {
 
 export type CrawlerStepMetadata = Record<string, string | number | string[]>;
 export type CrawlerReason = CrawlerRunReason;
+const BASELINE_STEP_COUNT = 10;
 
 export interface CrawlerCurrentStep {
   code: CrawlerRunStepDetails["step"];
@@ -103,6 +104,14 @@ function progressFor(timeline: CrawlerRunTimelineItem[]) {
   };
 }
 
+function runningProgressFor(timeline: CrawlerRunTimelineItem[]) {
+  const { completed } = progressFor(timeline);
+  return {
+    completed,
+    total: Math.max(BASELINE_STEP_COUNT, timeline.length, completed + 1),
+  };
+}
+
 export async function createCrawlerProgressReporter(
   statePath: string,
   run: { id: string; source: string; startedAt: string },
@@ -173,7 +182,7 @@ export async function createCrawlerProgressReporter(
         draft.current = toCurrent(item);
         draft.waitingFor = null;
         draft.timeline.push(item);
-        draft.progress = null;
+        draft.progress = runningProgressFor(draft.timeline);
       });
       return id;
     },
@@ -183,7 +192,7 @@ export async function createCrawlerProgressReporter(
         updateStepMetadata(step, metadata);
         draft.current = toCurrent(step);
         draft.waitingFor = waitingFor;
-        draft.progress = null;
+        draft.progress = runningProgressFor(draft.timeline);
       });
     },
     completeStep: async (stepId, metadata) => {
@@ -197,7 +206,7 @@ export async function createCrawlerProgressReporter(
         });
         draft.current = null;
         draft.waitingFor = null;
-        draft.progress = null;
+        draft.progress = runningProgressFor(draft.timeline);
       });
     },
     skipStep: async (stepId) => {
@@ -211,7 +220,7 @@ export async function createCrawlerProgressReporter(
         });
         draft.current = null;
         draft.waitingFor = null;
-        draft.progress = null;
+        draft.progress = runningProgressFor(draft.timeline);
       });
     },
     warnStep: async (stepId, reason, metadata) => {
@@ -221,7 +230,7 @@ export async function createCrawlerProgressReporter(
         Object.assign(step, { status: "warning", finishedAt: new Date().toISOString(), reason });
         draft.current = null;
         draft.waitingFor = null;
-        draft.progress = null;
+        draft.progress = runningProgressFor(draft.timeline);
       });
     },
     failStep: async (stepId, reason) => {
@@ -230,7 +239,7 @@ export async function createCrawlerProgressReporter(
         Object.assign(step, { status: "failed", finishedAt: new Date().toISOString(), reason });
         draft.current = toCurrent(step);
         draft.waitingFor = null;
-        draft.progress = null;
+        draft.progress = runningProgressFor(draft.timeline);
       });
     },
     finish: async (status, reason) => {

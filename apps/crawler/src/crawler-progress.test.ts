@@ -28,8 +28,10 @@ describe("crawler progress", () => {
       await runWithCrawlerRunLock(
         "test",
         async (progress) => {
-          await runCrawlerStep(progress, CRAWLER_STEPS.analytics, async () => undefined);
-          expect(progress.getState().progress).toBeNull();
+          await runCrawlerStep(progress, CRAWLER_STEPS.analytics, async () => {
+            expect(progress.getState().progress).toEqual({ completed: 0, total: 10 });
+          });
+          expect(progress.getState().progress).toEqual({ completed: 1, total: 10 });
         },
         { lockPath },
       );
