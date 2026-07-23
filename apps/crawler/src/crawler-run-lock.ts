@@ -540,8 +540,9 @@ export async function getCrawlerRunState(
 
     snapshot = await readLockSnapshot(resolved.lockPath);
     if (!snapshot) {
-      return progressState
-        ? toStoppedRunState(progressState, resolved.statePath)
+      const latestProgressState = await readCrawlerRunState({ statePath: resolved.statePath });
+      return latestProgressState
+        ? toStoppedRunState(latestProgressState, resolved.statePath)
         : { running: false, pid: null, source: null, startedAt: null };
     }
   }
@@ -566,8 +567,9 @@ export async function getCrawlerRunState(
   await resolved.beforeStaleLockCleanup?.();
   const removal = await removeStaleLockIfCurrent(snapshot, resolved);
   if (removal === "removed") {
-    return progressState
-      ? toStoppedRunState(progressState, resolved.statePath)
+    const latestProgressState = await readCrawlerRunState({ statePath: resolved.statePath });
+    return latestProgressState
+      ? toStoppedRunState(latestProgressState, resolved.statePath)
       : { running: false, pid: null, source: null, startedAt: null };
   }
   if (removal === "changed") {

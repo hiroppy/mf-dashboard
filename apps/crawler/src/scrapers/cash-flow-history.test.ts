@@ -1,6 +1,10 @@
 import { chromium, type Browser, type Page } from "playwright";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { buildMonthRange, scrapeCashFlowMonth } from "./cash-flow-history.js";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import {
+  buildMonthRange,
+  scrapeCashFlowHistory,
+  scrapeCashFlowMonth,
+} from "./cash-flow-history.js";
 
 describe("buildMonthRange", () => {
   test.each([
@@ -71,6 +75,32 @@ describe("scrapeCashFlowMonth", () => {
         balance: 0,
         items: [],
       });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test("前月 navigation の失敗を対象月の callback に通知する", async () => {
+    page = await browser.newPage();
+    page.setDefaultTimeout(50);
+    try {
+      await page.route("https://moneyforward.com/cf**", async (route) => {
+        await route.fulfill({
+          contentType: "text/html",
+          body: `
+            <a href="/cf/csv?year=2026&month=7">CSV</a>
+            <button class="fc-button-prev">前月</button>
+            <table id="monthly_total_table_kakeibo"><tbody><tr>
+              <td>¥0</td><td></td><td>¥0</td><td></td><td>¥0</td>
+            </tr></tbody></table>
+            <table id="cf-detail-table"><tbody><tr><td>placeholder</td></tr></tbody></table>
+          `,
+        });
+      });
+      const onMonthFailure = vi.fn<(month: string, error: unknown) => void>();
+
+      await expect(scrapeCashFlowHistory(page, 2, { onMonthFailure })).rejects.toThrow(/Timeout/);
+      expect(onMonthFailure).toHaveBeenCalledWith("2026-07", expect.any(Error));
     } finally {
       await page.close();
     }

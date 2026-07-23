@@ -297,35 +297,35 @@ export async function scrapeCashFlowHistory(
   for (let i = 0; i < monthsToScrape; i++) {
     const targetMonth = (await getMonthFromCsvLink(page)) ?? getHistoryMonth(new Date(), i);
     await callbacks.onMonthStart?.(targetMonth);
-    let data: CashFlowSummary;
     try {
-      data = await extractCashFlowFromPage(page);
+      const data = await extractCashFlowFromPage(page);
+      results.push({ month: data.month, data });
+      log(`  ${data.month}: ${data.items.length} transactions`);
+
+      if (i < monthsToScrape - 1) {
+        const currentMonth = await getMonthFromCsvLink(page);
+        const prevButton = page.locator("button.fc-button-prev, span.fc-button-prev").first();
+
+        // 月が変わるまで待機（CSV linkのURLパラメータで判定）
+        // クリックで /cf/fetch が発火するため、取りこぼさないよう先にリスナーを登録し、
+        // レスポンス到着後にCSV linkの月パラメータが変わったかを確認する
+        await Promise.all([
+          page.waitForResponse((res) => res.url().includes("/cf/fetch") && res.status() === 200),
+          prevButton.click(),
+        ]);
+
+        // /cf/fetch 後も月が変わらなければ、これ以上データがないことを意味する
+        const newMonth = await getMonthFromCsvLink(page);
+        if (newMonth === currentMonth) {
+          log(`  No more months available after ${currentMonth}, stopping.`);
+          await callbacks.onMonthComplete?.(targetMonth);
+          break;
+        }
+      }
       await callbacks.onMonthComplete?.(targetMonth);
     } catch (error) {
       await callbacks.onMonthFailure?.(targetMonth, error);
       throw error;
-    }
-    results.push({ month: data.month, data });
-    log(`  ${data.month}: ${data.items.length} transactions`);
-
-    if (i < monthsToScrape - 1) {
-      const currentMonth = await getMonthFromCsvLink(page);
-      const prevButton = page.locator("button.fc-button-prev, span.fc-button-prev").first();
-
-      // 月が変わるまで待機（CSV linkのURLパラメータで判定）
-      // クリックで /cf/fetch が発火するため、取りこぼさないよう先にリスナーを登録し、
-      // レスポンス到着後にCSV linkの月パラメータが変わったかを確認する
-      await Promise.all([
-        page.waitForResponse((res) => res.url().includes("/cf/fetch") && res.status() === 200),
-        prevButton.click(),
-      ]);
-
-      // /cf/fetch 後も月が変わらなければ、これ以上データがないことを意味する
-      const newMonth = await getMonthFromCsvLink(page);
-      if (newMonth === currentMonth) {
-        log(`  No more months available after ${currentMonth}, stopping.`);
-        break;
-      }
     }
   }
 

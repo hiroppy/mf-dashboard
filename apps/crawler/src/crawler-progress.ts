@@ -125,7 +125,7 @@ export async function createCrawlerProgressReporter(
     runStatus: "running",
     current: null,
     waitingFor: null,
-    progress: null,
+    progress: runningProgressFor([]),
     reason: null,
     timeline: [],
   };
@@ -273,6 +273,15 @@ export function normalizeCrawlerError(error: unknown, fallbackCode: string): Cra
   }
   if (name === "TimeoutError" || /timeout|timed out/i.test(message)) {
     const timeoutMs = Number(message.match(/(\d+)\s*ms/i)?.[1] ?? 0);
+    const operationLabels: Record<string, string> = {
+      database_save: "データベース保存",
+      notification_failed: "更新結果の通知",
+      web_cache_refresh_failed: "Webキャッシュ更新",
+    };
+    const operationLabel = operationLabels[fallbackCode];
+    if (operationLabel) {
+      return { code: "unknown_error", message: `${operationLabel}がタイムアウトしました` };
+    }
     return {
       code: "moneyforward_timeout",
       message: "画面の応答待ちがタイムアウトしました",
