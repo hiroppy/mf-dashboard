@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   getCrawlerRunStatePath,
   readCrawlerRunState,
+  type CrawlerRunReason,
   type CrawlerRunStateSnapshot,
   writeCrawlerRunState,
 } from "./crawler-run-state.js";
@@ -131,6 +132,57 @@ describe("crawler run state file", () => {
     await expect(readdir(path.dirname(statePath))).resolves.toEqual(["crawler-run-state.json"]);
     await expect(readFile(statePath, "utf8")).resolves.toBe(`${JSON.stringify(state, null, 2)}\n`);
   });
+
+  test.each([
+    ["auth_failed", { code: "auth_failed", message: "認証に失敗しました" }],
+    [
+      "refresh_timeout",
+      {
+        code: "refresh_timeout",
+        message: "更新が完了しませんでした",
+        maxWaitMinutes: 20,
+        incompleteAccounts: ["Institution A"],
+      },
+    ],
+    [
+      "moneyforward_timeout",
+      {
+        code: "moneyforward_timeout",
+        message: "画面の応答待ちがタイムアウトしました",
+        operation: "MoneyForward画面の応答待ち",
+        timeoutMs: 30_000,
+      },
+    ],
+    [
+      "navigation_failed",
+      {
+        code: "navigation_failed",
+        message: "画面を開けませんでした",
+        url: "https://example.com/path",
+      },
+    ],
+    [
+      "selector_not_found",
+      {
+        code: "selector_not_found",
+        message: "必要な画面要素を確認できませんでした",
+        selector: "[data-test=target]",
+      },
+    ],
+    ["unknown_error", { code: "unknown_error", message: "処理に失敗しました" }],
+  ] satisfies Array<[string, CrawlerRunReason]>)(
+    "reads a failed snapshot with a normalized %s reason",
+    async (_code, reason) => {
+      const state: CrawlerRunStateSnapshot = {
+        ...failedState,
+        timeline: [{ ...failedState.timeline[0], reason }],
+        reason,
+      };
+      await writeCrawlerRunState(state, { statePath });
+
+      await expect(readCrawlerRunState({ statePath })).resolves.toEqual(state);
+    },
+  );
 
   test("returns null when the state file does not exist", async () => {
     await expect(readCrawlerRunState({ statePath })).resolves.toBeNull();

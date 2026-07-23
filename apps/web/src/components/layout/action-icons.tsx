@@ -262,7 +262,7 @@ function SyncTimelineDialog({
               aria-labelledby="sync-reason-heading"
               className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
             >
-              <h3 id="sync-reason-heading" className="font-medium text-destructive">
+              <h3 id="sync-reason-heading" className="font-medium text-foreground">
                 理由
               </h3>
               <p className="mt-1 break-words text-muted-foreground">{run.reason.message}</p>

@@ -217,6 +217,45 @@ describe("/api/crawler/refresh/", () => {
     });
   });
 
+  it("proxies the latest successful run state", async () => {
+    const latestRun = {
+      version: 1,
+      runId: "run-success",
+      runStatus: "success",
+      source: "manual",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      finishedAt: "2026-01-01T00:01:00.000Z",
+      current: null,
+      waitingFor: null,
+      progress: { completed: 1, total: 1 },
+      timeline: [
+        {
+          id: "auth",
+          label: "認証",
+          step: "authentication",
+          metadata: null,
+          status: "done",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          finishedAt: "2026-01-01T00:01:00.000Z",
+          reason: null,
+        },
+      ],
+      reason: null,
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ running: false, latestRun }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      available: true,
+      running: false,
+      source: "manual",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      latestRun,
+    });
+  });
+
   it("starts a crawler run through the crawler service", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ running: true }, 202));
 
