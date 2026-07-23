@@ -1,64 +1,98 @@
 import { buildFinanceChatHref, financeChatHrefSchema } from "@mf-dashboard/analytics/chat/cards";
+import { isEscaped, sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
 import type { StreamTextTransform, ToolSet } from "ai";
 
-function normalizePath(href: string): string {
-  return href.length > 1 ? href.replace(/\/$/, "") : href;
-}
+export { sanitizeFinanceChatLinks } from "@mf-dashboard/analytics/chat/link-sanitizer";
 
-function resolveAllowedHref(destination: string, allowedHrefs: Set<string>): string | undefined {
-  const normalizedDestination = normalizePath(destination);
-  const exactMatch = [...allowedHrefs].find(
-    (href) => normalizePath(href) === normalizedDestination,
-  );
-  if (exactMatch) return exactMatch;
-
-  try {
-    const pathname = normalizePath(new URL(destination, "https://invalid.local").pathname);
-    const pathMatch = [...allowedHrefs].find((href) => normalizePath(href) === pathname);
-    if (pathMatch) return pathMatch;
-  } catch {
-    return undefined;
+function hasCompleteRawHtmlAnchorOpening(text: string, start: number): boolean {
+  let quote: '"' | "'" | undefined;
+  for (let index = start + 2; index < text.length; index += 1) {
+    const character = text[index];
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return true;
+    }
   }
-
-  return undefined;
+  return false;
 }
 
-function sanitizeBareUrl(url: string, allowedHrefs: Set<string>): string {
-  const match = /^(.*?)([.,!?;:]+)$/.exec(url);
-  const destination = match?.[1] ?? url;
-  const trailingPunctuation = match?.[2] ?? "";
-  const href = resolveAllowedHref(destination, allowedHrefs);
-
-  return href ? `${href}${trailingPunctuation}` : trailingPunctuation;
-}
-
-export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
-  const withoutInvalidMarkdownLinks = text.replace(
-    /(?<!!)\[([^\]]+)]\(([^)\s]+)(?:\s+["'][^)]*["'])?\)/g,
-    (_match, label: string, destination: string) => {
-      const href = resolveAllowedHref(destination, allowedHrefs);
-      return href ? `[${label}](${href})` : label;
-    },
-  );
-
-  return withoutInvalidMarkdownLinks.replace(
-    /(?:https?:\/\/|\/\/)[A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]+/g,
-    (url) => sanitizeBareUrl(url, allowedHrefs),
-  );
-}
-
-export function splitCompleteFinanceChatText(text: string): {
+export function splitCompleteFinanceChatText(
+  text: string,
+  knownReferenceIds: ReadonlySet<string> = new Set(),
+): {
   complete: string;
   pending: string;
 } {
   const boundaries = new Set(["\n", "。", "！", "？"]);
   let labelStart = -1;
   let destinationDepth = 0;
+  let codeDelimiterLength = 0;
+  let htmlAnchorOpen = false;
+  let htmlAnchorOpeningTag = false;
+  let htmlAnchorQuote: '"' | "'" | undefined;
   let lastBoundary = -1;
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
-    const escaped = index > 0 && text[index - 1] === "\\";
+    const escaped = isEscaped(text, index);
+
+    if (!escaped && character === "`") {
+      let runLength = 1;
+      while (text[index + runLength] === "`") runLength += 1;
+      if (codeDelimiterLength === 0) {
+        codeDelimiterLength = runLength;
+      } else if (runLength === codeDelimiterLength) {
+        codeDelimiterLength = 0;
+      }
+      index += runLength - 1;
+      continue;
+    }
+
+    if (
+      !escaped &&
+      codeDelimiterLength === 0 &&
+      !htmlAnchorOpen &&
+      /^<a\b/iu.test(text.slice(index)) &&
+      (hasCompleteRawHtmlAnchorOpening(text, index) ||
+        /^<a\s+[A-Za-z_:][A-Za-z0-9_.:-]*\s*=/iu.test(text.slice(index)) ||
+        /^<a\b\s*$/iu.test(text.slice(index)))
+    ) {
+      htmlAnchorOpen = true;
+      htmlAnchorOpeningTag = true;
+      continue;
+    }
+
+    if (htmlAnchorOpen) {
+      if (htmlAnchorOpeningTag) {
+        if (htmlAnchorQuote !== undefined) {
+          if (!escaped && character === htmlAnchorQuote) htmlAnchorQuote = undefined;
+          continue;
+        }
+        if (!escaped && (character === '"' || character === "'")) {
+          htmlAnchorQuote = character;
+          continue;
+        }
+        const selfClosingAnchor = /^\/\s*>/u.exec(text.slice(index));
+        if (!escaped && selfClosingAnchor) {
+          htmlAnchorOpen = false;
+          htmlAnchorOpeningTag = false;
+          index += selfClosingAnchor[0].length - 1;
+          continue;
+        }
+        if (!escaped && character === ">") htmlAnchorOpeningTag = false;
+        continue;
+      }
+
+      const closingAnchor = /^<\/a\s*>/iu.exec(text.slice(index));
+      if (!escaped && closingAnchor) {
+        htmlAnchorOpen = false;
+        index += closingAnchor[0].length - 1;
+      }
+      continue;
+    }
 
     if (!escaped && destinationDepth > 0) {
       if (character === "(") destinationDepth += 1;
@@ -82,13 +116,27 @@ export function splitCompleteFinanceChatText(text: string): {
       continue;
     }
 
-    if (character && boundaries.has(character)) lastBoundary = index;
+    if (codeDelimiterLength === 0 && character && boundaries.has(character)) lastBoundary = index;
   }
 
   if (lastBoundary < 0) return { complete: "", pending: text };
 
+  const complete = text.slice(0, lastBoundary + 1);
+  const referenceIds = Array.from(complete.matchAll(/(?<!!)\[[^\]]+\]\[([^\]]+)\]/gu), ([, id]) =>
+    id.toLowerCase(),
+  );
+  const definedReferenceIds = new Set(
+    Array.from(
+      complete.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu),
+      ([, id]) => id.toLowerCase(),
+    ),
+  );
+  if (referenceIds.some((id) => !definedReferenceIds.has(id) && !knownReferenceIds.has(id))) {
+    return { complete: "", pending: text };
+  }
+
   return {
-    complete: text.slice(0, lastBoundary + 1),
+    complete,
     pending: text.slice(lastBoundary + 1),
   };
 }
@@ -102,13 +150,25 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
   return () => {
     const allowedHrefs = new Set<string>();
     const pendingTextById = new Map<string, string>();
+    const referenceDefinitionsById = new Map<string, Map<string, string>>();
 
     const enqueueSanitizedText = (
       controller: TransformStreamDefaultController,
       id: string,
       text: string,
     ) => {
-      const sanitizedText = sanitizeFinanceChatLinks(text, allowedHrefs);
+      const definitions = referenceDefinitionsById.get(id) ?? new Map<string, string>();
+      for (const match of text.matchAll(
+        /^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu,
+      )) {
+        definitions.set(match[1].toLowerCase(), match[0]);
+      }
+      referenceDefinitionsById.set(id, definitions);
+      const definitionPrefix = [...definitions.values()].join("\n");
+      const sanitizedText = sanitizeFinanceChatLinks(
+        definitionPrefix ? `${definitionPrefix}\n${text}` : text,
+        allowedHrefs,
+      );
       if (!sanitizedText) return;
 
       onSanitizedText?.(sanitizedText);
@@ -120,6 +180,7 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
         enqueueSanitizedText(controller, id, text);
       }
       pendingTextById.clear();
+      referenceDefinitionsById.clear();
     };
 
     return new TransformStream({
@@ -140,13 +201,18 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
 
         if (chunk.type === "text-start") {
           pendingTextById.set(chunk.id, "");
+          referenceDefinitionsById.set(chunk.id, new Map());
           controller.enqueue(chunk);
           return;
         }
 
         if (chunk.type === "text-delta") {
           const bufferedText = `${pendingTextById.get(chunk.id) ?? ""}${chunk.text}`;
-          const { complete, pending } = splitCompleteFinanceChatText(bufferedText);
+          const knownReferenceIds = new Set(referenceDefinitionsById.get(chunk.id)?.keys());
+          const { complete, pending } = splitCompleteFinanceChatText(
+            bufferedText,
+            knownReferenceIds,
+          );
           pendingTextById.set(chunk.id, pending);
 
           if (complete) {
@@ -160,6 +226,7 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
           if (text !== undefined) {
             enqueueSanitizedText(controller, chunk.id, text);
             pendingTextById.delete(chunk.id);
+            referenceDefinitionsById.delete(chunk.id);
           }
         }
 

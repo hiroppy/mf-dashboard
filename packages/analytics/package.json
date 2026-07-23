@@ -6,6 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat/cards": "./src/chat/cards.ts",
+    "./chat/link-sanitizer": "./src/chat/link-sanitizer.ts",
+    "./chat/prompt": "./src/chat/prompt.ts",
     "./chat/tools": "./src/chat/tools.ts",
     "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
@@ -14,6 +16,7 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
+    "eval:chat": "pnpm --filter @mf-dashboard/db build:demo --period=2026-07 && (PROMPTFOO_ENV_FILE=; if [ -f ../../.env ]; then PROMPTFOO_ENV_FILE=--env-file=../../.env; fi; PROMPTFOO_DISABLE_TELEMETRY=1 DB_PATH=../../data/demo.db promptfoo eval --config=evals/promptfooconfig.yaml $PROMPTFOO_ENV_FILE --no-cache)",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
@@ -29,6 +32,8 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "mockdate": "3.0.5",
+    "promptfoo": "0.121.19",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -1,0 +1,422 @@
+- description: 月次状況が収入・支出・収支と詳細導線を返す
+  vars:
+    question: 今月どう？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: not-contains
+      value: データを取得できません
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        allowedVisibleAmounts: [313235, 219894, 93341]
+        allowedVisibleDates: ["2026-07-01", "2026-07-31"]
+        allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: [29.8, 30]
+        visibleAmountClaims:
+          - { label: 収入, amount: 313235 }
+          - { label: 支出, amount: 219894 }
+          - { label: 収支, amount: 93341 }
+          - { label: 黒字, amount: 93341 }
+          - { label: プラス, amount: 93341 }
+          - { label: 余剰, amount: 93341 }
+          - { label: 手残り, amount: 93341 }
+          - { label: 純収入, amount: 93341 }
+        visiblePercentageClaims:
+          - { label: 貯蓄率, amount: 29.8 }
+          - { label: 貯蓄率, amount: 30 }
+        allowedInsightMetrics:
+          - { amount: 93341, amountType: balance, labelPattern: (黒字|収支|余剰|手残り) }
+        expectedCardTextFacts:
+          - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: "(家計|収支|月次|キャッシュフロー)" }
+        forbiddenVisiblePatterns:
+          - (赤字(?!\s*(では|じゃ)(なく|ない|ありません))|収支.{0,10}(マイナス|負)|マイナス.{0,10}収支)
+          - (黒字|プラス|余剰|手残り)(とは言えません|とは限りません|ではない|ではなく|でない|ではありません)
+          - (貯蓄|積立|予算|見直し).{0,12}(不要(?!\s*(?:では|じゃ)(?:ありません|ない|なく))|必要ありません|必要ない|しなくてよい|しなくてもよい)
+          - ((支出|出費).{0,12}(収入|所得).{0,12}(上回(?!っていません|っていない|らない)|超え(?!ていません|ていない|ない)|多い(?!わけではありません|わけではない|とは限りません|とは限らない))|(収入|所得).{0,12}(支出|出費).{0,12}(下回(?!っていません|っていない|らない)|少ない(?!わけではありません|わけではない|とは限りません|とは限らない)))
+          - ((収入|所得).{0,12}(支出|出費)|(支出|出費).{0,12}(収入|所得)).{0,12}(同額(?!\s*(?:では|じゃ)(?:ありません|ない|なく))|同じ(?!(?:くらい|程度)?\s*(?:では|じゃ)(?:ありません|ない|なく))(?:くらい|程度)?|等しい(?!\s*(?:とは|わけでは)?(?:ありません|ない))|ほぼ同額(?!\s*(?:では|じゃ)(?:ありません|ない))|ほぼ同じ(?!\s*(?:では|じゃ)(?:ありません|ない))|大差(?:が)?ない|差(?:が)?ない)
+          - (収入|所得)(は|が)?(ありません|ございません|ない|発生していません)
+          - (支出|出費)(は|が)?(ありません|ございません|ない|発生していません)
+          - (貯蓄|積立).{0,12}(できていません|できていない|できません|できない|していません|していない|ありません|ない|なし|ゼロ)
+          - ((支出|出費).{0,12}予算.{0,8}(内|範囲内|以下|超過|オーバー|上回|下回)(?![^。！？\n]{0,16}(判断でき|わかり|分かり|不明|とは限|とは言え))|予算.{0,12}(内|範囲内|以下|超過|オーバー|上回|下回)(?![^。！？\n]{0,16}(判断でき|わかり|分かり|不明|とは限|とは言え)).{0,8}(支出|出費))
+          - ((収入|所得).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(給与|給料|賞与|ボーナス|事業収入|副業|利息|ポイント)(?![^。！？\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))|(給与|給料|賞与|ボーナス|事業収入|副業|利息|ポイント).{0,12}(が|で)(収入|所得).{0,8}(すべて|全て|全部|全額|を構成|を占め))
+          - ((支出|出費).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(住宅費|食費|日用品|水道・光熱費|交通費|通信費|医療費|教育費|娯楽費)(?![^。！？\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))|(住宅費|食費|日用品|水道・光熱費|交通費|通信費|医療費|教育費|娯楽費).{0,12}(が|で)(支出|出費).{0,8}(すべて|全て|全部|全額|を構成|を占め))
+        expectedMetrics:
+          - { label: 収入, amount: 313235, amountType: income }
+          - { label: 支出, amount: 219894, amountType: expense }
+          - { label: 収支, amount: 93341, amountType: balance }
+        expectedDataToolFacts:
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalIncome,
+              value: 313235,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalExpense,
+              value: 219894,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.netIncome,
+              value: 93341,
+            }
+        derivedVisibleClaims:
+          - { amount: 29.8, sourceValues: [93341, 313235] }
+          - { amount: 30, sourceValues: [93341, 313235] }
+        requiredInsightPatterns:
+          - (黒字|プラス|余剰|手残り)
+          - (貯蓄|積立|予算|見直し|確保|繰り越|繰越|持ち越|(?:翌月|来月).{0,8}(回す|充て|繰り))
+        expectedInsightActionPattern: (家計|収支|月次|予算|支出|内訳|詳細)
+        expectedCardTypes: [summary, insight]
+        expectedRoute: /0/cf/2026-07
+
+- description: 食費がカテゴリ合計・内訳・詳細導線を返す
+  vars:
+    question: 今月の食費は？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: not-contains
+      value: データを取得できません
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        allowedVisibleAmounts: [41837, 219894]
+        allowedVisibleMonths: ["2026-07"]
+        allowedCardHeadingDates: ["2026-07-01", "2026-07-31"]
+        allowedFallbackTextDates: ["2026-07-01", "2026-07-31"]
+        allowedVisiblePercentages: [19, 19.03]
+        visibleAmountClaims:
+          - { label: 食費, amount: 41837 }
+          - { label: 支出, amount: 219894 }
+        visiblePercentageClaims:
+          - { label: 食費, amount: 19, basisPattern: (支出|出費|総支出) }
+          - { label: 食費, amount: 19.03, basisPattern: (支出|出費|総支出) }
+        expectedCardFacts: [食費]
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: 食費 }
+          - { cardType: categoryBreakdown, pattern: 食費 }
+        expectedMetrics:
+          - { label: 食費, amount: 41837, amountType: expense }
+        expectedDataToolFacts:
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-07" },
+              path: $.*,
+              value: { category: 食費, type: expense, totalAmount: 41837 },
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalExpense,
+              value: 219894,
+            }
+        derivedVisibleClaims:
+          - { amount: 19, sourceValues: [41837, 219894] }
+          - { amount: 19.03, sourceValues: [41837, 219894] }
+        expectedCategories:
+          - { label: 食費, amount: 41837, amountType: expense, percentage: 19.03 }
+        expectedCardTextFacts:
+          - { cardType: summary, pattern: "(2026[-/]07|2026年7月|7月)" }
+          - { cardType: categoryBreakdown, pattern: "(2026[-/]07|2026年7月|7月)" }
+
+        forbiddenVisiblePatterns:
+          - 食費.{0,16}(ありません|ない|なし|見つかりません|ゼロ)
+        expectedCardTypes: [summary, categoryBreakdown]
+        expectedRoute: /0/cf/2026-07
+
+- description: 日付別支出が対象日・合計・明細を返す
+  vars:
+    question: 今月10日の支出を見たい
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: not-contains
+      value: データを取得できません
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        allowedVisibleAmounts: [6587, 3435, 3152]
+        allowedVisibleDates: ["2026-07-10"]
+        allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: []
+        visibleAmountClaims:
+          - { label: 支出, amount: 6587 }
+        expectedMetrics:
+          - { label: 支出, amount: 6587, amountType: expense }
+        expectedCardTextFacts:
+          - { cardType: summary, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
+          - { cardType: transactionList, pattern: "(2026[-/]07[-/]10|7月10日|7/10)" }
+        expectedCardActionFacts:
+          - {
+              cardType: action,
+              pattern: "(?=.*(2026[-/]07[-/]10|7月10日|7/10))(?=.*(支出|明細|内訳))",
+            }
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: "(支出|出金|支払い)" }
+          - { cardType: transactionList, pattern: "(支出|出金|支払い)" }
+        expectedTransactions:
+          - {
+              ids: ["1229", demo_001260],
+              date: "2026-07-10",
+              description: 東京ガス ガス代,
+              amount: 3435,
+              amountType: expense,
+              category: 水道・光熱費,
+            }
+          - {
+              ids: ["1234", demo_001265],
+              date: "2026-07-10",
+              description: 成城石井,
+              amount: 3152,
+              amountType: expense,
+              category: 食費,
+            }
+        requireTransactionToolGrounding: true
+        expectedDataToolFacts:
+          - {
+              toolName: searchTransactions,
+              input: { date: "2026-07-10", type: expense },
+              path: $.transactions.*,
+              value:
+                {
+                  date: "2026-07-10",
+                  description: 東京ガス ガス代,
+                  category: 水道・光熱費,
+                  type: expense,
+                  amount: 3435,
+                },
+            }
+          - {
+              toolName: searchTransactions,
+              input: { date: "2026-07-10", type: expense },
+              path: $.transactions.*,
+              value:
+                {
+                  date: "2026-07-10",
+                  description: 成城石井,
+                  category: 食費,
+                  type: expense,
+                  amount: 3152,
+                },
+            }
+        derivedVisibleClaims:
+          - { amount: 6587, sourceValues: [3435, 3152] }
+        forbiddenVisiblePatterns:
+          - (7月10日|2026[-/]07[-/]10|支出|明細|取引).{0,16}(ありません|ない|なし|見つかりません|ゼロ)
+        expectedCardTypes: [summary, transactionList, action]
+        expectedRoute: /0/cf/2026-07
+
+- description: 総資産が fixture の残高と資産導線を返す
+  vars:
+    question: 総資産は？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: not-contains
+      value: データを取得できません
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        allowedVisibleAmounts: [5683100]
+        allowedVisibleDates: ["2026-07-31"]
+        allowedVisibleMonths: ["2026-07"]
+        allowedVisiblePercentages: []
+        visibleAmountClaims:
+          - { label: 総資産, amount: 5683100 }
+        expectedMetrics:
+          - { label: 総資産, amount: 5683100, amountType: balance }
+        expectedDataToolFacts:
+          - { toolName: getLatestTotalAssets, path: $, value: 5683100 }
+        forbiddenVisiblePatterns:
+          - (総資産|保有資産|資産).{0,12}(ありません|ない|なし|保有していません|ゼロ(?:です|となっています))
+          - (総負債|負債|借入|ローン)(?:は|が)?.{0,6}(ありません|ない|なし|ゼロ(?:です|となっています))
+          - (総負債|負債|借入|ローン)(?:は|が)?.{0,6}(あります|ある|存在しています|残っています)(?![^。！？\n]{0,16}(とは限|とは言え|確認でき|不明))
+          - (総資産|保有資産|資産).{0,32}(増えています|増えました|減っています|減りました|増加(?:しています|しました|傾向(?:です|にあります))|減少(?:しています|しました|傾向(?:です|にあります))|上昇(?:しています|しました|傾向(?:です|にあります))|低下(?:しています|しました|傾向(?:です|にあります))|改善(?:しています|しました)|悪化(?:しています|しました)|上回っています|下回っています)
+          - (総資産|保有資産|資産).{0,16}(横ばい|変化(?:は|が)?(?:なし|ない)|同額|同じ)(?:です|でした|である|だ)
+          - (以前|過去|前回|前月|先月|前年|比較).{0,24}(増えています|増えました|減っています|減りました|増加(?:しています|しました|傾向(?:です|にあります))|減少(?:しています|しました|傾向(?:です|にあります))|上昇(?:しています|しました|傾向(?:です|にあります))|低下(?:しています|しました|傾向(?:です|にあります))|改善(?:しています|しました)|悪化(?:しています|しました)|上回っています|下回っています)
+          - (総資産|保有資産|資産).{0,20}(すべて|全て|全部|全額|のみ|だけ).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?![^。！？\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))
+          - (現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産).{0,12}(が|で)(総資産|保有資産|資産).{0,8}(すべて|全て|全部|全額|を構成|を占め)
+          - (総資産|保有資産|資産).{0,20}(大半|過半|半分以上|主に|中心|多く).{0,8}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)
+          - (現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産).{0,12}(が|で)(総資産|保有資産|資産).{0,8}(大半|過半|半分以上|中心|多く|を占め)
+          - (現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が|は).{0,8}(多め|少なめ|中心|主体|主要|最大|最小|多い|少ない)
+          - (資産構成|ポートフォリオ).{0,16}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産).{0,8}(中心|主体|主要|多め|少なめ|多い|少ない)
+          - ((総資産|保有資産|資産)(?:には|に|は|が).{0,12}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:(?:が|も)?(?:含まれています|含まれます|含まれている|あります|保有されています)|を保有しています)|(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)(?:が|は).{0,12}(総資産|保有資産|資産)(?:に|へ)(含まれています|含まれます|含まれている|あります))(?![^。！？\n]{0,16}(とは限|とは言え|断定でき|判断でき|不明))
+          - (総資産|保有資産|資産).{0,32}(伸びています|伸びました|伸長しています|伸長しました)
+          - (総資産|保有資産|資産).{0,16}(過去|史上)(?:最高|最低)
+          - ((最大|最小|最多|最少|一番(?:多い|少ない|大きい|小さい)).{0,12}(資産|カテゴリ)|(資産|カテゴリ).{0,12}(最大|最小|最多|最少|一番(?:多い|少ない|大きい|小さい))).{0,12}(現金|預金|株式|投資信託|暗号資産|仮想通貨|債券|保険|不動産)
+        expectedCardTitleFacts:
+          - { cardType: summary, pattern: 総資産 }
+        expectedCardTypes: [summary]
+        expectedRoute: /0/bs
+
+- description: 支出改善が具体的なカテゴリ・根拠・内訳導線を返す
+  vars:
+    question: 削れそうな支出ある？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: not-contains
+      value: 必ず削減できます
+    - type: not-regex
+      value: (必ず|確実に|絶対に).{0,8}(削減|節約)(でき|可能)
+    - type: not-regex
+      value: (削減|節約)[がはも]?(できます|できる|可能です|可能だ)
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        allowedVisibleAmounts: [93341, 41837, 19475, 11198, 49922, 12111, 11495, 8085, 7364, 297]
+        allowedVisibleDates: ["2026-06-30", "2026-07-31"]
+        allowedVisiblePercentages: [29.8, 30, 34.2, 34.68, 34.7, 64, 64.48, 64.5]
+        allowedVisibleMonths: ["2026-06", "2026-07"]
+        allowedCardHeadingDates: ["2026-07-31"]
+        visibleMonthClaims:
+          - { month: "2026-07" }
+          - { month: "2026-06", rolePattern: (前月|先月|比較) }
+        visibleAmountClaims:
+          - { label: 手残り, amount: 93341 }
+          - { label: 食費, amount: 41837 }
+          - { label: 食費, amount: 49922, rolePattern: (前月|先月|比較) }
+          - {
+              label: 食費,
+              amount: 8085,
+              rolePattern: '((差額|差|増減|変化).{0,20}(減|減少|下回)|円\s*(の\s*)?(減|減少)|下回)',
+            }
+          - { label: 衣服・美容, amount: 19475 }
+          - { label: 衣服・美容, amount: 12111, rolePattern: (前月|先月|比較) }
+          - {
+              label: 衣服・美容,
+              amount: 7364,
+              rolePattern: '((差額|差|増減|変化).{0,20}(増|増加|上回)|円\s*(の\s*)?(増|増加)|上回)',
+            }
+          - { label: 日用品, amount: 11198 }
+          - { label: 日用品, amount: 11495, rolePattern: (前月|先月|比較) }
+          - {
+              label: 日用品,
+              amount: 297,
+              rolePattern: '((差額|差|増減|変化).{0,20}(減|減少|下回)|円\s*(の\s*)?(減|減少)|下回)',
+            }
+        visiblePercentageClaims:
+          - { label: 貯蓄率, amount: 29.8 }
+          - { label: 貯蓄率, amount: 30 }
+          - { label: 貯蓄率, amount: 64, rolePattern: (前月|先月|比較) }
+          - { label: 貯蓄率, amount: 64.48, rolePattern: (前月|先月|比較) }
+          - { label: 貯蓄率, amount: 64.5, rolePattern: (前月|先月|比較) }
+          - { label: 貯蓄率, amount: 34.2, rolePattern: (低下|減少|下落) }
+          - { label: 貯蓄率, amount: 34.68, rolePattern: (低下|減少|下落) }
+          - { label: 貯蓄率, amount: 34.7, rolePattern: (低下|減少|下落) }
+        allowedInsightMetrics:
+          - {
+              amount: 19475,
+              amountType: balance,
+              labelPattern: (?=.*(衣服・美容|衣服))(?=.*(候補|見直し|参考|対象)),
+            }
+          - {
+              amount: 7364,
+              amountType: balance,
+              labelPattern: (?=.*(衣服・美容|衣服))(?=.*(差|増|前月|比較))(?=.*(候補|見直し|参考|対象)),
+            }
+        expectedDataToolFacts:
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalIncome,
+              value: 313235,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.totalExpense,
+              value: 219894,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-07" },
+              path: $.netIncome,
+              value: 93341,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-06" },
+              path: $.totalIncome,
+              value: 637637,
+            }
+          - {
+              toolName: getMonthlySummaryByMonth,
+              input: { month: "2026-06" },
+              path: $.netIncome,
+              value: 411133,
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-07" },
+              path: $.*,
+              value: { category: 衣服・美容, type: expense, totalAmount: 19475 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-06" },
+              path: $.*,
+              value: { category: 衣服・美容, type: expense, totalAmount: 12111 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-07" },
+              path: $.*,
+              value: { category: 食費, type: expense, totalAmount: 41837 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-06" },
+              path: $.*,
+              value: { category: 食費, type: expense, totalAmount: 49922 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-07" },
+              path: $.*,
+              value: { category: 日用品, type: expense, totalAmount: 11198 },
+            }
+          - {
+              toolName: getMonthlyCategoryTotals,
+              input: { month: "2026-06" },
+              path: $.*,
+              value: { category: 日用品, type: expense, totalAmount: 11495 },
+            }
+        derivedVisibleClaims:
+          - { amount: 29.8, sourceValues: [93341, 313235] }
+          - { amount: 30, sourceValues: [93341, 313235] }
+          - { amount: 64, sourceValues: [411133, 637637] }
+          - { amount: 64.48, sourceValues: [411133, 637637] }
+          - { amount: 64.5, sourceValues: [411133, 637637] }
+          - { amount: 34.2, sourceValues: [93341, 313235, 411133, 637637] }
+          - { amount: 34.68, sourceValues: [93341, 313235, 411133, 637637] }
+          - { amount: 34.7, sourceValues: [93341, 313235, 411133, 637637] }
+          - { amount: 8085, sourceValues: [41837, 49922] }
+          - { amount: 7364, sourceValues: [19475, 12111] }
+          - { amount: 297, sourceValues: [11198, 11495] }
+        expectedInsightFacts: [2026-07]
+        expectedCardTitleFacts:
+          - { cardType: insight, pattern: (衣服・美容|衣服) }
+        requiredInsightPatterns:
+          - 衣服・美容
+          - (衣服・美容.{0,40}(前月|先月).{0,20}(高い|多い|増加|上回)|(前月|先月).{0,20}衣服・美容.{0,20}(高い|多い|増加|上回))
+          - (ため|ので|理由|高い|多い|増加|上回)
+        expectedInsightActionPattern: ^(?=.*(衣服・美容|衣服)).*(内訳|支出|見る|確認)
+        forbiddenVisiblePatterns:
+          - (増加|上回|高い|多い)(していない|していません|とは限りません|とは言えません|とは認められません|[がは]?確認できません|ではない|でない|ではありません|対象外)
+          - ((衣服・美容|衣服).{0,30}(前月|先月).{0,20}|(前月|先月).{0,20}(衣服・美容|衣服).{0,20})(減少|下回)(?!\s*.{0,10}(していない|していません|ではなく|ではない|ではありません|でない|わけではない|訳ではない))
+          - ((食費).{0,30}(前月|先月).{0,20}|(前月|先月).{0,20}(食費).{0,20})(増加|上回)(?!\s*.{0,10}(していない|していません|ではなく|ではない|ではありません|でない|わけではない|訳ではない))
+          - (削れそうな支出|改善候補|見直し候補).{0,10}(ありません|ない|なし)
+          - (削減可能額|削減額|節約可能額)
+        allowedCardTypeSets:
+          - [insight]
+          - [insight, chart]
+          - [chart, insight]
+        expectedRoute: /0/cf/2026-07

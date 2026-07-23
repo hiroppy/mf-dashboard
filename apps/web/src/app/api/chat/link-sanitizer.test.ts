@@ -52,6 +52,10 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(sanitizeFinanceChatLinks("https://attacker.exampleです。", new Set())).toBe("です。");
   });
 
+  it("removes a bare URL with an uppercase scheme", () => {
+    expect(sanitizeFinanceChatLinks("HTTPS://attacker.example", new Set())).toBe("");
+  });
+
   it.each([".", ","])(
     "preserves trailing punctuation after an allowed bare URL: %s",
     (punctuation) => {
@@ -100,9 +104,259 @@ describe("splitCompleteFinanceChatText", () => {
       pending: "続き",
     });
   });
+
+  it("buffers a reference-style link until its definition arrives", () => {
+    expect(splitCompleteFinanceChatText("[詳細][route]\n")).toEqual({
+      complete: "",
+      pending: "[詳細][route]\n",
+    });
+    expect(splitCompleteFinanceChatText("[詳細][route]\n[route]: /group-a/cf/2026-07\n")).toEqual({
+      complete: "[詳細][route]\n[route]: /group-a/cf/2026-07\n",
+      pending: "",
+    });
+  });
+
+  it("keeps a reference link buffered with its definition when the definition has no newline", () => {
+    expect(splitCompleteFinanceChatText("[詳細][route]\n[route]: /group-a/cf/2026-07")).toEqual({
+      complete: "",
+      pending: "[詳細][route]\n[route]: /group-a/cf/2026-07",
+    });
+  });
+
+  it("keeps a raw HTML anchor buffered until its closing tag arrives", () => {
+    const openingChunk = '<a href="mailto:evil@example.com">詳細。';
+    expect(splitCompleteFinanceChatText(openingChunk)).toEqual({
+      complete: "",
+      pending: openingChunk,
+    });
+    expect(splitCompleteFinanceChatText(`${openingChunk}</a>続き。`)).toEqual({
+      complete: `${openingChunk}</a>続き。`,
+      pending: "",
+    });
+    expect(sanitizeFinanceChatLinks(`${openingChunk}</a>続き。`, new Set())).toBe("詳細。続き。");
+  });
+
+  it("closes a self-closing HTML anchor before the next sentence", () => {
+    const text = '<a href="javascript:alert(1)"/>メール。続き';
+    expect(splitCompleteFinanceChatText(text)).toEqual({
+      complete: '<a href="javascript:alert(1)"/>メール。',
+      pending: "続き",
+    });
+  });
+
+  it.each(["前半 <a 後半です。", "`<a` はHTMLタグ例です。"])(
+    "streams a literal unterminated anchor opener: %s",
+    (text) => {
+      expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+    },
+  );
+
+  it.each([
+    '`<a href="/0/cf">` はHTMLタグ例です。',
+    '`` `<a href="/0/cf">` `` はHTMLタグ例です。',
+    '```html\n<a href="/0/cf">\n```\n続き。',
+  ])("streams a raw anchor literal inside Markdown code: %s", (text) => {
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+  });
+
+  it("does not close a Markdown code span with a longer backtick run", () => {
+    const text = '``example ``` <a href="/0/cf">literal</a> ``。';
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+  });
+
+  it("keeps a quoted self-closing marker inside an anchor opener buffered", () => {
+    const text = '<a title="/>。';
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: "", pending: text });
+  });
+
+  it.each([
+    ["\\\\[x](javascript:alert(1)。", "", "\\\\[x](javascript:alert(1)。"],
+    ["\\\\`危険。`続き。", "\\\\`危険。`続き。", ""],
+  ])("uses backslash parity before streamed Markdown syntax: %s", (text, complete, pending) => {
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete, pending });
+  });
 });
 
 describe("createFinanceChatLinkSanitizer", () => {
+  it("buffers and sanitizes a Markdown link after an even backslash run", async () => {
+    const onSanitizedText = vi.fn<(text: string) => void>();
+    const transform = createFinanceChatLinkSanitizer(
+      "group-a",
+      onSanitizedText,
+    )({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: "\\\\[x](javascript:alert(1)。",
+    });
+    expect(onSanitizedText).not.toHaveBeenCalled();
+
+    await writer.write({ type: "text-delta", id: "text-a", text: ")。" });
+    expect(onSanitizedText).toHaveBeenCalledWith("\\\\x。");
+
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+  });
+
+  it("streams past an unmatched quote in a raw anchor label", async () => {
+    const onSanitizedText = vi.fn<(text: string) => void>();
+    const transform = createFinanceChatLinkSanitizer(
+      "group-a",
+      onSanitizedText,
+    )({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: '<a href="/group-a/cf/2026-07">don',
+    });
+    await writer.write({ type: "text-delta", id: "text-a", text: "'t</a>。続き。" });
+
+    expect(onSanitizedText).toHaveBeenCalledWith("don't。続き。");
+
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+  });
+
+  it("buffers a raw anchor whose first attribute starts after a streamed newline", async () => {
+    const transform = createFinanceChatLinkSanitizer("group-a")({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: Array<{ type: string; text?: string }> = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({ type: "text-delta", id: "text-a", text: "<a\n" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: 'href="javascript:alert(1)">click</a>。',
+    });
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.text)
+        .join(""),
+    ).toBe("click。");
+  });
+
+  it("preserves fenced-code state across streamed fragments", async () => {
+    const transform = createFinanceChatLinkSanitizer("group-a")({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: Array<{ type: string; text?: string }> = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({ type: "text-delta", id: "text-a", text: "```html\n" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: '<a href="javascript:alert(1)">example</a>\n```',
+    });
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.text)
+        .join(""),
+    ).toBe('```html\n<a href="javascript:alert(1)">example</a>\n```');
+  });
+
+  it("retains a reference definition emitted before its use", async () => {
+    const transform = createFinanceChatLinkSanitizer("group-a")({
+      stopStream: vi.fn<() => void>(),
+      tools: {},
+    });
+    const reader = transform.readable.getReader();
+    const writer = transform.writable.getWriter();
+    const chunks: Array<{ type: string; text?: string }> = [];
+    const readPromise = (async () => {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) return;
+        chunks.push(result.value);
+      }
+    })();
+
+    await writer.write({
+      type: "tool-result",
+      toolCallId: "route-a",
+      toolName: "getFinanceDashboardRoute",
+      input: {},
+      output: { href: "/group-a/cf/2026-07" },
+    });
+    await writer.write({ type: "text-start", id: "text-a" });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: "[route]: /group-a/cf/2026-07\n",
+    });
+    await writer.write({ type: "text-delta", id: "text-a", text: "[詳細][route]\n" });
+    await writer.write({ type: "text-end", id: "text-a" });
+    await writer.close();
+    await readPromise;
+
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === "text-delta")
+        .map((chunk) => chunk.text)
+        .join(""),
+    ).toBe("[詳細](/group-a/cf/2026-07)\n");
+  });
+
   it("flushes sanitized buffered text before an error chunk", async () => {
     const onSanitizedText = vi.fn<(text: string) => void>();
     const transform = createFinanceChatLinkSanitizer(
