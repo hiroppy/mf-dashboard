@@ -70,6 +70,42 @@ describe("crawler run lock", () => {
     });
   });
 
+  test("preserves a run that finishes while checking an absent lock", async () => {
+    const statePath = `${lockPath}.state`;
+    const runningState = {
+      version: 1 as const,
+      runId: "run-a",
+      source: "scheduled",
+      startedAt: "2026-07-01T00:00:00.000Z",
+      finishedAt: null,
+      runStatus: "running" as const,
+      current: null,
+      waitingFor: "処理の完了を待機",
+      progress: null,
+      reason: null,
+      timeline: [],
+    };
+    await writeCrawlerRunState(runningState, { statePath });
+
+    const finishedState = {
+      ...runningState,
+      finishedAt: "2026-07-01T00:01:00.000Z",
+      runStatus: "success" as const,
+      waitingFor: null,
+      progress: { completed: 0, total: 0 },
+    };
+    const state = await getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        await writeCrawlerRunState(finishedState, { statePath });
+      },
+      lockPath,
+      statePath,
+    });
+
+    expect(state).toEqual({ ...finishedState, running: false, pid: null });
+    await expect(readCrawlerRunState({ statePath })).resolves.toEqual(finishedState);
+  });
+
   test("returns idle state when no lock exists", async () => {
     await expect(getCrawlerRunState({ lockPath })).resolves.toEqual({
       running: false,
