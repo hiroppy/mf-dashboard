@@ -674,7 +674,15 @@ export async function runWithCrawlerRunLock<T>(
     await progress.finish("success");
     return result;
   } catch (err) {
-    await progress.finish("failed");
+    try {
+      await progress.finish("failed");
+    } catch (finishError) {
+      throw new AggregateError(
+        [err, finishError],
+        "Crawler run failed and its terminal state could not be saved",
+        { cause: err },
+      );
+    }
     throw err;
   } finally {
     await lock.release();

@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -58,6 +58,29 @@ describe("crawler run lock", () => {
         statePath: tempDir,
       }),
     ).rejects.toThrow(/EISDIR|directory/);
+
+    const lock = await acquireCrawlerRunLock("manual", { lockPath });
+    await lock.release();
+  });
+
+  test("preserves the crawler error when failed state persistence also fails", async () => {
+    const statePath = `${lockPath}.state`;
+    const crawlerError = new Error("crawler failed");
+
+    const run = runWithCrawlerRunLock(
+      "manual",
+      async () => {
+        await rm(statePath);
+        await mkdir(statePath);
+        throw crawlerError;
+      },
+      { lockPath, statePath },
+    );
+
+    await expect(run).rejects.toMatchObject({
+      cause: crawlerError,
+      errors: [crawlerError, expect.any(Error)],
+    });
 
     const lock = await acquireCrawlerRunLock("manual", { lockPath });
     await lock.release();
