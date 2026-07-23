@@ -4,6 +4,7 @@ import { ActionIcons } from "./action-icons";
 
 const originalEnv = { ...process.env };
 const originalFetch = global.fetch;
+const originalEventSource = global.EventSource;
 const { refreshMock, routerMock } = vi.hoisted(() => {
   const refreshMock = vi.fn<() => void>();
   return {
@@ -20,6 +21,29 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
+  });
+}
+
+class EventSourceMock {
+  static instances: EventSourceMock[] = [];
+  readonly url: string;
+  onerror: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  close = vi.fn<() => void>();
+
+  constructor(url: string | URL) {
+    this.url = String(url);
+    EventSourceMock.instances.push(this);
+  }
+
+  emit(body: unknown) {
+    this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(body) }));
+  }
+}
+
+async function emitStatus(body: unknown): Promise<void> {
+  await act(async () => {
+    EventSourceMock.instances.at(-1)?.emit(body);
   });
 }
 
@@ -54,6 +78,8 @@ const failedLatestRun = {
 
 beforeEach(() => {
   refreshMock.mockReset();
+  EventSourceMock.instances = [];
+  global.EventSource = EventSourceMock as unknown as typeof EventSource;
   global.fetch = vi
     .fn<typeof fetch>()
     .mockResolvedValue(jsonResponse({ available: true, running: false }));
@@ -61,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env = { ...originalEnv };
+  global.EventSource = originalEventSource;
   global.fetch = originalFetch;
 });
 
@@ -90,29 +117,24 @@ describe("ActionIcons", () => {
   });
 
   it("does not show the updating state while loading the initial status", async () => {
-    let resolveStatus: ((response: Response) => void) | undefined;
-    vi.mocked(global.fetch).mockReturnValueOnce(
-      new Promise<Response>((resolve) => {
-        resolveStatus = resolve;
-      }),
-    );
-
-    render(<ActionIcons variant="header" />);
+    const { unmount } = render(<ActionIcons variant="header" />);
 
     const refreshButton = screen.getByRole("button", { name: "更新サービス未接続" });
     expect(refreshButton.querySelector("svg")?.getAttribute("class")).not.toContain("animate-spin");
+    const events = EventSourceMock.instances.at(-1);
+    expect(events?.url).toBe("/api/crawler/refresh/");
 
-    await act(async () => {
-      resolveStatus?.(jsonResponse({ available: true, running: false }));
-    });
+    unmount();
+    expect(events?.close).toHaveBeenCalledTimes(1);
   });
 
   it("starts a crawler refresh from the header refresh button", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
-      .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ available: true, running: true }, 202),
+    );
 
     render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
 
     const refreshButton = await screen.findByRole("button", { name: "金融機関データを更新" });
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
@@ -125,71 +147,47 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  it("ignores an older status response after starting a refresh", async () => {
-    const intervalCallbacks: Array<() => unknown> = [];
-    const setIntervalSpy = vi.spyOn(window, "setInterval").mockImplementation((handler) => {
-      if (typeof handler === "function") {
-        intervalCallbacks.push(handler as () => unknown);
-      }
-      return 1 as unknown as ReturnType<typeof window.setInterval>;
+  it("ignores a status event while starting a refresh", async () => {
+    let resolvePost: ((response: Response) => void) | undefined;
+    vi.mocked(global.fetch).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolvePost = resolve;
+      }),
+    );
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関データを更新" }));
+    await emitStatus({ running: false });
+
+    expect(screen.getByRole("button", { name: "同期タイムラインを表示" })).toBeTruthy();
+
+    await act(async () => {
+      resolvePost?.(jsonResponse({ available: true, running: true }, 202));
     });
-    const clearIntervalSpy = vi.spyOn(window, "clearInterval").mockImplementation(() => undefined);
-    let resolveOldStatus: ((response: Response) => void) | undefined;
-
-    try {
-      vi.mocked(global.fetch)
-        .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
-        .mockReturnValueOnce(
-          new Promise<Response>((resolve) => {
-            resolveOldStatus = resolve;
-          }),
-        )
-        .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
-
-      render(<ActionIcons variant="header" />);
-
-      const refreshButton = await screen.findByRole("button", {
-        name: "金融機関データを更新",
-      });
-      void intervalCallbacks[0]?.();
-      fireEvent.click(refreshButton);
-
-      await screen.findByRole("button", { name: "同期タイムラインを表示" });
-
-      await act(async () => {
-        resolveOldStatus?.(jsonResponse({ available: true, running: false }));
-      });
-
-      expect(screen.getByRole("button", { name: "同期タイムラインを表示" })).toBeTruthy();
-    } finally {
-      setIntervalSpy.mockRestore();
-      clearIntervalSpy.mockRestore();
-    }
   });
 
   it("starts another refresh after the latest run succeeded", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          available: true,
-          running: false,
-          latestRun: {
-            version: 1,
-            runId: "run-success",
-            runStatus: "success",
-            source: "manual",
-            startedAt: "2026-01-01T00:00:00.000Z",
-            finishedAt: "2026-01-01T00:01:00.000Z",
-            current: null,
-            progress: { completed: 5, total: 5 },
-            timeline: [],
-            reason: null,
-          },
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ available: true, running: true }, 202),
+    );
 
     render(<ActionIcons variant="header" />);
+    await emitStatus({
+      running: false,
+      latestRun: {
+        version: 1,
+        runId: "run-success",
+        runStatus: "success",
+        source: "manual",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        finishedAt: "2026-01-01T00:01:00.000Z",
+        current: null,
+        progress: { completed: 5, total: 5 },
+        timeline: [],
+        reason: null,
+      },
+    });
 
     const refreshButton = await screen.findByRole("button", { name: "金融機関データを更新" });
     fireEvent.click(refreshButton);
@@ -201,96 +199,79 @@ describe("ActionIcons", () => {
   });
 
   it("refreshes the dashboard after the crawler run finishes", async () => {
-    const intervalCallbacks: Array<() => unknown> = [];
-    const setIntervalSpy = vi.spyOn(window, "setInterval").mockImplementation((handler) => {
-      if (typeof handler === "function") {
-        intervalCallbacks.push(handler as () => unknown);
-      }
-      return 1 as unknown as ReturnType<typeof window.setInterval>;
-    });
-    const clearIntervalSpy = vi.spyOn(window, "clearInterval").mockImplementation(() => undefined);
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ available: true, running: true }, 202),
+    );
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
 
-    try {
-      vi.mocked(global.fetch)
-        .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
-        .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202))
-        .mockResolvedValueOnce(jsonResponse({ available: true, running: false }));
+    fireEvent.click(screen.getByRole("button", { name: "金融機関データを更新" }));
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
+    );
 
-      render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
 
-      const refreshButton = await screen.findByRole("button", {
-        name: "金融機関データを更新",
-      });
-      expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
-
-      fireEvent.click(refreshButton);
-
-      await waitFor(() =>
-        expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
-      );
-      expect(refreshMock).not.toHaveBeenCalled();
-
-      await act(async () => {
-        await intervalCallbacks[0]?.();
-      });
-
-      await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
-    } finally {
-      setIntervalSpy.mockRestore();
-      clearIntervalSpy.mockRestore();
-    }
+    expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes the dashboard when a crawler run fails after partial updates", async () => {
-    const intervalCallbacks: Array<() => unknown> = [];
-    const setIntervalSpy = vi.spyOn(window, "setInterval").mockImplementation((handler) => {
-      if (typeof handler === "function") {
-        intervalCallbacks.push(handler as () => unknown);
-      }
-      return 1 as unknown as ReturnType<typeof window.setInterval>;
-    });
-    const clearIntervalSpy = vi.spyOn(window, "clearInterval").mockImplementation(() => undefined);
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: true });
+    await emitStatus({ running: false, latestRun: failedLatestRun });
 
-    try {
-      vi.mocked(global.fetch)
-        .mockResolvedValueOnce(jsonResponse({ available: true, running: true }))
-        .mockResolvedValueOnce(
-          jsonResponse({ available: true, running: false, latestRun: failedLatestRun }),
-        );
-
-      render(<ActionIcons variant="header" />);
-      await screen.findByRole("button", { name: "同期タイムラインを表示" });
-
-      await act(async () => {
-        await intervalCallbacks[0]?.();
-      });
-
-      await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
-      expect(screen.getByRole("button", { name: "同期失敗の詳細を表示" })).toBeTruthy();
-    } finally {
-      setIntervalSpy.mockRestore();
-      clearIntervalSpy.mockRestore();
-    }
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "同期失敗の詳細を表示" })).toBeTruthy();
   });
 
   it("opens the latest running timeline without starting another refresh", async () => {
     const startedAt = "2026-01-01T00:00:00.000Z";
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({
-        available: true,
-        running: true,
+    const status = {
+      running: true,
+      source: "scheduled",
+      startedAt,
+      latestRun: {
+        version: 1,
+        runId: "run-1",
+        runStatus: "running",
         source: "scheduled",
         startedAt,
-        latestRun: {
-          version: 1,
-          runId: "run-1",
-          runStatus: "running",
-          source: "scheduled",
-          startedAt,
-          finishedAt: null,
-          progress: { completed: 2, total: 5 },
-          current: {
-            timelineItemId: "refresh",
+        finishedAt: null,
+        progress: { completed: 2, total: 5 },
+        current: {
+          timelineItemId: "refresh",
+          label: "金融機関データを一括更新",
+          step: "moneyforward_refresh",
+          metadata: {
+            kind: "refresh",
+            maxWaitMinutes: 10,
+            remainingAccounts: 1,
+            incompleteAccounts: ["金融機関 A"],
+          },
+        },
+        timeline: [
+          {
+            id: "auth",
+            label: "認証",
+            step: "authentication",
+            metadata: null,
+            status: "done",
+            startedAt,
+            finishedAt: "2026-01-01T00:00:10.000Z",
+            reason: null,
+          },
+          {
+            id: "accounts",
+            label: "登録口座を取得",
+            step: "registered_accounts",
+            metadata: null,
+            status: "running",
+            startedAt: "2026-01-01T00:00:10.000Z",
+            finishedAt: null,
+            reason: null,
+          },
+          {
+            id: "refresh",
             label: "金融機関データを一括更新",
             step: "moneyforward_refresh",
             metadata: {
@@ -299,50 +280,18 @@ describe("ActionIcons", () => {
               remainingAccounts: 1,
               incompleteAccounts: ["金融機関 A"],
             },
+            status: "running",
+            startedAt: "2026-01-01T00:00:10.000Z",
+            finishedAt: null,
+            reason: null,
           },
-          timeline: [
-            {
-              id: "auth",
-              label: "認証",
-              step: "authentication",
-              metadata: null,
-              status: "done",
-              startedAt,
-              finishedAt: "2026-01-01T00:00:10.000Z",
-              reason: null,
-            },
-            {
-              id: "accounts",
-              label: "登録口座を取得",
-              step: "registered_accounts",
-              metadata: null,
-              status: "running",
-              startedAt: "2026-01-01T00:00:10.000Z",
-              finishedAt: null,
-              reason: null,
-            },
-            {
-              id: "refresh",
-              label: "金融機関データを一括更新",
-              step: "moneyforward_refresh",
-              metadata: {
-                kind: "refresh",
-                maxWaitMinutes: 10,
-                remainingAccounts: 1,
-                incompleteAccounts: ["金融機関 A"],
-              },
-              status: "running",
-              startedAt: "2026-01-01T00:00:10.000Z",
-              finishedAt: null,
-              reason: null,
-            },
-          ],
-          reason: null,
-        },
-      }),
-    );
+        ],
+        reason: null,
+      },
+    };
 
     render(<ActionIcons variant="header" />);
+    await emitStatus(status);
 
     const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
@@ -371,20 +320,13 @@ describe("ActionIcons", () => {
     expect(
       accountsStep!.compareDocumentPosition(authenticationStep!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
   it("ignores a stale failed snapshot while a new run is active", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({
-        available: true,
-        running: true,
-        latestRun: failedLatestRun,
-      }),
-    );
-
     render(<ActionIcons variant="header" />);
+    await emitStatus({ running: true, latestRun: failedLatestRun });
 
     const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
     expect(screen.queryByText("同期失敗")).toBeNull();
@@ -401,11 +343,10 @@ describe("ActionIcons", () => {
     const postResponse = new Promise<Response>((resolve) => {
       resolvePost = resolve;
     });
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
-      .mockReturnValueOnce(postResponse);
+    vi.mocked(global.fetch).mockReturnValueOnce(postResponse);
 
     render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
 
     fireEvent.click(await screen.findByRole("button", { name: "金融機関データを更新" }));
 
@@ -418,17 +359,12 @@ describe("ActionIcons", () => {
   });
 
   it("opens a failed timeline and retries from the popover", async () => {
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
-          available: true,
-          running: false,
-          latestRun: failedLatestRun,
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ available: true, running: true }, 202),
+    );
 
     render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false, latestRun: failedLatestRun });
 
     const refreshButton = await screen.findByRole("button", { name: "同期失敗の詳細を表示" });
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
@@ -448,11 +384,10 @@ describe("ActionIcons", () => {
   });
 
   it("disables the header refresh button when the crawler service is unavailable", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ available: false, running: false }, 503),
-    );
-
     render(<ActionIcons variant="header" />);
+    await act(async () => {
+      EventSourceMock.instances.at(-1)?.onerror?.(new Event("error"));
+    });
 
     const refreshButton = await screen.findByRole("button", { name: "更新サービス未接続" });
     expect(refreshButton.getAttribute("title")).toBe("更新サービス未接続");

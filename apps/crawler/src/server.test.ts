@@ -70,6 +70,39 @@ describe("crawler trigger server", () => {
     await expect(res.json()).resolves.toEqual(idleState);
   });
 
+  test("streams crawler state changes and releases the watcher on disconnect", async () => {
+    let state = idleState;
+    let notifyChange = () => {};
+    const stopWatching = vi.fn<() => void>();
+    const baseUrl = await listen(
+      createCrawlerTriggerServer({
+        getState: async () => state,
+        watchState: async (onChange) => {
+          notifyChange = onChange;
+          return stopWatching;
+        },
+      }),
+    );
+
+    const res = await fetch(`${baseUrl}/events`);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+
+    await expect(reader.read()).resolves.toMatchObject({
+      value: expect.any(Uint8Array),
+      done: false,
+    });
+
+    state = runningState;
+    notifyChange();
+    const update = await reader.read();
+    expect(decoder.decode(update.value)).toContain(JSON.stringify(runningState));
+
+    await reader.cancel();
+    await vi.waitFor(() => expect(stopWatching).toHaveBeenCalledTimes(1));
+  });
+
   test("starts a manual run", async () => {
     const startRun = vi.fn<() => Promise<CrawlerRunState>>(async () => runningState);
     const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));

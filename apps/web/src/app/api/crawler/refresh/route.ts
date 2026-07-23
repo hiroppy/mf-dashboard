@@ -45,7 +45,7 @@ function getCrawlerUrl(): string | null {
   return crawlerUrl.replace(/\/+$/, "");
 }
 
-async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit) {
+async function proxyCrawlerRequest(path: "/runs", init?: RequestInit) {
   const crawlerUrl = getCrawlerUrl();
   if (!crawlerUrl) {
     return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
@@ -67,12 +67,39 @@ async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit
   }
 }
 
+async function proxyCrawlerEvents(request: Request) {
+  const crawlerUrl = getCrawlerUrl();
+  if (!crawlerUrl) {
+    return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
+  }
+
+  try {
+    const response = await fetch(`${crawlerUrl}/events`, {
+      cache: "no-store",
+      headers: { accept: "text/event-stream" },
+      signal: request.signal,
+    });
+    if (!response.ok || !response.body) {
+      return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
+    }
+
+    return new Response(response.body, {
+      headers: {
+        "cache-control": "no-cache, no-transform",
+        "content-type": "text/event-stream",
+      },
+    });
+  } catch {
+    return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
+  }
+}
+
 export async function GET(request: Request) {
   if (!isSameOriginRead(request)) {
     return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
   }
 
-  return proxyCrawlerRequest("/status");
+  return proxyCrawlerEvents(request);
 }
 
 export async function POST(request: Request) {

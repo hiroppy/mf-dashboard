@@ -32,6 +32,10 @@ export interface CrawlerRunState {
   timeline?: CrawlerRunStateSnapshot["timeline"];
 }
 
+export function getCrawlerRunLockPath(): string {
+  return DEFAULT_LOCK_PATH;
+}
+
 interface CrawlerRunLockRecord {
   id: string;
   pid: number;

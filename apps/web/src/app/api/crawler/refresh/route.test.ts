@@ -12,6 +12,12 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function eventStreamResponse(body: unknown): Response {
+  return new Response(`data: ${JSON.stringify(body)}\n\n`, {
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 function sameOriginPostRequest(headers: HeadersInit = {}): Request {
   const requestHeaders = new Headers({
     origin: "https://dashboard.example.com",
@@ -56,211 +62,34 @@ describe("/api/crawler/refresh/", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("proxies crawler status", async () => {
+  it("proxies crawler events as an SSE stream", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ running: true, source: "manual", startedAt: "2026-01-01T00:00:00.000Z" }),
+      eventStreamResponse({ running: true, source: "manual" }),
     );
 
     const res = await GET(sameOriginGetRequest());
 
     expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
     expect(global.fetch).toHaveBeenCalledWith(
-      "http://crawler:8766/status",
-      expect.objectContaining({ cache: "no-store" }),
-    );
-    await expect(res.json()).resolves.toEqual(
+      "http://crawler:8766/events",
       expect.objectContaining({
-        available: true,
-        running: true,
-        source: "manual",
-        startedAt: "2026-01-01T00:00:00.000Z",
-        latestRun: null,
+        cache: "no-store",
+        headers: { accept: "text/event-stream" },
       }),
+    );
+    await expect(res.text()).resolves.toBe(
+      `data: ${JSON.stringify({ running: true, source: "manual" })}\n\n`,
     );
   });
 
-  it("keeps an explicit stopped lock state over a stale running snapshot", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({
-        running: false,
-        version: 1,
-        runId: "stale-run",
-        runStatus: "running",
-        source: "manual",
-        startedAt: "2026-01-01T00:00:00.000Z",
-        finishedAt: null,
-        current: null,
-        progress: null,
-        timeline: [],
-        reason: null,
-      }),
-    );
-
-    const res = await GET(sameOriginGetRequest());
-    const body = await res.json();
-
-    expect(body).toEqual(
-      expect.objectContaining({
-        available: true,
-        running: false,
-        latestRun: expect.objectContaining({ runStatus: "running" }),
-      }),
-    );
-  });
-
-  it("returns unavailable for a malformed successful crawler response", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: "invalid status" }));
+  it("returns unavailable when the crawler event stream fails", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: "failed" }, 500));
 
     const res = await GET(sameOriginGetRequest());
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(503);
     await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
-  });
-
-  it("drops a latest run snapshot with an invalid timestamp", async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({
-        running: false,
-        version: 1,
-        runId: "corrupt-run",
-        runStatus: "failed",
-        source: "manual",
-        startedAt: "not-a-date",
-        finishedAt: "also-not-a-date",
-        current: null,
-        progress: null,
-        timeline: [],
-        reason: { code: "unknown_error", message: "処理に失敗しました" },
-      }),
-    );
-
-    const res = await GET(sameOriginGetRequest());
-
-    await expect(res.json()).resolves.toEqual({
-      available: true,
-      running: false,
-      source: "manual",
-      startedAt: null,
-      latestRun: null,
-    });
-  });
-
-  it("proxies a typed latest run state", async () => {
-    const latestRun = {
-      version: 1,
-      runId: "run-1",
-      runStatus: "failed",
-      source: "manual",
-      startedAt: "2026-01-01T00:00:00.000Z",
-      finishedAt: "2026-01-01T00:01:00.000Z",
-      current: {
-        timelineItemId: "refresh",
-        label: "金融機関を更新",
-        step: "moneyforward_refresh",
-        metadata: {
-          kind: "refresh",
-          maxWaitMinutes: 0.5,
-          remainingAccounts: 1,
-          incompleteAccounts: ["機関 A"],
-        },
-      },
-      progress: { completed: 2, total: 4 },
-      timeline: [
-        {
-          id: "auth",
-          label: "認証",
-          step: "authentication",
-          metadata: null,
-          status: "done",
-          startedAt: "2026-01-01T00:00:00.000Z",
-          finishedAt: "2026-01-01T00:00:10.000Z",
-          reason: null,
-        },
-        {
-          id: "refresh",
-          label: "金融機関を更新",
-          step: "moneyforward_refresh",
-          metadata: {
-            kind: "refresh",
-            maxWaitMinutes: 0.5,
-            remainingAccounts: 1,
-            incompleteAccounts: ["機関 A"],
-          },
-          status: "failed",
-          startedAt: "2026-01-01T00:00:10.000Z",
-          finishedAt: "2026-01-01T00:01:00.000Z",
-          reason: {
-            code: "moneyforward_timeout",
-            message: "画面を開けませんでした",
-            operation: "refresh",
-            timeoutMs: 0.5,
-          },
-        },
-      ],
-      reason: {
-        code: "moneyforward_timeout",
-        message: "画面を開けませんでした",
-        operation: "refresh",
-        timeoutMs: 0.5,
-      },
-    };
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({
-        ...latestRun,
-        running: false,
-        pid: null,
-      }),
-    );
-
-    const res = await GET(sameOriginGetRequest());
-
-    await expect(res.json()).resolves.toEqual({
-      available: true,
-      running: false,
-      source: "manual",
-      startedAt: "2026-01-01T00:00:00.000Z",
-      latestRun,
-    });
-  });
-
-  it("proxies the latest successful run state", async () => {
-    const latestRun = {
-      version: 1,
-      runId: "run-success",
-      runStatus: "success",
-      source: "manual",
-      startedAt: "2026-01-01T00:00:00.000Z",
-      finishedAt: "2026-01-01T00:01:00.000Z",
-      current: null,
-      progress: { completed: 1, total: 1 },
-      timeline: [
-        {
-          id: "auth",
-          label: "認証",
-          step: "authentication",
-          metadata: null,
-          status: "done",
-          startedAt: "2026-01-01T00:00:00.000Z",
-          finishedAt: "2026-01-01T00:01:00.000Z",
-          reason: null,
-        },
-      ],
-      reason: null,
-    };
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ ...latestRun, running: false, pid: null }),
-    );
-
-    const res = await GET(sameOriginGetRequest());
-
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({
-      available: true,
-      running: false,
-      source: "manual",
-      startedAt: "2026-01-01T00:00:00.000Z",
-      latestRun,
-    });
   });
 
   it("starts a crawler run through the crawler service", async () => {
@@ -304,7 +133,7 @@ describe("/api/crawler/refresh/", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects timeline status reads from a cross-site request", async () => {
+  it("rejects event streams from a cross-site request", async () => {
     const res = await GET(
       new Request("https://dashboard.example.com/api/crawler/refresh/", {
         headers: { "sec-fetch-site": "cross-site" },
