@@ -14,14 +14,13 @@ import {
   unavailableCrawlerRefreshStatus,
   type CrawlerRefreshStatus,
 } from "../../lib/crawler-refresh-status";
-import { formatDateTime } from "../../lib/format";
+import { formatDateTime, formatElapsedTime, formatTime } from "../../lib/format";
 import { Button } from "../ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
-const STATUS_POLL_INTERVAL_MS = 15_000;
-const SYNC_BASELINE_STEP_COUNT = 10;
+const STATUS_POLL_INTERVAL_MS = 5_000;
 
 interface ActionIconsProps {
   variant: "header" | "sidebar";
@@ -152,7 +151,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   let ariaLabel = title;
   if (state.running) {
     title = state.startedAt
-      ? `同期タイムラインを表示（開始: ${formatDateTime(state.startedAt)}）`
+      ? `同期タイムラインを表示（開始 ${formatDateTime(state.startedAt)}）`
       : "同期タイムラインを表示";
     ariaLabel = "同期タイムラインを表示";
   } else if (isFailed) {
@@ -162,11 +161,6 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
 
   return (
     <>
-      {showsTimeline && (
-        <span className="hidden lg:inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-          {isFailed ? "同期失敗" : formatProgressLabel(state)}
-        </span>
-      )}
       <Popover open={popoverOpen && showsTimeline} onOpenChange={handlePopoverOpenChange}>
         <PopoverTrigger>
           <IconButton
@@ -191,7 +185,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
         <PopoverContent
           ariaLabel={isFailed ? "同期失敗の詳細" : "同期タイムライン"}
           align="end"
-          className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto"
+          className="h-[min(32rem,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto"
         >
           <SyncTimelinePopover state={state} onRetry={() => void startRefresh()} />
         </PopoverContent>
@@ -200,21 +194,13 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   );
 }
 
-function formatProgressLabel(state: CrawlerRefreshStatus): string {
-  const progress = state.latestRun?.runStatus === "running" ? state.latestRun.progress : null;
-  if (!progress) {
-    return `同期中 · 0/${SYNC_BASELINE_STEP_COUNT}`;
-  }
-  return `同期中 · ${progress.completed}/${progress.total}`;
-}
-
-const stepStatusLabels: Record<CrawlerRunStepStatus, string> = {
-  pending: "待機中",
-  running: "実行中",
-  done: "完了",
-  warning: "警告",
-  failed: "失敗",
-  skipped: "スキップ",
+const stepStatusPresentation: Record<CrawlerRunStepStatus, { label: string; className: string }> = {
+  pending: { label: "待機中", className: "font-semibold text-warning-foreground" },
+  running: { label: "実行中", className: "font-semibold text-primary" },
+  done: { label: "完了", className: "font-semibold text-success" },
+  warning: { label: "警告", className: "font-semibold text-warning-foreground" },
+  failed: { label: "失敗", className: "font-semibold text-destructive" },
+  skipped: { label: "スキップ", className: "font-semibold text-transfer" },
 };
 
 function SyncTimelinePopover({
@@ -225,46 +211,39 @@ function SyncTimelinePopover({
   onRetry: () => void;
 }) {
   const run = state.running && state.latestRun?.runStatus !== "running" ? null : state.latestRun;
+  const failed = run?.runStatus === "failed";
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!state.running) return;
+
+    setNow(Date.now());
+    const intervalId = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(intervalId);
+  }, [state.running]);
+
+  const elapsedTime = state.startedAt
+    ? formatElapsedTime(state.startedAt, run?.finishedAt ?? null, now)
+    : null;
 
   return (
     <>
-      <h2 className="font-semibold">
-        {run?.runStatus === "failed" ? "同期に失敗しました" : "同期タイムライン"}
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {state.startedAt ? `開始: ${formatDateTime(state.startedAt)}` : "最新の同期状況です。"}
-      </p>
+      {failed && <h2 className="font-semibold">同期に失敗しました</h2>}
+      <div
+        className={`${failed ? "mt-1" : ""} flex items-center justify-between gap-4 text-sm text-muted-foreground`}
+      >
+        <p className="tabular-nums">
+          {state.startedAt ? `開始 ${formatTime(state.startedAt)}` : "最新の同期状況です。"}
+          {elapsedTime && ` (${elapsedTime})`}
+        </p>
+        {run?.progress && (
+          <span className="shrink-0 tabular-nums">
+            {run.progress.completed}/{run.progress.total}
+          </span>
+        )}
+      </div>
 
       <div className="mt-5 space-y-5 text-sm">
-        {run?.progress && (
-          <section aria-labelledby="sync-progress-heading">
-            <div className="mb-2 flex items-center justify-between gap-4">
-              <h3 id="sync-progress-heading" className="font-medium">
-                進捗
-              </h3>
-              <span className="text-muted-foreground">
-                {run.progress.completed}/{run.progress.total}
-              </span>
-            </div>
-            <progress
-              aria-labelledby="sync-progress-heading"
-              value={Math.min(run.progress.completed, run.progress.total)}
-              max={run.progress.total || 1}
-              className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
-            />
-          </section>
-        )}
-
-        {run?.current && (
-          <TimelineDetail
-            title="現在"
-            label={run.current.label}
-            detail={formatStepMetadata(run.current)}
-          />
-        )}
-
-        {run?.waitingFor && <TimelineDetail title="待機中" label={run.waitingFor} detail={null} />}
-
         {run?.reason && (
           <section
             aria-labelledby="sync-reason-heading"
@@ -277,16 +256,9 @@ function SyncTimelinePopover({
           </section>
         )}
 
-        <section aria-labelledby="sync-timeline-heading">
-          <h3 id="sync-timeline-heading" className="font-medium">
-            タイムライン
-          </h3>
+        <section aria-label="タイムライン">
           {run && run.timeline.length > 0 ? (
-            <ol className="mt-2 space-y-2">
-              {run.timeline.map((item) => (
-                <TimelineListItem key={item.id} item={item} />
-              ))}
-            </ol>
+            <TimelineTree items={run.timeline} />
           ) : (
             <p className="mt-2 text-muted-foreground">タイムラインはまだありません。</p>
           )}
@@ -302,19 +274,60 @@ function SyncTimelinePopover({
   );
 }
 
-function TimelineListItem({ item }: { item: CrawlerRunTimelineItem }) {
+function TimelineTree({ items }: { items: CrawlerRunTimelineItem[] }) {
+  const itemIds = new Set(items.map(({ id }) => id));
+  const newestFirstItems = [...items].reverse();
+  const rootItems = newestFirstItems.filter(
+    ({ parentTimelineItemId }) => !parentTimelineItemId || !itemIds.has(parentTimelineItemId),
+  );
+
+  function renderItem(item: CrawlerRunTimelineItem, nested: boolean): ReactNode {
+    const children = newestFirstItems.filter(
+      ({ parentTimelineItemId }) => parentTimelineItemId === item.id,
+    );
+
+    return (
+      <TimelineListItem
+        key={item.id}
+        item={item}
+        hideStatus={children.some(({ status }) => status === "running")}
+        nested={nested}
+      >
+        {children.length > 0 && (
+          <ol className="mt-3 space-y-2">{children.map((child) => renderItem(child, true))}</ol>
+        )}
+      </TimelineListItem>
+    );
+  }
+
+  return <ol className="mt-2 space-y-2">{rootItems.map((item) => renderItem(item, false))}</ol>;
+}
+
+function TimelineListItem({
+  item,
+  hideStatus = false,
+  nested = false,
+  children,
+}: {
+  item: CrawlerRunTimelineItem;
+  hideStatus?: boolean;
+  nested?: boolean;
+  children?: ReactNode;
+}) {
   const detail = formatStepMetadata(item);
+  const status = stepStatusPresentation[item.status];
 
   return (
-    <li className="min-w-0 rounded-md border p-3">
+    <li className={`min-w-0 rounded-md border p-3 ${nested ? "bg-muted/40" : ""}`}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <span className="min-w-0 break-words font-medium">{item.label}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {stepStatusLabels[item.status]}
-        </span>
+        {!hideStatus && (
+          <span className={`shrink-0 text-xs ${status.className}`}>{status.label}</span>
+        )}
       </div>
       {detail && <p className="mt-1 break-words text-muted-foreground">{detail}</p>}
       {item.reason && <p className="mt-1 break-words text-destructive">{item.reason.message}</p>}
+      {children}
     </li>
   );
 }
@@ -334,24 +347,6 @@ function formatStepMetadata(item: CrawlerRunStepDetails): string | null {
     default:
       return null;
   }
-}
-
-function TimelineDetail({
-  title,
-  label,
-  detail,
-}: {
-  title: string;
-  label: string;
-  detail: string | null;
-}) {
-  return (
-    <section className="min-w-0 rounded-md bg-muted/60 p-3">
-      <h3 className="font-medium">{title}</h3>
-      <p className="mt-1 break-words">{label}</p>
-      {detail && <p className="mt-1 break-words text-muted-foreground">{detail}</p>}
-    </section>
-  );
 }
 
 function HelpButton({ iconSize, className }: { iconSize: string; className?: string }) {

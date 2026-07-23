@@ -167,6 +167,9 @@ function readTimelineItem(value: unknown): CrawlerRunTimelineItem | null {
   return {
     id: value.id,
     label: value.label,
+    ...(typeof value.parentTimelineItemId === "string"
+      ? { parentTimelineItemId: value.parentTimelineItemId }
+      : {}),
     status: value.status,
     startedAt,
     finishedAt,
@@ -227,7 +230,6 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
       if (
         value.finishedAt !== null ||
         (value.current !== null && !current) ||
-        (value.waitingFor !== null && typeof value.waitingFor !== "string") ||
         (value.progress !== null && !progress) ||
         value.reason !== null
       ) {
@@ -238,7 +240,6 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
         runStatus: value.runStatus,
         finishedAt: null,
         current,
-        waitingFor: value.waitingFor,
         progress,
         reason: null,
       };
@@ -246,7 +247,6 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
       if (
         !isTimestamp(value.finishedAt) ||
         value.current !== null ||
-        value.waitingFor !== null ||
         !progress ||
         value.reason !== null
       ) {
@@ -257,7 +257,6 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
         runStatus: value.runStatus,
         finishedAt: value.finishedAt,
         current: null,
-        waitingFor: null,
         progress,
         reason: null,
       };
@@ -266,7 +265,6 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
       if (
         !isTimestamp(value.finishedAt) ||
         (value.current !== null && !current) ||
-        value.waitingFor !== null ||
         (value.progress !== null && !progress) ||
         !reason
       ) {
@@ -277,7 +275,6 @@ function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
         runStatus: value.runStatus,
         finishedAt: value.finishedAt,
         current,
-        waitingFor: null,
         progress,
         reason,
       };

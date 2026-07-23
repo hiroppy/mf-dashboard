@@ -78,7 +78,17 @@ describe("crawler progress", () => {
         startedAt: "2026-07-01T00:00:00.000Z",
       });
       const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
-      const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh);
+      const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh, undefined, {
+        parentTimelineItemId: globalStep,
+      });
+
+      expect(progress.getState().timeline).toContainEqual(
+        expect.objectContaining({
+          id: refreshStep,
+          parentTimelineItemId: globalStep,
+          step: "moneyforward_refresh",
+        }),
+      );
 
       await progress.completeStep(refreshStep);
 
@@ -135,7 +145,6 @@ describe("crawler progress", () => {
         running: false,
         runStatus: "success",
         current: null,
-        waitingFor: null,
       });
       expect(state.finishedAt).toEqual(expect.any(String));
       expect(state.timeline).toEqual([

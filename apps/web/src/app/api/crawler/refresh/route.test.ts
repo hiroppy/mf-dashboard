@@ -90,7 +90,6 @@ describe("/api/crawler/refresh/", () => {
         startedAt: "2026-01-01T00:00:00.000Z",
         finishedAt: null,
         current: null,
-        waitingFor: null,
         progress: null,
         timeline: [],
         reason: null,
@@ -129,7 +128,6 @@ describe("/api/crawler/refresh/", () => {
         startedAt: "not-a-date",
         finishedAt: "also-not-a-date",
         current: null,
-        waitingFor: null,
         progress: null,
         timeline: [],
         reason: { code: "unknown_error", message: "処理に失敗しました" },
@@ -166,7 +164,6 @@ describe("/api/crawler/refresh/", () => {
           incompleteAccounts: ["機関 A"],
         },
       },
-      waitingFor: null,
       progress: { completed: 2, total: 4 },
       timeline: [
         {
@@ -235,7 +232,6 @@ describe("/api/crawler/refresh/", () => {
       startedAt: "2026-01-01T00:00:00.000Z",
       finishedAt: "2026-01-01T00:01:00.000Z",
       current: null,
-      waitingFor: null,
       progress: { completed: 1, total: 1 },
       timeline: [
         {

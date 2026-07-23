@@ -31,7 +31,6 @@ const runningState: CrawlerRunStateSnapshot = {
       incompleteAccounts: ["Institution A"],
     },
   },
-  waitingFor: "更新中の金融機関が0件になるのを待機",
   progress: { completed: 1, total: 3 },
   timeline: [
     {
@@ -59,7 +58,6 @@ const successState: CrawlerRunStateSnapshot = {
   runStatus: "success",
   finishedAt,
   current: null,
-  waitingFor: null,
   progress: { completed: 3, total: 3 },
   timeline: [
     {
@@ -77,7 +75,6 @@ const failedState: CrawlerRunStateSnapshot = {
   runId: "run-failed",
   runStatus: "failed",
   finishedAt,
-  waitingFor: null,
   timeline: [
     {
       id: "group-a",

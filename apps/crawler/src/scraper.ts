@@ -84,9 +84,13 @@ async function scrapeGlobalData(
 
   // Refresh
   let refreshResult = null;
-  const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh, {
-    maxWaitMinutes: getMaxWaitMinutes(),
-  });
+  const refreshStep = await progress.startStep(
+    CRAWLER_STEPS.refresh,
+    {
+      maxWaitMinutes: getMaxWaitMinutes(),
+    },
+    { parentTimelineItemId: globalStep },
+  );
   if (skipRefresh) {
     log("Skipping refresh (SKIP_REFRESH=true)");
     await progress.skipStep(refreshStep);
@@ -94,7 +98,7 @@ async function scrapeGlobalData(
     try {
       refreshResult = await clickRefreshButton(page, {
         onWaiting: (waiting) =>
-          progress.updateWaiting(refreshStep, "更新中の金融機関が0件になるのを待機", {
+          progress.updateStep(refreshStep, {
             ...waiting,
           }),
       });

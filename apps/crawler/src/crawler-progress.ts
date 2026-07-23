@@ -37,12 +37,12 @@ export const CRAWLER_STEPS = {
 
 export interface CrawlerProgressReporter {
   getState: () => CrawlerRunStateSnapshot;
-  startStep: (step: CrawlerCurrentStep, metadata?: CrawlerStepMetadata) => Promise<string>;
-  updateWaiting: (
-    stepId: string,
-    waitingFor: string,
+  startStep: (
+    step: CrawlerCurrentStep,
     metadata?: CrawlerStepMetadata,
-  ) => Promise<void>;
+    options?: { parentTimelineItemId?: string },
+  ) => Promise<string>;
+  updateStep: (stepId: string, metadata?: CrawlerStepMetadata) => Promise<void>;
   completeStep: (stepId: string, metadata?: CrawlerStepMetadata) => Promise<void>;
   skipStep: (stepId: string) => Promise<void>;
   warnStep: (
@@ -124,7 +124,6 @@ export async function createCrawlerProgressReporter(
     finishedAt: null,
     runStatus: "running",
     current: null,
-    waitingFor: null,
     progress: runningProgressFor([]),
     reason: null,
     timeline: [],
@@ -168,17 +167,19 @@ export async function createCrawlerProgressReporter(
   function restoreRunningCurrent(draft: CrawlerRunStateSnapshot): void {
     const runningStep = draft.timeline.findLast(({ status }) => status === "running");
     draft.current = runningStep ? toCurrent(runningStep) : null;
-    draft.waitingFor = null;
   }
 
   return {
     getState: () => structuredClone(state),
-    startStep: async (step, metadata) => {
+    startStep: async (step, metadata, options) => {
       const id = randomUUID();
       await update((draft) => {
         const item: CrawlerRunTimelineItem = {
           id,
           label: step.label,
+          ...(options?.parentTimelineItemId
+            ? { parentTimelineItemId: options.parentTimelineItemId }
+            : {}),
           ...toStepDetails(step.code, metadata),
           status: "running",
           startedAt: new Date().toISOString(),
@@ -186,18 +187,16 @@ export async function createCrawlerProgressReporter(
           reason: null,
         };
         draft.current = toCurrent(item);
-        draft.waitingFor = null;
         draft.timeline.push(item);
         draft.progress = runningProgressFor(draft.timeline);
       });
       return id;
     },
-    updateWaiting: async (stepId, waitingFor, metadata) => {
+    updateStep: async (stepId, metadata) => {
       await update((draft) => {
         const step = findStep(draft, stepId);
         updateStepMetadata(step, metadata);
         draft.current = toCurrent(step);
-        draft.waitingFor = waitingFor;
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -241,7 +240,6 @@ export async function createCrawlerProgressReporter(
         const step = findStep(draft, stepId);
         Object.assign(step, { status: "failed", finishedAt: new Date().toISOString(), reason });
         draft.current = toCurrent(step);
-        draft.waitingFor = null;
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -250,7 +248,6 @@ export async function createCrawlerProgressReporter(
         Object.assign(draft, {
           runStatus: status,
           finishedAt: new Date().toISOString(),
-          waitingFor: null,
           progress: progressFor(draft.timeline),
         });
         if (status === "success") {

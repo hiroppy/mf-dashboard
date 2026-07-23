@@ -27,7 +27,6 @@ export interface CrawlerRunState {
   finishedAt?: string | null;
   runStatus?: CrawlerRunStateSnapshot["runStatus"];
   current?: CrawlerRunStateSnapshot["current"];
-  waitingFor?: string | null;
   progress?: CrawlerRunStateSnapshot["progress"];
   reason?: CrawlerRunStateSnapshot["reason"];
   timeline?: CrawlerRunStateSnapshot["timeline"];
@@ -174,7 +173,6 @@ async function toStoppedRunState(
     ...progressState,
     runStatus: "failed",
     finishedAt,
-    waitingFor: null,
     reason,
     progress: {
       completed: timeline.filter(({ status }) => status !== "pending").length,

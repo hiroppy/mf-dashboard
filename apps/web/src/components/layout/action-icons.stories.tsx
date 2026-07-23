@@ -24,7 +24,6 @@ const runningStatus: CrawlerRefreshStatus = {
       step: "group_data",
       metadata: { kind: "group", groupName: "Group A" },
     },
-    waitingFor: "更新中の金融機関が0件になるのを待機",
     progress: { completed: 2, total: 5 },
     timeline: [
       {
@@ -70,7 +69,6 @@ const failedStatus: CrawlerRefreshStatus = {
       step: "authentication",
       metadata: null,
     },
-    waitingFor: null,
     progress: null,
     timeline: [
       {
@@ -162,16 +160,15 @@ export const DesktopRunning: Story = {
   beforeEach: () => mockCrawlerStatus(runningStatus),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("同期中 · 2/5")).toBeVisible();
-
-    await userEvent.click(canvas.getByRole("button", { name: "同期タイムラインを表示" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "同期タイムラインを表示" }));
 
     const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
-    await waitFor(() =>
-      expect(within(popover).getByRole("heading", { name: "同期タイムライン" })).toBeVisible(),
-    );
+    await waitFor(() => expect(within(popover).getByText("2/5")).toBeVisible());
+    await expect(
+      within(popover).queryByRole("heading", { name: "同期タイムライン" }),
+    ).not.toBeInTheDocument();
+    await expect(within(popover).queryByRole("progressbar")).not.toBeInTheDocument();
     await expect(within(popover).getAllByText("Group A")[0]).toBeVisible();
-    await expect(within(popover).getByText("更新中の金融機関が0件になるのを待機")).toBeVisible();
   },
 };
 
@@ -183,14 +180,10 @@ export const MobileRunning: Story = {
   beforeEach: () => mockCrawlerStatus(runningStatus),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("同期中 · 2/5")).not.toBeVisible();
-
-    await userEvent.click(canvas.getByRole("button", { name: "同期タイムラインを表示" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "同期タイムラインを表示" }));
 
     const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
-    await waitFor(() =>
-      expect(within(popover).getByRole("heading", { name: "同期タイムライン" })).toBeVisible(),
-    );
+    await waitFor(() => expect(within(popover).getByText("2/5")).toBeVisible());
     const bounds = popover.getBoundingClientRect();
     await expect(bounds.left).toBeGreaterThanOrEqual(0);
     await expect(bounds.right).toBeLessThanOrEqual(
@@ -204,9 +197,7 @@ export const Failed: Story = {
   beforeEach: () => mockCrawlerStatus(failedStatus),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("同期失敗")).toBeVisible();
-
-    await userEvent.click(canvas.getByRole("button", { name: "同期失敗の詳細を表示" }));
+    await userEvent.click(await canvas.findByRole("button", { name: "同期失敗の詳細を表示" }));
 
     const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
     await waitFor(() =>

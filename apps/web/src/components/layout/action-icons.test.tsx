@@ -36,7 +36,6 @@ const failedLatestRun = {
     step: "authentication",
     metadata: null,
   },
-  waitingFor: null,
   progress: null,
   timeline: [
     {
@@ -122,7 +121,6 @@ describe("ActionIcons", () => {
             startedAt: "2026-01-01T00:00:00.000Z",
             finishedAt: "2026-01-01T00:01:00.000Z",
             current: null,
-            waitingFor: null,
             progress: { completed: 5, total: 5 },
             timeline: [],
             reason: null,
@@ -202,7 +200,6 @@ describe("ActionIcons", () => {
 
       render(<ActionIcons variant="header" />);
       await screen.findByRole("button", { name: "同期タイムラインを表示" });
-      expect(screen.getByText("同期中 · 0/10")).toBeTruthy();
 
       await act(async () => {
         await intervalCallbacks[0]?.();
@@ -233,15 +230,16 @@ describe("ActionIcons", () => {
           finishedAt: null,
           progress: { completed: 2, total: 5 },
           current: {
-            timelineItemId: "group",
-            label: "グループ取得",
-            step: "group_data",
+            timelineItemId: "refresh",
+            label: "金融機関データを一括更新",
+            step: "moneyforward_refresh",
             metadata: {
-              kind: "group",
-              groupName: "非常に長いグループ名 Group A Group A Group A",
+              kind: "refresh",
+              maxWaitMinutes: 10,
+              remainingAccounts: 1,
+              incompleteAccounts: ["金融機関 A"],
             },
           },
-          waitingFor: "更新中の金融機関が0件になるのを待機",
           timeline: [
             {
               id: "auth",
@@ -254,12 +252,25 @@ describe("ActionIcons", () => {
               reason: null,
             },
             {
-              id: "group",
-              label: "グループ取得",
-              step: "group_data",
+              id: "global",
+              label: "全体データを取得",
+              step: "global_data",
+              metadata: null,
+              status: "running",
+              startedAt: "2026-01-01T00:00:10.000Z",
+              finishedAt: null,
+              reason: null,
+            },
+            {
+              id: "refresh",
+              label: "金融機関データを一括更新",
+              parentTimelineItemId: "global",
+              step: "moneyforward_refresh",
               metadata: {
-                kind: "group",
-                groupName: "非常に長いグループ名 Group A Group A Group A",
+                kind: "refresh",
+                maxWaitMinutes: 10,
+                remainingAccounts: 1,
+                incompleteAccounts: ["金融機関 A"],
               },
               status: "running",
               startedAt: "2026-01-01T00:00:10.000Z",
@@ -276,15 +287,26 @@ describe("ActionIcons", () => {
 
     const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByText("同期中 · 2/5").className).toContain("hidden lg:inline-flex");
+    expect(screen.queryByText("同期中 · 2/5")).toBeNull();
 
     fireEvent.click(refreshButton);
 
-    expect(await screen.findByRole("dialog", { name: "同期タイムライン" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: "進捗" })).toBeTruthy();
-    expect(screen.getByText("更新中の金融機関が0件になるのを待機")).toBeTruthy();
-    expect(screen.getAllByText("非常に長いグループ名 Group A Group A Group A")).toHaveLength(2);
+    const timelineDialog = await screen.findByRole("dialog", { name: "同期タイムライン" });
+    expect(timelineDialog.className).toContain("h-[min(32rem,calc(100dvh-2rem))]");
+    expect(screen.queryByRole("heading", { name: "同期タイムライン" })).toBeNull();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.getByText("2/5")).toBeTruthy();
+    expect(screen.getAllByText("実行中")).toHaveLength(1);
+    expect(screen.getByText("完了").className).toContain("font-semibold text-success");
+    const globalStep = screen.getByText("全体データを取得").closest("li");
+    expect(globalStep?.textContent).toContain("金融機関データを一括更新");
+    expect(globalStep?.textContent).toContain("残り 1件: 金融機関 A");
+    const authenticationStep = screen.getByText("認証").closest("li");
+    expect(globalStep).not.toBeNull();
+    expect(authenticationStep).not.toBeNull();
+    expect(
+      globalStep!.compareDocumentPosition(authenticationStep!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(refreshMock).not.toHaveBeenCalled();
   });
@@ -301,14 +323,13 @@ describe("ActionIcons", () => {
     render(<ActionIcons variant="header" />);
 
     const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
-    expect(screen.getByText("同期中 · 0/10")).toBeTruthy();
     expect(screen.queryByText("同期失敗")).toBeNull();
 
     fireEvent.click(refreshButton);
 
-    expect(await screen.findByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
+    expect(await screen.findByText("タイムラインはまだありません。")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "同期タイムライン" })).toBeNull();
     expect(screen.queryByRole("button", { name: "再度更新" })).toBeNull();
-    expect(screen.getByText("タイムラインはまだありません。")).toBeTruthy();
   });
 
   it("shows baseline progress immediately after starting a refresh", async () => {
@@ -324,7 +345,7 @@ describe("ActionIcons", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "金融機関データを更新" }));
 
-    expect(await screen.findByText("同期中 · 0/10")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "同期タイムラインを表示" })).toBeTruthy();
 
     await act(async () => {
       resolvePost?.(jsonResponse({ available: true, running: true }, 202));
@@ -347,11 +368,13 @@ describe("ActionIcons", () => {
 
     const refreshButton = await screen.findByRole("button", { name: "同期失敗の詳細を表示" });
     expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByText("同期失敗").className).toContain("hidden lg:inline-flex");
+    expect(screen.queryByText("同期失敗")).toBeNull();
 
     fireEvent.click(refreshButton);
 
     expect(await screen.findByRole("heading", { name: "同期に失敗しました" })).toBeTruthy();
+    expect(screen.getByText(/開始 .+ \(00:10\)/)).toBeTruthy();
+    expect(screen.getByText("失敗").className).toContain("font-semibold text-destructive");
     expect(screen.getAllByText("認証できませんでした")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "再度更新" }));
 

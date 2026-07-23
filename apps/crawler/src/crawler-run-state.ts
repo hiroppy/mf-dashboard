@@ -72,6 +72,7 @@ type CrawlerRunTimelineStatusDetails =
 export type CrawlerRunTimelineItem = {
   id: string;
   label: string;
+  parentTimelineItemId?: string;
 } & CrawlerRunStepDetails &
   CrawlerRunTimelineStatusDetails;
 
@@ -98,7 +99,6 @@ export type CrawlerRunStateSnapshot =
       runStatus: "running";
       finishedAt: null;
       current: CrawlerRunCurrent | null;
-      waitingFor: string | null;
       progress: CrawlerRunProgress | null;
       reason: null;
     })
@@ -106,7 +106,6 @@ export type CrawlerRunStateSnapshot =
       runStatus: "success";
       finishedAt: string;
       current: null;
-      waitingFor: null;
       progress: CrawlerRunProgress;
       reason: null;
     })
@@ -114,7 +113,6 @@ export type CrawlerRunStateSnapshot =
       runStatus: "failed";
       finishedAt: string;
       current: CrawlerRunCurrent | null;
-      waitingFor: null;
       progress: CrawlerRunProgress | null;
       reason: CrawlerRunReason;
     });
@@ -199,6 +197,7 @@ function isCrawlerRunTimelineItem(value: unknown): value is CrawlerRunTimelineIt
     !isRecord(value) ||
     typeof value.id !== "string" ||
     typeof value.label !== "string" ||
+    (value.parentTimelineItemId !== undefined && typeof value.parentTimelineItemId !== "string") ||
     !isCrawlerRunStepDetails(value)
   ) {
     return false;
@@ -269,7 +268,6 @@ function isCrawlerRunStateSnapshot(value: unknown): value is CrawlerRunStateSnap
       return (
         value.finishedAt === null &&
         (value.current === null || isCrawlerRunCurrent(value.current)) &&
-        (value.waitingFor === null || typeof value.waitingFor === "string") &&
         (value.progress === null || isCrawlerRunProgress(value.progress)) &&
         value.reason === null
       );
@@ -277,7 +275,6 @@ function isCrawlerRunStateSnapshot(value: unknown): value is CrawlerRunStateSnap
       return (
         typeof value.finishedAt === "string" &&
         value.current === null &&
-        value.waitingFor === null &&
         isCrawlerRunProgress(value.progress) &&
         value.reason === null
       );
@@ -285,7 +282,6 @@ function isCrawlerRunStateSnapshot(value: unknown): value is CrawlerRunStateSnap
       return (
         typeof value.finishedAt === "string" &&
         (value.current === null || isCrawlerRunCurrent(value.current)) &&
-        value.waitingFor === null &&
         (value.progress === null || isCrawlerRunProgress(value.progress)) &&
         isCrawlerRunReason(value.reason)
       );

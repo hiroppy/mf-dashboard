@@ -226,7 +226,6 @@ describe("scraper progress", () => {
     await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress);
 
     expect(waitingState).toMatchObject({
-      waitingFor: "更新中の金融機関が0件になるのを待機",
       current: {
         step: "moneyforward_refresh",
         metadata: expect.objectContaining({

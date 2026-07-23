@@ -329,7 +329,7 @@ export async function runCashFlowHistoryPhase(
         if (setupStepId) {
           monthSteps.delete(setupMonth);
           monthSteps.set(month, setupStepId);
-          await progress.updateWaiting(setupStepId, "対象月のデータ取得を待機", { month });
+          await progress.updateStep(setupStepId, { month });
           setupStepId = null;
           return;
         }
