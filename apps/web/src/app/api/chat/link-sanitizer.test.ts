@@ -128,6 +128,11 @@ describe("splitCompleteFinanceChatText", () => {
     },
   );
 
+  it("normalizes whitespace while buffering a reference definition", () => {
+    const text = "[詳細][route label]\n[route   label]: /group-a/cf/2026-07\n";
+    expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+  });
+
   it("keeps a reference link buffered with its definition when the definition has no newline", () => {
     expect(splitCompleteFinanceChatText("[詳細][route]\n[route]: /group-a/cf/2026-07")).toEqual({
       complete: "",
@@ -298,6 +303,7 @@ describe("createFinanceChatLinkSanitizer", () => {
 
   it.each([
     ["```html\n", '<a href="javascript:alert(1)">example</a>\n```'],
+    ["```html\n", '<a href="javascript:alert(1)">example</a>\n````'],
     ["~~~html\n", '<a href="javascript:alert(1)">example</a>\n~~~~'],
   ])("preserves fenced-code state across streamed fragments: %s", async (opening, body) => {
     const transform = createFinanceChatLinkSanitizer("group-a")({

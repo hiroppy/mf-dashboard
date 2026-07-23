@@ -2,6 +2,7 @@ import { buildFinanceChatHref, financeChatHrefSchema } from "@mf-dashboard/analy
 import {
   findFinanceChatReferenceDefinitions,
   isEscaped,
+  normalizeFinanceChatReferenceId,
   sanitizeFinanceChatLinks,
 } from "@mf-dashboard/analytics/chat/link-sanitizer";
 import type { StreamTextTransform, ToolSet } from "ai";
@@ -34,6 +35,7 @@ export function splitCompleteFinanceChatText(
   let labelStart = -1;
   let destinationDepth = 0;
   let codeDelimiterLength = 0;
+  let backtickFenceLength = 0;
   let tildeFenceLength = 0;
   let htmlAnchorOpen = false;
   let htmlAnchorOpeningTag = false;
@@ -48,8 +50,29 @@ export function splitCompleteFinanceChatText(
 
     if (
       !escaped &&
+      character === "`" &&
+      codeDelimiterLength === 0 &&
+      /^ {0,3}$/u.test(linePrefix)
+    ) {
+      let runLength = 1;
+      while (text[index + runLength] === "`") runLength += 1;
+      const restOfLine = text.slice(index + runLength).split(/\r?\n/u, 1)[0];
+      if (backtickFenceLength > 0 || runLength >= 3) {
+        if (backtickFenceLength === 0 && !restOfLine.includes("`")) {
+          backtickFenceLength = runLength;
+        } else if (runLength >= backtickFenceLength && /^[ \t]*$/u.test(restOfLine)) {
+          backtickFenceLength = 0;
+        }
+        index += runLength - 1;
+        continue;
+      }
+    }
+
+    if (
+      !escaped &&
       character === "~" &&
       codeDelimiterLength === 0 &&
+      backtickFenceLength === 0 &&
       /^ {0,3}$/u.test(linePrefix)
     ) {
       let runLength = 1;
@@ -64,7 +87,7 @@ export function splitCompleteFinanceChatText(
       continue;
     }
 
-    if (!escaped && character === "`" && tildeFenceLength === 0) {
+    if (!escaped && character === "`" && backtickFenceLength === 0 && tildeFenceLength === 0) {
       let runLength = 1;
       while (text[index + runLength] === "`") runLength += 1;
       if (codeDelimiterLength === 0) {
@@ -79,6 +102,7 @@ export function splitCompleteFinanceChatText(
     if (
       !escaped &&
       codeDelimiterLength === 0 &&
+      backtickFenceLength === 0 &&
       tildeFenceLength === 0 &&
       !htmlAnchorOpen &&
       /^<a\b/iu.test(text.slice(index)) &&
@@ -143,6 +167,7 @@ export function splitCompleteFinanceChatText(
 
     if (
       codeDelimiterLength === 0 &&
+      backtickFenceLength === 0 &&
       tildeFenceLength === 0 &&
       character &&
       boundaries.has(character)
@@ -155,13 +180,10 @@ export function splitCompleteFinanceChatText(
   const complete = text.slice(0, lastBoundary + 1);
   const referenceIds = Array.from(
     complete.matchAll(/(?<!!)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu),
-    ([, label, explicitId]) => (explicitId || label).toLowerCase(),
+    ([, label, explicitId]) => normalizeFinanceChatReferenceId(explicitId || label),
   );
   const definedReferenceIds = new Set(
-    Array.from(
-      complete.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*[^\s]+(?:[ \t]+[^\r\n]*)?$/gimu),
-      ([, id]) => id.toLowerCase(),
-    ),
+    findFinanceChatReferenceDefinitions(complete).map(({ id }) => id),
   );
   if (referenceIds.some((id) => !definedReferenceIds.has(id) && !knownReferenceIds.has(id))) {
     return { complete: "", pending: text };

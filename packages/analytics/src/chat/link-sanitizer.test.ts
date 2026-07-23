@@ -39,6 +39,7 @@ describe("sanitizeFinanceChatLinks", () => {
   it.each([
     "`[x](https://example.com)`",
     "```md\n[x](https://example.com)\n```",
+    "```md\nhttps://example.com\n````",
     '~~~md\nhttps://example.com <a href="javascript:alert(1)">x</a>\n~~~~',
   ])("preserves a Markdown link literal inside Markdown code: %s", (text) => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
@@ -102,6 +103,15 @@ describe("sanitizeFinanceChatLinks", () => {
       expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[詳細](/0/cf/2026-07)\n\n");
     },
   );
+
+  it("normalizes whitespace in reference labels", () => {
+    expect(
+      sanitizeFinanceChatLinks(
+        "[詳細][route label]\n\n[route   label]: /0/cf/2026-07",
+        allowedHrefs,
+      ),
+    ).toBe("[詳細](/0/cf/2026-07)\n\n");
+  });
 
   it("preserves prose following a reference definition", () => {
     expect(

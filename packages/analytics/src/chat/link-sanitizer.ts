@@ -65,12 +65,16 @@ export function isEscaped(text: string, index: number): boolean {
   return backslashCount % 2 === 1;
 }
 
-function findTildeFenceRanges(text: string): MarkdownCodeRange[] {
+function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRange[] {
   const ranges: MarkdownCodeRange[] = [];
-  const openingPattern = /^ {0,3}(~{3,})[^\r\n]*(?:\r?\n|$)/gmu;
+  const openingPattern = new RegExp(`^ {0,3}(${marker}{3,})([^\\r\\n]*)(?:\\r?\\n|$)`, "gmu");
   let opening: RegExpExecArray | null;
   while ((opening = openingPattern.exec(text)) !== null) {
-    const closingPattern = new RegExp(`^ {0,3}~{${opening[1].length},}[ \\t]*(?:\\r?$)`, "gmu");
+    if (marker === "`" && opening[2].includes("`")) continue;
+    const closingPattern = new RegExp(
+      `^ {0,3}${marker}{${opening[1].length},}[ \\t]*(?:\\r?$)`,
+      "gmu",
+    );
     closingPattern.lastIndex = openingPattern.lastIndex;
     const closing = closingPattern.exec(text);
     if (closing === null) continue;
@@ -82,12 +86,14 @@ function findTildeFenceRanges(text: string): MarkdownCodeRange[] {
 }
 
 function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
-  const tildeFenceRanges = findTildeFenceRanges(text);
-  const ranges = [...tildeFenceRanges];
+  const fenceRanges = [...findFencedCodeRanges(text, "`"), ...findFencedCodeRanges(text, "~")].sort(
+    (left, right) => left.start - right.start,
+  );
+  const ranges = [...fenceRanges];
   let excludedRangeIndex = 0;
   for (let index = 0; index < text.length; index += 1) {
-    while (tildeFenceRanges[excludedRangeIndex]?.end <= index) excludedRangeIndex += 1;
-    const excludedRange = tildeFenceRanges[excludedRangeIndex];
+    while (fenceRanges[excludedRangeIndex]?.end <= index) excludedRangeIndex += 1;
+    const excludedRange = fenceRanges[excludedRangeIndex];
     if (excludedRange !== undefined && index >= excludedRange.start) {
       index = excludedRange.end - 1;
       continue;
@@ -303,8 +309,16 @@ export function findFinanceChatReferenceDefinitions(text: string): Array<{
   const { masked } = maskMarkdownCode(text);
   return Array.from(
     masked.matchAll(/^[ \t]*\[([^\]]+)\]\s*:\s*([^\s]+)(?:[ \t]+[^\r\n]*)?$/gimu),
-    ([source, id, destination]) => ({ destination, id: id.toLowerCase(), source }),
+    ([source, id, destination]) => ({
+      destination,
+      id: normalizeFinanceChatReferenceId(id),
+      source,
+    }),
   );
+}
+
+export function normalizeFinanceChatReferenceId(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
@@ -321,8 +335,8 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
     /(!?)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu,
     (match, imageMarker: string, label: string, explicitId: string | undefined) => {
       if (imageMarker) return label;
-      const id = explicitId || label;
-      const destination = referenceDefinitions.get(id.toLowerCase());
+      const id = normalizeFinanceChatReferenceId(explicitId || label);
+      const destination = referenceDefinitions.get(id);
       if (destination === undefined) return explicitId === undefined ? match : label;
       const href = resolveAllowedHref(destination, allowedHrefs);
       return href ? `[${label}](${href})` : label;
