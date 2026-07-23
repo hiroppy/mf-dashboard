@@ -175,7 +175,18 @@ describe("crawler run state file", () => {
     async (_code, reason) => {
       const state: CrawlerRunStateSnapshot = {
         ...failedState,
-        timeline: [{ ...failedState.timeline[0], reason }],
+        timeline: [
+          {
+            id: "group-a",
+            step: "group_data",
+            label: "グループを取得",
+            status: "failed",
+            startedAt,
+            finishedAt,
+            reason,
+            metadata: { kind: "group", groupName: "Group A" },
+          },
+        ],
         reason,
       };
       await writeCrawlerRunState(state, { statePath });
