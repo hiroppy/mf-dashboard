@@ -137,6 +137,10 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 function isCrawlerRunReason(value: unknown): value is CrawlerRunReason {
   if (!isRecord(value) || typeof value.message !== "string") {
     return false;
@@ -147,9 +151,11 @@ function isCrawlerRunReason(value: unknown): value is CrawlerRunReason {
     case "unknown_error":
       return true;
     case "refresh_timeout":
-      return isNonNegativeInteger(value.maxWaitMinutes) && isStringArray(value.incompleteAccounts);
+      return (
+        isNonNegativeFiniteNumber(value.maxWaitMinutes) && isStringArray(value.incompleteAccounts)
+      );
     case "moneyforward_timeout":
-      return typeof value.operation === "string" && isNonNegativeInteger(value.timeoutMs);
+      return typeof value.operation === "string" && isNonNegativeFiniteNumber(value.timeoutMs);
     case "navigation_failed":
       return typeof value.url === "string";
     case "selector_not_found":
@@ -175,7 +181,7 @@ function isCrawlerRunStepDetails(value: Record<string, unknown>): boolean {
       return (
         isRecord(metadata) &&
         metadata.kind === "refresh" &&
-        isNonNegativeInteger(metadata.maxWaitMinutes) &&
+        isNonNegativeFiniteNumber(metadata.maxWaitMinutes) &&
         isNonNegativeInteger(metadata.remainingAccounts) &&
         isStringArray(metadata.incompleteAccounts)
       );
@@ -331,8 +337,24 @@ export async function writeCrawlerRunState(
     await file.close();
     file = null;
     await rename(temporaryPath, statePath);
+    await syncDirectory(path.dirname(statePath));
   } finally {
     await file?.close();
     await rm(temporaryPath, { force: true });
+  }
+}
+
+async function syncDirectory(directoryPath: string): Promise<void> {
+  let directory: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    directory = await open(directoryPath, "r");
+    await directory.sync();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (!code || !["EBADF", "EINVAL", "EISDIR", "ENOSYS", "ENOTSUP", "EPERM"].includes(code)) {
+      throw error;
+    }
+  } finally {
+    await directory?.close();
   }
 }

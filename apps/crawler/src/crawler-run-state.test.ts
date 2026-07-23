@@ -25,7 +25,7 @@ const runningState: CrawlerRunStateSnapshot = {
     label: "金融機関を更新",
     metadata: {
       kind: "refresh",
-      maxWaitMinutes: 20,
+      maxWaitMinutes: 0.5,
       remainingAccounts: 1,
       incompleteAccounts: ["Institution A"],
     },
@@ -43,7 +43,7 @@ const runningState: CrawlerRunStateSnapshot = {
       reason: null,
       metadata: {
         kind: "refresh",
-        maxWaitMinutes: 20,
+        maxWaitMinutes: 0.5,
         remainingAccounts: 1,
         incompleteAccounts: ["Institution A"],
       },
