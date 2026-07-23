@@ -163,4 +163,25 @@ describe("/api/crawler/refresh/", () => {
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
   });
+
+  it("times out when the crawler does not complete the SSE handshake", async () => {
+    vi.useFakeTimers();
+    vi.mocked(global.fetch).mockImplementationOnce(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    );
+
+    try {
+      const responsePromise = GET(sameOriginGetRequest());
+      await vi.advanceTimersByTimeAsync(5_000);
+      const res = await responsePromise;
+
+      expect(res.status).toBe(503);
+      await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

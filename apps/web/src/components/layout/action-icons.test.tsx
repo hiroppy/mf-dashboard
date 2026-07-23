@@ -397,6 +397,19 @@ describe("ActionIcons", () => {
     expect((refreshButton as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("refreshes after reconnecting when a running crawl finished during an SSE outage", async () => {
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: true });
+
+    await act(async () => {
+      EventSourceMock.instances.at(-1)?.onerror?.(new Event("error"));
+    });
+    await emitStatus({ running: false });
+
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+  });
+
   it("does not render the refresh button in the mobile sidebar actions", () => {
     render(<ActionIcons variant="sidebar" />);
 

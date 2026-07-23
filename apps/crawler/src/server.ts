@@ -57,7 +57,7 @@ async function watchCrawlerState(onChange: () => void): Promise<() => void> {
   const watchers = [...targetsByDirectory].map(([directory, targets]) => {
     const filenames = new Set(targets.map((target) => path.basename(target)));
     return watch(directory, (_event, filename) => {
-      if (filename && filenames.has(filename.toString())) {
+      if (!filename || filenames.has(filename.toString())) {
         onChange();
       }
     });
@@ -77,9 +77,20 @@ async function streamCrawlerState(
   watchState: (onChange: () => void) => Promise<() => void>,
 ): Promise<void> {
   let closed = false;
+  let stopWatching: (() => void) | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
   let requestedVersion = 0;
   let sentVersion = -1;
   let sending = false;
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (heartbeat) clearInterval(heartbeat);
+    stopWatching?.();
+  };
+  request.once("close", close);
+  response.once("close", close);
 
   async function sendLatestState(): Promise<void> {
     requestedVersion += 1;
@@ -100,31 +111,27 @@ async function streamCrawlerState(
     }
   }
 
-  const stopWatching = await watchState(() => {
+  const stopWatcher = await watchState(() => {
     void sendLatestState().catch((err) => {
       error("Failed to stream crawler state:", err);
       response.destroy(err instanceof Error ? err : undefined);
     });
   });
+  if (closed) {
+    stopWatcher();
+    return;
+  }
+  stopWatching = stopWatcher;
   response.writeHead(200, {
     "cache-control": "no-cache, no-transform",
     connection: "keep-alive",
     "content-type": "text/event-stream",
   });
   response.flushHeaders();
-  const heartbeat = setInterval(() => {
+  heartbeat = setInterval(() => {
     if (!closed) response.write(": heartbeat\n\n");
   }, 15_000);
   heartbeat.unref();
-
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    clearInterval(heartbeat);
-    stopWatching();
-  };
-  request.once("close", close);
-  response.once("close", close);
 
   try {
     await sendLatestState();

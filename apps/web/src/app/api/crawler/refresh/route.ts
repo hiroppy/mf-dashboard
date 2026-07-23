@@ -73,13 +73,20 @@ async function proxyCrawlerEvents(request: Request) {
     return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
   }
 
+  const controller = new AbortController();
+  const abortUpstream = () => controller.abort(request.signal.reason);
+  request.signal.addEventListener("abort", abortUpstream, { once: true });
+  const handshakeTimeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${crawlerUrl}/events`, {
       cache: "no-store",
       headers: { accept: "text/event-stream" },
-      signal: request.signal,
+      signal: controller.signal,
     });
+    clearTimeout(handshakeTimeout);
     if (!response.ok || !response.body) {
+      request.signal.removeEventListener("abort", abortUpstream);
       return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
     }
 
@@ -90,6 +97,8 @@ async function proxyCrawlerEvents(request: Request) {
       },
     });
   } catch {
+    clearTimeout(handshakeTimeout);
+    request.signal.removeEventListener("abort", abortUpstream);
     return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
   }
 }

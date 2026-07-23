@@ -98,7 +98,8 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     };
     events.onerror = () => {
       if (startRefreshInFlightRef.current) return;
-      setUnavailable();
+      setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      setPopoverOpen(false);
     };
 
     return () => {
