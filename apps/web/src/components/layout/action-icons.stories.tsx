@@ -89,11 +89,13 @@ const failedStatus: CrawlerRefreshStatus = {
 function mockCrawlerStatus(status: CrawlerRefreshStatus) {
   const OriginalEventSource = globalThis.EventSource;
   class StoryEventSource {
+    private closed = false;
     onerror: ((event: Event) => void) | null = null;
     onmessage: ((event: MessageEvent<string>) => void) | null = null;
 
     constructor() {
       queueMicrotask(() => {
+        if (this.closed) return;
         this.onmessage?.(
           new MessageEvent("message", {
             data: JSON.stringify(status),
@@ -102,7 +104,9 @@ function mockCrawlerStatus(status: CrawlerRefreshStatus) {
       });
     }
 
-    close() {}
+    close() {
+      this.closed = true;
+    }
   }
   globalThis.EventSource = StoryEventSource as unknown as typeof EventSource;
 
