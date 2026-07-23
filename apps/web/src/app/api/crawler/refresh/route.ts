@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  parseCrawlerRefreshStatus,
+  unavailableCrawlerRefreshStatus,
+} from "../../../../lib/crawler-refresh-status";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +44,7 @@ function getCrawlerUrl(): string | null {
 async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit) {
   const crawlerUrl = getCrawlerUrl();
   if (!crawlerUrl) {
-    return NextResponse.json({ available: false, running: false }, { status: 503 });
+    return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
   }
 
   try {
@@ -49,17 +53,13 @@ async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit
       cache: "no-store",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const body: unknown = await res.json().catch(() => null);
 
-    return NextResponse.json(
-      {
-        available: true,
-        ...body,
-      },
-      { status: res.status },
-    );
+    return NextResponse.json(parseCrawlerRefreshStatus(body, res.ok || res.status === 409), {
+      status: res.status,
+    });
   } catch {
-    return NextResponse.json({ available: false, running: false }, { status: 503 });
+    return NextResponse.json(unavailableCrawlerRefreshStatus, { status: 503 });
   }
 }
 

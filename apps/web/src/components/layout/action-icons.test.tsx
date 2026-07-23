@@ -1,6 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatDateTime } from "../../lib/format";
 import { ActionIcons } from "./action-icons";
 
 const originalEnv = { ...process.env };
@@ -68,8 +67,8 @@ describe("ActionIcons", () => {
 
     render(<ActionIcons variant="header" />);
 
-    const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
-    await waitFor(() => expect((refreshButton as HTMLButtonElement).disabled).toBe(false));
+    const refreshButton = await screen.findByRole("button", { name: "金融機関データを更新" });
+    expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(refreshButton);
 
@@ -77,6 +76,40 @@ describe("ActionIcons", () => {
       expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
     );
     expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("starts another refresh after the latest run succeeded", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          available: true,
+          running: false,
+          latestRun: {
+            version: 1,
+            runId: "run-success",
+            runStatus: "success",
+            source: "manual",
+            startedAt: "2026-01-01T00:00:00.000Z",
+            finishedAt: "2026-01-01T00:01:00.000Z",
+            current: null,
+            waitingFor: null,
+            progress: { completed: 5, total: 5 },
+            timeline: [],
+            reason: null,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
+
+    render(<ActionIcons variant="header" />);
+
+    const refreshButton = await screen.findByRole("button", { name: "金融機関データを更新" });
+    fireEvent.click(refreshButton);
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
+    );
+    expect(screen.queryByText("同期失敗")).toBeNull();
   });
 
   it("refreshes the dashboard after the crawler run finishes", async () => {
@@ -97,8 +130,10 @@ describe("ActionIcons", () => {
 
       render(<ActionIcons variant="header" />);
 
-      const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
-      await waitFor(() => expect((refreshButton as HTMLButtonElement).disabled).toBe(false));
+      const refreshButton = await screen.findByRole("button", {
+        name: "金融機関データを更新",
+      });
+      expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
 
       fireEvent.click(refreshButton);
 
@@ -118,26 +153,132 @@ describe("ActionIcons", () => {
     }
   });
 
-  it("disables the header refresh button while the crawler is running", async () => {
+  it("opens the latest running timeline without starting another refresh", async () => {
     const startedAt = "2026-01-01T00:00:00.000Z";
     vi.mocked(global.fetch).mockResolvedValueOnce(
-      jsonResponse({ available: true, running: true, source: "scheduled", startedAt }),
+      jsonResponse({
+        available: true,
+        running: true,
+        source: "scheduled",
+        startedAt,
+        latestRun: {
+          version: 1,
+          runId: "run-1",
+          runStatus: "running",
+          source: "scheduled",
+          startedAt,
+          finishedAt: null,
+          progress: { completed: 2, total: 5 },
+          current: {
+            timelineItemId: "group",
+            label: "グループ取得",
+            step: "group_data",
+            metadata: {
+              kind: "group",
+              groupName: "非常に長いグループ名 Group A Group A Group A",
+            },
+          },
+          waitingFor: "更新中の金融機関が0件になるのを待機",
+          timeline: [
+            {
+              id: "auth",
+              label: "認証",
+              step: "authentication",
+              metadata: null,
+              status: "done",
+              startedAt,
+              finishedAt: "2026-01-01T00:00:10.000Z",
+              reason: null,
+            },
+            {
+              id: "group",
+              label: "グループ取得",
+              step: "group_data",
+              metadata: {
+                kind: "group",
+                groupName: "非常に長いグループ名 Group A Group A Group A",
+              },
+              status: "running",
+              startedAt: "2026-01-01T00:00:10.000Z",
+              finishedAt: null,
+              reason: null,
+            },
+          ],
+          reason: null,
+        },
+      }),
     );
 
     render(<ActionIcons variant="header" />);
 
-    const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
-    await waitFor(() =>
-      expect(refreshButton.getAttribute("title")).toBe(
-        `更新中（開始: ${formatDateTime(startedAt)}）`,
-      ),
-    );
-    expect((refreshButton as HTMLButtonElement).disabled).toBe(true);
+    const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
+    expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("同期中 · 2/5").className).toContain("hidden lg:inline-flex");
 
     fireEvent.click(refreshButton);
 
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
+    expect(screen.getByText("更新中の金融機関が0件になるのを待機")).toBeTruthy();
+    expect(screen.getAllByText("非常に長いグループ名 Group A Group A Group A")).toHaveLength(2);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("opens a failed timeline and retries from the dialog", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          available: true,
+          running: false,
+          latestRun: {
+            version: 1,
+            runId: "run-2",
+            runStatus: "failed",
+            source: "manual",
+            startedAt: "2026-01-01T00:00:00.000Z",
+            finishedAt: "2026-01-01T00:00:10.000Z",
+            current: {
+              timelineItemId: "auth",
+              label: "認証",
+              step: "authentication",
+              metadata: null,
+            },
+            waitingFor: null,
+            progress: null,
+            timeline: [
+              {
+                id: "auth",
+                label: "認証",
+                step: "authentication",
+                metadata: null,
+                status: "failed",
+                startedAt: "2026-01-01T00:00:00.000Z",
+                finishedAt: "2026-01-01T00:00:10.000Z",
+                reason: { code: "auth_failed", message: "認証できませんでした" },
+              },
+            ],
+            reason: { code: "auth_failed", message: "認証できませんでした" },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
+
+    render(<ActionIcons variant="header" />);
+
+    const refreshButton = await screen.findByRole("button", { name: "同期失敗の詳細を表示" });
+    expect((refreshButton as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("同期失敗").className).toContain("hidden lg:inline-flex");
+
+    fireEvent.click(refreshButton);
+
+    expect(await screen.findByRole("heading", { name: "同期に失敗しました" })).toBeTruthy();
+    expect(screen.getAllByText("認証できませんでした")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "再度更新" }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
+    );
   });
 
   it("disables the header refresh button when the crawler service is unavailable", async () => {
@@ -147,8 +288,8 @@ describe("ActionIcons", () => {
 
     render(<ActionIcons variant="header" />);
 
-    const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
-    await waitFor(() => expect(refreshButton.getAttribute("title")).toBe("更新サービス未接続"));
+    const refreshButton = await screen.findByRole("button", { name: "更新サービス未接続" });
+    expect(refreshButton.getAttribute("title")).toBe("更新サービス未接続");
     expect((refreshButton as HTMLButtonElement).disabled).toBe(true);
   });
 

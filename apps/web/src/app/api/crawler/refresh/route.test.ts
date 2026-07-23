@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { unavailableCrawlerRefreshStatus } from "../../../../lib/crawler-refresh-status";
 import { GET, POST } from "./route";
 
 const originalEnv = { ...process.env };
@@ -42,7 +43,7 @@ describe("/api/crawler/refresh/", () => {
     const res = await GET();
 
     expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toEqual({ available: false, running: false });
+    await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -58,11 +59,90 @@ describe("/api/crawler/refresh/", () => {
       "http://crawler:8766/status",
       expect.objectContaining({ cache: "no-store" }),
     );
-    await expect(res.json()).resolves.toEqual({
-      available: true,
-      running: true,
+    await expect(res.json()).resolves.toEqual(
+      expect.objectContaining({
+        available: true,
+        running: true,
+        source: "manual",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        latestRun: null,
+      }),
+    );
+  });
+
+  it("proxies a typed latest run state", async () => {
+    const latestRun = {
+      version: 1,
+      runId: "run-1",
+      runStatus: "failed",
       source: "manual",
       startedAt: "2026-01-01T00:00:00.000Z",
+      finishedAt: "2026-01-01T00:01:00.000Z",
+      current: {
+        timelineItemId: "refresh",
+        label: "金融機関を更新",
+        step: "moneyforward_refresh",
+        metadata: {
+          kind: "refresh",
+          maxWaitMinutes: 20,
+          remainingAccounts: 1,
+          incompleteAccounts: ["機関 A"],
+        },
+      },
+      waitingFor: null,
+      progress: { completed: 2, total: 4 },
+      timeline: [
+        {
+          id: "auth",
+          label: "認証",
+          step: "authentication",
+          metadata: null,
+          status: "done",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          finishedAt: "2026-01-01T00:00:10.000Z",
+          reason: null,
+        },
+        {
+          id: "refresh",
+          label: "金融機関を更新",
+          step: "moneyforward_refresh",
+          metadata: {
+            kind: "refresh",
+            maxWaitMinutes: 20,
+            remainingAccounts: 1,
+            incompleteAccounts: ["機関 A"],
+          },
+          status: "failed",
+          startedAt: "2026-01-01T00:00:10.000Z",
+          finishedAt: "2026-01-01T00:01:00.000Z",
+          reason: {
+            code: "navigation_failed",
+            message: "画面を開けませんでした",
+            url: "https://example.com/path",
+          },
+        },
+      ],
+      reason: {
+        code: "navigation_failed",
+        message: "画面を開けませんでした",
+        url: "https://example.com/path",
+      },
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        running: false,
+        latestRun,
+      }),
+    );
+
+    const res = await GET();
+
+    await expect(res.json()).resolves.toEqual({
+      available: true,
+      running: false,
+      source: "manual",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      latestRun,
     });
   });
 
@@ -76,7 +156,9 @@ describe("/api/crawler/refresh/", () => {
       "http://crawler:8766/runs",
       expect.objectContaining({ method: "POST", cache: "no-store" }),
     );
-    await expect(res.json()).resolves.toEqual({ available: true, running: true });
+    await expect(res.json()).resolves.toEqual(
+      expect.objectContaining({ available: true, running: true, latestRun: null }),
+    );
   });
 
   it("preserves conflict response when crawler is already running", async () => {
@@ -87,11 +169,14 @@ describe("/api/crawler/refresh/", () => {
     const res = await POST(sameOriginPostRequest());
 
     expect(res.status).toBe(409);
-    await expect(res.json()).resolves.toEqual({
-      available: true,
-      running: true,
-      source: "scheduled",
-    });
+    await expect(res.json()).resolves.toEqual(
+      expect.objectContaining({
+        available: true,
+        running: true,
+        source: "scheduled",
+        latestRun: null,
+      }),
+    );
   });
 
   it("rejects a crawler run from a cross-site origin", async () => {
@@ -118,6 +203,6 @@ describe("/api/crawler/refresh/", () => {
     const res = await GET();
 
     expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toEqual({ available: false, running: false });
+    await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
   });
 });

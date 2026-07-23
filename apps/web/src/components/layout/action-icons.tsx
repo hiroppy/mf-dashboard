@@ -4,7 +4,16 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  parseCrawlerRefreshStatus,
+  unavailableCrawlerRefreshStatus,
+  type CrawlerRefreshStatus,
+  type CrawlerRunStepDetails,
+  type CrawlerRunStepStatus,
+  type CrawlerRunTimelineItem,
+} from "../../lib/crawler-refresh-status";
 import { formatDateTime } from "../../lib/format";
+import { Button } from "../ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
 
@@ -15,31 +24,14 @@ interface ActionIconsProps {
   notifications?: ReactNode;
 }
 
-interface CrawlerRefreshStatus {
-  available: boolean;
-  running: boolean;
-  startedAt: string | null;
-}
-
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
   isPending: boolean;
 }
 
-const unavailableStatus: CrawlerRefreshStatus = {
-  available: false,
-  running: false,
-  startedAt: null,
-};
-
 async function readCrawlerRefreshStatus(): Promise<CrawlerRefreshStatus> {
   const res = await fetch("/api/crawler/refresh/", { cache: "no-store" });
-  const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
-
-  return {
-    available: res.ok && body.available !== false,
-    running: Boolean(body.running),
-    startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
-  };
+  const body: unknown = await res.json().catch(() => null);
+  return parseCrawlerRefreshStatus(body, res.ok);
 }
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
@@ -56,18 +48,19 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
   return (
     <div className="flex items-center gap-1">
       {notifications}
-      <RefreshButton iconSize={iconSize} />
+      <RefreshControl iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
   );
 }
 
-function RefreshButton({ iconSize }: { iconSize: string }) {
+function RefreshControl({ iconSize }: { iconSize: string }) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
-    ...unavailableStatus,
+    ...unavailableCrawlerRefreshStatus,
     isPending: true,
   });
 
@@ -79,14 +72,19 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
         const nextStatus = await readCrawlerRefreshStatus();
         if (isMounted) {
           setState({ ...nextStatus, isPending: false });
-          if (nextStatus.available && wasRunningRef.current && !nextStatus.running) {
+          if (
+            nextStatus.available &&
+            wasRunningRef.current &&
+            !nextStatus.running &&
+            nextStatus.latestRun?.runStatus !== "failed"
+          ) {
             router.refresh();
           }
           wasRunningRef.current = nextStatus.running;
         }
       } catch {
         if (isMounted) {
-          setState({ ...unavailableStatus, isPending: false });
+          setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
           wasRunningRef.current = false;
         }
       }
@@ -102,49 +100,254 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
   }, [router]);
 
   async function startRefresh() {
-    if (!state.available || state.running || state.isPending) {
+    if (!state.available || state.isPending) {
       return;
     }
 
-    setState((prev) => ({ ...prev, running: true, isPending: true }));
+    setDialogOpen(false);
+    setState((prev) => ({
+      ...prev,
+      running: true,
+      latestRun: null,
+      isPending: true,
+    }));
 
     try {
       const res = await fetch("/api/crawler/refresh/", { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as Partial<CrawlerRefreshStatus>;
+      const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
-        setState({ ...unavailableStatus, isPending: false });
+        setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
         return;
       }
 
-      const running = Boolean(body.running ?? true);
-      wasRunningRef.current ||= running;
+      const nextStatus = parseCrawlerRefreshStatus(body, true);
+      const runningStatus = nextStatus.running ? nextStatus : { ...nextStatus, running: true };
+      wasRunningRef.current = true;
       setState({
-        available: body.available !== false,
-        running,
-        startedAt: typeof body.startedAt === "string" ? body.startedAt : null,
+        ...runningStatus,
         isPending: false,
       });
     } catch {
-      setState({ ...unavailableStatus, isPending: false });
+      setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
     }
   }
 
-  const isBusy = state.isPending || state.running;
-  const isDisabled = isBusy || !state.available;
-  let title = state.available ? "更新" : "更新サービス未接続";
+  const isFailed = state.latestRun?.runStatus === "failed";
+  const showsTimeline = state.running || isFailed;
+  const isDisabled = state.isPending || !state.available;
+  let title = state.available ? "金融機関データを更新" : "更新サービス未接続";
+  let ariaLabel = title;
   if (state.running) {
-    title = state.startedAt ? `更新中（開始: ${formatDateTime(state.startedAt)}）` : "更新中";
+    title = state.startedAt
+      ? `同期タイムラインを表示（開始: ${formatDateTime(state.startedAt)}）`
+      : "同期タイムラインを表示";
+    ariaLabel = "同期タイムラインを表示";
+  } else if (isFailed) {
+    title = "同期失敗の詳細を表示";
+    ariaLabel = title;
   }
 
   return (
-    <IconButton
-      icon={<RefreshCw className={`${iconSize} ${isBusy ? "animate-spin" : ""}`} />}
-      onClick={() => void startRefresh()}
-      ariaLabel="金融機関データを更新"
-      disabled={isDisabled}
-      title={title}
-    />
+    <>
+      {showsTimeline && (
+        <span className="hidden lg:inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          {isFailed ? "同期失敗" : formatProgressLabel(state)}
+        </span>
+      )}
+      <IconButton
+        icon={
+          <span className="relative block">
+            <RefreshCw
+              className={`${iconSize} ${state.running || state.isPending ? "animate-spin" : ""}`}
+            />
+            {isFailed && (
+              <span
+                aria-hidden="true"
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-background"
+              />
+            )}
+          </span>
+        }
+        onClick={() => {
+          if (showsTimeline) {
+            setDialogOpen(true);
+          } else {
+            void startRefresh();
+          }
+        }}
+        ariaLabel={ariaLabel}
+        disabled={isDisabled}
+        title={title}
+      />
+      <SyncTimelineDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        state={state}
+        onRetry={() => void startRefresh()}
+      />
+    </>
+  );
+}
+
+function formatProgressLabel(state: CrawlerRefreshStatus): string {
+  const progress = state.latestRun?.progress;
+  if (!progress) {
+    return "同期中";
+  }
+  return `同期中 · ${progress.completed}/${progress.total}`;
+}
+
+const stepStatusLabels: Record<CrawlerRunStepStatus, string> = {
+  pending: "待機中",
+  running: "実行中",
+  done: "完了",
+  warning: "警告",
+  failed: "失敗",
+  skipped: "スキップ",
+};
+
+function SyncTimelineDialog({
+  open,
+  onOpenChange,
+  state,
+  onRetry,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  state: CrawlerRefreshStatus;
+  onRetry: () => void;
+}) {
+  const run = state.latestRun;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto">
+        <DialogTitle>
+          {run?.runStatus === "failed" ? "同期に失敗しました" : "同期タイムライン"}
+        </DialogTitle>
+        <DialogDescription>
+          {state.startedAt ? `開始: ${formatDateTime(state.startedAt)}` : "最新の同期状況です。"}
+        </DialogDescription>
+
+        <div className="mt-5 space-y-5 text-sm">
+          {run?.progress && (
+            <section aria-labelledby="sync-progress-heading">
+              <div className="mb-2 flex items-center justify-between gap-4">
+                <h3 id="sync-progress-heading" className="font-medium">
+                  進捗
+                </h3>
+                <span className="text-muted-foreground">
+                  {run.progress.completed}/{run.progress.total}
+                </span>
+              </div>
+              <progress
+                value={Math.min(run.progress.completed, run.progress.total)}
+                max={run.progress.total || 1}
+                className="h-2 w-full overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary"
+              />
+            </section>
+          )}
+
+          {run?.current && (
+            <TimelineDetail
+              title="現在"
+              label={run.current.label}
+              detail={formatStepMetadata(run.current)}
+            />
+          )}
+
+          {run?.waitingFor && (
+            <TimelineDetail title="待機中" label={run.waitingFor} detail={null} />
+          )}
+
+          {run?.reason && (
+            <section
+              aria-labelledby="sync-reason-heading"
+              className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
+            >
+              <h3 id="sync-reason-heading" className="font-medium text-destructive">
+                理由
+              </h3>
+              <p className="mt-1 break-words text-muted-foreground">{run.reason.message}</p>
+            </section>
+          )}
+
+          <section aria-labelledby="sync-timeline-heading">
+            <h3 id="sync-timeline-heading" className="font-medium">
+              タイムライン
+            </h3>
+            {run && run.timeline.length > 0 ? (
+              <ol className="mt-2 space-y-2">
+                {run.timeline.map((item) => (
+                  <TimelineListItem key={item.id} item={item} />
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-2 text-muted-foreground">タイムラインはまだありません。</p>
+            )}
+          </section>
+
+          {run?.runStatus === "failed" && (
+            <div className="flex justify-end border-t pt-4">
+              <Button onClick={onRetry}>再度更新</Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TimelineListItem({ item }: { item: CrawlerRunTimelineItem }) {
+  const detail = formatStepMetadata(item);
+
+  return (
+    <li className="min-w-0 rounded-md border p-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <span className="min-w-0 break-words font-medium">{item.label}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {stepStatusLabels[item.status]}
+        </span>
+      </div>
+      {detail && <p className="mt-1 break-words text-muted-foreground">{detail}</p>}
+      {item.reason && <p className="mt-1 break-words text-destructive">{item.reason.message}</p>}
+    </li>
+  );
+}
+
+function formatStepMetadata(item: CrawlerRunStepDetails): string | null {
+  switch (item.metadata?.kind) {
+    case "group":
+      return item.metadata.groupName;
+    case "month":
+      return item.metadata.month;
+    case "refresh": {
+      const accounts = item.metadata.incompleteAccounts.join("、");
+      return accounts
+        ? `残り ${item.metadata.remainingAccounts}件: ${accounts}`
+        : `残り ${item.metadata.remainingAccounts}件`;
+    }
+    default:
+      return null;
+  }
+}
+
+function TimelineDetail({
+  title,
+  label,
+  detail,
+}: {
+  title: string;
+  label: string;
+  detail: string | null;
+}) {
+  return (
+    <section className="min-w-0 rounded-md bg-muted/60 p-3">
+      <h3 className="font-medium">{title}</h3>
+      <p className="mt-1 break-words">{label}</p>
+      {detail && <p className="mt-1 break-words text-muted-foreground">{detail}</p>}
+    </section>
   );
 }
 
