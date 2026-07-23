@@ -65,9 +65,33 @@ export function isEscaped(text: string, index: number): boolean {
   return backslashCount % 2 === 1;
 }
 
-function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
+function findTildeFenceRanges(text: string): MarkdownCodeRange[] {
   const ranges: MarkdownCodeRange[] = [];
+  const openingPattern = /^ {0,3}(~{3,})[^\r\n]*(?:\r?\n|$)/gmu;
+  let opening: RegExpExecArray | null;
+  while ((opening = openingPattern.exec(text)) !== null) {
+    const closingPattern = new RegExp(`^ {0,3}~{${opening[1].length},}[ \\t]*(?:\\r?$)`, "gmu");
+    closingPattern.lastIndex = openingPattern.lastIndex;
+    const closing = closingPattern.exec(text);
+    if (closing === null) continue;
+    const end = closing.index + closing[0].length;
+    ranges.push({ start: opening.index, end });
+    openingPattern.lastIndex = end;
+  }
+  return ranges;
+}
+
+function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
+  const tildeFenceRanges = findTildeFenceRanges(text);
+  const ranges = [...tildeFenceRanges];
+  let excludedRangeIndex = 0;
   for (let index = 0; index < text.length; index += 1) {
+    while (tildeFenceRanges[excludedRangeIndex]?.end <= index) excludedRangeIndex += 1;
+    const excludedRange = tildeFenceRanges[excludedRangeIndex];
+    if (excludedRange !== undefined && index >= excludedRange.start) {
+      index = excludedRange.end - 1;
+      continue;
+    }
     if (text[index] !== "`" || isEscaped(text, index)) continue;
     let delimiterLength = 1;
     while (text[index + delimiterLength] === "`") delimiterLength += 1;
@@ -91,7 +115,7 @@ function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
     }
     if (!matched) index += delimiterLength - 1;
   }
-  return ranges;
+  return ranges.sort((left, right) => left.start - right.start);
 }
 
 function maskMarkdownCode(text: string): { masked: string; restore: (value: string) => string } {
@@ -282,11 +306,12 @@ export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>
   );
   const withoutInvalidMarkdownLinks = sanitizeMarkdownInlineLinks(withoutHtmlLinks, allowedHrefs);
   const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(
-    /(!?)\[([^\]]+)\]\[([^\]]+)\]/gu,
-    (_match, imageMarker: string, label: string, id: string) => {
+    /(!?)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu,
+    (match, imageMarker: string, label: string, explicitId: string | undefined) => {
       if (imageMarker) return label;
+      const id = explicitId || label;
       const destination = referenceDefinitions.get(id.toLowerCase());
-      if (destination === undefined) return label;
+      if (destination === undefined) return explicitId === undefined ? match : label;
       const href = resolveAllowedHref(destination, allowedHrefs);
       return href ? `[${label}](${href})` : label;
     },

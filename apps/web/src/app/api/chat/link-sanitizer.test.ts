@@ -116,6 +116,18 @@ describe("splitCompleteFinanceChatText", () => {
     });
   });
 
+  it.each(["[詳細][]", "[詳細]"])(
+    "buffers a collapsed or shortcut reference until its definition arrives: %s",
+    (reference) => {
+      expect(splitCompleteFinanceChatText(`${reference}\n`)).toEqual({
+        complete: "",
+        pending: `${reference}\n`,
+      });
+      const text = `${reference}\n[詳細]: /group-a/cf/2026-07\n`;
+      expect(splitCompleteFinanceChatText(text)).toEqual({ complete: text, pending: "" });
+    },
+  );
+
   it("keeps a reference link buffered with its definition when the definition has no newline", () => {
     expect(splitCompleteFinanceChatText("[詳細][route]\n[route]: /group-a/cf/2026-07")).toEqual({
       complete: "",
@@ -284,7 +296,10 @@ describe("createFinanceChatLinkSanitizer", () => {
     },
   );
 
-  it("preserves fenced-code state across streamed fragments", async () => {
+  it.each([
+    ["```html\n", '<a href="javascript:alert(1)">example</a>\n```'],
+    ["~~~html\n", '<a href="javascript:alert(1)">example</a>\n~~~~'],
+  ])("preserves fenced-code state across streamed fragments: %s", async (opening, body) => {
     const transform = createFinanceChatLinkSanitizer("group-a")({
       stopStream: vi.fn<() => void>(),
       tools: {},
@@ -301,11 +316,11 @@ describe("createFinanceChatLinkSanitizer", () => {
     })();
 
     await writer.write({ type: "text-start", id: "text-a" });
-    await writer.write({ type: "text-delta", id: "text-a", text: "```html\n" });
+    await writer.write({ type: "text-delta", id: "text-a", text: opening });
     await writer.write({
       type: "text-delta",
       id: "text-a",
-      text: '<a href="javascript:alert(1)">example</a>\n```',
+      text: body,
     });
     await writer.write({ type: "text-end", id: "text-a" });
     await writer.close();
@@ -316,7 +331,7 @@ describe("createFinanceChatLinkSanitizer", () => {
         .filter((chunk) => chunk.type === "text-delta")
         .map((chunk) => chunk.text)
         .join(""),
-    ).toBe('```html\n<a href="javascript:alert(1)">example</a>\n```');
+    ).toBe(opening + body);
   });
 
   it("retains a reference definition emitted before its use", async () => {

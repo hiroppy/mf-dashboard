@@ -36,13 +36,14 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toEqual(expect.arrayContaining(["/invalid", "/evil"]));
   });
 
-  it.each(["`[x](https://example.com)`", "```md\n[x](https://example.com)\n```"])(
-    "preserves a Markdown link literal inside Markdown code: %s",
-    (text) => {
-      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
-      expect(collectFinanceChatLinks(text)).toEqual([]);
-    },
-  );
+  it.each([
+    "`[x](https://example.com)`",
+    "```md\n[x](https://example.com)\n```",
+    '~~~md\nhttps://example.com <a href="javascript:alert(1)">x</a>\n~~~~',
+  ])("preserves a Markdown link literal inside Markdown code: %s", (text) => {
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
+    expect(collectFinanceChatLinks(text)).toEqual([]);
+  });
 
   it("does not treat an escaped backtick as a Markdown code delimiter", () => {
     const text = "\\`https://evil.example``";
@@ -94,6 +95,13 @@ describe("sanitizeFinanceChatLinks", () => {
       "[詳細](/0/cf/2026-07)\n\n",
     );
   });
+
+  it.each(["[詳細][]\n\n[詳細]: /0/cf/2026-07", "[詳細]\n\n[詳細]: /0/cf/2026-07"])(
+    "resolves a collapsed or shortcut reference link: %s",
+    (text) => {
+      expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[詳細](/0/cf/2026-07)\n\n");
+    },
+  );
 
   it("preserves prose following a reference definition", () => {
     expect(

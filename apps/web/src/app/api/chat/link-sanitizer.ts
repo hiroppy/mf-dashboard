@@ -30,6 +30,7 @@ export function splitCompleteFinanceChatText(
   let labelStart = -1;
   let destinationDepth = 0;
   let codeDelimiterLength = 0;
+  let tildeFenceLength = 0;
   let htmlAnchorOpen = false;
   let htmlAnchorOpeningTag = false;
   let htmlAnchorQuote: '"' | "'" | undefined;
@@ -38,8 +39,28 @@ export function splitCompleteFinanceChatText(
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
     const escaped = isEscaped(text, index);
+    const lineStart = text.lastIndexOf("\n", index - 1) + 1;
+    const linePrefix = text.slice(lineStart, index);
 
-    if (!escaped && character === "`") {
+    if (
+      !escaped &&
+      character === "~" &&
+      codeDelimiterLength === 0 &&
+      /^ {0,3}$/u.test(linePrefix)
+    ) {
+      let runLength = 1;
+      while (text[index + runLength] === "~") runLength += 1;
+      const restOfLine = text.slice(index + runLength).split(/\r?\n/u, 1)[0];
+      if (tildeFenceLength === 0 && runLength >= 3) {
+        tildeFenceLength = runLength;
+      } else if (runLength >= tildeFenceLength && /^[ \t]*$/u.test(restOfLine)) {
+        tildeFenceLength = 0;
+      }
+      index += runLength - 1;
+      continue;
+    }
+
+    if (!escaped && character === "`" && tildeFenceLength === 0) {
       let runLength = 1;
       while (text[index + runLength] === "`") runLength += 1;
       if (codeDelimiterLength === 0) {
@@ -54,6 +75,7 @@ export function splitCompleteFinanceChatText(
     if (
       !escaped &&
       codeDelimiterLength === 0 &&
+      tildeFenceLength === 0 &&
       !htmlAnchorOpen &&
       /^<a\b/iu.test(text.slice(index)) &&
       (hasCompleteRawHtmlAnchorOpening(text, index) ||
@@ -115,14 +137,21 @@ export function splitCompleteFinanceChatText(
       continue;
     }
 
-    if (codeDelimiterLength === 0 && character && boundaries.has(character)) lastBoundary = index;
+    if (
+      codeDelimiterLength === 0 &&
+      tildeFenceLength === 0 &&
+      character &&
+      boundaries.has(character)
+    )
+      lastBoundary = index;
   }
 
   if (lastBoundary < 0) return { complete: "", pending: text };
 
   const complete = text.slice(0, lastBoundary + 1);
-  const referenceIds = Array.from(complete.matchAll(/(?<!!)\[[^\]]+\]\[([^\]]+)\]/gu), ([, id]) =>
-    id.toLowerCase(),
+  const referenceIds = Array.from(
+    complete.matchAll(/(?<!!)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu),
+    ([, label, explicitId]) => (explicitId || label).toLowerCase(),
   );
   const definedReferenceIds = new Set(
     Array.from(
