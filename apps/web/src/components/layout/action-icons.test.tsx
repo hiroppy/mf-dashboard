@@ -202,6 +202,7 @@ describe("ActionIcons", () => {
 
       render(<ActionIcons variant="header" />);
       await screen.findByRole("button", { name: "同期タイムラインを表示" });
+      expect(screen.getByText("同期中 · 0/10")).toBeTruthy();
 
       await act(async () => {
         await intervalCallbacks[0]?.();
@@ -300,7 +301,7 @@ describe("ActionIcons", () => {
     render(<ActionIcons variant="header" />);
 
     const refreshButton = await screen.findByRole("button", { name: "同期タイムラインを表示" });
-    expect(screen.getByText("同期中")).toBeTruthy();
+    expect(screen.getByText("同期中 · 0/10")).toBeTruthy();
     expect(screen.queryByText("同期失敗")).toBeNull();
 
     fireEvent.click(refreshButton);
@@ -308,6 +309,27 @@ describe("ActionIcons", () => {
     expect(await screen.findByRole("heading", { name: "同期タイムライン" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "再度更新" })).toBeNull();
     expect(screen.getByText("タイムラインはまだありません。")).toBeTruthy();
+  });
+
+  it("shows baseline progress immediately after starting a refresh", async () => {
+    let resolvePost: ((response: Response) => void) | undefined;
+    const postResponse = new Promise<Response>((resolve) => {
+      resolvePost = resolve;
+    });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
+      .mockReturnValueOnce(postResponse);
+
+    render(<ActionIcons variant="header" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "金融機関データを更新" }));
+
+    expect(await screen.findByText("同期中 · 0/10")).toBeTruthy();
+
+    await act(async () => {
+      resolvePost?.(jsonResponse({ available: true, running: true }, 202));
+      await postResponse;
+    });
   });
 
   it("opens a failed timeline and retries from the dialog", async () => {
