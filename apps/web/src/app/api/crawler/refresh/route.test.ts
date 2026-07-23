@@ -84,7 +84,7 @@ describe("/api/crawler/refresh/", () => {
         step: "moneyforward_refresh",
         metadata: {
           kind: "refresh",
-          maxWaitMinutes: 20,
+          maxWaitMinutes: 0.5,
           remainingAccounts: 1,
           incompleteAccounts: ["機関 A"],
         },
@@ -108,7 +108,7 @@ describe("/api/crawler/refresh/", () => {
           step: "moneyforward_refresh",
           metadata: {
             kind: "refresh",
-            maxWaitMinutes: 20,
+            maxWaitMinutes: 0.5,
             remainingAccounts: 1,
             incompleteAccounts: ["機関 A"],
           },
@@ -116,16 +116,18 @@ describe("/api/crawler/refresh/", () => {
           startedAt: "2026-01-01T00:00:10.000Z",
           finishedAt: "2026-01-01T00:01:00.000Z",
           reason: {
-            code: "navigation_failed",
+            code: "moneyforward_timeout",
             message: "画面を開けませんでした",
-            url: "https://example.com/path",
+            operation: "refresh",
+            timeoutMs: 0.5,
           },
         },
       ],
       reason: {
-        code: "navigation_failed",
+        code: "moneyforward_timeout",
         message: "画面を開けませんでした",
-        url: "https://example.com/path",
+        operation: "refresh",
+        timeoutMs: 0.5,
       },
     };
     vi.mocked(global.fetch).mockResolvedValueOnce(

@@ -41,14 +41,23 @@ export type CrawlerRunStepDetails =
   | { step: "notification"; metadata: null }
   | { step: "web_cache_refresh"; metadata: null };
 
+type CrawlerRunTimelineStatusDetails =
+  | { status: "pending"; startedAt: null; finishedAt: null; reason: null }
+  | { status: "running"; startedAt: string; finishedAt: null; reason: null }
+  | { status: "done"; startedAt: string; finishedAt: string; reason: null }
+  | {
+      status: "warning" | "failed";
+      startedAt: string;
+      finishedAt: string;
+      reason: CrawlerRunReason;
+    }
+  | { status: "skipped"; startedAt: null; finishedAt: string; reason: null };
+
 export type CrawlerRunTimelineItem = {
   id: string;
   label: string;
-  status: CrawlerRunStepStatus;
-  startedAt: string | null;
-  finishedAt: string | null;
-  reason: CrawlerRunReason | null;
-} & CrawlerRunStepDetails;
+} & CrawlerRunStepDetails &
+  CrawlerRunTimelineStatusDetails;
 
 export type CrawlerRunCurrent = {
   timelineItemId: string;
@@ -122,6 +131,10 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 function readReason(value: unknown): CrawlerRunReason | null {
   if (!isRecord(value) || typeof value.message !== "string") {
     return null;
@@ -132,7 +145,8 @@ function readReason(value: unknown): CrawlerRunReason | null {
     case "unknown_error":
       return { code: value.code, message: value.message };
     case "refresh_timeout":
-      return isNonNegativeInteger(value.maxWaitMinutes) && isStringArray(value.incompleteAccounts)
+      return isNonNegativeFiniteNumber(value.maxWaitMinutes) &&
+        isStringArray(value.incompleteAccounts)
         ? {
             code: value.code,
             message: value.message,
@@ -141,7 +155,7 @@ function readReason(value: unknown): CrawlerRunReason | null {
           }
         : null;
     case "moneyforward_timeout":
-      return typeof value.operation === "string" && isNonNegativeInteger(value.timeoutMs)
+      return typeof value.operation === "string" && isNonNegativeFiniteNumber(value.timeoutMs)
         ? {
             code: value.code,
             message: value.message,
@@ -190,7 +204,7 @@ function readStepDetails(value: Record<string, unknown>): CrawlerRunStepDetails 
     case "moneyforward_refresh":
       return isRecord(value.metadata) &&
         value.metadata.kind === "refresh" &&
-        isNonNegativeInteger(value.metadata.maxWaitMinutes) &&
+        isNonNegativeFiniteNumber(value.metadata.maxWaitMinutes) &&
         isNonNegativeInteger(value.metadata.remainingAccounts) &&
         isStringArray(value.metadata.incompleteAccounts)
         ? {
@@ -250,7 +264,7 @@ function readTimelineItem(value: unknown): CrawlerRunTimelineItem | null {
     finishedAt,
     reason,
     ...details,
-  };
+  } as CrawlerRunTimelineItem;
 }
 
 function readCurrent(value: unknown): CrawlerRunCurrent | null {
