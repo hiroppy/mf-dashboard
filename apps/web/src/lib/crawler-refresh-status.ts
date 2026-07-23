@@ -296,7 +296,12 @@ export function parseCrawlerRefreshStatus(value: unknown, responseOk = true): Cr
   }
 
   const latestRun = readLatestRun(value.latestRun ?? value);
-  const running = value.running === true || latestRun?.runStatus === "running";
+  const hasLockStatus = typeof value.running === "boolean";
+  if (!hasLockStatus && !latestRun) {
+    return unavailableCrawlerRefreshStatus;
+  }
+
+  const running = hasLockStatus ? value.running === true : latestRun?.runStatus === "running";
   return {
     available: responseOk && value.available !== false,
     running,

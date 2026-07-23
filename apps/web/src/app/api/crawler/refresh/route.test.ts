@@ -70,6 +70,47 @@ describe("/api/crawler/refresh/", () => {
     );
   });
 
+  it("keeps an explicit stopped lock state over a stale running snapshot", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        running: false,
+        latestRun: {
+          version: 1,
+          runId: "stale-run",
+          runStatus: "running",
+          source: "manual",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          finishedAt: null,
+          current: null,
+          waitingFor: null,
+          progress: null,
+          timeline: [],
+          reason: null,
+        },
+      }),
+    );
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(body).toEqual(
+      expect.objectContaining({
+        available: true,
+        running: false,
+        latestRun: expect.objectContaining({ runStatus: "running" }),
+      }),
+    );
+  });
+
+  it("returns unavailable for a malformed successful crawler response", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: "invalid status" }));
+
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
+  });
+
   it("proxies a typed latest run state", async () => {
     const latestRun = {
       version: 1,
