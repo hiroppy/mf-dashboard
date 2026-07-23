@@ -41,6 +41,13 @@ export const financeChartSchema = z
         path: ["data"],
       });
     }
+    if (new Set(chart.data.map((point) => point.label)).size !== chart.data.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Data labels must be unique",
+        path: ["data"],
+      });
+    }
     if (chart.chartType === "pie" && chart.series.length !== 1) {
       context.addIssue({
         code: "custom",

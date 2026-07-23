@@ -34,6 +34,7 @@ minimumReleaseAgeExclude:
 
 catalog:
   "@libsql/client": 0.17.4
+  libsql: 0.5.28
   "@types/node": 25.9.3
   "@vitest/browser-playwright": 4.1.9
   drizzle-orm: 0.45.2

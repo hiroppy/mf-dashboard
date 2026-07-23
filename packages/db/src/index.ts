@@ -4,27 +4,11 @@ import { createClient, type Client } from "@libsql/client";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import { getDbPath } from "./db-path";
 import * as schema from "./schema/schema";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 let _client: Client | null = null;
-
-function getDbPath() {
-  if (process.env.DB_PATH) {
-    return process.env.DB_PATH;
-  }
-  // Try cwd first, then try going up directories
-  const cwdDataDir = join(process.cwd(), "data");
-  if (existsSync(cwdDataDir)) {
-    return join(cwdDataDir, "moneyforward.db");
-  }
-  // apps/web or apps/crawler -> monorepo root
-  const rootDataDir = join(process.cwd(), "..", "..", "data");
-  if (existsSync(rootDataDir)) {
-    return join(rootDataDir, "moneyforward.db");
-  }
-  return join(cwdDataDir, "moneyforward.db");
-}
 
 export function isDatabaseAvailable(): boolean {
   return existsSync(getDbPath());

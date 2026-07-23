@@ -55,6 +55,20 @@ describe("financeChartSchema", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate data labels", () => {
+    expect(
+      financeChartSchema.safeParse({
+        title: "口座比較",
+        chartType: "bar",
+        series: [{ name: "残高", amountType: "balance" }],
+        data: [
+          { label: "口座 A", values: [100_000] },
+          { label: "口座 A", values: [200_000] },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts count and percentage units", () => {
     expect(
       financeChartSchema.safeParse({

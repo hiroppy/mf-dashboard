@@ -1,12 +1,95 @@
-import type { Client, InValue } from "@libsql/client";
+import { createRequire } from "node:module";
+import { Worker } from "node:worker_threads";
 import { getTableColumns, getTableName, isTable } from "drizzle-orm";
+import { getDbPath } from "../db-path";
 import type { Db } from "../index";
 import * as schema from "../schema/schema";
 
 export const READ_ONLY_QUERY_MAX_ROWS = 200;
+export const READ_ONLY_QUERY_MAX_BYTES = 64 * 1024;
+export const READ_ONLY_QUERY_TIMEOUT_MS = 1_000;
+
+const MAX_SQL_LENGTH = 5_000;
+const MAX_RESULT_COLUMNS = 32;
+const MAX_JOIN_COUNT = 8;
+const MAX_UNION_COUNT = 8;
 
 const WRITE_KEYWORDS =
   /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|replace|rollback|savepoint|update|vacuum)\b/i;
+const EXPENSIVE_SQL =
+  /\b(?:cross\s+join|group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob|with\s+recursive)\b/i;
+const SCHEMA_QUALIFIER = /(?:\b(?:main|source|temp)\b|["'`[](?:main|source|temp)["'`\]])\s*\./i;
+
+const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
+
+const TABLE_NAME_SET = new Set(TABLE_NAMES);
+const libsqlModulePath = createRequire(import.meta.url).resolve("libsql/promise");
+
+const QUERY_WORKER_SOURCE = String.raw`
+  const { parentPort, workerData } = require("node:worker_threads");
+  const Database = require(workerData.libsqlModulePath);
+
+  function serializeValue(value) {
+    return value instanceof Uint8Array ? Array.from(value) : value;
+  }
+
+  async function run() {
+    const database = new Database(":memory:", {});
+
+    try {
+      await database.exec(workerData.scopedDatabaseSql);
+      parentPort.postMessage({ ready: true });
+      await new Promise((resolve) => parentPort.once("message", resolve));
+
+      const statement = await database.prepare(
+        "SELECT * FROM (\n" + workerData.query + "\n) AS query_result LIMIT " +
+          (workerData.maxRows + 1),
+      );
+      const columns = statement.columns().map((column) => column.name);
+      if (columns.length > workerData.maxColumns) {
+        throw new Error("結果列は" + workerData.maxColumns + "個以内で指定してください。");
+      }
+
+      const rows = [];
+      let byteLength = 0;
+      let truncated = false;
+      const iterator = await statement.iterate(
+        /:groupId\b/.test(workerData.query) ? { groupId: workerData.groupId } : {},
+      );
+
+      for (const resultRow of iterator) {
+        if (rows.length === workerData.maxRows) {
+          truncated = true;
+          break;
+        }
+
+        const row = Object.fromEntries(
+          columns.map((column) => [column, serializeValue(resultRow[column])]),
+        );
+        const rowByteLength = Buffer.byteLength(JSON.stringify(row));
+        if (byteLength + rowByteLength > workerData.maxBytes) {
+          truncated = true;
+          break;
+        }
+
+        rows.push(row);
+        byteLength += rowByteLength;
+      }
+
+      parentPort.postMessage({
+        result: { columns, rows, rowCount: rows.length, truncated },
+      });
+    } finally {
+      database.close();
+    }
+  }
+
+  run().catch((error) => {
+    parentPort.postMessage({
+      error: error instanceof Error ? error.message : "SQLの実行に失敗しました。",
+    });
+  });
+`;
 
 export function describeDatabaseSchema(): string {
   const tables = (Object.values(schema) as unknown[])
@@ -114,6 +197,9 @@ export function normalizeReadOnlySql(sql: string): string {
   const normalized = sql.trim().replace(/;\s*$/, "");
   const masked = maskCommentsAndQuotedText(normalized);
 
+  if (normalized.length > MAX_SQL_LENGTH) {
+    throw new Error(`SQLは${MAX_SQL_LENGTH}文字以内で指定してください。`);
+  }
   if (!/^\s*(?:select|with)\b/i.test(masked)) {
     throw new Error("SELECTまたはWITHで始まるread-only SQLだけを実行できます。");
   }
@@ -123,31 +209,209 @@ export function normalizeReadOnlySql(sql: string): string {
   if (WRITE_KEYWORDS.test(masked)) {
     throw new Error("データを変更するSQLは実行できません。");
   }
+  if (SCHEMA_QUALIFIER.test(normalized)) {
+    throw new Error("データベースschemaを直接指定するSQLは実行できません。");
+  }
+  if (EXPENSIVE_SQL.test(masked)) {
+    throw new Error("実行量または返却サイズが大きくなるSQLは実行できません。");
+  }
+  if ((masked.match(/\bjoin\b/gi)?.length ?? 0) > MAX_JOIN_COUNT) {
+    throw new Error(`JOINは${MAX_JOIN_COUNT}個以内で指定してください。`);
+  }
+  if ((masked.match(/\bunion\b/gi)?.length ?? 0) > MAX_UNION_COUNT) {
+    throw new Error(`UNIONは${MAX_UNION_COUNT}個以内で指定してください。`);
+  }
 
   return normalized;
 }
 
-function serializeValue(value: InValue | undefined) {
-  return value instanceof Uint8Array ? Array.from(value) : value;
+function quoteSqlText(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
-export async function executeReadOnlyQuery(db: Db, sql: string, groupId: string) {
-  const query = normalizeReadOnlySql(sql);
-  const client = (db as Db & { $client: Client }).$client;
-  const result = await client.execute({
-    sql: `SELECT * FROM (\n${query}\n) AS query_result LIMIT ${READ_ONLY_QUERY_MAX_ROWS + 1}`,
-    args: /:groupId\b/.test(query) ? { groupId } : {},
-  });
-  const truncated = result.rows.length > READ_ONLY_QUERY_MAX_ROWS;
+function createScopedDatabaseSql(databasePath: string, groupId: string): string {
+  const sourceDatabase = quoteSqlText(databasePath);
+  const selectedGroup = quoteSqlText(groupId);
+  const accountIds = `SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}`;
+  const holdingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
+  const assetHistoryIds = `SELECT id FROM source.asset_history WHERE group_id = ${selectedGroup}`;
 
-  return {
-    columns: result.columns,
-    rows: result.rows
-      .slice(0, READ_ONLY_QUERY_MAX_ROWS)
-      .map((row) =>
-        Object.fromEntries(result.columns.map((column) => [column, serializeValue(row[column])])),
-      ),
-    rowCount: Math.min(result.rows.length, READ_ONLY_QUERY_MAX_ROWS),
-    truncated,
+  return `
+    ATTACH DATABASE ${sourceDatabase} AS source;
+    CREATE TABLE groups AS
+      SELECT * FROM source.groups WHERE id = ${selectedGroup};
+    CREATE TABLE group_accounts AS
+      SELECT * FROM source.group_accounts WHERE group_id = ${selectedGroup};
+    CREATE TABLE institution_categories AS
+      SELECT * FROM source.institution_categories;
+    CREATE TABLE accounts AS
+      SELECT id, NULL AS mf_id, name, type, institution, category_id, created_at, updated_at, is_active
+      FROM source.accounts
+      WHERE id IN (${accountIds});
+    CREATE TABLE asset_categories AS
+      SELECT * FROM source.asset_categories;
+    CREATE TABLE account_statuses AS
+      SELECT * FROM source.account_statuses WHERE account_id IN (${accountIds});
+    CREATE TABLE holdings AS
+      SELECT
+        id,
+        NULL AS mf_id,
+        account_id,
+        category_id,
+        name,
+        code,
+        type,
+        liability_category,
+        created_at,
+        updated_at,
+        is_active
+      FROM source.holdings
+      WHERE id IN (${holdingIds});
+    CREATE TABLE daily_snapshots AS
+      SELECT *
+      FROM source.daily_snapshots
+      WHERE group_id = ${selectedGroup}
+        OR id IN (
+          SELECT snapshot_id FROM source.holding_values WHERE holding_id IN (${holdingIds})
+        );
+    CREATE TABLE holding_values AS
+      SELECT * FROM source.holding_values WHERE holding_id IN (${holdingIds});
+    CREATE TABLE transactions AS
+      SELECT
+        id,
+        NULL AS mf_id,
+        date,
+        CASE WHEN account_id IN (${accountIds}) THEN account_id END AS account_id,
+        category,
+        sub_category,
+        description,
+        amount,
+        type,
+        is_transfer,
+        is_excluded_from_calculation,
+        CASE WHEN transfer_target_account_id IN (${accountIds}) THEN transfer_target END
+          AS transfer_target,
+        CASE WHEN transfer_target_account_id IN (${accountIds}) THEN transfer_target_account_id END
+          AS transfer_target_account_id,
+        created_at,
+        updated_at
+      FROM source.transactions
+      WHERE account_id IN (${accountIds}) OR transfer_target_account_id IN (${accountIds});
+    CREATE TABLE asset_history AS
+      SELECT * FROM source.asset_history WHERE id IN (${assetHistoryIds});
+    CREATE TABLE asset_history_categories AS
+      SELECT * FROM source.asset_history_categories WHERE asset_history_id IN (${assetHistoryIds});
+    CREATE TABLE spending_targets AS
+      SELECT * FROM source.spending_targets WHERE group_id = ${selectedGroup};
+    CREATE TABLE analytics_reports AS
+      SELECT * FROM source.analytics_reports WHERE group_id = ${selectedGroup};
+    CREATE INDEX group_accounts_group_id_idx ON group_accounts(group_id);
+    CREATE INDEX group_accounts_account_id_idx ON group_accounts(account_id);
+    CREATE INDEX holdings_account_id_idx ON holdings(account_id);
+    CREATE INDEX holding_values_holding_id_idx ON holding_values(holding_id);
+    CREATE INDEX transactions_account_id_idx ON transactions(account_id);
+    CREATE INDEX transactions_date_idx ON transactions(date);
+    CREATE INDEX asset_history_group_id_idx ON asset_history(group_id);
+    DETACH DATABASE source;
+    PRAGMA query_only = ON;
+  `;
+}
+
+function validateReferencedTables(sql: string): void {
+  const masked = maskCommentsAndQuotedText(sql);
+  const cteNames = new Set(
+    [...masked.matchAll(/(?:\bwith\b|,)\s*([a-z_][\w$]*)\s+as\s*\(/gi)].map((match) =>
+      match[1]!.toLowerCase(),
+    ),
+  );
+
+  for (const match of masked.matchAll(/\b(?:from|join)\s+([a-z_][\w$]*)/gi)) {
+    const tableName = match[1]!.toLowerCase();
+    if (!TABLE_NAME_SET.has(tableName) && !cteNames.has(tableName)) {
+      throw new Error(`許可されていないテーブル ${tableName} は参照できません。`);
+    }
+  }
+
+  if (/\b(?:from|join)\s+["'`[]/i.test(sql)) {
+    throw new Error("テーブル名はschemaに記載された形式で指定してください。");
+  }
+}
+
+interface QueryWorkerMessage {
+  error?: string;
+  ready?: boolean;
+  result?: {
+    columns: string[];
+    rows: Record<string, unknown>[];
+    rowCount: number;
+    truncated: boolean;
   };
+}
+
+function runSandboxedQuery(
+  databasePath: string,
+  query: string,
+  groupId: string,
+): Promise<NonNullable<QueryWorkerMessage["result"]>> {
+  const worker = new Worker(QUERY_WORKER_SOURCE, {
+    eval: true,
+    workerData: {
+      groupId,
+      libsqlModulePath,
+      maxBytes: READ_ONLY_QUERY_MAX_BYTES,
+      maxColumns: MAX_RESULT_COLUMNS,
+      maxRows: READ_ONLY_QUERY_MAX_ROWS,
+      query,
+      scopedDatabaseSql: createScopedDatabaseSql(databasePath, groupId),
+    },
+  });
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    function finish(callback: () => void): void {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      callback();
+    }
+
+    worker.on("message", (message: QueryWorkerMessage) => {
+      if (message.ready) {
+        timeout = setTimeout(() => {
+          settled = true;
+          void worker
+            .terminate()
+            .then(() => reject(new Error("SQLの実行時間が上限を超えました。")))
+            .catch(reject);
+        }, READ_ONLY_QUERY_TIMEOUT_MS);
+        worker.postMessage("run");
+        return;
+      }
+
+      finish(() => {
+        if (message.result) {
+          resolve(message.result);
+        } else {
+          reject(new Error(message.error ?? "SQLの実行に失敗しました。"));
+        }
+      });
+    });
+    worker.once("error", (error) => finish(() => reject(error)));
+    worker.once("exit", (code) => {
+      finish(() => reject(new Error(`SQL workerが終了しました (code: ${code})。`)));
+    });
+  });
+}
+
+export async function executeReadOnlyQuery(
+  _db: Db,
+  sql: string,
+  groupId: string,
+  databasePath = getDbPath(),
+) {
+  const query = normalizeReadOnlySql(sql);
+  validateReferencedTables(query);
+  return runSandboxedQuery(databasePath, query, groupId);
 }
