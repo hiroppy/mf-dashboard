@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
+    "dev:e2e": "DB_PATH=../../data/demo.db AI_PROVIDER=openai AI_MODEL=e2e-mock AI_API_KEY=e2e-mock-key next dev",
     "dev:prod": "DB_PATH=../../data/moneyforward.db CRAWLER_URL=http://127.0.0.1:8766 next dev",
     "build": "next build",
     "build:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next build",
@@ -20,11 +21,15 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.33",
     "@base-ui/react": "1.5.0",
+    "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
     "@mf-dashboard/meta": "workspace:*",
     "@nivo/sankey": "0.99.0",
+    "@streamdown/cjk": "1.0.3",
+    "ai": "7.0.30",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
@@ -33,6 +38,7 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "recharts": "3.8.1",
+    "streamdown": "2.5.0",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {

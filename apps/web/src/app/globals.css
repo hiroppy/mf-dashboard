@@ -1,4 +1,7 @@
+@import "streamdown/styles.css";
 @import "tailwindcss";
+
+@source "../../node_modules/streamdown/dist/*.js";
 
 @theme {
   /* === Base theme === */

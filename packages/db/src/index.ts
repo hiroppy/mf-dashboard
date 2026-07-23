@@ -72,3 +72,4 @@ export * from "./queries/account";
 export * from "./queries/asset";
 export * from "./queries/holding";
 export * from "./queries/analytics";
+export * from "./queries/read-only-query";

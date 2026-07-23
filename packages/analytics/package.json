@@ -5,6 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chat/chart": "./src/chat/chart.ts",
+    "./chat/navigation": "./src/chat/navigation-tool.ts",
+    "./chat/tools": "./src/chat/tools.ts",
+    "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
     "./types": "./src/types.ts"
   },
