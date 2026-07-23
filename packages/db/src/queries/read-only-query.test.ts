@@ -280,6 +280,77 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it("holdingが選択group内でも他groupのsnapshotと評価額を公開しない", async () => {
+    const now = new Date().toISOString();
+    const account = await db.query.accounts.findFirst({
+      where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
+    });
+    if (!account) throw new Error("Test account was not created.");
+
+    const holding = await db
+      .insert(schema.holdings)
+      .values({
+        mfId: "holding-a",
+        accountId: account.id,
+        name: "Asset A",
+        type: "asset",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const selectedSnapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "group-a",
+        date: "2026-07-12",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const externalSnapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "group-b",
+        date: "2026-07-12",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.holdingValues).values([
+      {
+        holdingId: holding.id,
+        snapshotId: selectedSnapshot.id,
+        amount: 10_000,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        holdingId: holding.id,
+        snapshotId: externalSnapshot.id,
+        amount: 20_000,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `SELECT ds.group_id, hv.amount
+         FROM daily_snapshots ds
+         JOIN holding_values hv ON hv.snapshot_id = ds.id`,
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ group_id: "group-a", amount: 10_000 }],
+      rowCount: 1,
+    });
+  });
+
   it("schema外のtableを拒否する", async () => {
     await expect(
       executeReadOnlyQuery(db, "SELECT name FROM sqlite_master", "group-a", databasePath),

@@ -269,12 +269,14 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE daily_snapshots AS
       SELECT *
       FROM source.daily_snapshots
-      WHERE group_id = ${selectedGroup}
-        OR id IN (
-          SELECT snapshot_id FROM source.holding_values WHERE holding_id IN (${holdingIds})
-        );
+      WHERE group_id = ${selectedGroup};
     CREATE TABLE holding_values AS
-      SELECT * FROM source.holding_values WHERE holding_id IN (${holdingIds});
+      SELECT *
+      FROM source.holding_values
+      WHERE holding_id IN (${holdingIds})
+        AND snapshot_id IN (
+          SELECT id FROM source.daily_snapshots WHERE group_id = ${selectedGroup}
+        );
     CREATE TABLE transactions AS
       SELECT
         id,
