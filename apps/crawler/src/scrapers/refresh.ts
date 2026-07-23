@@ -72,8 +72,11 @@ interface RefreshOptions {
   onWaiting?: (progress: RefreshWaitProgress) => Promise<void> | void;
 }
 
-export function getMaxWaitMinutes(): number {
-  return Number(process.env.MAX_WAIT_MINUTES) || DEFAULT_MAX_WAIT_MINUTES;
+export function getMaxWaitMinutes(env: NodeJS.ProcessEnv = process.env): number {
+  const configuredValue = Number(env.MAX_WAIT_MINUTES);
+  return Number.isFinite(configuredValue) && configuredValue > 0
+    ? configuredValue
+    : DEFAULT_MAX_WAIT_MINUTES;
 }
 
 export async function clickRefreshButton(

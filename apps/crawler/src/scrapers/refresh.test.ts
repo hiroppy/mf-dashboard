@@ -1,6 +1,19 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { getRefreshStatus, navigateToAccountsPage } from "./refresh.js";
+import { getMaxWaitMinutes, getRefreshStatus, navigateToAccountsPage } from "./refresh.js";
+
+describe("getMaxWaitMinutes", () => {
+  test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(
+    "invalid MAX_WAIT_MINUTES=%s は default 値を返す",
+    (value) => {
+      expect(getMaxWaitMinutes({ MAX_WAIT_MINUTES: value })).toBe(20);
+    },
+  );
+
+  test("有限の正数を返す", () => {
+    expect(getMaxWaitMinutes({ MAX_WAIT_MINUTES: "12.5" })).toBe(12.5);
+  });
+});
 
 describe("refresh - 更新中セレクタ", () => {
   let browser: Browser;
