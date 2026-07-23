@@ -18,6 +18,7 @@ import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } 
 import { IconButton } from "../ui/icon-button";
 
 const STATUS_POLL_INTERVAL_MS = 15_000;
+const SYNC_BASELINE_STEP_COUNT = 10;
 
 interface ActionIconsProps {
   variant: "header" | "sidebar";
@@ -188,7 +189,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
 function formatProgressLabel(state: CrawlerRefreshStatus): string {
   const progress = state.latestRun?.runStatus === "running" ? state.latestRun.progress : null;
   if (!progress) {
-    return "同期中";
+    return `同期中 · 0/${SYNC_BASELINE_STEP_COUNT}`;
   }
   return `同期中 · ${progress.completed}/${progress.total}`;
 }

@@ -32,6 +32,10 @@ function isSameOriginRequest(request: Request): boolean {
   }
 }
 
+function isSameOriginRead(request: Request): boolean {
+  return request.headers.get("sec-fetch-site") === "same-origin" || isSameOriginRequest(request);
+}
+
 function getCrawlerUrl(): string | null {
   const crawlerUrl = process.env.CRAWLER_URL?.trim();
   if (!crawlerUrl) {
@@ -63,7 +67,11 @@ async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!isSameOriginRead(request)) {
+    return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
+  }
+
   return proxyCrawlerRequest("/status");
 }
 

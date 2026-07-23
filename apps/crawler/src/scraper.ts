@@ -99,7 +99,10 @@ async function scrapeGlobalData(
           }),
       });
       if (refreshResult.completed) {
-        await progress.completeStep(refreshStep, { remainingCount: 0 });
+        await progress.completeStep(refreshStep, {
+          remainingCount: 0,
+          incompleteAccounts: [],
+        });
       } else {
         await progress.warnStep(
           refreshStep,

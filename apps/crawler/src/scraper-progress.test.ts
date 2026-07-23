@@ -117,6 +117,20 @@ describe("scraper progress", () => {
     expect(clickRefreshButton).not.toHaveBeenCalled();
   });
 
+  test("refresh 前に group なし view へ切り替える", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress);
+
+    expect(vi.mocked(switchGroup).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(clickRefreshButton).mock.invocationCallOrder[0]!,
+    );
+  });
+
   test("SKIP_REFRESH の refresh step を skipped にする", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
@@ -132,6 +146,34 @@ describe("scraper progress", () => {
       expect.objectContaining({ step: "moneyforward_refresh", status: "skipped" }),
     );
     expect(clickRefreshButton).not.toHaveBeenCalled();
+  });
+
+  test("refresh 完了時に待機中の未完了機関 metadata を消去する", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(clickRefreshButton).mockImplementation(async (_page, options) => {
+      await options?.onWaiting?.({
+        elapsedSeconds: 30,
+        incompleteAccounts: ["Institution A"],
+        maxWaitMinutes: 20,
+        nextCheckSeconds: 30,
+        remainingCount: 1,
+      });
+      return { completed: true, incompleteAccounts: [] };
+    });
+
+    await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress);
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({
+        step: "moneyforward_refresh",
+        status: "done",
+        metadata: expect.objectContaining({ remainingAccounts: 0, incompleteAccounts: [] }),
+      }),
+    );
   });
 
   test("group 切り替え失敗を対象 group name の failed step にする", async () => {
