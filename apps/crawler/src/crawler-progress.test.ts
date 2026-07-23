@@ -35,6 +35,28 @@ describe("crawler progress", () => {
     });
   });
 
+  test("nested step 完了後に外側の running step を current に戻す", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-nested-"));
+    try {
+      const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
+      const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh);
+
+      await progress.completeStep(refreshStep);
+
+      expect(progress.getState().current).toMatchObject({
+        timelineItemId: globalStep,
+        step: "global_data",
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("通常終了後も success と finishedAt を latest state に残す", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-success-"));
     const lockPath = path.join(tempDir, "crawler-run.lock");

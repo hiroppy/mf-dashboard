@@ -165,6 +165,12 @@ export async function createCrawlerProgressReporter(
     Object.assign(item, toStepDetails(item.step, { ...currentMetadata, ...metadata }));
   }
 
+  function restoreRunningCurrent(draft: CrawlerRunStateSnapshot): void {
+    const runningStep = draft.timeline.findLast(({ status }) => status === "running");
+    draft.current = runningStep ? toCurrent(runningStep) : null;
+    draft.waitingFor = null;
+  }
+
   return {
     getState: () => structuredClone(state),
     startStep: async (step, metadata) => {
@@ -204,8 +210,7 @@ export async function createCrawlerProgressReporter(
           finishedAt: new Date().toISOString(),
           reason: null,
         });
-        draft.current = null;
-        draft.waitingFor = null;
+        restoreRunningCurrent(draft);
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -218,8 +223,7 @@ export async function createCrawlerProgressReporter(
           finishedAt: new Date().toISOString(),
           reason: null,
         });
-        draft.current = null;
-        draft.waitingFor = null;
+        restoreRunningCurrent(draft);
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -228,8 +232,7 @@ export async function createCrawlerProgressReporter(
         const step = findStep(draft, stepId);
         updateStepMetadata(step, metadata);
         Object.assign(step, { status: "warning", finishedAt: new Date().toISOString(), reason });
-        draft.current = null;
-        draft.waitingFor = null;
+        restoreRunningCurrent(draft);
         draft.progress = runningProgressFor(draft.timeline);
       });
     },

@@ -96,6 +96,7 @@ describe("scraper progress", () => {
         reason: expect.objectContaining({ code: "selector_not_found" }),
       }),
     );
+    expect(clickRefreshButton).not.toHaveBeenCalled();
   });
 
   test("SKIP_REFRESH の refresh step を skipped にする", async () => {
