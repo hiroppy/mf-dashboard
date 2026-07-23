@@ -1,0 +1,91 @@
+- description: 月次状況が収入・支出・収支と詳細導線を返す
+  vars:
+    question: 今月どう？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: contains-all
+      value: ["313235", "219894", "93341"]
+    - type: not-contains
+      value: データを取得できません
+    - type: not-regex
+      value: (赤字|収支.{0,8}(マイナス|負))
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedCardTypes: [summary, insight]
+        expectedMetrics:
+          - { label: 収入, amount: 313235, amountType: income }
+          - { label: 支出, amount: 219894, amountType: expense }
+          - { label: 収支, amount: 93341, amountType: balance }
+        expectedRoutes: [/0/cf/2026-07]
+
+- description: 食費がカテゴリ合計・内訳・詳細導線を返す
+  vars:
+    question: 今月の食費は？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: contains-all
+      value: [食費, "41837", "2026-07"]
+    - type: not-regex
+      value: 食費.{0,12}(ありません|ない|ゼロ)
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedCardTypes: [summary, categoryBreakdown]
+        expectedMetrics:
+          - { label: 食費, amount: 41837, amountType: expense }
+        expectedRoutes: [/0/cf/2026-07]
+
+- description: 日付別支出が対象日・合計・明細を返す
+  vars:
+    question: 今月10日の支出を見たい
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: contains-all
+      value: ["2026-07-10", "6587", "3435", "3152", 東京ガス, 成城石井]
+    - type: not-regex
+      value: (7月10日|2026-07-10).{0,12}(ありません|ない|ゼロ)
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedCardTypes: [summary, transactionList, action]
+        expectedMetrics:
+          - { label: 支出, amount: 6587, amountType: expense }
+        expectedRoutes: [/0/cf/2026-07]
+
+- description: 総資産が fixture の残高と資産導線を返す
+  vars:
+    question: 総資産は？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: contains-all
+      value: [総資産, "5683100"]
+    - type: not-regex
+      value: 総資産.{0,12}(ありません|ない|ゼロ)
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedCardTypes: [summary]
+        expectedMetrics:
+          - { label: 総資産, amount: 5683100, amountType: balance }
+        expectedRoutes: [/0/bs]
+
+- description: 支出改善が具体的なカテゴリ・根拠・内訳導線を返す
+  vars:
+    question: 削れそうな支出ある？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: contains-all
+      value: [衣服・美容, "19475", "2026-07"]
+    - type: not-regex
+      value: (必ず|確実に|絶対に).{0,8}(削減|節約)(でき|可能)
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedCardTypes: [insight]
+        expectedRoutes: [/0/cf/2026-07]

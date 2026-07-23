@@ -14,6 +14,7 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
+    "eval:chat": "pnpm --filter @mf-dashboard/db build:demo --period=2026-07 && PROMPTFOO_DISABLE_TELEMETRY=1 DB_PATH=../../data/demo.db promptfoo eval --config=evals/promptfooconfig.yaml --no-cache",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "promptfoo": "0.121.19",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
