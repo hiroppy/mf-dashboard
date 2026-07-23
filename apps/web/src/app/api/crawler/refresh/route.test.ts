@@ -74,19 +74,17 @@ describe("/api/crawler/refresh/", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({
         running: false,
-        latestRun: {
-          version: 1,
-          runId: "stale-run",
-          runStatus: "running",
-          source: "manual",
-          startedAt: "2026-01-01T00:00:00.000Z",
-          finishedAt: null,
-          current: null,
-          waitingFor: null,
-          progress: null,
-          timeline: [],
-          reason: null,
-        },
+        version: 1,
+        runId: "stale-run",
+        runStatus: "running",
+        source: "manual",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        finishedAt: null,
+        current: null,
+        waitingFor: null,
+        progress: null,
+        timeline: [],
+        reason: null,
       }),
     );
 
@@ -173,8 +171,9 @@ describe("/api/crawler/refresh/", () => {
     };
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({
+        ...latestRun,
         running: false,
-        latestRun,
+        pid: null,
       }),
     );
 

@@ -1,6 +1,11 @@
-import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
+import { formatJstDateTimeForDisplay, getJstDateParts } from "@mf-dashboard/date-utils";
 import type { Group, ScrapedData } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
+import {
+  CRAWLER_STEPS,
+  normalizeCrawlerError,
+  type CrawlerProgressReporter,
+} from "./crawler-progress.js";
 import { log, warn, phase } from "./logger.js";
 import { getAssetHistory } from "./scrapers/asset-history.js";
 import { getAssetItems } from "./scrapers/asset-items.js";
@@ -15,7 +20,7 @@ import {
 } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
 import { getPortfolio } from "./scrapers/portfolio.js";
-import { clickRefreshButton } from "./scrapers/refresh.js";
+import { clickRefreshButton, getMaxWaitMinutes } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
 import type { ScrapeOptions } from "./types.js";
@@ -62,40 +67,89 @@ export interface ScrapeResult {
  * - liabilities
  * - cashFlow
  */
-async function scrapeGlobalData(page: Page, options: ScrapeOptions): Promise<GlobalData> {
+async function scrapeGlobalData(
+  page: Page,
+  options: ScrapeOptions,
+  progress: CrawlerProgressReporter,
+): Promise<GlobalData> {
   const { skipRefresh = false } = options;
 
   // Refresh
   let refreshResult = null;
+  const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh, {
+    maxWaitMinutes: getMaxWaitMinutes(),
+  });
   if (skipRefresh) {
     log("Skipping refresh (SKIP_REFRESH=true)");
+    await progress.skipStep(refreshStep);
   } else {
-    refreshResult = await clickRefreshButton(page);
+    try {
+      refreshResult = await clickRefreshButton(page, {
+        onWaiting: (waiting) =>
+          progress.updateWaiting(refreshStep, "更新中の金融機関が0件になるのを待機", {
+            ...waiting,
+          }),
+      });
+      if (refreshResult.completed) {
+        await progress.completeStep(refreshStep, { remainingCount: 0 });
+      } else {
+        await progress.warnStep(
+          refreshStep,
+          {
+            code: "refresh_timeout",
+            message: "金融機関の一括更新が待機時間を超えました",
+            maxWaitMinutes: getMaxWaitMinutes(),
+            incompleteAccounts: refreshResult.incompleteAccounts,
+          },
+          {
+            maxWaitMinutes: getMaxWaitMinutes(),
+            remainingCount: refreshResult.remainingCount ?? refreshResult.incompleteAccounts.length,
+            incompleteAccounts: refreshResult.incompleteAccounts,
+          },
+        );
+      }
+    } catch (error) {
+      await progress.failStep(refreshStep, normalizeCrawlerError(error, "refresh_failed"));
+      throw error;
+    }
   }
 
-  // 全アカウント情報
-  const registeredAccounts = await getRegisteredAccounts(page);
-  log(`Registered accounts: ${registeredAccounts.accounts.length}`);
+  const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
+  let registeredAccounts: Awaited<ReturnType<typeof getRegisteredAccounts>>;
+  let portfolio: Awaited<ReturnType<typeof getPortfolio>>;
+  let liabilities: Awaited<ReturnType<typeof getLiabilities>>;
+  try {
+    // 全アカウント情報
+    registeredAccounts = await getRegisteredAccounts(page);
+    log(`Registered accounts: ${registeredAccounts.accounts.length}`);
 
-  // Portfolio
-  const portfolio = await getPortfolio(page);
-  log(`Portfolio: ${portfolio.items.length} items`);
+    // Portfolio
+    portfolio = await getPortfolio(page);
+    log(`Portfolio: ${portfolio.items.length} items`);
 
-  // Liabilities
-  const liabilities = await getLiabilities(page);
-  log(`Liabilities: ${liabilities.items.length} items`);
+    // Liabilities
+    liabilities = await getLiabilities(page);
+    log(`Liabilities: ${liabilities.items.length} items`);
+    await progress.completeStep(globalStep);
+  } catch (error) {
+    await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
+    throw error;
+  }
 
-  // CashFlow
-  const cashFlow = await getCashFlow(page);
-  log(`CashFlow: ${cashFlow.items.length} items`);
+  const { year, month: monthNumber } = getJstDateParts();
+  const month = `${year}-${String(monthNumber).padStart(2, "0")}`;
+  const cashFlowStep = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month });
+  let cashFlow: Awaited<ReturnType<typeof getCashFlow>>;
+  try {
+    cashFlow = await getCashFlow(page);
+    await progress.completeStep(cashFlowStep, { month: cashFlow.month });
+    log(`CashFlow: ${cashFlow.items.length} items`);
+  } catch (error) {
+    await progress.failStep(cashFlowStep, normalizeCrawlerError(error, "monthly_cash_flow_failed"));
+    throw error;
+  }
 
-  return {
-    registeredAccounts,
-    portfolio,
-    liabilities,
-    cashFlow,
-    refreshResult,
-  };
+  return { registeredAccounts, portfolio, liabilities, cashFlow, refreshResult };
 }
 
 // ============================================================
@@ -152,16 +206,11 @@ function buildGroupsToProcess(allGroups: Group[]): Group[] {
     : [{ id: NO_GROUP_ID, name: "グループ選択なし", isCurrent: false }, ...allGroups];
 }
 
-async function runPhase1(page: Page, options: ScrapeOptions): Promise<GlobalData> {
-  phase("Scrape: Global Data");
-  await switchGroup(page, NO_GROUP_ID);
-  return scrapeGlobalData(page, options);
-}
-
 async function runPhase2(
   page: Page,
   groupsToProcess: Group[],
   defaultGroup: Group | null,
+  progress: CrawlerProgressReporter,
 ): Promise<GroupData[]> {
   phase("Scrape: Group Data");
   const groupDataList: GroupData[] = [];
@@ -170,17 +219,23 @@ async function runPhase2(
     const groupId = groupEntry.id;
     const groupName = groupEntry.name;
 
+    const groupStep = await progress.startStep(CRAWLER_STEPS.groupData, { groupName });
     log(`--- ${groupName} ---`);
-    await switchGroup(page, groupId);
-
     const group: Group = {
       id: groupId,
       name: groupName,
       isCurrent: groupId === defaultGroup?.id,
     };
 
-    const groupData = await scrapeGroupData(page, group);
-    groupDataList.push(groupData);
+    try {
+      await switchGroup(page, groupId);
+      const groupData = await scrapeGroupData(page, group);
+      groupDataList.push(groupData);
+      await progress.completeStep(groupStep);
+    } catch (error) {
+      await progress.failStep(groupStep, normalizeCrawlerError(error, "group_data_failed"));
+      throw error;
+    }
   }
 
   return groupDataList;
@@ -201,6 +256,7 @@ async function runPhase2(
  */
 export async function scrapeAllGroups(
   page: Page,
+  progress: CrawlerProgressReporter,
   options: ScrapeOptions = {},
 ): Promise<ScrapeResult> {
   // 現在のグループを記憶
@@ -213,8 +269,10 @@ export async function scrapeAllGroups(
 
   const groupsToProcess = buildGroupsToProcess(allGroups);
 
-  const globalData = await runPhase1(page, options);
-  const groupDataList = await runPhase2(page, groupsToProcess, defaultGroup);
+  phase("Scrape: Global Data");
+  await switchGroup(page, NO_GROUP_ID);
+  const globalData = await scrapeGlobalData(page, options, progress);
+  const groupDataList = await runPhase2(page, groupsToProcess, defaultGroup, progress);
 
   return {
     globalData,

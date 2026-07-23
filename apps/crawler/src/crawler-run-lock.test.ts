@@ -7,7 +7,9 @@ import {
   acquireCrawlerRunLock,
   CrawlerAlreadyRunningError,
   getCrawlerRunState,
+  runWithCrawlerRunLock,
 } from "./crawler-run-lock.js";
+import { readCrawlerRunState, writeCrawlerRunState } from "./crawler-run-state.js";
 
 let tempDir: string;
 let lockPath: string;
@@ -22,6 +24,52 @@ afterEach(async () => {
 });
 
 describe("crawler run lock", () => {
+  test("releases the lock when progress reporter initialization fails", async () => {
+    await expect(
+      runWithCrawlerRunLock("manual", async () => undefined, {
+        lockPath,
+        statePath: tempDir,
+      }),
+    ).rejects.toThrow(/EISDIR|directory/);
+
+    const lock = await acquireCrawlerRunLock("manual", { lockPath });
+    await lock.release();
+  });
+
+  test("marks an orphaned running state as failed when no lock exists", async () => {
+    const statePath = `${lockPath}.state`;
+    await writeCrawlerRunState(
+      {
+        version: 1,
+        runId: "run-a",
+        source: "scheduled",
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: null,
+        runStatus: "running",
+        current: null,
+        waitingFor: "処理の完了を待機",
+        progress: null,
+        reason: null,
+        timeline: [],
+      },
+      { statePath },
+    );
+
+    await expect(getCrawlerRunState({ lockPath })).resolves.toMatchObject({
+      running: false,
+      runStatus: "failed",
+      finishedAt: expect.any(String),
+      reason: {
+        code: "unknown_error",
+        message: "前回の実行は完了を確認できませんでした",
+      },
+    });
+    await expect(readCrawlerRunState({ statePath })).resolves.toMatchObject({
+      runStatus: "failed",
+      finishedAt: expect.any(String),
+    });
+  });
+
   test("returns idle state when no lock exists", async () => {
     await expect(getCrawlerRunState({ lockPath })).resolves.toEqual({
       running: false,

@@ -4,8 +4,6 @@ import type { Page } from "playwright";
 import { debug, info, warn } from "../logger.js";
 
 const DEFAULT_MAX_WAIT_MINUTES = 20;
-const MAX_WAIT_TIME_MS =
-  (Number(process.env.MAX_WAIT_MINUTES) || DEFAULT_MAX_WAIT_MINUTES) * 60 * 1000; // default: 20 minutes
 const POLL_INTERVAL_MS = 30000; // 30 seconds
 const NAVIGATION_RETRY_DELAY_MS = 1000;
 
@@ -34,32 +32,57 @@ export async function navigateToAccountsPage(page: Page): Promise<void> {
   }
 }
 
-async function getUpdatingAccounts(page: Page): Promise<string[]> {
+export async function getRefreshStatus(
+  page: Page,
+): Promise<{ incompleteAccounts: string[]; remainingCount: number }> {
   const rows = page.locator("#account-table tr:has(td.account-status)");
   const count = await rows.count();
-  const updatingAccounts: string[] = [];
+  const incompleteAccounts: string[] = [];
+  let remainingCount = 0;
 
   for (let i = 0; i < count; i++) {
     const row = rows.nth(i);
     const statusCells = row.locator("td.account-status");
     // Multiple td.account-status cells may exist in the same row (e.g., info_msg and normal)
     const allTexts = await statusCells.allTextContents();
-    const statusText = allTexts.join(" ");
-
-    // Only count as updating if it exactly matches "更新中"
-    if (statusText?.trim() === "更新中") {
+    if (allTexts.some((text) => text.trim() === "更新中")) {
+      remainingCount++;
       const nameCell = row.locator("td.service a").first();
       const name = await nameCell.textContent();
       if (name) {
-        updatingAccounts.push(name.trim());
+        incompleteAccounts.push(name.trim());
       }
     }
   }
 
-  return updatingAccounts;
+  return { incompleteAccounts, remainingCount };
 }
 
-export async function clickRefreshButton(page: Page): Promise<RefreshResult> {
+export interface RefreshWaitProgress {
+  elapsedSeconds: number;
+  incompleteAccounts: string[];
+  maxWaitMinutes: number;
+  nextCheckSeconds: number;
+  remainingCount: number;
+}
+
+interface RefreshOptions {
+  maxWaitMinutes?: number;
+  pollIntervalMs?: number;
+  onWaiting?: (progress: RefreshWaitProgress) => Promise<void> | void;
+}
+
+export function getMaxWaitMinutes(): number {
+  return Number(process.env.MAX_WAIT_MINUTES) || DEFAULT_MAX_WAIT_MINUTES;
+}
+
+export async function clickRefreshButton(
+  page: Page,
+  options: RefreshOptions = {},
+): Promise<RefreshResult> {
+  const maxWaitMinutes = options.maxWaitMinutes ?? getMaxWaitMinutes();
+  const maxWaitTimeMs = maxWaitMinutes * 60 * 1000;
+  const pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS;
   debug("Looking for refresh button...");
 
   // Navigate to home and click refresh button
@@ -81,40 +104,37 @@ export async function clickRefreshButton(page: Page): Promise<RefreshResult> {
 
   const startTime = Date.now();
 
-  while (Date.now() - startTime < MAX_WAIT_TIME_MS) {
-    // Count accounts with "更新中" status (exclude cells that also have "正常" - hidden text)
-    const statusCells = page.locator("#account-table td.account-status");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
+  while (Date.now() - startTime < maxWaitTimeMs) {
+    const { incompleteAccounts, remainingCount } = await getRefreshStatus(page);
     const elapsed = Math.round((Date.now() - startTime) / 1000);
-    info(`[${elapsed}s] 残り: ${updatingCount}`);
+    info(`[${elapsed}s] 残り: ${remainingCount}`);
 
-    if (updatingCount === 0) {
+    await options.onWaiting?.({
+      elapsedSeconds: elapsed,
+      incompleteAccounts,
+      maxWaitMinutes,
+      nextCheckSeconds: Math.round(pollIntervalMs / 1000),
+      remainingCount,
+    });
+
+    if (remainingCount === 0) {
       info("All updates completed!");
       return { completed: true, incompleteAccounts: [] };
     }
 
     // Wait and navigate to accounts page again to get fresh status
     // Using goto instead of reload to avoid ERR_ABORTED when frame is detached
-    await page.waitForTimeout(POLL_INTERVAL_MS);
+    await page.waitForTimeout(pollIntervalMs);
     await navigateToAccountsPage(page);
   }
 
   // Timeout: get list of accounts still updating
-  const incompleteAccounts = await getUpdatingAccounts(page);
+  const { incompleteAccounts, remainingCount } = await getRefreshStatus(page);
 
   warn(`Max wait time exceeded. ${incompleteAccounts.length} accounts still updating:`);
   for (const account of incompleteAccounts) {
     warn(`  - ${account}`);
   }
 
-  return { completed: false, incompleteAccounts };
+  return { completed: false, incompleteAccounts, remainingCount };
 }

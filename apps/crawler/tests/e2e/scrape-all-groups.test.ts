@@ -1,5 +1,10 @@
+import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { scrapeAllGroups } from "../../src/scraper.js";
 import { isNoGroup, createGroupScope } from "../../src/scrapers/group.js";
@@ -14,6 +19,7 @@ import {
 let browser: Browser;
 let context: BrowserContext;
 let result: ScrapeResult;
+const progressStatePath = path.join(os.tmpdir(), `scrape-all-groups-${randomUUID()}.json`);
 
 beforeAll(async () => {
   ({ browser, context } = await launchLoggedInContext());
@@ -23,7 +29,12 @@ beforeAll(async () => {
 
     return withErrorScreenshot(page, "scrape-all-groups-test-error.png", async () => {
       await using _scope = await createGroupScope(page);
-      return scrapeAllGroups(page, { skipRefresh: true });
+      const progress = await createCrawlerProgressReporter(progressStatePath, {
+        id: randomUUID(),
+        source: "e2e",
+        startedAt: new Date().toISOString(),
+      });
+      return scrapeAllGroups(page, progress, { skipRefresh: true });
     });
   });
 }, 300000);
@@ -31,6 +42,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await context?.close();
   await browser?.close();
+  await rm(progressStatePath, { force: true });
 });
 
 describe("scrapeAllGroups", () => {
