@@ -11,6 +11,7 @@ import { getCrawlerRunStatePath } from "./crawler-run-state.js";
 import { error, info } from "./logger.js";
 
 const DEFAULT_PORT = 8766;
+const DEFAULT_HOST = "127.0.0.1";
 
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
@@ -114,14 +115,17 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
   });
 }
 
-export function listenCrawlerTriggerServer(port = DEFAULT_PORT): Server {
+export function listenCrawlerTriggerServer(port = DEFAULT_PORT, host = DEFAULT_HOST): Server {
   const server = createCrawlerTriggerServer();
-  server.listen(port, "0.0.0.0", () => {
-    info(`Crawler trigger server listening on ${port}`);
+  server.listen(port, host, () => {
+    info(`Crawler trigger server listening on ${host}:${port}`);
   });
   return server;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  listenCrawlerTriggerServer(Number(process.env.CRAWLER_PORT) || DEFAULT_PORT);
+  listenCrawlerTriggerServer(
+    Number(process.env.CRAWLER_PORT) || DEFAULT_PORT,
+    process.env.CRAWLER_HOST?.trim() || DEFAULT_HOST,
+  );
 }
