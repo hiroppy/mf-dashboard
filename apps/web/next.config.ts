@@ -18,6 +18,7 @@ const privateResponseHeaders = [
   { key: "Pragma", value: "no-cache" },
   { key: "Vary", value: "Cookie" },
 ];
+const protectedResponseSource = "/((?!_next/static|_next/image|favicon.ico|logo.png|cry.png).*)";
 
 const nextConfig: NextConfig = {
   output: isStaticDemoBuild ? "export" : "standalone",
@@ -29,13 +30,13 @@ const nextConfig: NextConfig = {
   },
   trailingSlash: true,
   reactCompiler: true,
-  async headers() {
-    if (isStaticDemoBuild) {
-      return [];
-    }
-
-    return [{ source: "/:path*", headers: privateResponseHeaders }];
-  },
+  ...(isStaticDemoBuild
+    ? {}
+    : {
+        async headers() {
+          return [{ source: protectedResponseSource, headers: privateResponseHeaders }];
+        },
+      }),
   experimental: {
     typedEnv: true,
   },

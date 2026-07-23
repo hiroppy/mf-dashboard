@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { LoginError } from "./login-error.client";
 
 export const metadata: Metadata = {
   title: "ログイン",
   robots: { index: false, follow: false },
 };
 
-export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const { error } = await searchParams;
-
+export default function LoginPage() {
   return (
     <main className="min-h-dvh bg-background px-4 flex items-center justify-center">
       <section className="w-full max-w-sm rounded-xl border bg-card p-8 shadow-sm">
@@ -15,11 +15,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <p className="mt-2 text-sm text-muted-foreground">
           閲覧用パスワードを入力してください。セッションは一定時間後に失効します。
         </p>
-        {error === "invalid" && (
-          <p role="alert" className="mt-4 text-sm text-destructive">
-            パスワードが正しくありません。
-          </p>
-        )}
+        <Suspense fallback={null}>
+          <LoginError />
+        </Suspense>
         <form action="/api/auth/login/" method="post" className="mt-6 space-y-4">
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-foreground">

@@ -46,9 +46,9 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const authDisabled = isDashboardAuthDisabled();
   const authenticated =
-    isDashboardAuthDisabled() ||
-    (await verifySessionToken((await cookies()).get(SESSION_COOKIE_NAME)?.value));
+    authDisabled || (await verifySessionToken((await cookies()).get(SESSION_COOKIE_NAME)?.value));
 
   if (!authenticated) {
     return (
@@ -85,7 +85,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ja">
       <body className="min-h-dvh bg-background antialiased overflow-x-hidden tabular-nums">
         <SidebarProvider>
-          <Header groupSelector={<GroupSelector />} notifications={<AccountNotifications />} />
+          <Header
+            groupSelector={<GroupSelector />}
+            notifications={<AccountNotifications />}
+            showLogout={!authDisabled}
+          />
           <div className="flex pt-14">
             <Sidebar />
             <main className="flex-1 lg:ml-60 overflow-x-hidden px-4 py-6 lg:px-8">

@@ -21,7 +21,7 @@ describe("next config", () => {
 
     expect(config.output).toBe("export");
     expect(config.pageExtensions).toEqual(["tsx"]);
-    await expect(config.headers?.()).resolves.toEqual([]);
+    expect(config.headers).toBeUndefined();
   });
 
   it("keeps TypeScript route handlers available for runtime server builds", async () => {
@@ -32,7 +32,7 @@ describe("next config", () => {
     expect(config.pageExtensions).toEqual(["tsx", "ts"]);
     await expect(config.headers?.()).resolves.toEqual([
       {
-        source: "/:path*",
+        source: "/((?!_next/static|_next/image|favicon.ico|logo.png|cry.png).*)",
         headers: [
           { key: "Cache-Control", value: "private, no-store, max-age=0" },
           { key: "CDN-Cache-Control", value: "no-store" },

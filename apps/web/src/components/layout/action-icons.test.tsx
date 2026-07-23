@@ -70,6 +70,12 @@ describe("ActionIcons", () => {
     expect(logoutButton.closest("form")?.getAttribute("method")).toBe("post");
   });
 
+  it("hides logout when dashboard authentication is disabled", () => {
+    render(<ActionIcons variant="header" showLogout={false} />);
+
+    expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
+  });
+
   it("starts a crawler refresh from the header refresh button", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))

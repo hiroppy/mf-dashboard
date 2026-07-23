@@ -13,6 +13,7 @@ const STATUS_POLL_INTERVAL_MS = 15_000;
 interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
+  showLogout?: boolean;
 }
 
 interface CrawlerRefreshStatus {
@@ -42,7 +43,7 @@ async function readCrawlerRefreshStatus(): Promise<CrawlerRefreshStatus> {
   };
 }
 
-export function ActionIcons({ variant, notifications }: ActionIconsProps) {
+export function ActionIcons({ variant, notifications, showLogout = true }: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
 
   if (variant === "sidebar") {
@@ -59,9 +60,11 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
       <RefreshButton iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
-      <form action="/api/auth/logout/" method="post">
-        <IconButton icon={<LogOut className={iconSize} />} ariaLabel="ログアウト" type="submit" />
-      </form>
+      {showLogout && (
+        <form action="/api/auth/logout/" method="post">
+          <IconButton icon={<LogOut className={iconSize} />} ariaLabel="ログアウト" type="submit" />
+        </form>
+      )}
     </div>
   );
 }

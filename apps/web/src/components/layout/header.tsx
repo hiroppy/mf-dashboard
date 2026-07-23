@@ -10,9 +10,10 @@ import { useSidebar } from "./sidebar-context";
 interface HeaderProps {
   groupSelector: ReactNode;
   notifications?: ReactNode;
+  showLogout?: boolean;
 }
 
-export function Header({ groupSelector, notifications }: HeaderProps) {
+export function Header({ groupSelector, notifications, showLogout = true }: HeaderProps) {
   const { toggle } = useSidebar();
 
   return (
@@ -34,7 +35,7 @@ export function Header({ groupSelector, notifications }: HeaderProps) {
           />
           <div className="flex flex-col gap-0.5">{groupSelector}</div>
         </div>
-        <ActionIcons variant="header" notifications={notifications} />
+        <ActionIcons variant="header" notifications={notifications} showLogout={showLogout} />
       </div>
     </header>
   );
