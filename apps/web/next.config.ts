@@ -10,6 +10,14 @@ if (existsSync(rootEnvPath)) {
 }
 
 const isStaticDemoBuild = process.env.DEMO_MODE === "true";
+const privateResponseHeaders = [
+  { key: "Cache-Control", value: "private, no-store, max-age=0" },
+  { key: "CDN-Cache-Control", value: "no-store" },
+  { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+  { key: "Surrogate-Control", value: "no-store" },
+  { key: "Pragma", value: "no-cache" },
+  { key: "Vary", value: "Cookie" },
+];
 
 const nextConfig: NextConfig = {
   output: isStaticDemoBuild ? "export" : "standalone",
@@ -21,6 +29,13 @@ const nextConfig: NextConfig = {
   },
   trailingSlash: true,
   reactCompiler: true,
+  async headers() {
+    if (isStaticDemoBuild) {
+      return [];
+    }
+
+    return [{ source: "/:path*", headers: privateResponseHeaders }];
+  },
   experimental: {
     typedEnv: true,
   },

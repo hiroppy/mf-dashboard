@@ -1,7 +1,7 @@
 "use client";
 
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import { Home, HelpCircle, RefreshCw } from "lucide-react";
+import { Home, HelpCircle, LogOut, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDateTime } from "../../lib/format";
@@ -59,6 +59,9 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
       <RefreshButton iconSize={iconSize} />
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
+      <form action="/api/auth/logout/" method="post">
+        <IconButton icon={<LogOut className={iconSize} />} ariaLabel="ログアウト" type="submit" />
+      </form>
     </div>
   );
 }

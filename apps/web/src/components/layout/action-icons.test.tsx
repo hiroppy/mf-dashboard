@@ -61,6 +61,15 @@ describe("ActionIcons", () => {
     expect(screen.queryByLabelText("ワークフローを実行")).toBeNull();
   });
 
+  it("offers a same-origin logout form in the authenticated header", () => {
+    render(<ActionIcons variant="header" />);
+
+    const logoutButton = screen.getByRole("button", { name: "ログアウト" });
+    expect(logoutButton.getAttribute("type")).toBe("submit");
+    expect(logoutButton.closest("form")?.getAttribute("action")).toBe("/api/auth/logout/");
+    expect(logoutButton.closest("form")?.getAttribute("method")).toBe("post");
+  });
+
   it("starts a crawler refresh from the header refresh button", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))

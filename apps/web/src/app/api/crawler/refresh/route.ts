@@ -1,31 +1,15 @@
 import { NextResponse } from "next/server";
+import { applyPrivateCacheHeaders, hasValidSession } from "../../../../lib/dashboard-auth";
+import { isSameOriginRequest } from "../../../../lib/request-origin";
 
 export const dynamic = "force-dynamic";
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
-function readForwardedHeader(request: Request, name: string): string | null {
-  return request.headers.get(name)?.split(",")[0]?.trim() || null;
-}
-
-function isSameOriginRequest(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) {
-    return false;
-  }
-
-  try {
-    const requestUrl = new URL(request.url);
-    const originUrl = new URL(origin);
-    const forwardedHost = readForwardedHeader(request, "x-forwarded-host");
-    const forwardedProto = readForwardedHeader(request, "x-forwarded-proto");
-    const host = forwardedHost ?? request.headers.get("host") ?? requestUrl.host;
-    const protocol = forwardedProto ? `${forwardedProto}:` : requestUrl.protocol;
-
-    return originUrl.protocol === protocol && originUrl.host === host;
-  } catch {
-    return false;
-  }
+function privateJson(body: unknown, status: number) {
+  const response = NextResponse.json(body, { status });
+  applyPrivateCacheHeaders(response.headers);
+  return response;
 }
 
 function getCrawlerUrl(): string | null {
@@ -40,7 +24,7 @@ function getCrawlerUrl(): string | null {
 async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit) {
   const crawlerUrl = getCrawlerUrl();
   if (!crawlerUrl) {
-    return NextResponse.json({ available: false, running: false }, { status: 503 });
+    return privateJson({ available: false, running: false }, 503);
   }
 
   try {
@@ -51,25 +35,27 @@ async function proxyCrawlerRequest(path: "/status" | "/runs", init?: RequestInit
     });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
-    return NextResponse.json(
-      {
-        available: true,
-        ...body,
-      },
-      { status: res.status },
-    );
+    return privateJson({ available: true, ...body }, res.status);
   } catch {
-    return NextResponse.json({ available: false, running: false }, { status: 503 });
+    return privateJson({ available: false, running: false }, 503);
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!(await hasValidSession(request))) {
+    return privateJson({ error: "Unauthorized" }, 401);
+  }
+
   return proxyCrawlerRequest("/status");
 }
 
 export async function POST(request: Request) {
+  if (!(await hasValidSession(request))) {
+    return privateJson({ error: "Unauthorized" }, 401);
+  }
+
   if (!isSameOriginRequest(request)) {
-    return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
+    return privateJson({ error: "Invalid origin" }, 403);
   }
 
   return proxyCrawlerRequest("/runs", { method: "POST" });

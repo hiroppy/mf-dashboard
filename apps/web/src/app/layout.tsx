@@ -2,11 +2,17 @@ import { isDatabaseAvailable } from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { AccountNotifications } from "../components/info/account-notifications";
 import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
+import {
+  isDashboardAuthDisabled,
+  SESSION_COOKIE_NAME,
+  verifySessionToken,
+} from "../lib/dashboard-auth";
 import { createMetadataBase } from "../lib/metadata";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
 
@@ -40,6 +46,18 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const authenticated =
+    isDashboardAuthDisabled() ||
+    (await verifySessionToken((await cookies()).get(SESSION_COOKIE_NAME)?.value));
+
+  if (!authenticated) {
+    return (
+      <html lang="ja">
+        <body className="min-h-dvh bg-background antialiased">{children}</body>
+      </html>
+    );
+  }
+
   await waitForRuntimeData();
 
   if (!isDatabaseAvailable()) {

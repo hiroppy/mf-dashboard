@@ -21,6 +21,7 @@ describe("next config", () => {
 
     expect(config.output).toBe("export");
     expect(config.pageExtensions).toEqual(["tsx"]);
+    await expect(config.headers?.()).resolves.toEqual([]);
   });
 
   it("keeps TypeScript route handlers available for runtime server builds", async () => {
@@ -29,5 +30,18 @@ describe("next config", () => {
     expect(config.output).toBe("standalone");
     expect(config.outputFileTracingRoot).toBeDefined();
     expect(config.pageExtensions).toEqual(["tsx", "ts"]);
+    await expect(config.headers?.()).resolves.toEqual([
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+          { key: "Surrogate-Control", value: "no-store" },
+          { key: "Pragma", value: "no-cache" },
+          { key: "Vary", value: "Cookie" },
+        ],
+      },
+    ]);
   });
 });

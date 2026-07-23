@@ -93,10 +93,13 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-`openssl`の出力を`.env`の`REFRESH_TOKEN`に設定する。このトークンはcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。
+`openssl`を2回実行し、別々の出力を`.env`の`DASHBOARD_SESSION_SECRET`と`REFRESH_TOKEN`に設定する。`DASHBOARD_PASSWORD`にはパスワードマネージャーで生成した閲覧用パスワードを設定する。これらは用途の異なる認証情報であり、Terraformでは管理しない。
 
 | `.env`のキー                                 | 必須 | 内容                                                                     |
 | -------------------------------------------- | ---- | ------------------------------------------------------------------------ |
+| `DASHBOARD_PASSWORD`                         | 必須 | ダッシュボードの単一閲覧者ログイン用パスワード                           |
+| `DASHBOARD_SESSION_SECRET`                   | 必須 | 閲覧セッションをHMAC署名する、パスワードとは別のランダム値               |
+| `DASHBOARD_SESSION_TTL_SECONDS`              | 任意 | セッション有効期間。既定12時間、設定可能範囲300〜604800秒                |
 | `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する`/api/refresh/`用Bearerトークン                    |
 | `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL           |
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
@@ -105,6 +108,19 @@ openssl rand -hex 32
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                              |
 | `HOST_UID` / `HOST_GID`                      | 任意 | Linuxで`./data`へ書き込むユーザーのUIDとGID。既定値は`1000:1000`         |
 | `AUTH_STATE_PATH`                            | 任意 | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない |
+
+#### ダッシュボードのセッション境界
+
+アプリケーション層では単一閲覧者向けパスワード認証を行う。ログイン成功時に、次の属性を持つHMAC署名済みcookieを発行する。
+
+- `HttpOnly`、`SameSite=Lax`、`Path=/`（productionでは`Secure`も付与）
+- 有効期限は`DASHBOARD_SESSION_TTL_SECONDS`。既定は12時間で、期限到達時は再ログインが必要
+- 署名鍵は`DASHBOARD_SESSION_SECRET`。cookieにパスワードや金融情報は格納しない
+- ダッシュボードの全ページと`/api/crawler/refresh/`のGET／POSTが同じセッション境界に入る
+- POSTはセッションに加えてsame-originを検証する
+- 個人向けページとAPI応答には`Cache-Control: private, no-store, max-age=0`を付け、CDN／surrogate向けにも`no-store`を明示する
+
+Cloudflare Accessは公開入口のアクセス制御、アプリのcookieはダッシュボード自身のアクセス制御であり、どちらか一方の代替ではない。秘密情報が未設定の通常実行はfail-closedとなり、ログインできない。`DEMO_MODE=true`のdemo modeだけは`data/demo.db`の非個人データを公開する用途のためアプリ認証を無効化する。
 
 Linuxで`./data`へ書き込めない場合は、`id -u`と`id -g`で値を確認し、`.env`の`HOST_UID`と`HOST_GID`へ設定する。
 
@@ -208,9 +224,11 @@ docker compose logs -f
 - `docker compose ps`で3サービスすべてが`Up`になっている
 - ログに認証エラーやTunnel接続エラーがない
 - 未ログインで`https://<hostname>/`へアクセスするとGoogleログインへ移動する
-- 許可したアカウントではダッシュボードが表示される
+- 許可したアカウントではアプリのログイン画面へ進み、`DASHBOARD_PASSWORD`でログインするとダッシュボードが表示される
 - 許可していないアカウントではアクセスが拒否される
 - Google以外のログイン方法が表示されない
+- ログアウト後やセッション期限後はアプリのログイン画面へ戻る
+- 未認証の`/api/crawler/refresh/`は401、不正OriginのPOSTは403になる
 
 ```sh
 # Cloudflare Access経由の応答を確認
@@ -227,6 +245,18 @@ terraform -chdir=terraform output -raw tunnel_id
 - **イメージを再ビルドする**: `docker compose build && docker compose up -d`
 - **crawlerをすぐに実行する**: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start`
 - **webの表示だけを更新する**: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer ${REFRESH_TOKEN}" http://web:8765/api/refresh/'`
+
+### 既存private deploymentからの移行
+
+1. 現行サービスを止める前に、パスワードマネージャーで`DASHBOARD_PASSWORD`を作成し、`openssl rand -hex 32`で`DASHBOARD_SESSION_SECRET`を作成して`.env`へ保存する。
+2. 必要なら`DASHBOARD_SESSION_TTL_SECONDS`を300〜604800秒で設定する。未指定時は43200秒（12時間）。
+3. `docker compose config`で3項目がwebサービスへ渡ることだけを確認する。出力を共有ログへ保存しない。
+4. `docker compose build web && docker compose up -d web`でwebを更新する。既存のCloudflare Access設定とcrawler用`REFRESH_TOKEN`はそのまま維持できる。
+5. 未認証ページのredirect、ログイン、crawler status/run、ログアウトを確認する。以前のブラウザーにはアプリセッションがないため、初回だけ再ログインが必要。
+
+閲覧パスワードを変更する場合は`DASHBOARD_PASSWORD`を更新してwebを再起動する。全セッションを即時失効させる場合は`DASHBOARD_SESSION_SECRET`も新しいランダム値へ変更してwebを再起動する。旧cookieは新しい鍵で検証できず拒否される。
+
+Dockerを使わないローカル開発でもルート`.env`に同じ値を設定し、`DB_PATH=../../data/moneyforward.db pnpm --filter @mf-dashboard/web exec next dev`を起動する。個人データを使う通常のローカル実行では認証を無効化しない。認証なしで確認できるのは、`pnpm --filter @mf-dashboard/web dev`による`data/demo.db`利用時だけである。
 
 ## 5. オプション設定
 
