@@ -26,6 +26,15 @@ function sameOriginPostRequest(headers: HeadersInit = {}): Request {
   });
 }
 
+function sameOriginGetRequest(headers: HeadersInit = {}): Request {
+  const requestHeaders = new Headers({ "sec-fetch-site": "same-origin" });
+  new Headers(headers).forEach((value, key) => requestHeaders.set(key, value));
+
+  return new Request("https://dashboard.example.com/api/crawler/refresh/", {
+    headers: requestHeaders,
+  });
+}
+
 describe("/api/crawler/refresh/", () => {
   beforeEach(() => {
     process.env = { ...originalEnv, CRAWLER_URL: "http://crawler:8766" };
@@ -40,7 +49,7 @@ describe("/api/crawler/refresh/", () => {
   it("returns unavailable when crawler URL is not configured", async () => {
     delete process.env.CRAWLER_URL;
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
@@ -52,7 +61,7 @@ describe("/api/crawler/refresh/", () => {
       jsonResponse({ running: true, source: "manual", startedAt: "2026-01-01T00:00:00.000Z" }),
     );
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     expect(res.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledWith(
@@ -88,7 +97,7 @@ describe("/api/crawler/refresh/", () => {
       }),
     );
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
     const body = await res.json();
 
     expect(body).toEqual(
@@ -103,7 +112,7 @@ describe("/api/crawler/refresh/", () => {
   it("returns unavailable for a malformed successful crawler response", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: "invalid status" }));
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
@@ -127,7 +136,7 @@ describe("/api/crawler/refresh/", () => {
       }),
     );
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     await expect(res.json()).resolves.toEqual({
       available: true,
@@ -206,7 +215,7 @@ describe("/api/crawler/refresh/", () => {
       }),
     );
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     await expect(res.json()).resolves.toEqual({
       available: true,
@@ -258,6 +267,18 @@ describe("/api/crawler/refresh/", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("rejects timeline status reads from a cross-site request", async () => {
+    const res = await GET(
+      new Request("https://dashboard.example.com/api/crawler/refresh/", {
+        headers: { "sec-fetch-site": "cross-site" },
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({ error: "Invalid origin" });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("rejects a crawler run without an origin header", async () => {
     const res = await POST(
       new Request("https://dashboard.example.com/api/crawler/refresh/", { method: "POST" }),
@@ -271,7 +292,7 @@ describe("/api/crawler/refresh/", () => {
   it("returns unavailable when crawler service cannot be reached", async () => {
     vi.mocked(global.fetch).mockRejectedValueOnce(new Error("connection refused"));
 
-    const res = await GET();
+    const res = await GET(sameOriginGetRequest());
 
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toEqual(unavailableCrawlerRefreshStatus);
