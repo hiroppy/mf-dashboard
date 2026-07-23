@@ -87,14 +87,27 @@ const failedStatus: CrawlerRefreshStatus = {
 };
 
 function mockCrawlerStatus(status: CrawlerRefreshStatus) {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify(status), {
-      headers: { "content-type": "application/json" },
-    })) as typeof fetch;
+  const OriginalEventSource = globalThis.EventSource;
+  class StoryEventSource {
+    onerror: ((event: Event) => void) | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+
+    constructor() {
+      queueMicrotask(() => {
+        this.onmessage?.(
+          new MessageEvent("message", {
+            data: JSON.stringify(status),
+          }),
+        );
+      });
+    }
+
+    close() {}
+  }
+  globalThis.EventSource = StoryEventSource as unknown as typeof EventSource;
 
   return () => {
-    globalThis.fetch = originalFetch;
+    globalThis.EventSource = OriginalEventSource;
   };
 }
 
