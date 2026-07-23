@@ -264,7 +264,6 @@ describe("ActionIcons", () => {
             {
               id: "refresh",
               label: "金融機関データを一括更新",
-              parentTimelineItemId: "global",
               step: "moneyforward_refresh",
               metadata: {
                 kind: "refresh",
@@ -299,8 +298,8 @@ describe("ActionIcons", () => {
     expect(screen.getAllByText("実行中")).toHaveLength(1);
     expect(screen.getByText("完了").className).toContain("font-semibold text-success");
     const globalStep = screen.getByText("全体データを取得").closest("li");
-    expect(globalStep?.textContent).toContain("金融機関データを一括更新");
-    expect(globalStep?.textContent).toContain("残り 1件: 金融機関 A");
+    expect(globalStep?.textContent).not.toContain("実行中");
+    expect(screen.getByText("残り 1件: 金融機関 A")).toBeTruthy();
     const authenticationStep = screen.getByText("認証").closest("li");
     expect(globalStep).not.toBeNull();
     expect(authenticationStep).not.toBeNull();

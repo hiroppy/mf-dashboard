@@ -72,7 +72,6 @@ type CrawlerRunTimelineStatusDetails =
 export type CrawlerRunTimelineItem = {
   id: string;
   label: string;
-  parentTimelineItemId?: string;
 } & CrawlerRunStepDetails &
   CrawlerRunTimelineStatusDetails;
 
@@ -197,7 +196,6 @@ function isCrawlerRunTimelineItem(value: unknown): value is CrawlerRunTimelineIt
     !isRecord(value) ||
     typeof value.id !== "string" ||
     typeof value.label !== "string" ||
-    (value.parentTimelineItemId !== undefined && typeof value.parentTimelineItemId !== "string") ||
     !isCrawlerRunStepDetails(value)
   ) {
     return false;

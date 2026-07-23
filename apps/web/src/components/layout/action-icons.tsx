@@ -258,7 +258,10 @@ function SyncTimelinePopover({
 
         <section aria-label="タイムライン">
           {run && run.timeline.length > 0 ? (
-            <TimelineTree items={run.timeline} />
+            <TimelineList
+              items={run.timeline}
+              currentTimelineItemId={run.current?.timelineItemId ?? null}
+            />
           ) : (
             <p className="mt-2 text-muted-foreground">タイムラインはまだありません。</p>
           )}
@@ -274,51 +277,38 @@ function SyncTimelinePopover({
   );
 }
 
-function TimelineTree({ items }: { items: CrawlerRunTimelineItem[] }) {
-  const itemIds = new Set(items.map(({ id }) => id));
-  const newestFirstItems = [...items].reverse();
-  const rootItems = newestFirstItems.filter(
-    ({ parentTimelineItemId }) => !parentTimelineItemId || !itemIds.has(parentTimelineItemId),
+function TimelineList({
+  items,
+  currentTimelineItemId,
+}: {
+  items: CrawlerRunTimelineItem[];
+  currentTimelineItemId: string | null;
+}) {
+  return (
+    <ol className="mt-2 space-y-2">
+      {[...items].reverse().map((item) => (
+        <TimelineListItem
+          key={item.id}
+          item={item}
+          hideStatus={item.status === "running" && item.id !== currentTimelineItemId}
+        />
+      ))}
+    </ol>
   );
-
-  function renderItem(item: CrawlerRunTimelineItem, nested: boolean): ReactNode {
-    const children = newestFirstItems.filter(
-      ({ parentTimelineItemId }) => parentTimelineItemId === item.id,
-    );
-
-    return (
-      <TimelineListItem
-        key={item.id}
-        item={item}
-        hideStatus={children.some(({ status }) => status === "running")}
-        nested={nested}
-      >
-        {children.length > 0 && (
-          <ol className="mt-3 space-y-2">{children.map((child) => renderItem(child, true))}</ol>
-        )}
-      </TimelineListItem>
-    );
-  }
-
-  return <ol className="mt-2 space-y-2">{rootItems.map((item) => renderItem(item, false))}</ol>;
 }
 
 function TimelineListItem({
   item,
   hideStatus = false,
-  nested = false,
-  children,
 }: {
   item: CrawlerRunTimelineItem;
   hideStatus?: boolean;
-  nested?: boolean;
-  children?: ReactNode;
 }) {
   const detail = formatStepMetadata(item);
   const status = stepStatusPresentation[item.status];
 
   return (
-    <li className={`min-w-0 rounded-md border p-3 ${nested ? "bg-muted/40" : ""}`}>
+    <li className="min-w-0 rounded-md border p-3">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <span className="min-w-0 break-words font-medium">{item.label}</span>
         {!hideStatus && (
@@ -327,7 +317,6 @@ function TimelineListItem({
       </div>
       {detail && <p className="mt-1 break-words text-muted-foreground">{detail}</p>}
       {item.reason && <p className="mt-1 break-words text-destructive">{item.reason.message}</p>}
-      {children}
     </li>
   );
 }

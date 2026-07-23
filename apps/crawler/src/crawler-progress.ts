@@ -37,11 +37,7 @@ export const CRAWLER_STEPS = {
 
 export interface CrawlerProgressReporter {
   getState: () => CrawlerRunStateSnapshot;
-  startStep: (
-    step: CrawlerCurrentStep,
-    metadata?: CrawlerStepMetadata,
-    options?: { parentTimelineItemId?: string },
-  ) => Promise<string>;
+  startStep: (step: CrawlerCurrentStep, metadata?: CrawlerStepMetadata) => Promise<string>;
   updateStep: (stepId: string, metadata?: CrawlerStepMetadata) => Promise<void>;
   completeStep: (stepId: string, metadata?: CrawlerStepMetadata) => Promise<void>;
   skipStep: (stepId: string) => Promise<void>;
@@ -171,15 +167,12 @@ export async function createCrawlerProgressReporter(
 
   return {
     getState: () => structuredClone(state),
-    startStep: async (step, metadata, options) => {
+    startStep: async (step, metadata) => {
       const id = randomUUID();
       await update((draft) => {
         const item: CrawlerRunTimelineItem = {
           id,
           label: step.label,
-          ...(options?.parentTimelineItemId
-            ? { parentTimelineItemId: options.parentTimelineItemId }
-            : {}),
           ...toStepDetails(step.code, metadata),
           status: "running",
           startedAt: new Date().toISOString(),

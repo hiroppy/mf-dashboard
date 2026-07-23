@@ -84,13 +84,9 @@ async function scrapeGlobalData(
 
   // Refresh
   let refreshResult = null;
-  const refreshStep = await progress.startStep(
-    CRAWLER_STEPS.refresh,
-    {
-      maxWaitMinutes: getMaxWaitMinutes(),
-    },
-    { parentTimelineItemId: globalStep },
-  );
+  const refreshStep = await progress.startStep(CRAWLER_STEPS.refresh, {
+    maxWaitMinutes: getMaxWaitMinutes(),
+  });
   if (skipRefresh) {
     log("Skipping refresh (SKIP_REFRESH=true)");
     await progress.skipStep(refreshStep);

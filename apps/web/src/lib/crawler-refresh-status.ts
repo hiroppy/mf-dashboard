@@ -167,9 +167,6 @@ function readTimelineItem(value: unknown): CrawlerRunTimelineItem | null {
   return {
     id: value.id,
     label: value.label,
-    ...(typeof value.parentTimelineItemId === "string"
-      ? { parentTimelineItemId: value.parentTimelineItemId }
-      : {}),
     status: value.status,
     startedAt,
     finishedAt,
