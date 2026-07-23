@@ -567,6 +567,9 @@ export async function getCrawlerRunState(
 
   if (!isStaleSnapshot(snapshot, resolved)) {
     if (record && progressState?.runId === record.id) {
+      if (progressState.runStatus !== "running") {
+        return { ...progressState, running: false, pid: null };
+      }
       return { ...progressState, running: true, pid: record.pid };
     }
     return snapshotState;

@@ -4,13 +4,15 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type {
+  CrawlerRunStepDetails,
+  CrawlerRunStepStatus,
+  CrawlerRunTimelineItem,
+} from "../../../../crawler/src/crawler-run-state";
 import {
   parseCrawlerRefreshStatus,
   unavailableCrawlerRefreshStatus,
   type CrawlerRefreshStatus,
-  type CrawlerRunStepDetails,
-  type CrawlerRunStepStatus,
-  type CrawlerRunTimelineItem,
 } from "../../lib/crawler-refresh-status";
 import { formatDateTime } from "../../lib/format";
 import { Button } from "../ui/button";

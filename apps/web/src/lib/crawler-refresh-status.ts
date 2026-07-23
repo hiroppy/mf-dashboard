@@ -7,12 +7,6 @@ import type {
   CrawlerRunTimelineItem,
 } from "../../../crawler/src/crawler-run-state";
 
-export type {
-  CrawlerRunStepDetails,
-  CrawlerRunStepStatus,
-  CrawlerRunTimelineItem,
-} from "../../../crawler/src/crawler-run-state";
-
 export interface CrawlerRefreshStatus {
   available: boolean;
   running: boolean;

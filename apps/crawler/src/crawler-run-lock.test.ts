@@ -24,6 +24,33 @@ afterEach(async () => {
 });
 
 describe("crawler run lock", () => {
+  test("returns a matching terminal state without the live lock flag", async () => {
+    const statePath = `${lockPath}.state`;
+    const lock = await acquireCrawlerRunLock("manual", { lockPath, statePath });
+    const finishedState = {
+      version: 1 as const,
+      runId: lock.record.id,
+      source: "manual",
+      startedAt: lock.record.startedAt,
+      finishedAt: "2026-07-01T00:01:00.000Z",
+      runStatus: "success" as const,
+      current: null,
+      waitingFor: null,
+      progress: { completed: 0, total: 0 },
+      reason: null,
+      timeline: [],
+    };
+    await writeCrawlerRunState(finishedState, { statePath });
+
+    await expect(getCrawlerRunState({ lockPath, statePath })).resolves.toEqual({
+      ...finishedState,
+      running: false,
+      pid: null,
+    });
+
+    await lock.release();
+  });
+
   test("releases the lock when progress reporter initialization fails", async () => {
     await expect(
       runWithCrawlerRunLock("manual", async () => undefined, {
