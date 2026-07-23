@@ -76,6 +76,19 @@ const failedLatestRun = {
   reason: { code: "auth_failed", message: "認証できませんでした" },
 };
 
+const successfulLatestRun = {
+  version: 1,
+  runId: "run-success",
+  runStatus: "success",
+  source: "manual",
+  startedAt: "2026-01-01T00:00:00.000Z",
+  finishedAt: "2026-01-01T00:00:10.000Z",
+  current: null,
+  progress: { completed: 0, total: 0 },
+  timeline: [],
+  reason: null,
+};
+
 beforeEach(() => {
   refreshMock.mockReset();
   EventSourceMock.instances = [];
@@ -158,7 +171,7 @@ describe("ActionIcons", () => {
     await emitStatus({ running: false });
 
     fireEvent.click(screen.getByRole("button", { name: "金融機関データを更新" }));
-    await emitStatus({ running: false });
+    await emitStatus({ running: false, latestRun: successfulLatestRun });
 
     expect(screen.getByRole("button", { name: "同期タイムラインを表示" })).toBeTruthy();
 
@@ -168,6 +181,44 @@ describe("ActionIcons", () => {
 
     expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
     expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a stale idle status override a confirmed running POST response", async () => {
+    let resolvePost: ((response: Response) => void) | undefined;
+    vi.mocked(global.fetch).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolvePost = resolve;
+      }),
+    );
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関データを更新" }));
+    await emitStatus({ running: false });
+
+    await act(async () => {
+      resolvePost?.(jsonResponse({ available: true, running: true }, 202));
+    });
+
+    expect(screen.getByRole("button", { name: "同期タイムラインを表示" })).toBeTruthy();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes after an ambiguous POST failure is reconciled by SSE", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ error: "upstream response lost" }, 503),
+    );
+    render(<ActionIcons variant="header" />);
+    await emitStatus({ running: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関データを更新" }));
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
+    );
+    await emitStatus({ running: false });
+
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
   });
 
   it("preserves buffered running and terminal statuses when the refresh POST fails", async () => {

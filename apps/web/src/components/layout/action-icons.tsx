@@ -56,6 +56,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   const startRefreshInFlightRef = useRef(false);
   const pendingStatusRef = useRef<CrawlerRefreshStatus | null>(null);
   const pendingWasRunningRef = useRef(false);
+  const previousRunIdRef = useRef<string | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
     ...unavailableCrawlerRefreshStatus,
@@ -119,6 +120,8 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     startRefreshInFlightRef.current = true;
     pendingStatusRef.current = null;
     pendingWasRunningRef.current = false;
+    previousRunIdRef.current = state.latestRun?.runId ?? null;
+    wasRunningRef.current = true;
     setPopoverOpen(false);
     setState((prev) => ({
       ...prev,
@@ -147,13 +150,18 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
     } finally {
       startRefreshInFlightRef.current = false;
-      const pendingStatus = pendingStatusRef.current;
-      if (pendingWasRunningRef.current) {
-        wasRunningRef.current = true;
-      }
+      const pendingStatus = pendingStatusRef.current as CrawlerRefreshStatus | null;
+      const pendingRun = pendingStatus?.latestRun;
+      const isNewTerminalRun =
+        pendingRun !== null &&
+        pendingRun !== undefined &&
+        pendingRun.runStatus !== "running" &&
+        pendingRun.runId !== previousRunIdRef.current;
+      const shouldApplyPendingStatus = pendingWasRunningRef.current || isNewTerminalRun;
       pendingStatusRef.current = null;
       pendingWasRunningRef.current = false;
-      if (pendingStatus) {
+      previousRunIdRef.current = null;
+      if (pendingStatus && shouldApplyPendingStatus) {
         applyStatus(pendingStatus);
       }
     }
