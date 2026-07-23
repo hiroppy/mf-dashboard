@@ -215,6 +215,8 @@ describe("ActionIcons", () => {
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
     );
+    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+
     await emitStatus({ running: false });
 
     expect(refreshMock).toHaveBeenCalledTimes(1);

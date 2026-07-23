@@ -117,6 +117,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       return;
     }
 
+    const statusBeforeRefresh = state;
     startRefreshInFlightRef.current = true;
     pendingStatusRef.current = null;
     pendingWasRunningRef.current = false;
@@ -135,7 +136,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
-        setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+        setState({ ...statusBeforeRefresh, isPending: false });
         return;
       }
 
@@ -147,7 +148,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
         isPending: false,
       });
     } catch {
-      setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      setState({ ...statusBeforeRefresh, isPending: false });
     } finally {
       startRefreshInFlightRef.current = false;
       const pendingStatus = pendingStatusRef.current as CrawlerRefreshStatus | null;
