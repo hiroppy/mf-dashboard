@@ -232,15 +232,10 @@ function SyncTimelinePopover({
       <div
         className={`${failed ? "mt-1" : ""} flex items-center justify-between gap-4 text-sm text-muted-foreground`}
       >
-        <p className="tabular-nums">
+        <p className="ml-auto tabular-nums">
           {state.startedAt ? `開始 ${formatTime(state.startedAt)}` : "最新の同期状況です。"}
           {elapsedTime && ` (${elapsedTime})`}
         </p>
-        {run?.progress && (
-          <span className="shrink-0 tabular-nums">
-            {run.progress.completed}/{run.progress.total}
-          </span>
-        )}
       </div>
 
       <div className="mt-5 space-y-5 text-sm">

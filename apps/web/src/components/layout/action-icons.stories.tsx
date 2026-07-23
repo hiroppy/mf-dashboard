@@ -163,7 +163,7 @@ export const DesktopRunning: Story = {
     await userEvent.click(await canvas.findByRole("button", { name: "同期タイムラインを表示" }));
 
     const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
-    await waitFor(() => expect(within(popover).getByText("2/5")).toBeVisible());
+    await waitFor(() => expect(within(popover).getAllByText("Group A")[0]).toBeVisible());
     await expect(
       within(popover).queryByRole("heading", { name: "同期タイムライン" }),
     ).not.toBeInTheDocument();
@@ -183,7 +183,7 @@ export const MobileRunning: Story = {
     await userEvent.click(await canvas.findByRole("button", { name: "同期タイムラインを表示" }));
 
     const popover = within(canvasElement.ownerDocument.body).getByRole("dialog");
-    await waitFor(() => expect(within(popover).getByText("2/5")).toBeVisible());
+    await waitFor(() => expect(within(popover).getAllByText("Group A")[0]).toBeVisible());
     const bounds = popover.getBoundingClientRect();
     await expect(bounds.left).toBeGreaterThanOrEqual(0);
     await expect(bounds.right).toBeLessThanOrEqual(

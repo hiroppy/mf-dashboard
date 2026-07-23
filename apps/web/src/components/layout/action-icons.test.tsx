@@ -294,7 +294,6 @@ describe("ActionIcons", () => {
     expect(timelineDialog.className).toContain("h-[min(32rem,calc(100dvh-2rem))]");
     expect(screen.queryByRole("heading", { name: "同期タイムライン" })).toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
-    expect(screen.getByText("2/5")).toBeTruthy();
     expect(screen.getAllByText("実行中")).toHaveLength(1);
     expect(screen.getByText("金融機関データを一括更新").closest("li")?.className).toContain(
       "bg-muted/40",
