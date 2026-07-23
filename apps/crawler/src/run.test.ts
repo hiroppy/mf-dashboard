@@ -39,6 +39,7 @@ vi.mock("./web-refresh.js", () => ({ notifyWebRefresh: vi.fn<() => void>() }));
 let tempDir: string;
 
 beforeEach(async () => {
+  vi.clearAllMocks();
   tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-run-progress-"));
   vi.mocked(runLoadPhase).mockReturnValue({
     skipRefresh: false,
@@ -99,6 +100,21 @@ afterEach(async () => {
 });
 
 describe("runCrawler progress", () => {
+  test("group cleanup 失敗を database save step に記録する", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(runCleanupPhase).mockRejectedValueOnce(new Error("database cleanup failed"));
+
+    await expect(runCrawler(progress)).rejects.toThrow("database cleanup failed");
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({ step: "database_save", status: "failed" }),
+    );
+  });
+
   test("通常成功でユーザー向けの全 step を順に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",

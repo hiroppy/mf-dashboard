@@ -299,7 +299,7 @@ export async function scrapeCashFlowHistory(
     await callbacks.onMonthStart?.(targetMonth);
     try {
       const data = await extractCashFlowFromPage(page);
-      results.push({ month: data.month, data });
+      results.push({ month: data.month, progressMonth: targetMonth, data });
       log(`  ${data.month}: ${data.items.length} transactions`);
 
       if (i < monthsToScrape - 1) {
