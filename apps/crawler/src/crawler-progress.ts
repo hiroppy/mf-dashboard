@@ -125,7 +125,7 @@ export async function createCrawlerProgressReporter(
     runStatus: "running",
     current: null,
     waitingFor: null,
-    progress: null,
+    progress: runningProgressFor([]),
     reason: null,
     timeline: [],
   };
