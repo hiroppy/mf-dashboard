@@ -4,6 +4,11 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, HelpCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type {
+  CrawlerRunCurrent,
+  CrawlerRunReason,
+  CrawlerRunStatus,
+} from "../../../../crawler/src/crawler-run-state";
 import { formatDateTime } from "../../lib/format";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
@@ -20,13 +25,10 @@ interface CrawlerRefreshStatus {
   running: boolean;
   startedAt: string | null;
   finishedAt: string | null;
-  runStatus: "running" | "success" | "failed" | null;
-  current: {
-    label: string;
-    metadata?: Record<string, string | number | string[]>;
-  } | null;
+  runStatus: CrawlerRunStatus | null;
+  current: CrawlerRunCurrent | null;
   waitingFor: string | null;
-  reason: { code: string; message: string } | null;
+  reason: CrawlerRunReason | null;
 }
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
@@ -86,8 +88,13 @@ function getRefreshTitle(state: CrawlerRefreshStatus): string {
     return "更新";
   }
 
-  const metadataTarget = state.current?.metadata?.groupName ?? state.current?.metadata?.month;
-  const currentTarget = typeof metadataTarget === "string" ? metadataTarget : null;
+  const metadata = state.current?.metadata;
+  let currentTarget: string | null = null;
+  if (metadata?.kind === "group") {
+    currentTarget = metadata.groupName;
+  } else if (metadata?.kind === "month") {
+    currentTarget = metadata.month;
+  }
   const current = state.current
     ? `${state.current.label}${currentTarget ? `: ${currentTarget}` : ""}`
     : null;
