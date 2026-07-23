@@ -177,7 +177,12 @@ function RefreshButton({ iconSize }: { iconSize: string }) {
       return;
     }
 
-    setState((prev) => ({ ...prev, running: true, isPending: true }));
+    setState((prev) => ({
+      ...prev,
+      running: true,
+      isPending: true,
+      progress: { completed: 0, total: 10 },
+    }));
 
     try {
       const res = await fetch("/api/crawler/refresh/", { method: "POST" });

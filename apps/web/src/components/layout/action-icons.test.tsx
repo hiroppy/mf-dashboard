@@ -79,6 +79,35 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("resets terminal progress while optimistically starting another run", async () => {
+    let resolveStart!: (response: Response) => void;
+    const startResponse = new Promise<Response>((resolve) => {
+      resolveStart = resolve;
+    });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          available: true,
+          running: false,
+          runStatus: "success",
+          progress: { completed: 10, total: 10 },
+        }),
+      )
+      .mockReturnValueOnce(startResponse);
+
+    render(<ActionIcons variant="header" />);
+    const refreshButton = screen.getByRole("button", { name: "金融機関データを更新" });
+    await waitFor(() => expect((refreshButton as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(refreshButton);
+
+    await waitFor(() => expect(screen.getByText("同期中 · 0/10")).not.toBeNull());
+    resolveStart(
+      jsonResponse({ available: true, running: true, progress: { completed: 0, total: 10 } }, 202),
+    );
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+  });
+
   it("refreshes the dashboard after the crawler run finishes", async () => {
     const intervalCallbacks: Array<() => unknown> = [];
     const setIntervalSpy = vi.spyOn(window, "setInterval").mockImplementation((handler) => {

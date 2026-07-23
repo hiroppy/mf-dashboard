@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -35,6 +35,19 @@ describe("crawler progress", () => {
     });
   });
 
+  test("Playwright navigation error を安全な reason に分類する", () => {
+    expect(
+      normalizeCrawlerError(
+        new Error("page.goto: net::ERR_ABORTED at https://example.invalid/?token=secret"),
+        "global_data_failed",
+      ),
+    ).toEqual({
+      code: "navigation_failed",
+      message: "MoneyForward の画面遷移に失敗しました",
+      url: "MoneyForward画面",
+    });
+  });
+
   test("nested step 完了後に外側の running step を current に戻す", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-nested-"));
     try {
@@ -52,6 +65,29 @@ describe("crawler progress", () => {
         timelineItemId: globalStep,
         step: "global_data",
       });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("state write 失敗時に未永続 step を in-memory state へ反映しない", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-write-failure-"));
+    const statePath = path.join(tempDir, "state.json");
+    try {
+      const progress = await createCrawlerProgressReporter(statePath, {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      await rm(statePath);
+      await mkdir(statePath);
+
+      await expect(progress.startStep(CRAWLER_STEPS.analytics)).rejects.toThrow(/EISDIR|directory/);
+      expect(progress.getState().timeline).toEqual([]);
+
+      await rm(statePath, { recursive: true });
+      await progress.finish("failed");
+      expect(progress.getState().timeline).toEqual([]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

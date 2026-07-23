@@ -135,8 +135,8 @@ export async function createCrawlerProgressReporter(
   async function update(mutator: (draft: CrawlerRunStateSnapshot) => void): Promise<void> {
     const draft = structuredClone(state);
     mutator(draft);
+    await writeCrawlerRunState(draft, options);
     state = draft;
-    await writeCrawlerRunState(state, options);
   }
 
   function findStep(draft: CrawlerRunStateSnapshot, stepId: string): CrawlerRunTimelineItem {
@@ -290,6 +290,13 @@ export function normalizeCrawlerError(error: unknown, fallbackCode: string): Cra
       message: "画面の応答待ちがタイムアウトしました",
       operation: "MoneyForward画面の応答待ち",
       timeoutMs,
+    };
+  }
+  if (/net::ERR_|page\.goto|navigation/i.test(message)) {
+    return {
+      code: "navigation_failed",
+      message: "MoneyForward の画面遷移に失敗しました",
+      url: "MoneyForward画面",
     };
   }
   if (/selector|locator|waiting for .* to be|not found|no element/i.test(message)) {
