@@ -20,5 +20,6 @@ export interface ScrapeOptions {
 
 export interface CashFlowHistoryResult {
   month: string;
+  progressMonth?: string;
   data: CashFlowSummary;
 }

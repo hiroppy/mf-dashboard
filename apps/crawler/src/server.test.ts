@@ -1,8 +1,13 @@
+import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { CrawlerAlreadyRunningError, type CrawlerRunState } from "./crawler-run-lock.js";
-import { createCrawlerTriggerServer } from "./server.js";
+import {
+  createCrawlerTriggerServer,
+  listenCrawlerTriggerServer,
+  recordManualRunFailure,
+} from "./server.js";
 
 const runningState: CrawlerRunState = {
   running: true,
@@ -40,6 +45,22 @@ async function listen(testServer: Server): Promise<string> {
 }
 
 describe("crawler trigger server", () => {
+  test("binds to localhost by default", async () => {
+    server = listenCrawlerTriggerServer(0);
+    await once(server, "listening");
+
+    expect((server.address() as AddressInfo).address).toBe("127.0.0.1");
+  });
+
+  test("terminal state の保存失敗を detached run へ再送出しない", async () => {
+    const progress = {
+      finish: vi.fn<() => Promise<void>>().mockRejectedValue(new Error("disk full")),
+    } as unknown as Parameters<typeof recordManualRunFailure>[0];
+
+    await expect(recordManualRunFailure(progress)).resolves.toBeUndefined();
+    expect(progress.finish).toHaveBeenCalledWith("failed");
+  });
+
   test("returns crawler status", async () => {
     const baseUrl = await listen(createCrawlerTriggerServer({ getState: async () => idleState }));
 
