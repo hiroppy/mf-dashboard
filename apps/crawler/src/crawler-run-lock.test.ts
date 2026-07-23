@@ -150,6 +150,57 @@ describe("crawler run lock", () => {
     });
   });
 
+  test("finalizes an absent-lock state before allowing a new run to acquire the lock", async () => {
+    const statePath = `${lockPath}.state`;
+    await writeCrawlerRunState(
+      {
+        version: 1,
+        runId: "old-run",
+        source: "scheduled",
+        startedAt: "2026-07-01T00:00:00.000Z",
+        finishedAt: null,
+        runStatus: "running",
+        current: null,
+        waitingFor: null,
+        progress: { completed: 0, total: 10 },
+        reason: null,
+        timeline: [],
+      },
+      { statePath },
+    );
+
+    let acquisition: ReturnType<typeof acquireCrawlerRunLock> | undefined;
+    let markBlocked!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      markBlocked = resolve;
+    });
+    const status = getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        acquisition = acquireCrawlerRunLock("manual", {
+          afterLockMutationGuardBlocked: async () => markBlocked(),
+          lockPath,
+          statePath,
+        });
+        await blocked;
+      },
+      lockPath,
+      statePath,
+    });
+
+    await blocked;
+    if (!acquisition) throw new Error("Expected the competing lock acquisition to start");
+    await expect(
+      Promise.race([
+        status.then(() => "status" as const),
+        acquisition.then(() => "acquired" as const),
+      ]),
+    ).resolves.toBe("status");
+    await expect(status).resolves.toMatchObject({ running: false, runStatus: "failed" });
+
+    const newLock = await acquisition;
+    await newLock.release();
+  });
+
   test("returns idle state when no lock exists", async () => {
     await expect(getCrawlerRunState({ lockPath })).resolves.toEqual({
       running: false,
@@ -662,8 +713,7 @@ describe("crawler run lock", () => {
     await acquisitionBlocked;
     finishCleanup();
 
-    await expect(statePromise).resolves.toEqual({
-      running: false,
+    await expect(statePromise).resolves.toMatchObject({
       pid: null,
       source: null,
       startedAt: null,

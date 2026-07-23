@@ -538,7 +538,7 @@ export async function getCrawlerRunState(
       if (!snapshot) {
         const latestProgressState = await readCrawlerRunState({ statePath: resolved.statePath });
         return latestProgressState
-          ? toStoppedRunState(latestProgressState, resolved.statePath)
+          ? await toStoppedRunState(latestProgressState, resolved.statePath)
           : { running: false, pid: null, source: null, startedAt: null };
       }
     } finally {
