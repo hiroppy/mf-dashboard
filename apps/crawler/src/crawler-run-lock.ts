@@ -264,6 +264,9 @@ function isStaleLock(
     if (currentPidStartedAt && currentPidStartedAt !== record.pidStartedAt) {
       return true;
     }
+    if (currentPidStartedAt === record.pidStartedAt) {
+      return false;
+    }
   }
 
   return isExpired(record.startedAt, options.staleMs);
