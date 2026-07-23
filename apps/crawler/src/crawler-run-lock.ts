@@ -262,9 +262,6 @@ function isStaleLock(
     if (currentPidStartedAt && currentPidStartedAt !== record.pidStartedAt) {
       return true;
     }
-    if (currentPidStartedAt === record.pidStartedAt) {
-      return false;
-    }
   }
 
   return isExpired(record.startedAt, options.staleMs);
@@ -565,9 +562,6 @@ export async function getCrawlerRunState(
 
   if (!isStaleSnapshot(snapshot, resolved)) {
     if (record && progressState?.runId === record.id) {
-      if (progressState.runStatus !== "running") {
-        return { ...progressState, running: false, pid: null };
-      }
       return { ...progressState, running: true, pid: record.pid };
     }
     return snapshotState;
@@ -632,9 +626,6 @@ export async function acquireCrawlerRunLock(
 
   if (lockExists) {
     const state = await getCrawlerRunState(options);
-    if (!state.running) {
-      return acquireCrawlerRunLock(source, options);
-    }
     throw new CrawlerAlreadyRunningError(state);
   }
 

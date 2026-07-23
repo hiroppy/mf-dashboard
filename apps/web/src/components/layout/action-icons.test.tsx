@@ -125,6 +125,48 @@ describe("ActionIcons", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  it("ignores an older status response after starting a refresh", async () => {
+    const intervalCallbacks: Array<() => unknown> = [];
+    const setIntervalSpy = vi.spyOn(window, "setInterval").mockImplementation((handler) => {
+      if (typeof handler === "function") {
+        intervalCallbacks.push(handler as () => unknown);
+      }
+      return 1 as unknown as ReturnType<typeof window.setInterval>;
+    });
+    const clearIntervalSpy = vi.spyOn(window, "clearInterval").mockImplementation(() => undefined);
+    let resolveOldStatus: ((response: Response) => void) | undefined;
+
+    try {
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(jsonResponse({ available: true, running: false }))
+        .mockReturnValueOnce(
+          new Promise<Response>((resolve) => {
+            resolveOldStatus = resolve;
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ available: true, running: true }, 202));
+
+      render(<ActionIcons variant="header" />);
+
+      const refreshButton = await screen.findByRole("button", {
+        name: "金融機関データを更新",
+      });
+      void intervalCallbacks[0]?.();
+      fireEvent.click(refreshButton);
+
+      await screen.findByRole("button", { name: "同期タイムラインを表示" });
+
+      await act(async () => {
+        resolveOldStatus?.(jsonResponse({ available: true, running: false }));
+      });
+
+      expect(screen.getByRole("button", { name: "同期タイムラインを表示" })).toBeTruthy();
+    } finally {
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+    }
+  });
+
   it("starts another refresh after the latest run succeeded", async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(

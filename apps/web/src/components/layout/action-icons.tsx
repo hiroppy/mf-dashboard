@@ -61,6 +61,8 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 function RefreshControl({ iconSize }: { iconSize: string }) {
   const router = useRouter();
   const wasRunningRef = useRef(false);
+  const requestSequenceRef = useRef(0);
+  const startRefreshInFlightRef = useRef(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [state, setState] = useState<CrawlerRefreshButtonState>({
     ...unavailableCrawlerRefreshStatus,
@@ -71,9 +73,14 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     let isMounted = true;
 
     async function updateStatus() {
+      if (startRefreshInFlightRef.current) {
+        return;
+      }
+      const requestSequence = ++requestSequenceRef.current;
+
       try {
         const nextStatus = await readCrawlerRefreshStatus();
-        if (isMounted) {
+        if (isMounted && requestSequence === requestSequenceRef.current) {
           setState({ ...nextStatus, isPending: false });
           if (!nextStatus.running && nextStatus.latestRun?.runStatus !== "failed") {
             setPopoverOpen(false);
@@ -84,7 +91,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
           wasRunningRef.current = nextStatus.running;
         }
       } catch {
-        if (isMounted) {
+        if (isMounted && requestSequence === requestSequenceRef.current) {
           setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
           setPopoverOpen(false);
           wasRunningRef.current = false;
@@ -106,6 +113,8 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       return;
     }
 
+    startRefreshInFlightRef.current = true;
+    const requestSequence = ++requestSequenceRef.current;
     setPopoverOpen(false);
     setState((prev) => ({
       ...prev,
@@ -119,19 +128,27 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
       const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {
-        setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+        if (requestSequence === requestSequenceRef.current) {
+          setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+        }
         return;
       }
 
       const nextStatus = parseCrawlerRefreshStatus(body, true);
       const runningStatus = nextStatus.running ? nextStatus : { ...nextStatus, running: true };
-      wasRunningRef.current = true;
-      setState({
-        ...runningStatus,
-        isPending: false,
-      });
+      if (requestSequence === requestSequenceRef.current) {
+        wasRunningRef.current = true;
+        setState({
+          ...runningStatus,
+          isPending: false,
+        });
+      }
     } catch {
-      setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      if (requestSequence === requestSequenceRef.current) {
+        setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
+      }
+    } finally {
+      startRefreshInFlightRef.current = false;
     }
   }
 
