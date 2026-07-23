@@ -21,6 +21,20 @@ describe("crawler progress", () => {
     });
   });
 
+  test.each([
+    ["database_save", "データベース保存がタイムアウトしました"],
+    ["notification_failed", "更新結果の通知がタイムアウトしました"],
+    ["web_cache_refresh_failed", "Webキャッシュ更新がタイムアウトしました"],
+  ])("MoneyForward外の %s timeout に処理名を残す", (fallbackCode, expectedMessage) => {
+    const timeout = new Error("Timeout 5000ms exceeded");
+    timeout.name = "TimeoutError";
+
+    expect(normalizeCrawlerError(timeout, fallbackCode)).toEqual({
+      code: "unknown_error",
+      message: expectedMessage,
+    });
+  });
+
   test("通常終了後も success と finishedAt を latest state に残す", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-progress-success-"));
     const lockPath = path.join(tempDir, "crawler-run.lock");
