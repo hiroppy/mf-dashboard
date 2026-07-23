@@ -84,6 +84,7 @@ async function scrapeGlobalData(
     await progress.skipStep(refreshStep);
   } else {
     try {
+      await switchGroup(page, NO_GROUP_ID);
       refreshResult = await clickRefreshButton(page, {
         onWaiting: (waiting) =>
           progress.updateWaiting(refreshStep, "更新中の金融機関が0件になるのを待機", {
@@ -122,7 +123,7 @@ async function scrapeGlobalData(
   let portfolio: Awaited<ReturnType<typeof getPortfolio>>;
   let liabilities: Awaited<ReturnType<typeof getLiabilities>>;
   try {
-    await switchGroup(page, NO_GROUP_ID);
+    if (skipRefresh) await switchGroup(page, NO_GROUP_ID);
 
     // 全アカウント情報
     registeredAccounts = await getRegisteredAccounts(page);

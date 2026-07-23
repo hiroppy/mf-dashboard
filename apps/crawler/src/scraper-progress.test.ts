@@ -77,7 +77,7 @@ afterEach(async () => {
 });
 
 describe("scraper progress", () => {
-  test("初期 group 切り替え失敗を全体データ step に記録する", async () => {
+  test("refresh 前の group 切り替え失敗を refresh step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
       source: "test",
@@ -91,10 +91,24 @@ describe("scraper progress", () => {
 
     expect(progress.getState().timeline).toContainEqual(
       expect.objectContaining({
-        step: "global_data",
+        step: "moneyforward_refresh",
         status: "failed",
         reason: expect.objectContaining({ code: "selector_not_found" }),
       }),
+    );
+  });
+
+  test("refresh 前に group なし view へ切り替える", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress);
+
+    expect(vi.mocked(switchGroup).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(clickRefreshButton).mock.invocationCallOrder[0]!,
     );
   });
 
