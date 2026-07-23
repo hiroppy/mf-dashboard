@@ -85,7 +85,9 @@ interface LockMutationIntentRecord {
   pidStartedAt: string | null;
 }
 
-type StaleLockRemovalResult = "busy" | "changed" | "removed";
+type StaleLockRemovalResult =
+  | { kind: "busy" | "changed" }
+  | { kind: "removed"; state: CrawlerRunState };
 
 function defaultPidExists(pid: number): boolean {
   try {
@@ -261,6 +263,9 @@ function isStaleLock(
     const currentPidStartedAt = options.getPidStartedAt(record.pid);
     if (currentPidStartedAt && currentPidStartedAt !== record.pidStartedAt) {
       return true;
+    }
+    if (currentPidStartedAt === record.pidStartedAt) {
+      return false;
     }
   }
 
@@ -476,7 +481,7 @@ async function removeStaleLockIfCurrent(
 ): Promise<StaleLockRemovalResult> {
   const mutationGuard = await tryAcquireLockMutationGuard(options);
   if (!mutationGuard) {
-    return "busy";
+    return { kind: "busy" };
   }
 
   const quarantinePath = `${options.lockPath}.stale-${randomUUID()}`;
@@ -488,7 +493,7 @@ async function removeStaleLockIfCurrent(
       await options.afterStaleLockQuarantine?.();
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return "changed";
+        return { kind: "changed" };
       }
       throw err;
     }
@@ -501,7 +506,11 @@ async function removeStaleLockIfCurrent(
       current.contents === expected.contents
     ) {
       await rm(quarantinePath, { force: true });
-      return "removed";
+      const latestProgressState = await readCrawlerRunState({ statePath: options.statePath });
+      const state = latestProgressState
+        ? await toStoppedRunState(latestProgressState, options.statePath)
+        : { running: false as const, pid: null, source: null, startedAt: null };
+      return { kind: "removed", state };
     }
 
     try {
@@ -513,7 +522,7 @@ async function removeStaleLockIfCurrent(
       }
     }
 
-    return "changed";
+    return { kind: "changed" };
   } finally {
     await mutationGuard.release();
   }
@@ -534,15 +543,15 @@ export async function getCrawlerRunState(
     }
     try {
       await recoverQuarantinedLock(resolved.lockPath);
+      snapshot = await readLockSnapshot(resolved.lockPath);
+      if (!snapshot) {
+        const latestProgressState = await readCrawlerRunState({ statePath: resolved.statePath });
+        return latestProgressState
+          ? await toStoppedRunState(latestProgressState, resolved.statePath)
+          : { running: false, pid: null, source: null, startedAt: null };
+      }
     } finally {
       await mutationGuard.release();
-    }
-
-    snapshot = await readLockSnapshot(resolved.lockPath);
-    if (!snapshot) {
-      return progressState
-        ? toStoppedRunState(progressState, resolved.statePath)
-        : { running: false, pid: null, source: null, startedAt: null };
     }
   }
 
@@ -565,12 +574,10 @@ export async function getCrawlerRunState(
 
   await resolved.beforeStaleLockCleanup?.();
   const removal = await removeStaleLockIfCurrent(snapshot, resolved);
-  if (removal === "removed") {
-    return progressState
-      ? toStoppedRunState(progressState, resolved.statePath)
-      : { running: false, pid: null, source: null, startedAt: null };
+  if (removal.kind === "removed") {
+    return removal.state;
   }
-  if (removal === "changed") {
+  if (removal.kind === "changed") {
     return getCrawlerRunState(options);
   }
 

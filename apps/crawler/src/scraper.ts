@@ -71,8 +71,16 @@ async function scrapeGlobalData(
   page: Page,
   options: ScrapeOptions,
   progress: CrawlerProgressReporter,
+  globalStep: string,
 ): Promise<GlobalData> {
   const { skipRefresh = false } = options;
+
+  try {
+    await switchGroup(page, NO_GROUP_ID);
+  } catch (error) {
+    await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
+    throw error;
+  }
 
   // Refresh
   let refreshResult = null;
@@ -110,11 +118,11 @@ async function scrapeGlobalData(
       }
     } catch (error) {
       await progress.failStep(refreshStep, normalizeCrawlerError(error, "refresh_failed"));
+      await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
       throw error;
     }
   }
 
-  const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
   let registeredAccounts: Awaited<ReturnType<typeof getRegisteredAccounts>>;
   let portfolio: Awaited<ReturnType<typeof getPortfolio>>;
   let liabilities: Awaited<ReturnType<typeof getLiabilities>>;
@@ -259,19 +267,27 @@ export async function scrapeAllGroups(
   progress: CrawlerProgressReporter,
   options: ScrapeOptions = {},
 ): Promise<ScrapeResult> {
-  // 現在のグループを記憶
-  const defaultGroup = await getCurrentGroup(page);
-  log(`Default group: ${defaultGroup?.name ?? "none"}`);
+  const globalStep = await progress.startStep(CRAWLER_STEPS.globalData);
 
-  // 全グループの一覧を取得
-  const allGroups = await getAllGroups(page);
-  log(`Found ${allGroups.length} groups`);
+  // 現在のグループを記憶
+  let defaultGroup: Group | null;
+  let allGroups: Group[];
+  try {
+    defaultGroup = await getCurrentGroup(page);
+    log(`Default group: ${defaultGroup?.name ?? "none"}`);
+
+    // 全グループの一覧を取得
+    allGroups = await getAllGroups(page);
+    log(`Found ${allGroups.length} groups`);
+  } catch (error) {
+    await progress.failStep(globalStep, normalizeCrawlerError(error, "global_data_failed"));
+    throw error;
+  }
 
   const groupsToProcess = buildGroupsToProcess(allGroups);
 
   phase("Scrape: Global Data");
-  await switchGroup(page, NO_GROUP_ID);
-  const globalData = await scrapeGlobalData(page, options, progress);
+  const globalData = await scrapeGlobalData(page, options, progress, globalStep);
   const groupDataList = await runPhase2(page, groupsToProcess, defaultGroup, progress);
 
   return {

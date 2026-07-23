@@ -294,29 +294,65 @@ export async function runCashFlowHistoryPhase(
 
   info(`Fetching ${monthsToFetch} months`);
 
-  await switchGroup(page, NO_GROUP_ID);
-
   const monthSteps = new Map<string, string>();
-  const historyResults = await scrapeCashFlowHistory(page, monthsToFetch, {
-    onMonthStart: async (month) => {
-      if (progress) {
-        monthSteps.set(month, await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month }));
-      }
-    },
-    onMonthFailure: async (month, failure) => {
-      const stepId = monthSteps.get(month);
-      if (progress && stepId) {
+  const setupMonth = getHistoryMonth(now, 0);
+  let setupStepId: string | null = null;
+  if (progress) {
+    setupStepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month: setupMonth });
+    monthSteps.set(setupMonth, setupStepId);
+  }
+  async function failRunningMonthSteps(failure: unknown): Promise<void> {
+    if (!progress) return;
+
+    const runningStepIds = new Set(
+      progress
+        .getState()
+        .timeline.filter(({ status }) => status === "running")
+        .map(({ id }) => id),
+    );
+    for (const stepId of monthSteps.values()) {
+      if (runningStepIds.has(stepId)) {
         await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
       }
-    },
-  });
-
-  for (const { month, data: monthData } of historyResults) {
-    let stepId = monthSteps.get(month);
-    if (progress && !stepId) {
-      stepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month });
     }
-    try {
+  }
+
+  try {
+    await switchGroup(page, NO_GROUP_ID);
+    const historyResults = await scrapeCashFlowHistory(page, monthsToFetch, {
+      onMonthStart: async (month) => {
+        if (!progress) return;
+        if (monthSteps.has(month)) {
+          setupStepId = null;
+          return;
+        }
+        if (setupStepId) {
+          monthSteps.delete(setupMonth);
+          monthSteps.set(month, setupStepId);
+          await progress.updateWaiting(setupStepId, "対象月のデータ取得を待機", { month });
+          setupStepId = null;
+          return;
+        }
+        monthSteps.set(month, await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month }));
+      },
+      onMonthFailure: async (month, failure) => {
+        const stepId = monthSteps.get(month);
+        if (progress && stepId) {
+          await progress.failStep(
+            stepId,
+            normalizeCrawlerError(failure, "monthly_cash_flow_failed"),
+          );
+        }
+      },
+    });
+
+    for (const { month, progressMonth = month, data: monthData } of historyResults) {
+      let stepId = monthSteps.get(progressMonth);
+      if (progress && !stepId) {
+        stepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, {
+          month: progressMonth,
+        });
+      }
       const categorizedMonthData = categoryDecision.config
         ? await categorizeCashFlowMonth({
             page,
@@ -334,12 +370,10 @@ export async function runCashFlowHistoryPhase(
       );
       log(`  ${month}: saved ${savedCount} transactions`);
       if (progress && stepId) await progress.completeStep(stepId);
-    } catch (failure) {
-      if (progress && stepId) {
-        await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
-      }
-      throw failure;
     }
+  } catch (failure) {
+    await failRunningMonthSteps(failure);
+    throw failure;
   }
 }
 

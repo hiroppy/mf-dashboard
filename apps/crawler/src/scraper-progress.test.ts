@@ -77,6 +77,46 @@ afterEach(async () => {
 });
 
 describe("scraper progress", () => {
+  test("group discovery 失敗を全体データ step に記録する", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(getAllGroups).mockRejectedValueOnce(new Error("page closed"));
+
+    await expect(
+      scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress),
+    ).rejects.toThrow("page closed");
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({ step: "global_data", status: "failed" }),
+    );
+    expect(switchGroup).not.toHaveBeenCalled();
+  });
+
+  test("初期 group 切り替え失敗を全体データ step に記録する", async () => {
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+    vi.mocked(switchGroup).mockRejectedValueOnce(new Error("selector not found"));
+
+    await expect(
+      scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress),
+    ).rejects.toThrow("selector not found");
+
+    expect(progress.getState().timeline).toContainEqual(
+      expect.objectContaining({
+        step: "global_data",
+        status: "failed",
+        reason: expect.objectContaining({ code: "selector_not_found" }),
+      }),
+    );
+    expect(clickRefreshButton).not.toHaveBeenCalled();
+  });
+
   test("SKIP_REFRESH の refresh step を skipped にする", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",

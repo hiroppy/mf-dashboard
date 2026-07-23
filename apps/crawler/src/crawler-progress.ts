@@ -125,7 +125,7 @@ export async function createCrawlerProgressReporter(
     runStatus: "running",
     current: null,
     waitingFor: null,
-    progress: null,
+    progress: runningProgressFor([]),
     reason: null,
     timeline: [],
   };
@@ -135,8 +135,8 @@ export async function createCrawlerProgressReporter(
   async function update(mutator: (draft: CrawlerRunStateSnapshot) => void): Promise<void> {
     const draft = structuredClone(state);
     mutator(draft);
+    await writeCrawlerRunState(draft, options);
     state = draft;
-    await writeCrawlerRunState(state, options);
   }
 
   function findStep(draft: CrawlerRunStateSnapshot, stepId: string): CrawlerRunTimelineItem {
@@ -163,6 +163,12 @@ export async function createCrawlerProgressReporter(
       currentMetadata = { month: item.metadata.month };
     }
     Object.assign(item, toStepDetails(item.step, { ...currentMetadata, ...metadata }));
+  }
+
+  function restoreRunningCurrent(draft: CrawlerRunStateSnapshot): void {
+    const runningStep = draft.timeline.findLast(({ status }) => status === "running");
+    draft.current = runningStep ? toCurrent(runningStep) : null;
+    draft.waitingFor = null;
   }
 
   return {
@@ -204,8 +210,7 @@ export async function createCrawlerProgressReporter(
           finishedAt: new Date().toISOString(),
           reason: null,
         });
-        draft.current = null;
-        draft.waitingFor = null;
+        restoreRunningCurrent(draft);
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -218,8 +223,7 @@ export async function createCrawlerProgressReporter(
           finishedAt: new Date().toISOString(),
           reason: null,
         });
-        draft.current = null;
-        draft.waitingFor = null;
+        restoreRunningCurrent(draft);
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -228,8 +232,7 @@ export async function createCrawlerProgressReporter(
         const step = findStep(draft, stepId);
         updateStepMetadata(step, metadata);
         Object.assign(step, { status: "warning", finishedAt: new Date().toISOString(), reason });
-        draft.current = null;
-        draft.waitingFor = null;
+        restoreRunningCurrent(draft);
         draft.progress = runningProgressFor(draft.timeline);
       });
     },
@@ -273,11 +276,27 @@ export function normalizeCrawlerError(error: unknown, fallbackCode: string): Cra
   }
   if (name === "TimeoutError" || /timeout|timed out/i.test(message)) {
     const timeoutMs = Number(message.match(/(\d+)\s*ms/i)?.[1] ?? 0);
+    const operationLabels: Record<string, string> = {
+      database_save: "データベース保存",
+      notification_failed: "更新結果の通知",
+      web_cache_refresh_failed: "Webキャッシュ更新",
+    };
+    const operationLabel = operationLabels[fallbackCode];
+    if (operationLabel) {
+      return { code: "unknown_error", message: `${operationLabel}がタイムアウトしました` };
+    }
     return {
       code: "moneyforward_timeout",
       message: "画面の応答待ちがタイムアウトしました",
       operation: "MoneyForward画面の応答待ち",
       timeoutMs,
+    };
+  }
+  if (/net::ERR_|page\.goto|navigation/i.test(message)) {
+    return {
+      code: "navigation_failed",
+      message: "MoneyForward の画面遷移に失敗しました",
+      url: "MoneyForward画面",
     };
   }
   if (/selector|locator|waiting for .* to be|not found|no element/i.test(message)) {
