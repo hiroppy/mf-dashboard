@@ -38,9 +38,6 @@ const QUERY_WORKER_SOURCE = String.raw`
 
     try {
       await database.exec(workerData.scopedDatabaseSql);
-      parentPort.postMessage({ ready: true });
-      await new Promise((resolve) => parentPort.once("message", resolve));
-
       const statement = await database.prepare(
         "SELECT * FROM (\n" + workerData.query + "\n) AS query_result LIMIT " +
           (workerData.maxRows + 1),
@@ -339,7 +336,6 @@ function validateReferencedTables(sql: string): void {
 
 interface QueryWorkerMessage {
   error?: string;
-  ready?: boolean;
   result?: {
     columns: string[];
     rows: Record<string, unknown>[];
@@ -368,28 +364,22 @@ function runSandboxedQuery(
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeout = setTimeout(() => {
+      settled = true;
+      void worker
+        .terminate()
+        .then(() => reject(new Error("SQLの実行時間が上限を超えました。")))
+        .catch(reject);
+    }, READ_ONLY_QUERY_TIMEOUT_MS);
 
     function finish(callback: () => void): void {
       if (settled) return;
       settled = true;
-      if (timeout) clearTimeout(timeout);
+      clearTimeout(timeout);
       callback();
     }
 
     worker.on("message", (message: QueryWorkerMessage) => {
-      if (message.ready) {
-        timeout = setTimeout(() => {
-          settled = true;
-          void worker
-            .terminate()
-            .then(() => reject(new Error("SQLの実行時間が上限を超えました。")))
-            .catch(reject);
-        }, READ_ONLY_QUERY_TIMEOUT_MS);
-        worker.postMessage("run");
-        return;
-      }
-
       finish(() => {
         if (message.result) {
           resolve(message.result);
