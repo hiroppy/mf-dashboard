@@ -38,6 +38,14 @@ function collectVisibleStrings(value: unknown): string[] {
   return Object.values(value).flatMap(collectVisibleStrings);
 }
 
+function collectCardHrefs(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(collectCardHrefs);
+  if (typeof value !== "object" || value === null) return [];
+  return Object.entries(value).flatMap(([key, fieldValue]) =>
+    key === "href" && typeof fieldValue === "string" ? [fieldValue] : collectCardHrefs(fieldValue),
+  );
+}
+
 interface DataToolResult {
   toolName: string;
   input: unknown;
@@ -144,10 +152,14 @@ export function toEvaluationOutput(response: ChatResponse, groupId: string) {
         }
       }
       if (toolName === "presentFinanceCards") {
+        const allowedHrefsBeforePresentation = new Set(allowedHrefsBeforeStep);
         unauthorizedLinks.push(
+          ...collectCardHrefs(output).filter(
+            (href) => !isAllowedGeneratedLink(href, allowedHrefsBeforePresentation),
+          ),
           ...collectVisibleStrings(output).flatMap((value) =>
             collectFinanceChatLinks(value).filter(
-              (link) => !isAllowedGeneratedLink(link, allowedHrefs),
+              (link) => !isAllowedGeneratedLink(link, allowedHrefsBeforePresentation),
             ),
           ),
         );

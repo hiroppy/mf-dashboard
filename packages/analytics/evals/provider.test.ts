@@ -296,6 +296,34 @@ describe("toEvaluationOutput", () => {
     );
   });
 
+  it("records card href fields that were not returned before presentation", () => {
+    const response: ChatResponse = {
+      text: "回答",
+      steps: [
+        {
+          toolResults: [
+            {
+              toolName: "presentFinanceCards",
+              output: [
+                {
+                  type: "insight",
+                  title: "確認",
+                  href: "/other-group/cf/2026-07",
+                  action: { label: "詳細", href: "/test-group/bs" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(toEvaluationOutput(response, "test-group").unauthorizedLinks).toEqual([
+      "/other-group/cf/2026-07",
+      "/test-group/bs",
+    ]);
+  });
+
   it("keeps visible text from every generation step in order", () => {
     const response: ChatResponse = {
       text: "最終回答",

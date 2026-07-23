@@ -212,8 +212,9 @@ export function createFinanceChatLinkSanitizer<TOOLS extends ToolSet>(
       text: string,
     ) => {
       const definitions = referenceDefinitionsById.get(id) ?? new Map<string, string>();
-      for (const definition of findFinanceChatReferenceDefinitions(text))
-        definitions.set(definition.id, definition.source);
+      for (const definition of findFinanceChatReferenceDefinitions(text)) {
+        if (!definitions.has(definition.id)) definitions.set(definition.id, definition.source);
+      }
       referenceDefinitionsById.set(id, definitions);
       const definitionPrefix = [...definitions.values()].join("\n");
       const sanitizedText = sanitizeFinanceChatLinks(

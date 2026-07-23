@@ -369,6 +369,11 @@ describe("createFinanceChatLinkSanitizer", () => {
       id: "text-a",
       text: "[route]: /group-a/cf/2026-07\n",
     });
+    await writer.write({
+      type: "text-delta",
+      id: "text-a",
+      text: "[route]: /group-a/bs\n",
+    });
     await writer.write({ type: "text-delta", id: "text-a", text: "[詳細][route]\n" });
     await writer.write({ type: "text-end", id: "text-a" });
     await writer.close();

@@ -88,8 +88,19 @@ function findFencedCodeRanges(text: string, marker: "`" | "~"): MarkdownCodeRang
   return ranges;
 }
 
+function findIndentedCodeRanges(text: string): MarkdownCodeRange[] {
+  return Array.from(text.matchAll(/^(?: {4}|\t)[^\r\n]*(?:\r?\n|$)/gmu), (match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+}
+
 function findMarkdownCodeRanges(text: string): MarkdownCodeRange[] {
-  const fenceRanges = [...findFencedCodeRanges(text, "`"), ...findFencedCodeRanges(text, "~")]
+  const fenceRanges = [
+    ...findFencedCodeRanges(text, "`"),
+    ...findFencedCodeRanges(text, "~"),
+    ...findIndentedCodeRanges(text),
+  ]
     .sort((left, right) => left.start - right.start)
     .reduce<MarkdownCodeRange[]>((selected, range) => {
       if (range.start >= (selected.at(-1)?.end ?? 0)) selected.push(range);
@@ -330,22 +341,25 @@ export function normalizeFinanceChatReferenceId(value: string): string {
 export function sanitizeFinanceChatLinks(text: string, allowedHrefs: Set<string>): string {
   const { masked, restore } = maskMarkdownCode(text);
   const withoutHtmlLinks = sanitizeRawHtmlAnchors(masked, allowedHrefs);
-  const referenceDefinitions = new Map(
-    findFinanceChatReferenceDefinitions(withoutHtmlLinks).map(({ id, destination }) => [
-      id,
-      destination,
-    ]),
-  );
+  const referenceDefinitions = new Map<string, string>();
+  for (const { id, destination } of findFinanceChatReferenceDefinitions(withoutHtmlLinks)) {
+    if (!referenceDefinitions.has(id)) referenceDefinitions.set(id, destination);
+  }
   const withoutInvalidMarkdownLinks = sanitizeMarkdownInlineLinks(withoutHtmlLinks, allowedHrefs);
   const withoutReferenceLinks = withoutInvalidMarkdownLinks.replace(
     /(!?)\[([^\]]+)\](?:\[([^\]]*)\])?(?!\s*[:(])/gu,
-    (match, imageMarker: string, label: string, explicitId: string | undefined) => {
-      if (imageMarker) return label;
+    (match, imageMarker: string, label: string, explicitId: string | undefined, offset: number) => {
+      const escapedImageMarker = imageMarker && isEscaped(withoutInvalidMarkdownLinks, offset);
+      if (imageMarker && !escapedImageMarker) return label;
       const id = normalizeFinanceChatReferenceId(explicitId || label);
       const destination = referenceDefinitions.get(id);
-      if (destination === undefined) return explicitId === undefined ? match : label;
+      if (destination === undefined)
+        return explicitId === undefined
+          ? match
+          : `${escapedImageMarker ? imageMarker : ""}${label}`;
       const href = resolveAllowedHref(destination, allowedHrefs);
-      return href ? `[${label}](${href})` : label;
+      const prefix = escapedImageMarker ? imageMarker : "";
+      return href ? `${prefix}[${label}](${href})` : `${prefix}${label}`;
     },
   );
   const withoutReferenceDefinitions = withoutReferenceLinks.replace(

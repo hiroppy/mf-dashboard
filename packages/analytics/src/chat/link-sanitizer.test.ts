@@ -43,6 +43,8 @@ describe("sanitizeFinanceChatLinks", () => {
     '~~~md\nhttps://example.com <a href="javascript:alert(1)">x</a>\n~~~~',
     "```md\nhttps://example.com",
     "~~~md\nuser@example.com",
+    "    https://example.com",
+    "\tuser@example.com",
   ])("preserves a Markdown link literal inside Markdown code: %s", (text) => {
     expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe(text);
     expect(collectFinanceChatLinks(text)).toEqual([]);
@@ -105,6 +107,11 @@ describe("sanitizeFinanceChatLinks", () => {
     expect(collectFinanceChatLinks(text)).toContain("/0/cf/2026-07");
   });
 
+  it("treats a reference link after an escaped exclamation mark as a normal link", () => {
+    const text = "\\![詳細][route]\n\n[route]: /0/cf/2026-07";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("\\![詳細](/0/cf/2026-07)\n\n");
+  });
+
   it("resolves a reference-style link with an allowlisted route", () => {
     expect(sanitizeFinanceChatLinks("[詳細][route]\n\n[route]: /0/cf/2026-07", allowedHrefs)).toBe(
       "[詳細](/0/cf/2026-07)\n\n",
@@ -125,6 +132,11 @@ describe("sanitizeFinanceChatLinks", () => {
         allowedHrefs,
       ),
     ).toBe("[詳細](/0/cf/2026-07)\n\n");
+  });
+
+  it("uses the first definition when a reference label is defined more than once", () => {
+    const text = "[詳細][route]\n\n[route]: /0/cf/2026-07\n[route]: /0/bs";
+    expect(sanitizeFinanceChatLinks(text, allowedHrefs)).toBe("[詳細](/0/cf/2026-07)\n\n");
   });
 
   it("preserves prose following a reference definition", () => {
