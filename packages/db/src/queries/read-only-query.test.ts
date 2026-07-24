@@ -181,6 +181,19 @@ describe("executeReadOnlyQuery", () => {
     ).rejects.toThrow("データベースschemaを直接指定するSQLは実行できません。");
   });
 
+  it("schema名と同じtable aliasを許可する", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT source.description FROM transactions AS source",
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ description: "店舗 A" }],
+    });
+  });
+
   it("group境界transferの外部account情報とraw IDを匿名化する", async () => {
     const now = new Date().toISOString();
     const accounts = await db.query.accounts.findMany();
@@ -445,6 +458,12 @@ describe("normalizeReadOnlySql", () => {
   it("文字列とコメント内の禁止語はSQL操作として扱わない", () => {
     expect(normalizeReadOnlySql("/* delete */ SELECT 'update' AS text;")).toBe(
       "/* delete */ SELECT 'update' AS text",
+    );
+  });
+
+  it("文字列内のschema風テキストを許可する", () => {
+    expect(normalizeReadOnlySql("SELECT 'main.transactions' AS text")).toBe(
+      "SELECT 'main.transactions' AS text",
     );
   });
 });

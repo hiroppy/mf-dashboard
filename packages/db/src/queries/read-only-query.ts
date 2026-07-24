@@ -18,11 +18,14 @@ const WRITE_KEYWORDS =
   /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|replace|rollback|savepoint|update|vacuum)\b/i;
 const EXPENSIVE_SQL =
   /\b(?:cross\s+join|group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob|with\s+recursive)\b/i;
-const SCHEMA_QUALIFIER = /(?:\b(?:main|source|temp)\b|["'`[](?:main|source|temp)["'`\]])\s*\./i;
 
 const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
 
 const TABLE_NAME_SET = new Set(TABLE_NAMES);
+const SCHEMA_QUALIFIER = new RegExp(
+  String.raw`\b(?:main|source|temp)\s*\.\s*(?:${TABLE_NAMES.join("|")})\b`,
+  "i",
+);
 const libsqlModulePath = createRequire(import.meta.url).resolve("libsql/promise");
 
 const QUERY_WORKER_SOURCE = String.raw`
@@ -125,7 +128,7 @@ export function describeDatabaseSchema(): string {
 - chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（group_id = '0'を除く）に属する内部振替であり、収支集計から除外する
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
-- 現在グループの取引は${transactions}.${schema.transactions.accountId.name}を${groupAccounts}.${schema.groupAccounts.accountId.name}へJOINし、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdで絞る
+- chat query sandboxの${transactions}は現在グループの振替元または振替先口座に関係する行へ限定済み。明示的に絞る場合は${schema.transactions.accountId.name}または${schema.transactions.transferTargetAccountId.name}のいずれかを${groupAccounts}.${schema.groupAccounts.accountId.name}と照合し、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdを使用する
 - 現在グループの保有資産も${holdings}.${schema.holdings.accountId.name}を${groupAccounts}経由で絞る
 - 現在グループの総資産は${assetHistory}.${schema.assetHistory.groupId.name} = :groupIdで絞り、${schema.assetHistory.date.name}が最新の行の${schema.assetHistory.totalAssets.name}を使用する。保有銘柄の件数や評価額から総資産を推測・再計算しない
 - 総資産のカテゴリ内訳は最新の${assetHistory}を${assetHistoryCategories}.${schema.assetHistoryCategories.assetHistoryId.name} = ${assetHistory}.${schema.assetHistory.id.name}でJOINし、${schema.assetHistoryCategories.categoryName.name}と${schema.assetHistoryCategories.amount.name}を使用する
@@ -207,7 +210,7 @@ export function normalizeReadOnlySql(sql: string): string {
   if (WRITE_KEYWORDS.test(masked)) {
     throw new Error("データを変更するSQLは実行できません。");
   }
-  if (SCHEMA_QUALIFIER.test(normalized)) {
+  if (SCHEMA_QUALIFIER.test(masked)) {
     throw new Error("データベースschemaを直接指定するSQLは実行できません。");
   }
   if (EXPENSIVE_SQL.test(masked)) {
