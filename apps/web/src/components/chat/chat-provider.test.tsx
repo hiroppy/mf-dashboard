@@ -107,6 +107,32 @@ describe("ChatProvider", () => {
     ]);
   });
 
+  it("keeps only the latest complete exchange and current user message", () => {
+    const messages = Array.from({ length: 10 }, (_, index) => [
+      {
+        id: `user-${index}`,
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: `質問 ${index}` }],
+      },
+      {
+        id: `assistant-${index}`,
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: `回答 ${index}` }],
+      },
+    ]).flat();
+    messages.push({
+      id: "user-current",
+      role: "user",
+      parts: [{ type: "text", text: "続きの質問" }],
+    });
+
+    expect(prepareChatMessagesForRequest(messages).map(({ id }) => id)).toEqual([
+      "user-9",
+      "assistant-9",
+      "user-current",
+    ]);
+  });
+
   it("sends the selected group ID from a group page", () => {
     mocks.usePathname.mockReturnValue("/group-b/cf");
 

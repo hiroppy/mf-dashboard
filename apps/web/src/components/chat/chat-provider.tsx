@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { CHAT_REQUEST_MAX_MESSAGES } from "../../lib/chat-limits";
 import { extractGroupIdFromPath } from "../../lib/url";
 
 interface ChatContextValue {
@@ -44,7 +45,8 @@ export function prepareChatMessagesForRequest(messages: UIMessage[]): UIMessage[
         part.type === "text" ? [{ type: "text" as const, text: part.text }] : [],
       ),
     }))
-    .filter((message) => message.parts.length > 0);
+    .filter((message) => message.parts.length > 0)
+    .slice(-CHAT_REQUEST_MAX_MESSAGES);
 }
 
 export function ChatProvider({
