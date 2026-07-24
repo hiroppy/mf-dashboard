@@ -10,6 +10,8 @@ import { SidebarProvider } from "../components/layout/sidebar-context";
 import { createMetadataBase } from "../lib/metadata";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export const metadata: Metadata = {
   metadataBase: createMetadataBase(),
   title: {
@@ -17,6 +19,15 @@ export const metadata: Metadata = {
     default: "MoneyForward Me Dashboard",
   },
   description: "MoneyForward Me のデータを可視化するダッシュボード",
+  manifest: `${basePath}/manifest.webmanifest`,
+  icons: {
+    apple: `${basePath}/apple-touch-icon.png`,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black",
+    title: "MF Dashboard",
+  },
   openGraph: {
     title: "MoneyForward Me Dashboard",
     description: "MoneyForward Me のデータを可視化するダッシュボード",
