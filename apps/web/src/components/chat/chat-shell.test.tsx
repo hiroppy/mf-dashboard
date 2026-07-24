@@ -81,6 +81,26 @@ describe("ChatShell", () => {
     );
   });
 
+  it("shows retry guidance when chat concurrency is full", () => {
+    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+      addUserMessage: vi.fn<(text: string) => void>(),
+      close: vi.fn<() => void>(),
+      draft: "",
+      error: new Error(JSON.stringify({ error: { code: "CHAT_BUSY" } })),
+      isOpen: true,
+      isSubmitting: false,
+      messages: [],
+      open: vi.fn<() => void>(),
+      setDraft: vi.fn<(draft: string) => void>(),
+    });
+
+    render(<ChatShell />);
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "しばらく待ってからもう一度お試しください。",
+    );
+  });
+
   it("blocks another submission while a response is in progress", () => {
     const addUserMessage = vi.fn<(text: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({

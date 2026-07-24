@@ -12,6 +12,7 @@ import {
   type UIMessage,
 } from "ai";
 import { CHAT_MAX_OUTPUT_TOKENS, CHAT_MESSAGE_MAX_LENGTH } from "../../../lib/chat-limits";
+import { acquireChatSlot } from "./chat-concurrency";
 
 export const maxDuration = 60;
 
@@ -213,32 +214,44 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(503, "LLM_NOT_CONFIGURED", "LLM設定を確認してください。");
   }
 
-  const tools = createFinanceChatTools(db, group.id);
-  const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
-  let assistantText = "";
-  const result = streamText({
-    abortSignal: request.signal,
-    experimental_transform: smoothStream(),
-    maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
-    model,
-    onChunk: ({ chunk }) => {
-      if (chunk.type === "text-delta") assistantText += chunk.text;
-    },
-    system: getSystemPrompt(),
-    messages: await convertToModelMessages(modelInputMessages, { tools }),
-    tools,
-    stopWhen: stepCountIs(MAX_GENERATION_STEPS),
-  });
+  const releaseChatSlot = acquireChatSlot();
+  if (!releaseChatSlot) {
+    return errorResponse(429, "CHAT_BUSY", "AIチャットが混み合っています。");
+  }
 
-  return result.toUIMessageStreamResponse({
-    consumeSseStream: consumeStream,
-    messageMetadata: ({ part }) =>
-      part.type === "finish"
-        ? {
-            [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText),
-          }
-        : undefined,
-    originalMessages: validation.data,
-    onError: () => "回答の生成中にエラーが発生しました。",
-  });
+  try {
+    const tools = createFinanceChatTools(db, group.id);
+    const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
+    let assistantText = "";
+    const result = streamText({
+      abortSignal: request.signal,
+      experimental_transform: smoothStream(),
+      maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
+      model,
+      onAbort: releaseChatSlot,
+      onChunk: ({ chunk }) => {
+        if (chunk.type === "text-delta") assistantText += chunk.text;
+      },
+      onFinish: releaseChatSlot,
+      system: getSystemPrompt(),
+      messages: await convertToModelMessages(modelInputMessages, { tools }),
+      tools,
+      stopWhen: stepCountIs(MAX_GENERATION_STEPS),
+    });
+
+    return result.toUIMessageStreamResponse({
+      consumeSseStream: consumeStream,
+      messageMetadata: ({ part }) =>
+        part.type === "finish"
+          ? {
+              [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText),
+            }
+          : undefined,
+      originalMessages: validation.data,
+      onError: () => "回答の生成中にエラーが発生しました。",
+    });
+  } catch (error) {
+    releaseChatSlot();
+    throw error;
+  }
 }
