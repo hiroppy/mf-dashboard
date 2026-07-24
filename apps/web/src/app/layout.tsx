@@ -7,7 +7,6 @@ import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
-import { createMobileMetadata } from "./mobile-metadata";
 
 const metadataBase =
   process.env.GITHUB_PAGES === "true"
@@ -16,6 +15,8 @@ const metadataBase =
       )
     : undefined;
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export const metadata: Metadata = {
   metadataBase,
   title: {
@@ -23,7 +24,15 @@ export const metadata: Metadata = {
     default: "MoneyForward Me Dashboard",
   },
   description: "MoneyForward Me のデータを可視化するダッシュボード",
-  ...createMobileMetadata(process.env.NEXT_PUBLIC_BASE_PATH ?? ""),
+  manifest: `${basePath}/manifest.webmanifest`,
+  icons: {
+    apple: `${basePath}/apple-touch-icon.png`,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black",
+    title: "MF Dashboard",
+  },
   openGraph: {
     title: "MoneyForward Me Dashboard",
     description: "MoneyForward Me のデータを可視化するダッシュボード",
