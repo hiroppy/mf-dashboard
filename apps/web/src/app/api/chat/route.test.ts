@@ -116,6 +116,7 @@ describe("POST /api/chat", () => {
         model: "test-model",
         messages: modelMessages,
         onAbort: mocks.releaseChatSlot,
+        onError: mocks.releaseChatSlot,
         onFinish: mocks.releaseChatSlot,
         tools,
         stopWhen: "finite-stop-condition",
@@ -131,6 +132,15 @@ describe("POST /api/chat", () => {
       }),
     );
     await expect(response.text()).resolves.toContain("tool-output-available");
+  });
+
+  it("releases the concurrency slot when the model stream errors", async () => {
+    await POST(request({ messages }));
+
+    const onError = mocks.streamText.mock.calls[0]![0].onError as () => void;
+    onError();
+
+    expect(mocks.releaseChatSlot).toHaveBeenCalledOnce();
   });
 
   it("treats commands in transaction descriptions as untrusted data", async () => {

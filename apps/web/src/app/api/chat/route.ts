@@ -232,6 +232,7 @@ export async function POST(request: Request): Promise<Response> {
       onChunk: ({ chunk }) => {
         if (chunk.type === "text-delta") assistantText += chunk.text;
       },
+      onError: releaseChatSlot,
       onFinish: releaseChatSlot,
       system: getSystemPrompt(),
       messages: await convertToModelMessages(modelInputMessages, { tools }),
