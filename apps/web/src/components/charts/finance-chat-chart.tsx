@@ -36,7 +36,7 @@ export function getFinanceChartSeriesColor(
   if (series.amountType === "income") return semanticColors.income;
   if (series.amountType === "expense") return semanticColors.expense;
   if (series.amountType === "liability") return semanticColors.balanceNegative;
-  return values.every((value) => value < 0)
+  return values.some((value) => value < 0) && values.every((value) => value <= 0)
     ? semanticColors.balanceNegative
     : semanticColors.balancePositive;
 }

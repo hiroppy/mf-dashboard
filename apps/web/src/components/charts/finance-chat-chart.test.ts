@@ -8,6 +8,12 @@ describe("getFinanceChartSeriesColor", () => {
       getFinanceChartSeriesColor({ name: "負債", amountType: "liability" }, [20_000_000]),
     ).toBe(semanticColors.balanceNegative);
   });
+
+  it("uses the negative balance semantic when balance values are negative or zero", () => {
+    expect(getFinanceChartSeriesColor({ name: "残高", amountType: "balance" }, [-10_000, 0])).toBe(
+      semanticColors.balanceNegative,
+    );
+  });
 });
 
 describe("getFinanceChartLineStroke", () => {
