@@ -158,7 +158,7 @@ export function describeDatabaseSchema(): string {
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
 
-function maskCommentsAndQuotedText(sql: string): string {
+function maskComments(sql: string): string {
   let result = "";
   let index = 0;
 
@@ -182,17 +182,32 @@ function maskCommentsAndQuotedText(sql: string): string {
       continue;
     }
 
+    result += character;
+    index += 1;
+  }
+
+  return result;
+}
+
+function maskCommentsAndQuotedText(sql: string): string {
+  const commentMaskedSql = maskComments(sql);
+  let result = "";
+  let index = 0;
+
+  while (index < commentMaskedSql.length) {
+    const character = commentMaskedSql[index];
+
     if (character === "'" || character === '"' || character === "`" || character === "[") {
       const closingCharacter = character === "[" ? "]" : character;
       const start = index;
       index += 1;
 
-      while (index < sql.length) {
-        if (sql[index] !== closingCharacter) {
+      while (index < commentMaskedSql.length) {
+        if (commentMaskedSql[index] !== closingCharacter) {
           index += 1;
           continue;
         }
-        if (closingCharacter !== "]" && sql[index + 1] === closingCharacter) {
+        if (closingCharacter !== "]" && commentMaskedSql[index + 1] === closingCharacter) {
           index += 2;
           continue;
         }
@@ -422,6 +437,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
 
 function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
+  const commentMasked = maskComments(sql);
   const cteNames = new Set(
     [...masked.matchAll(/(?:\bwith\b|,)\s*([a-z_][\w$]*)\s*(?:\([^)]*\)\s*)?as\s*\(/gi)].map(
       (match) => match[1]!.toLowerCase(),
@@ -435,7 +451,7 @@ function validateReferencedTables(sql: string): void {
     }
   }
 
-  if (/\b(?:from|join)\s+["'`[]/i.test(sql)) {
+  if (/\b(?:from|join)\s+["'`[]/i.test(commentMasked)) {
     throw new Error("テーブル名はschemaに記載された形式で指定してください。");
   }
 }

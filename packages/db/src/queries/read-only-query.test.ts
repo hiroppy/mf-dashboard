@@ -707,6 +707,15 @@ describe("executeReadOnlyQuery", () => {
     ).rejects.toThrow("許可されていないテーブル sqlite_master は参照できません。");
   });
 
+  it.each(['SELECT name FROM/**/"sqlite_schema"', "SELECT name FROM/**/[sqlite_schema]"])(
+    "commentを介したquoted table参照を拒否する: %s",
+    async (sql) => {
+      await expect(executeReadOnlyQuery(db, sql, "group-a", databasePath)).rejects.toThrow(
+        "テーブル名はschemaに記載された形式で指定してください。",
+      );
+    },
+  );
+
   it("serialized resultがbyte budgetを超えた時点で打ち切る", async () => {
     await db
       .update(schema.transactions)
