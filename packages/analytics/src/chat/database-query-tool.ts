@@ -10,6 +10,53 @@ import {
 import { tool } from "ai";
 import { z } from "zod";
 
+const MAX_CONCURRENT_DATABASE_QUERIES = 2;
+let activeDatabaseQueries = 0;
+const databaseQueryWaiters: Array<{
+  abort: () => void;
+  resolve: (release: () => void) => void;
+  signal?: AbortSignal;
+}> = [];
+
+function createDatabaseQueryRelease(): () => void {
+  let released = false;
+
+  return () => {
+    if (released) return;
+    released = true;
+
+    const waiter = databaseQueryWaiters.shift();
+    if (waiter) {
+      waiter.signal?.removeEventListener("abort", waiter.abort);
+      waiter.resolve(createDatabaseQueryRelease());
+      return;
+    }
+    activeDatabaseQueries -= 1;
+  };
+}
+
+function acquireDatabaseQuerySlot(abortSignal?: AbortSignal): Promise<() => void> {
+  abortSignal?.throwIfAborted();
+  if (activeDatabaseQueries < MAX_CONCURRENT_DATABASE_QUERIES) {
+    activeDatabaseQueries += 1;
+    return Promise.resolve(createDatabaseQueryRelease());
+  }
+
+  return new Promise((resolve, reject) => {
+    const waiter = {
+      abort: () => {
+        const index = databaseQueryWaiters.indexOf(waiter);
+        if (index >= 0) databaseQueryWaiters.splice(index, 1);
+        reject(abortSignal?.reason ?? new Error("SQLの実行を中断しました。"));
+      },
+      resolve,
+      signal: abortSignal,
+    };
+    abortSignal?.addEventListener("abort", waiter.abort, { once: true });
+    databaseQueryWaiters.push(waiter);
+  });
+}
+
 function getDatabaseDescription(): string {
   return `SQLiteデータベースへread-only SQLを実行する。
 現在のグループIDは名前付きパラメータ :groupId としてサーバーがbindする。グループに属するデータは必ずこのパラメータで絞る。
@@ -39,7 +86,12 @@ export function createDatabaseQueryTool(
     }),
     execute: async ({ sql }, { abortSignal }) => {
       beforeExecute();
-      return await executeReadOnlyQuery(db, sql, groupId, undefined, abortSignal);
+      const release = await acquireDatabaseQuerySlot(abortSignal);
+      try {
+        return await executeReadOnlyQuery(db, sql, groupId, undefined, abortSignal);
+      } finally {
+        release();
+      }
     },
   });
 }

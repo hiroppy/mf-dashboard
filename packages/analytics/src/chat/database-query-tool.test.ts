@@ -4,7 +4,7 @@ import {
   executeReadOnlyQuery,
   READ_ONLY_QUERY_MAX_SQL_LENGTH,
 } from "@mf-dashboard/db/queries/read-only-query";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ZodType } from "zod";
 import { createDatabaseQueryTool } from "./database-query-tool";
 
@@ -22,6 +22,10 @@ const execOptions = {
 };
 
 describe("createDatabaseQueryTool", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("Drizzle schemaから物理テーブルとカラムを説明する", () => {
     const description = describeDatabaseSchema();
 
@@ -77,5 +81,56 @@ describe("createDatabaseQueryTool", () => {
       undefined,
       abortController.signal,
     );
+  });
+
+  it("全chat requestを通じて同時query subprocessを2件に制限する", async () => {
+    const releases: Array<() => void> = [];
+    vi.mocked(executeReadOnlyQuery).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releases.push(() => resolve({ columns: [], rows: [], rowCount: 0, truncated: false }));
+        }),
+    );
+    const tools = Array.from({ length: 4 }, () => createDatabaseQueryTool(db, "group-a"));
+    const executions = tools.map((queryTool, index) =>
+      Promise.resolve(queryTool.execute!({ sql: `SELECT ${index}` }, execOptions)),
+    );
+
+    await vi.waitFor(() => expect(executeReadOnlyQuery).toHaveBeenCalledTimes(2));
+    releases.splice(0).forEach((release) => release());
+    await vi.waitFor(() => expect(executeReadOnlyQuery).toHaveBeenCalledTimes(4));
+    releases.splice(0).forEach((release) => release());
+
+    await expect(Promise.all(executions)).resolves.toHaveLength(4);
+  });
+
+  it("待機中にrequestがabortされたqueryを実行しない", async () => {
+    const releases: Array<() => void> = [];
+    vi.mocked(executeReadOnlyQuery).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releases.push(() => resolve({ columns: [], rows: [], rowCount: 0, truncated: false }));
+        }),
+    );
+    const runningTools = Array.from({ length: 2 }, () => createDatabaseQueryTool(db, "group-a"));
+    const running = runningTools.map((queryTool) =>
+      Promise.resolve(queryTool.execute!({ sql: "SELECT 1" }, execOptions)),
+    );
+    await vi.waitFor(() => expect(executeReadOnlyQuery).toHaveBeenCalledTimes(2));
+
+    const abortController = new AbortController();
+    const waiting = Promise.resolve(
+      createDatabaseQueryTool(db, "group-a").execute!(
+        { sql: "SELECT 2" },
+        { ...execOptions, abortSignal: abortController.signal },
+      ),
+    );
+    const abortReason = new Error("request aborted");
+    abortController.abort(abortReason);
+
+    await expect(waiting).rejects.toBe(abortReason);
+    expect(executeReadOnlyQuery).toHaveBeenCalledTimes(2);
+    releases.splice(0).forEach((release) => release());
+    await Promise.all(running);
   });
 });
