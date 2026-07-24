@@ -443,16 +443,61 @@ function validateReferencedTables(sql: string): void {
       (match) => match[1]!.toLowerCase(),
     ),
   );
+  const sourceClauseDepths = new Set<number>();
+  let depth = 0;
+  let expectsSource = false;
 
-  for (const match of masked.matchAll(/\b(?:from|join)\s+([a-z_][\w$]*)/gi)) {
-    const tableName = match[1]!.toLowerCase();
-    if (!TABLE_NAME_SET.has(tableName) && !cteNames.has(tableName)) {
-      throw new Error(`許可されていないテーブル ${tableName} は参照できません。`);
+  for (const match of masked.matchAll(/[a-z_][\w$]*|[(),]/gi)) {
+    const token = match[0]!.toLowerCase();
+    const followingSql = commentMasked.slice(match.index! + match[0]!.length);
+    const startsSource =
+      token === "from" || token === "join" || (token === "," && sourceClauseDepths.has(depth));
+
+    if (startsSource && /^\s*\(*\s*["'`[]/.test(followingSql)) {
+      throw new Error("テーブル名はschemaに記載された形式で指定してください。");
     }
-  }
 
-  if (/\b(?:from|join)\s+["'`[]/i.test(commentMasked)) {
-    throw new Error("テーブル名はschemaに記載された形式で指定してください。");
+    if (token === "(") {
+      depth += 1;
+      continue;
+    }
+    if (token === ")") {
+      sourceClauseDepths.delete(depth);
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (token === "from") {
+      sourceClauseDepths.add(depth);
+      expectsSource = true;
+      continue;
+    }
+    if (token === "join") {
+      expectsSource = true;
+      continue;
+    }
+    if (
+      sourceClauseDepths.has(depth) &&
+      /^(?:where|group|having|order|limit|union|except|intersect|window)$/.test(token)
+    ) {
+      sourceClauseDepths.delete(depth);
+      expectsSource = false;
+      continue;
+    }
+    if (token === "," && sourceClauseDepths.has(depth)) {
+      expectsSource = true;
+      continue;
+    }
+    if (!expectsSource || token === ",") {
+      continue;
+    }
+
+    expectsSource = false;
+    if (token === "select" || token === "with") {
+      continue;
+    }
+    if (!TABLE_NAME_SET.has(token) && !cteNames.has(token)) {
+      throw new Error(`許可されていないテーブル ${token} は参照できません。`);
+    }
   }
 }
 
