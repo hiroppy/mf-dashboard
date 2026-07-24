@@ -319,7 +319,20 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE groups AS
       SELECT * FROM source.groups WHERE id = ${selectedGroup};
     CREATE TABLE group_accounts AS
-      SELECT * FROM source.group_accounts WHERE group_id = ${selectedGroup};
+      SELECT * FROM source.group_accounts WHERE group_id = ${selectedGroup}
+      UNION ALL
+      SELECT
+        -1 AS id,
+        ${globalSnapshotGroup} AS group_id,
+        id AS account_id,
+        created_at,
+        updated_at
+      FROM source.accounts
+      WHERE mf_id = 'unknown'
+        AND ${selectedGroup} = ${globalSnapshotGroup}
+        AND id NOT IN (
+          SELECT account_id FROM source.group_accounts WHERE group_id = ${globalSnapshotGroup}
+        );
     CREATE TABLE institution_categories AS
       SELECT * FROM source.institution_categories;
     CREATE TABLE accounts AS

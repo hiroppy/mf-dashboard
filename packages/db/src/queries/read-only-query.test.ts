@@ -618,7 +618,9 @@ describe("executeReadOnlyQuery", () => {
         db,
         `SELECT h.name, hv.amount
          FROM holdings h
-         JOIN holding_values hv ON hv.holding_id = h.id`,
+         JOIN holding_values hv ON hv.holding_id = h.id
+         JOIN group_accounts ga ON ga.account_id = h.account_id
+         WHERE ga.group_id = :groupId`,
         "0",
         databasePath,
       ),
