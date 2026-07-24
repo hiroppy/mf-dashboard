@@ -7,6 +7,7 @@ import { now } from "../utils";
 import { upsertAccounts, saveAccountStatuses, buildAccountIdMap } from "./accounts";
 import { getOrCreateCategory } from "./categories";
 import {
+  deleteGroupsNotIn,
   upsertGroup,
   updateGroupLastScrapedAt,
   clearGroupAccountLinks,
@@ -37,6 +38,7 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
 export async function saveScrapedDataBatch(
   db: Db,
   data: {
+    cleanupGroupIds?: string[];
     fullData?: ScrapedData;
     groupOnlyData: ScrapedData[];
     historyMonths?: Array<{ items: CashFlowItem[]; month: string }>;
@@ -57,6 +59,7 @@ export async function saveScrapedDataBatch(
         );
       }
     }
+    if (data.cleanupGroupIds) await deleteGroupsNotIn(transaction, data.cleanupGroupIds);
     return savedCounts;
   });
 }

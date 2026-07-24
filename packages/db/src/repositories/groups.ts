@@ -69,7 +69,7 @@ export async function updateGroupLastScrapedAt(
     .run();
 }
 
-export async function deleteGroupsNotIn(db: Db, groupIds: string[]): Promise<void> {
+export async function deleteGroupsNotIn(db: DbExecutor, groupIds: string[]): Promise<void> {
   if (groupIds.length === 0) return;
   await db.delete(schema.groups).where(notInArray(schema.groups.id, groupIds)).run();
 }

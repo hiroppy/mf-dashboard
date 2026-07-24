@@ -246,6 +246,7 @@ describe("runSavePhase", () => {
       expect.objectContaining({ group: expect.objectContaining({ id: "0" }) }),
     );
     expect(saveScrapedDataBatch).toHaveBeenCalledWith(db, {
+      cleanupGroupIds: undefined,
       fullData: { kind: "full" },
       groupOnlyData: [{ kind: "group-only" }],
       historyMonths: [],

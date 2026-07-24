@@ -4,7 +4,6 @@ import path from "node:path";
 import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { initDb, type Db } from "@mf-dashboard/db";
 import { updateAccountCategory, buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
-import { deleteGroupsNotIn } from "@mf-dashboard/db/repository/groups";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
@@ -21,7 +20,6 @@ import type {
   CategoryDecisionUsage,
   NormalizedCategoryDecisionConfig,
 } from "./category-decision/types.js";
-import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import {
   CRAWLER_STEPS,
   normalizeCrawlerError,
@@ -195,6 +193,7 @@ export async function runSavePhase(
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   historyMonths: Array<{ items: CashFlowItem[]; month: string }> = [],
+  cleanupGroupIds?: string[],
 ): Promise<number[]> {
   phase("Save");
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
@@ -233,33 +232,11 @@ export async function runSavePhase(
   });
 
   return saveScrapedDataBatch(db, {
+    cleanupGroupIds,
     fullData,
     groupOnlyData: groupOnlyScrapedData,
     historyMonths,
   });
-}
-
-export async function runCleanupPhase(
-  db: Db,
-  groupDataList: GroupData[],
-  config: Pick<CrawlerConfig, "cleanupGroups">,
-): Promise<void> {
-  phase("Cleanup");
-
-  if (!config.cleanupGroups) {
-    log("Skipping group cleanup (CLEANUP_GROUPS=false)");
-    return;
-  }
-
-  const result = buildCleanupGroupIds(groupDataList);
-  if (result) {
-    await deleteGroupsNotIn(db, result.ids);
-    info("Cleaned up groups not found in MoneyForward");
-  } else {
-    warn(
-      "Skipped group cleanup because no groups were scraped; group selector retrieval may have failed.",
-    );
-  }
 }
 
 export async function runInstitutionCategoryPhase(db: Db, page: Page): Promise<void> {

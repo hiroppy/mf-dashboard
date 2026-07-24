@@ -167,8 +167,35 @@ describe("saveScrapedData", () => {
     await expect(db.select().from(schema.holdingValues).all()).resolves.toEqual([]);
   });
 
+  test("stale group cleanupをcurrent dataと同じtransactionで公開する", async () => {
+    await db.insert(schema.groups).values({
+      id: "stale-group",
+      name: "Stale Group",
+      isCurrent: false,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await saveScrapedDataBatch(db, {
+      cleanupGroupIds: ["group-a"],
+      fullData: createScrapedData(),
+      groupOnlyData: [],
+    });
+
+    await expect(db.select().from(schema.groups).all()).resolves.toEqual([
+      expect.objectContaining({ id: "group-a" }),
+    ]);
+  });
+
   test("後続の履歴月保存失敗時もcurrent dataと先行月をrollbackする", async () => {
     const fullData = createScrapedData();
+    await db.insert(schema.groups).values({
+      id: "stale-group",
+      name: "Stale Group",
+      isCurrent: false,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
     const item = {
       mfId: "history-a",
       date: "2026-05-01",
@@ -183,6 +210,7 @@ describe("saveScrapedData", () => {
 
     await expect(
       saveScrapedDataBatch(db, {
+        cleanupGroupIds: ["group-a"],
         fullData,
         groupOnlyData: [],
         historyMonths: [
@@ -195,7 +223,9 @@ describe("saveScrapedData", () => {
       }),
     ).rejects.toThrow(/transactions/);
 
-    await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
+    await expect(db.select().from(schema.groups).all()).resolves.toEqual([
+      expect.objectContaining({ id: "stale-group" }),
+    ]);
     await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
     await expect(db.select().from(schema.dailySnapshots).all()).resolves.toEqual([]);
   });

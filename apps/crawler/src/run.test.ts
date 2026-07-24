@@ -6,7 +6,6 @@ import {
   runAnalyticsPhase,
   runAuthPhase,
   runCashFlowHistoryPhase,
-  runCleanupPhase,
   runInstitutionCategoryPhase,
   runLoadPhase,
   runNotificationPhase,
@@ -25,7 +24,6 @@ vi.mock("./crawler-phases.js", () => ({
   runAnalyticsPhase: vi.fn<() => void>(),
   runAuthPhase: vi.fn<() => void>(),
   runCashFlowHistoryPhase: vi.fn<() => void>(),
-  runCleanupPhase: vi.fn<() => void>(),
   runInstitutionCategoryPhase: vi.fn<() => void>(),
   runLoadPhase: vi.fn<() => void>(),
   runNotificationPhase: vi.fn<() => void>(),
@@ -110,13 +108,13 @@ afterEach(async () => {
 });
 
 describe("runCrawler progress", () => {
-  test("group cleanup 失敗を database save step に記録する", async () => {
+  test("atomic database save失敗を database save step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
       source: "test",
       startedAt: "2026-07-01T00:00:00.000Z",
     });
-    vi.mocked(runCleanupPhase).mockRejectedValueOnce(new Error("database cleanup failed"));
+    vi.mocked(runSavePhase).mockRejectedValueOnce(new Error("database cleanup failed"));
 
     await expect(runCrawler(progress)).rejects.toThrow("database cleanup failed");
 
@@ -153,7 +151,6 @@ describe("runCrawler progress", () => {
     ]);
     expect(runAuthPhase).toHaveBeenCalledOnce();
     expect(runSavePhase).toHaveBeenCalledOnce();
-    expect(runCleanupPhase).toHaveBeenCalledOnce();
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
@@ -192,6 +189,7 @@ describe("runCrawler progress", () => {
       expect.anything(),
       expect.anything(),
       historyMonths,
+      undefined,
     );
   });
 });
