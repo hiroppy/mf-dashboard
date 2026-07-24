@@ -456,14 +456,75 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
   `;
 }
 
+interface CommonTableExpression {
+  bodyEnd: number;
+  bodyStart: number;
+  name: string;
+}
+
+function findClosingParenthesis(sql: string, openingIndex: number): number {
+  let depth = 0;
+
+  for (let index = openingIndex; index < sql.length; index += 1) {
+    if (sql[index] === "(") depth += 1;
+    if (sql[index] !== ")") continue;
+
+    depth -= 1;
+    if (depth === 0) return index;
+  }
+
+  return -1;
+}
+
+function findCommonTableExpressions(maskedSql: string): CommonTableExpression[] {
+  const withMatch = /^\s*with\b\s*/i.exec(maskedSql);
+  if (!withMatch) return [];
+
+  const definitions: CommonTableExpression[] = [];
+  let index = withMatch[0].length;
+
+  while (index < maskedSql.length) {
+    const nameMatch = /^[a-z_][\w$]*/i.exec(maskedSql.slice(index));
+    if (!nameMatch) break;
+
+    const name = nameMatch[0].toLowerCase();
+    index += nameMatch[0].length;
+    index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+
+    if (maskedSql[index] === "(") {
+      const columnListEnd = findClosingParenthesis(maskedSql, index);
+      if (columnListEnd === -1) break;
+      index = columnListEnd + 1;
+    }
+
+    const asMatch = /^\s*as\s*(?:(?:not\s+)?materialized\s*)?\(/i.exec(maskedSql.slice(index));
+    if (!asMatch) break;
+
+    const openingIndex = index + asMatch[0].lastIndexOf("(");
+    const closingIndex = findClosingParenthesis(maskedSql, openingIndex);
+    if (closingIndex === -1) break;
+
+    definitions.push({
+      bodyEnd: closingIndex,
+      bodyStart: openingIndex + 1,
+      name,
+    });
+
+    index = closingIndex + 1;
+    index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+    if (maskedSql[index] !== ",") break;
+    index += 1;
+    index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+  }
+
+  return definitions;
+}
+
 function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
   const commentMasked = maskComments(sql);
-  const cteNames = new Set(
-    [...masked.matchAll(/(?:\bwith\b|,)\s*([a-z_][\w$]*)\s*(?:\([^)]*\)\s*)?as\s*\(/gi)].map(
-      (match) => match[1]!.toLowerCase(),
-    ),
-  );
+  const commonTableExpressions = findCommonTableExpressions(masked);
+  const cteNames = new Set(commonTableExpressions.map(({ name }) => name));
   const sourceClauseDepths = new Set<number>();
   let depth = 0;
   let expectsSource = false;
@@ -515,6 +576,14 @@ function validateReferencedTables(sql: string): void {
     expectsSource = false;
     if (token === "select" || token === "with") {
       continue;
+    }
+    if (
+      commonTableExpressions.some(
+        ({ bodyEnd, bodyStart, name }) =>
+          token === name && match.index! >= bodyStart && match.index! < bodyEnd,
+      )
+    ) {
+      throw new Error("再帰CTEは使用できません。");
     }
     if (!TABLE_NAME_SET.has(token) && !cteNames.has(token)) {
       throw new Error(`許可されていないテーブル ${token} は参照できません。`);

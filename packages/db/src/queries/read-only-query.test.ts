@@ -205,6 +205,17 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it("RECURSIVE keywordなしの自己参照CTEを拒否する", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "WITH cnt(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM cnt) SELECT max(x) FROM cnt",
+        "",
+        databasePath,
+      ),
+    ).rejects.toThrow("再帰CTEは使用できません。");
+  });
+
   it("末尾の行コメントを外側のLIMITで壊さない", async () => {
     await expect(
       executeReadOnlyQuery(db, "SELECT 1 AS value -- explanation", "", databasePath),
