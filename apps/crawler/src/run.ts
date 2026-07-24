@@ -47,6 +47,11 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
         "Skipped group cleanup because no groups were scraped; group selector retrieval may have failed.",
       );
     }
+    const institutionCategories = await runCrawlerStep(
+      progress,
+      CRAWLER_STEPS.institutionCategories,
+      () => runInstitutionCategoryPhase(activeRuntime.page),
+    );
     await runCrawlerStep(progress, CRAWLER_STEPS.databaseSave, () =>
       runCashFlowHistoryPhase(
         activeRuntime.db,
@@ -62,14 +67,12 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
             activeRuntime.categoryDecision,
             historyMonths,
             cleanupResult?.ids,
+            institutionCategories,
           );
           if (cleanupResult) info("Cleaned up groups not found in MoneyForward");
           return savedCounts;
         },
       ),
-    );
-    await runCrawlerStep(progress, CRAWLER_STEPS.institutionCategories, () =>
-      runInstitutionCategoryPhase(activeRuntime.db, activeRuntime.page),
     );
     await runCrawlerStep(progress, CRAWLER_STEPS.analytics, () =>
       runAnalyticsPhase(activeRuntime.db, scrapeResult.groupDataList),

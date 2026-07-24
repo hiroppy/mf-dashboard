@@ -250,6 +250,7 @@ describe("runSavePhase", () => {
       fullData: { kind: "full" },
       groupOnlyData: [{ kind: "group-only" }],
       historyMonths: [],
+      institutionCategories: undefined,
     });
   });
 });

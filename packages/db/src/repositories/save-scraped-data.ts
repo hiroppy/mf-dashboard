@@ -4,7 +4,12 @@ import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { CashFlowItem, ScrapedData } from "../types";
 import { now } from "../utils";
-import { upsertAccounts, saveAccountStatuses, buildAccountIdMap } from "./accounts";
+import {
+  upsertAccounts,
+  saveAccountStatuses,
+  buildAccountIdMap,
+  updateAccountCategory,
+} from "./accounts";
 import { getOrCreateCategory } from "./categories";
 import {
   deleteGroupsNotIn,
@@ -42,12 +47,16 @@ export async function saveScrapedDataBatch(
     fullData?: ScrapedData;
     groupOnlyData: ScrapedData[];
     historyMonths?: Array<{ items: CashFlowItem[]; month: string }>;
+    institutionCategories?: ReadonlyMap<string, string>;
   },
 ): Promise<number[]> {
   return db.transaction(async (transaction) => {
     if (data.fullData) await saveScrapedDataAtomically(transaction, data.fullData);
     for (const groupData of data.groupOnlyData) {
       await saveGroupOnlyDataAtomically(transaction, groupData);
+    }
+    for (const [mfId, category] of data.institutionCategories ?? []) {
+      await updateAccountCategory(transaction, mfId, category);
     }
 
     const savedCounts: number[] = [];

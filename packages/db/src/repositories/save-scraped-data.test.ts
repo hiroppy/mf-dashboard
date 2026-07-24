@@ -187,6 +187,51 @@ describe("saveScrapedData", () => {
     ]);
   });
 
+  test("institution category更新をrefresh transaction失敗時にrollbackする", async () => {
+    const fullData = createScrapedData();
+    await saveScrapedData(db, fullData);
+    await saveScrapedDataBatch(db, {
+      fullData,
+      groupOnlyData: [],
+      institutionCategories: new Map([["account-a", "銀行"]]),
+    });
+    const [bankCategory] = await db.select().from(schema.institutionCategories).all();
+    expect(bankCategory).toEqual(expect.objectContaining({ name: "銀行" }));
+
+    await expect(
+      saveScrapedDataBatch(db, {
+        fullData,
+        groupOnlyData: [],
+        institutionCategories: new Map([["account-a", "証券"]]),
+        historyMonths: [
+          {
+            month: "2026-06",
+            items: [
+              {
+                mfId: "invalid-history",
+                date: "2026-06-01",
+                category: "Category A",
+                subCategory: null,
+                description: "Transaction A",
+                amount: undefined as unknown as number,
+                type: "expense",
+                isTransfer: false,
+                isExcludedFromCalculation: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/transactions/);
+
+    await expect(db.select().from(schema.accounts).all()).resolves.toContainEqual(
+      expect.objectContaining({ mfId: "account-a", categoryId: bankCategory?.id }),
+    );
+    await expect(db.select().from(schema.institutionCategories).all()).resolves.toEqual([
+      bankCategory,
+    ]);
+  });
+
   test("後続の履歴月保存失敗時もcurrent dataと先行月をrollbackする", async () => {
     const fullData = createScrapedData();
     await db.insert(schema.groups).values({

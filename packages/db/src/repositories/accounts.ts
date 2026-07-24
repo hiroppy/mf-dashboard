@@ -56,7 +56,7 @@ export async function saveAccountStatus(
 }
 
 export async function updateAccountCategory(
-  db: Db,
+  db: DbExecutor,
   mfId: string,
   categoryName: string,
 ): Promise<void> {

@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { initDb, type Db } from "@mf-dashboard/db";
-import { updateAccountCategory, buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
+import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
@@ -194,6 +194,7 @@ export async function runSavePhase(
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   historyMonths: Array<{ items: CashFlowItem[]; month: string }> = [],
   cleanupGroupIds?: string[],
+  institutionCategories?: ReadonlyMap<string, string>,
 ): Promise<number[]> {
   phase("Save");
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
@@ -236,18 +237,16 @@ export async function runSavePhase(
     fullData,
     groupOnlyData: groupOnlyScrapedData,
     historyMonths,
+    institutionCategories,
   });
 }
 
-export async function runInstitutionCategoryPhase(db: Db, page: Page): Promise<void> {
+export async function runInstitutionCategoryPhase(page: Page): Promise<Map<string, string>> {
   phase("Institution Categories");
   log("Scraping institution categories");
   const categoryMap = await scrapeInstitutionCategories(page);
-  info(`Updated ${categoryMap.size} account categories`);
-
-  for (const [mfId, category] of categoryMap.entries()) {
-    await updateAccountCategory(db, mfId, category);
-  }
+  info(`Scraped ${categoryMap.size} account categories`);
+  return categoryMap;
 }
 
 export async function runCashFlowHistoryPhase(

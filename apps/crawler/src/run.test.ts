@@ -24,7 +24,7 @@ vi.mock("./crawler-phases.js", () => ({
   runAnalyticsPhase: vi.fn<() => void>(),
   runAuthPhase: vi.fn<() => void>(),
   runCashFlowHistoryPhase: vi.fn<() => void>(),
-  runInstitutionCategoryPhase: vi.fn<() => void>(),
+  runInstitutionCategoryPhase: vi.fn<() => Map<string, string>>(),
   runLoadPhase: vi.fn<() => void>(),
   runNotificationPhase: vi.fn<() => void>(),
   runSavePhase: vi.fn<() => void>(),
@@ -64,6 +64,7 @@ beforeEach(async () => {
   vi.mocked(runNotificationPhase).mockResolvedValue(null);
   vi.mocked(notifyWebRefresh).mockResolvedValue(undefined);
   vi.mocked(runSavePhase).mockResolvedValue([]);
+  vi.mocked(runInstitutionCategoryPhase).mockResolvedValue(new Map([["account-a", "銀行"]]));
   vi.mocked(runCashFlowHistoryPhase).mockImplementation(
     async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
       if (!publishHistory) throw new Error("publishHistory is required");
@@ -143,8 +144,8 @@ describe("runCrawler progress", () => {
       { step: "liabilities", status: "done" },
       { step: "cash_flow_history", status: "done" },
       { step: "group_data", status: "done" },
-      { step: "database_save", status: "done" },
       { step: "institution_categories", status: "done" },
+      { step: "database_save", status: "done" },
       { step: "analytics", status: "done" },
       { step: "notification", status: "done" },
       { step: "web_cache_refresh", status: "done" },
@@ -190,6 +191,7 @@ describe("runCrawler progress", () => {
       expect.anything(),
       historyMonths,
       undefined,
+      new Map([["account-a", "銀行"]]),
     );
   });
 });
