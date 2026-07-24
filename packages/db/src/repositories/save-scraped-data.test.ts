@@ -5,7 +5,7 @@ import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest"
 import * as schema from "../schema/schema";
 import { closeTestDb, createTestDb, resetTestDb } from "../test-helpers";
 import type { ScrapedData } from "../types";
-import { saveGroupOnlyData, saveScrapedData } from "./save-scraped-data";
+import { saveGroupOnlyData, saveScrapedData, saveScrapedDataBatch } from "./save-scraped-data";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -141,5 +141,29 @@ describe("saveScrapedData", () => {
 
     await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
     await expect(db.select().from(schema.groupAccounts).all()).resolves.toEqual([]);
+  });
+
+  test("full保存後のgroup-only保存失敗時もcrawl全体をrollbackする", async () => {
+    const fullData = createScrapedData();
+    const groupData = createScrapedData();
+    groupData.currentGroup = { id: "group-b", name: "Group B", isCurrent: false };
+    groupData.spendingTargets = {
+      categories: [
+        {
+          largeCategoryId: undefined as unknown as number,
+          name: "Category A",
+          type: "fixed",
+        },
+      ],
+    };
+
+    await expect(
+      saveScrapedDataBatch(db, { fullData, groupOnlyData: [groupData] }),
+    ).rejects.toThrow(/spending_targets/);
+
+    await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
+    await expect(db.select().from(schema.groupAccounts).all()).resolves.toEqual([]);
+    await expect(db.select().from(schema.dailySnapshots).all()).resolves.toEqual([]);
+    await expect(db.select().from(schema.holdingValues).all()).resolves.toEqual([]);
   });
 });

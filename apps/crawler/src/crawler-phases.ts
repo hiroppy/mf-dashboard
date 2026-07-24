@@ -5,7 +5,7 @@ import { analyzeFinancialData } from "@mf-dashboard/analytics";
 import { initDb, type Db } from "@mf-dashboard/db";
 import { updateAccountCategory, buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { deleteGroupsNotIn } from "@mf-dashboard/db/repository/groups";
-import { saveScrapedData, saveGroupOnlyData } from "@mf-dashboard/db/repository/save-scraped-data";
+import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
   saveTransactionsForMonth,
@@ -196,6 +196,7 @@ export async function runSavePhase(
 ): Promise<void> {
   phase("Save");
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
+  let fullData: ReturnType<typeof buildScrapedData> | undefined;
 
   if (noGroupData) {
     info(`Saving full data for ${noGroupData.group.name}`);
@@ -214,9 +215,8 @@ export async function runSavePhase(
       };
     }
 
-    const scrapedData = buildScrapedData(globalData, noGroupData);
-    debug("Scraped data:", JSON.stringify(scrapedData, null, 2));
-    await saveScrapedData(db, scrapedData);
+    fullData = buildScrapedData(globalData, noGroupData);
+    debug("Scraped data:", JSON.stringify(fullData, null, 2));
   } else {
     warn("No no-group data found; skipped full data save");
   }
@@ -225,11 +225,12 @@ export async function runSavePhase(
     (groupData) => !isNoGroup(groupData.group.id),
   );
 
-  for (const groupData of groupOnlyData) {
+  const groupOnlyScrapedData = groupOnlyData.map((groupData) => {
     info(`Saving group-only data for ${groupData.group.name}`);
-    const scrapedData = buildGroupOnlyScrapedData(groupData);
-    await saveGroupOnlyData(db, scrapedData);
-  }
+    return buildGroupOnlyScrapedData(groupData);
+  });
+
+  await saveScrapedDataBatch(db, { fullData, groupOnlyData: groupOnlyScrapedData });
 }
 
 export async function runCleanupPhase(

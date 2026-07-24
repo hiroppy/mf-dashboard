@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
-import { saveGroupOnlyData, saveScrapedData } from "@mf-dashboard/db/repository/save-scraped-data";
+import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
   saveTransactionsForMonth,
@@ -38,8 +38,7 @@ vi.mock("@mf-dashboard/db/repository/accounts", () => ({
 }));
 
 vi.mock("@mf-dashboard/db/repository/save-scraped-data", () => ({
-  saveScrapedData: vi.fn<() => Promise<void>>(),
-  saveGroupOnlyData: vi.fn<() => Promise<void>>(),
+  saveScrapedDataBatch: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock("@mf-dashboard/db/repository/transactions", () => ({
@@ -138,8 +137,7 @@ beforeEach(() => {
   vi.mocked(buildScrapedData).mockClear();
   vi.mocked(buildGroupOnlyScrapedData).mockClear();
   vi.mocked(buildAccountIdMap).mockReset();
-  vi.mocked(saveScrapedData).mockReset();
-  vi.mocked(saveGroupOnlyData).mockReset();
+  vi.mocked(saveScrapedDataBatch).mockReset();
   vi.mocked(hasTransactionsForMonth).mockReset();
   vi.mocked(saveTransactionsForMonth).mockReset();
   vi.mocked(scrapeCashFlowHistory).mockReset();
@@ -245,7 +243,10 @@ describe("runSavePhase", () => {
       expect.objectContaining({ cashFlow: categorizedCashFlow }),
       expect.objectContaining({ group: expect.objectContaining({ id: "0" }) }),
     );
-    expect(saveScrapedData).toHaveBeenCalledWith(db, { kind: "full" });
+    expect(saveScrapedDataBatch).toHaveBeenCalledWith(db, {
+      fullData: { kind: "full" },
+      groupOnlyData: [{ kind: "group-only" }],
+    });
   });
 });
 

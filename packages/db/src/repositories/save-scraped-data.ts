@@ -31,8 +31,18 @@ function log(...args: unknown[]) {
  * - group_accountsへのリンク
  */
 export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
+  await saveScrapedDataBatch(db, { fullData: data, groupOnlyData: [] });
+}
+
+export async function saveScrapedDataBatch(
+  db: Db,
+  data: { fullData?: ScrapedData; groupOnlyData: ScrapedData[] },
+): Promise<void> {
   await db.transaction(async (transaction) => {
-    await saveScrapedDataAtomically(transaction, data);
+    if (data.fullData) await saveScrapedDataAtomically(transaction, data.fullData);
+    for (const groupData of data.groupOnlyData) {
+      await saveGroupOnlyDataAtomically(transaction, groupData);
+    }
   });
 }
 
@@ -175,9 +185,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
  * - spendingTargets
  */
 export async function saveGroupOnlyData(db: Db, data: ScrapedData): Promise<void> {
-  await db.transaction(async (transaction) => {
-    await saveGroupOnlyDataAtomically(transaction, data);
-  });
+  await saveScrapedDataBatch(db, { groupOnlyData: [data] });
 }
 
 async function saveGroupOnlyDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
