@@ -105,6 +105,7 @@ describe("POST /api/chat", () => {
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({
         abortSignal: expect.any(AbortSignal),
+        maxOutputTokens: 2_000,
         model: "test-model",
         messages: modelMessages,
         tools,

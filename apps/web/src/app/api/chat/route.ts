@@ -11,7 +11,7 @@ import {
   streamText,
   type UIMessage,
 } from "ai";
-import { CHAT_MESSAGE_MAX_LENGTH } from "../../../lib/chat-limits";
+import { CHAT_MAX_OUTPUT_TOKENS, CHAT_MESSAGE_MAX_LENGTH } from "../../../lib/chat-limits";
 
 export const maxDuration = 60;
 
@@ -218,6 +218,7 @@ export async function POST(request: Request): Promise<Response> {
   const result = streamText({
     abortSignal: request.signal,
     experimental_transform: smoothStream(),
+    maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
     model,
     onChunk: ({ chunk }) => {
       if (chunk.type === "text-delta") assistantText += chunk.text;

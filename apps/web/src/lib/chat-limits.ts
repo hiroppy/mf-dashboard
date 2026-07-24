@@ -1,1 +1,2 @@
 export const CHAT_MESSAGE_MAX_LENGTH = 8_000;
+export const CHAT_MAX_OUTPUT_TOKENS = 2_000;
