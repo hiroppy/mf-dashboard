@@ -1,6 +1,19 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { navigateToAccountsPage } from "./refresh.js";
+import { getMaxWaitMinutes, getRefreshStatus, navigateToAccountsPage } from "./refresh.js";
+
+describe("getMaxWaitMinutes", () => {
+  test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(
+    "invalid MAX_WAIT_MINUTES=%s は default 値を返す",
+    (value) => {
+      expect(getMaxWaitMinutes({ MAX_WAIT_MINUTES: value })).toBe(20);
+    },
+  );
+
+  test("有限の正数を返す", () => {
+    expect(getMaxWaitMinutes({ MAX_WAIT_MINUTES: "12.5" })).toBe(12.5);
+  });
+});
 
 describe("refresh - 更新中セレクタ", () => {
   let browser: Browser;
@@ -69,6 +82,21 @@ describe("refresh - 更新中セレクタ", () => {
     }
 
     expect(updatingCount).toBe(2);
+  });
+
+  test("同じ行に非表示の正常セルがあっても更新中として数える", async () => {
+    await page.setContent(`
+      <table id="account-table"><tbody><tr>
+        <td class="service"><a>Institution A</a></td>
+        <td class="account-status">更新中</td>
+        <td class="account-status" hidden>正常</td>
+      </tr></tbody></table>
+    `);
+
+    await expect(getRefreshStatus(page)).resolves.toEqual({
+      incompleteAccounts: ["Institution A"],
+      remainingCount: 1,
+    });
   });
 
   test("更新中のアカウントがない場合は0を返す", async () => {

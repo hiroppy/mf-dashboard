@@ -13,7 +13,7 @@ description: Use when adding/modifying database tables or columns in Drizzle ORM
 - [ ] Add index for frequently queried columns
 - [ ] Update `packages/db/src/schema/relations.ts` if adding relations
 - [ ] Run migration: `pnpm --filter @mf-dashboard/db exec drizzle-kit generate`
-- [ ] Update `architecture/database-schema.md` with new ERD
+- [ ] Update `docs/architecture/database-schema.md` with new ERD
 
 ## File Locations
 

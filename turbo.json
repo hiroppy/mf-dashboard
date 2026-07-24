@@ -4,10 +4,6 @@
   "tasks": {
     "dev": {
       "cache": false,
-      "persistent": true
-    },
-    "dev:demo": {
-      "cache": false,
       "persistent": true,
       "dependsOn": ["^build:demo"]
     },
@@ -27,7 +23,8 @@
       "dependsOn": ["^build"]
     },
     "test:e2e": {
-      "dependsOn": ["^build:demo"]
+      "dependsOn": ["^build:demo"],
+      "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]
     }
   }
 }

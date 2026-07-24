@@ -14,7 +14,18 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
 import { createBrowserContext } from "./browser/context.js";
+import { categorizeCashFlowMonth } from "./category-decision/categorize-cash-flow.js";
+import { loadCategoryDecisionConfig } from "./category-decision/config.js";
+import type {
+  CategoryDecisionUsage,
+  NormalizedCategoryDecisionConfig,
+} from "./category-decision/types.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
+import {
+  CRAWLER_STEPS,
+  normalizeCrawlerError,
+  type CrawlerProgressReporter,
+} from "./crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
 import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
@@ -46,6 +57,12 @@ export interface CrawlerRuntime {
   browser: Browser;
   context: BrowserContext;
   page: Page;
+  categoryDecision: CategoryDecisionRuntime;
+}
+
+export interface CategoryDecisionRuntime {
+  config: NormalizedCategoryDecisionConfig | null;
+  usage: CategoryDecisionUsage;
 }
 
 export function runLoadPhase(): CrawlerConfig {
@@ -103,6 +120,7 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
   phase("Setup");
   info("Initializing database");
   const db = await initDb();
+  const categoryDecision = await loadCategoryDecisionRuntime();
 
   let browser: Browser | null = null;
   try {
@@ -119,6 +137,7 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
       browser,
       context,
       page,
+      categoryDecision,
     };
   } catch (err) {
     if (browser) {
@@ -126,6 +145,20 @@ export async function runSetupPhase(config: CrawlerConfig): Promise<CrawlerRunti
     }
     throw err;
   }
+}
+
+async function loadCategoryDecisionRuntime(): Promise<CategoryDecisionRuntime> {
+  const result = await loadCategoryDecisionConfig(undefined, warn);
+  if (result.enabled) {
+    info("Category decision: enabled (data/category-rules.json found)");
+  } else {
+    info("Category decision: disabled (data/category-rules.json not found or invalid)");
+  }
+
+  return {
+    config: result.config,
+    usage: { llmCallsUsed: 0 },
+  };
 }
 
 export async function runAuthPhase(page: Page, context: BrowserContext): Promise<void> {
@@ -140,9 +173,10 @@ export async function runAuthPhase(page: Page, context: BrowserContext): Promise
 export async function runScrapePhase(
   page: Page,
   config: Pick<CrawlerConfig, "skipRefresh">,
+  progress: CrawlerProgressReporter,
 ): Promise<ScrapeResult> {
   phase("Scrape");
-  const scrapeResult = await scrapeAllGroups(page, {
+  const scrapeResult = await scrapeAllGroups(page, progress, {
     skipRefresh: config.skipRefresh,
   });
 
@@ -154,13 +188,33 @@ export async function runScrapePhase(
   return scrapeResult;
 }
 
-export async function runSavePhase(db: Db, scrapeResult: ScrapeResult): Promise<void> {
+export async function runSavePhase(
+  db: Db,
+  page: Page,
+  scrapeResult: ScrapeResult,
+  categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
+): Promise<void> {
   phase("Save");
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
 
   if (noGroupData) {
     info(`Saving full data for ${noGroupData.group.name}`);
-    const scrapedData = buildScrapedData(scrapeResult.globalData, noGroupData);
+    let globalData = scrapeResult.globalData;
+    if (categoryDecision.config) {
+      await switchGroup(page, NO_GROUP_ID);
+      globalData = {
+        ...globalData,
+        cashFlow: await categorizeCashFlowMonth({
+          page,
+          db,
+          cashFlow: globalData.cashFlow,
+          config: categoryDecision.config,
+          usage: categoryDecision.usage,
+        }),
+      };
+    }
+
+    const scrapedData = buildScrapedData(globalData, noGroupData);
     debug("Scraped data:", JSON.stringify(scrapedData, null, 2));
     await saveScrapedData(db, scrapedData);
   } else {
@@ -216,6 +270,8 @@ export async function runCashFlowHistoryPhase(
   db: Db,
   page: Page,
   config: Pick<CrawlerConfig, "isHistoryMode">,
+  categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
+  progress?: CrawlerProgressReporter,
 ): Promise<void> {
   phase("Cash Flow History");
 
@@ -238,13 +294,86 @@ export async function runCashFlowHistoryPhase(
 
   info(`Fetching ${monthsToFetch} months`);
 
-  await switchGroup(page, NO_GROUP_ID);
+  const monthSteps = new Map<string, string>();
+  const setupMonth = getHistoryMonth(now, 0);
+  let setupStepId: string | null = null;
+  if (progress) {
+    setupStepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month: setupMonth });
+    monthSteps.set(setupMonth, setupStepId);
+  }
+  async function failRunningMonthSteps(failure: unknown): Promise<void> {
+    if (!progress) return;
 
-  const historyResults = await scrapeCashFlowHistory(page, monthsToFetch);
+    const runningStepIds = new Set(
+      progress
+        .getState()
+        .timeline.filter(({ status }) => status === "running")
+        .map(({ id }) => id),
+    );
+    for (const stepId of monthSteps.values()) {
+      if (runningStepIds.has(stepId)) {
+        await progress.failStep(stepId, normalizeCrawlerError(failure, "monthly_cash_flow_failed"));
+      }
+    }
+  }
 
-  for (const { month, data: monthData } of historyResults) {
-    const savedCount = await saveTransactionsForMonth(db, month, monthData.items, accountIdMap);
-    log(`  ${month}: saved ${savedCount} transactions`);
+  try {
+    await switchGroup(page, NO_GROUP_ID);
+    const historyResults = await scrapeCashFlowHistory(page, monthsToFetch, {
+      onMonthStart: async (month) => {
+        if (!progress) return;
+        if (monthSteps.has(month)) {
+          setupStepId = null;
+          return;
+        }
+        if (setupStepId) {
+          monthSteps.delete(setupMonth);
+          monthSteps.set(month, setupStepId);
+          await progress.updateStep(setupStepId, { month });
+          setupStepId = null;
+          return;
+        }
+        monthSteps.set(month, await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month }));
+      },
+      onMonthFailure: async (month, failure) => {
+        const stepId = monthSteps.get(month);
+        if (progress && stepId) {
+          await progress.failStep(
+            stepId,
+            normalizeCrawlerError(failure, "monthly_cash_flow_failed"),
+          );
+        }
+      },
+    });
+
+    for (const { month, progressMonth = month, data: monthData } of historyResults) {
+      let stepId = monthSteps.get(progressMonth);
+      if (progress && !stepId) {
+        stepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, {
+          month: progressMonth,
+        });
+      }
+      const categorizedMonthData = categoryDecision.config
+        ? await categorizeCashFlowMonth({
+            page,
+            db,
+            cashFlow: monthData,
+            config: categoryDecision.config,
+            usage: categoryDecision.usage,
+          })
+        : monthData;
+      const savedCount = await saveTransactionsForMonth(
+        db,
+        month,
+        categorizedMonthData.items,
+        accountIdMap,
+      );
+      log(`  ${month}: saved ${savedCount} transactions`);
+      if (progress && stepId) await progress.completeStep(stepId);
+    }
+  } catch (failure) {
+    await failRunningMonthSteps(failure);
+    throw failure;
   }
 }
 
@@ -274,13 +403,15 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
 export async function runNotificationPhase(
   groupDataList: GroupData[],
   defaultGroup: ScrapeResult["defaultGroup"],
-): Promise<void> {
+): Promise<Error | null> {
   phase("Notification");
 
   try {
     await sendSuccessNotifications(groupDataList, defaultGroup);
+    return null;
   } catch (err) {
     error("Failed to send notification:", err);
+    return err instanceof Error ? err : new Error(String(err));
   }
 }
 

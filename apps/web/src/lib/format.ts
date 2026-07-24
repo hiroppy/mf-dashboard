@@ -45,6 +45,30 @@ export function formatDateTime(dateStr: string): string {
   });
 }
 
+export function formatTime(dateStr: string): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Tokyo",
+  }).format(new Date(dateStr));
+}
+
+export function formatElapsedTime(
+  startedAt: string,
+  finishedAt: string | null,
+  now = Date.now(),
+): string | null {
+  const startTime = new Date(startedAt).getTime();
+  const endTime = finishedAt ? new Date(finishedAt).getTime() : now;
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null;
+
+  const totalSeconds = Math.max(0, Math.floor((endTime - startTime) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function formatLastUpdated(lastUpdated: string | null, includeYear = false): string | null {
   if (!lastUpdated) return null;
 

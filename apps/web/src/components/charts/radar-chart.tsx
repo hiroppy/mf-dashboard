@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { chartTooltipStyle } from "./chart-tooltip";
 
 interface RadarChartCategory {
@@ -31,7 +32,7 @@ export function RadarChart({ categories, height = 280 }: RadarChartProps) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ResponsiveContainer width="100%" height={height} initialDimension={CHART_INITIAL_DIMENSION}>
       <RechartsRadarChart cx="50%" cy="50%" outerRadius="65%" data={data}>
         <PolarGrid className="stroke-muted" />
         <PolarAngleAxis

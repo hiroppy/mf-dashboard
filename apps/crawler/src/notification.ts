@@ -51,6 +51,10 @@ export async function sendSuccessNotifications(
   ]);
 
   logNotificationFailures(results, "Failed to send notification:");
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
 }
 
 export async function sendFailureNotifications(err: Error) {

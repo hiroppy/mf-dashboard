@@ -30,6 +30,7 @@ minimumReleaseAgeExclude:
   - turbo
   - workerd
   - wrangler
+  - "@ai-sdk/gateway@4.0.22"
 
 catalog:
   "@libsql/client": 0.17.4

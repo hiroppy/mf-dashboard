@@ -3,6 +3,7 @@
 import { Scale } from "lucide-react";
 import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
@@ -89,7 +90,11 @@ export function BalanceSheetChartClient({
         <CardTitle icon={Scale}>バランスシート</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={isMobile ? 280 : 400}>
+        <ResponsiveContainer
+          width="100%"
+          height={isMobile ? 280 : 400}
+          initialDimension={CHART_INITIAL_DIMENSION}
+        >
           <BarChart
             data={chartData}
             margin={{ top: 10, right: 10, left: 10, bottom: 5 }}

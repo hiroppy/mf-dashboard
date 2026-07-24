@@ -1,6 +1,27 @@
-import { describe, expect, test } from "vitest";
-import { buildNotificationPayload, selectNotificationGroup } from "./notification.js";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { sendDiscordNotification } from "./discord.js";
+import {
+  buildNotificationPayload,
+  selectNotificationGroup,
+  sendSuccessNotifications,
+} from "./notification.js";
 import type { GroupData } from "./scraper.js";
+import { sendSlackNotification } from "./slack.js";
+
+vi.mock("./discord.js", () => ({
+  sendDiscordNotification: vi.fn<() => Promise<void>>(),
+  sendDiscordErrorNotification: vi.fn<() => Promise<void>>(),
+}));
+vi.mock("./slack.js", () => ({
+  sendSlackNotification: vi.fn<() => Promise<void>>(),
+  sendErrorNotification: vi.fn<() => Promise<void>>(),
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(sendSlackNotification).mockResolvedValue(undefined);
+  vi.mocked(sendDiscordNotification).mockResolvedValue(undefined);
+});
 
 function makeGroupData(id: string, name: string): GroupData {
   return {
@@ -94,5 +115,17 @@ describe("buildNotificationPayload", () => {
         errorMessage: "Connection failed",
       },
     ]);
+  });
+});
+
+describe("sendSuccessNotifications", () => {
+  test("通知 channel の失敗を caller に返す", async () => {
+    const failure = new Error("notification unavailable");
+    vi.mocked(sendSlackNotification).mockRejectedValue(failure);
+
+    await expect(
+      sendSuccessNotifications([makeGroupData("group-a", "Group A")], null),
+    ).rejects.toBe(failure);
+    expect(sendDiscordNotification).toHaveBeenCalledTimes(1);
   });
 });

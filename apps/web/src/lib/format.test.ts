@@ -8,6 +8,8 @@ import {
   getShortMonth,
   formatDateShort,
   formatDateTime,
+  formatTime,
+  formatElapsedTime,
   formatLastUpdated,
 } from "./format";
 
@@ -99,6 +101,35 @@ describe("formatDateTime", () => {
     expect(result).toMatch(/30/);
     expect(result).toMatch(/10/);
     expect(result).toMatch(/30/);
+  });
+});
+
+describe("formatTime", () => {
+  it("時刻だけをJSTでフォーマットする", () => {
+    expect(formatTime("2025-04-30T09:56:00Z")).toBe("18:56");
+  });
+});
+
+describe("formatElapsedTime", () => {
+  const startedAt = "2026-07-23T09:00:00.000Z";
+
+  it.each([
+    ["2026-07-23T09:00:05.000Z", "00:05"],
+    ["2026-07-23T09:00:59.000Z", "00:59"],
+    ["2026-07-23T09:01:00.000Z", "01:00"],
+    ["2026-07-23T10:01:05.000Z", "61:05"],
+  ])("終了時刻 %s までの経過時間を %s と表示する", (finishedAt, expected) => {
+    expect(formatElapsedTime(startedAt, finishedAt)).toBe(expected);
+  });
+
+  it("実行中は現在時刻までの経過時間を表示する", () => {
+    expect(formatElapsedTime(startedAt, null, Date.parse("2026-07-23T09:00:05.000Z"))).toBe(
+      "00:05",
+    );
+  });
+
+  it("不正な時刻は表示しない", () => {
+    expect(formatElapsedTime("invalid", null)).toBeNull();
   });
 });
 
