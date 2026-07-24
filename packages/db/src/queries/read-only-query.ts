@@ -578,11 +578,21 @@ function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
   const commentMasked = maskComments(sql);
   const commonTableExpressions = findCommonTableExpressions(masked, commentMasked);
-  const isCteInScope = (name: string, index: number) =>
-    commonTableExpressions.some(
-      (definition) =>
-        definition.name === name && index >= definition.scopeStart && index < definition.scopeEnd,
-    );
+  const resolveCteInScope = (name: string, index: number) => {
+    let resolved: CommonTableExpression | undefined;
+    for (const definition of commonTableExpressions) {
+      const isInScope =
+        definition.name === name && index >= definition.scopeStart && index < definition.scopeEnd;
+      if (isInScope && (!resolved || definition.scopeStart > resolved.scopeStart)) {
+        resolved = definition;
+      }
+    }
+    return resolved;
+  };
+  const isRecursiveReference = (name: string, index: number) => {
+    const definition = resolveCteInScope(name, index);
+    return definition && index >= definition.bodyStart && index < definition.bodyEnd;
+  };
   const sourceClauseDepths = new Set<number>();
   let depth = 0;
   let expectsSource = false;
@@ -603,18 +613,11 @@ function validateReferencedTables(sql: string): void {
         if (
           /^\s*\./.test(commentMasked.slice(quotedSource.end)) ||
           (!TABLE_NAME_SET.has(quotedSource.name) &&
-            !isCteInScope(quotedSource.name, quotedSourceIndex))
+            !resolveCteInScope(quotedSource.name, quotedSourceIndex))
         ) {
           throw new Error("テーブル名はschemaに記載された形式で指定してください。");
         }
-        if (
-          commonTableExpressions.some(
-            ({ bodyEnd, bodyStart, name }) =>
-              quotedSource.name === name &&
-              quotedSourceIndex >= bodyStart &&
-              quotedSourceIndex < bodyEnd,
-          )
-        ) {
+        if (isRecursiveReference(quotedSource.name, quotedSourceIndex)) {
           throw new Error("再帰CTEは使用できません。");
         }
         hasQuotedSource = true;
@@ -659,15 +662,10 @@ function validateReferencedTables(sql: string): void {
     if (token === "select" || token === "with") {
       continue;
     }
-    if (
-      commonTableExpressions.some(
-        ({ bodyEnd, bodyStart, name }) =>
-          token === name && match.index! >= bodyStart && match.index! < bodyEnd,
-      )
-    ) {
+    if (isRecursiveReference(token, match.index!)) {
       throw new Error("再帰CTEは使用できません。");
     }
-    if (!TABLE_NAME_SET.has(token) && !isCteInScope(token, match.index!)) {
+    if (!TABLE_NAME_SET.has(token) && !resolveCteInScope(token, match.index!)) {
       throw new Error(`許可されていないテーブル ${token} は参照できません。`);
     }
   }

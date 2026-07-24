@@ -225,6 +225,17 @@ describe("executeReadOnlyQuery", () => {
     ).rejects.toThrow("許可されていないテーブル totals は参照できません。");
   });
 
+  it("nested CTEがouter CTEと同じ名前をshadowできる", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "WITH value AS (SELECT * FROM (WITH value AS (SELECT 1 AS amount) SELECT * FROM value)) SELECT * FROM value",
+        "",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({ rows: [{ amount: 1 }] });
+  });
+
   it.each([
     'SELECT description FROM "transactions"',
     'WITH value AS (SELECT 1 AS amount) SELECT amount FROM "value"',
