@@ -306,7 +306,7 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
-  it("外部振替先をraw IDなしのstable keyで区別する", async () => {
+  it("外部振替相手をraw IDなしのstable keyで区別する", async () => {
     const now = new Date().toISOString();
     const accounts = await db.query.accounts.findMany();
     const selectedAccount = accounts.find(({ mfId }) => mfId === "account-a");
@@ -364,6 +364,45 @@ describe("executeReadOnlyQuery", () => {
         createdAt: now,
         updatedAt: now,
       },
+      {
+        mfId: "inbound-transfer-a",
+        date: "2026-07-12",
+        accountId: externalAccount.id,
+        description: "Inbound transfer A",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Account A",
+        transferTargetAccountId: selectedAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        mfId: "inbound-transfer-b",
+        date: "2026-07-12",
+        accountId: anotherExternalAccount.id,
+        description: "Inbound transfer B",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Account A",
+        transferTargetAccountId: selectedAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        mfId: "inbound-transfer-a-duplicate",
+        date: "2026-07-12",
+        accountId: externalAccount.id,
+        description: "Inbound transfer A duplicate",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Account A",
+        transferTargetAccountId: selectedAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
     ]);
 
     const result = await executeReadOnlyQuery(
@@ -384,6 +423,25 @@ describe("executeReadOnlyQuery", () => {
     expect(new Set(keys).size).toBe(2);
     expect(keys[0]).toBe(keys[1]);
     expect(keys.every((key) => /^external:\d+$/.test(String(key)))).toBe(true);
+
+    const inboundResult = await executeReadOnlyQuery(
+      db,
+      `SELECT account_id, transfer_counterparty_key
+       FROM transactions
+       WHERE description LIKE 'Inbound transfer%'
+       ORDER BY description`,
+      "group-a",
+      databasePath,
+    );
+    const inboundKeys = inboundResult.rows.map(
+      ({ transfer_counterparty_key }) => transfer_counterparty_key,
+    );
+
+    expect(inboundResult.rows.every(({ account_id }) => account_id === null)).toBe(true);
+    expect(inboundKeys).toHaveLength(3);
+    expect(new Set(inboundKeys).size).toBe(2);
+    expect(inboundKeys[0]).toBe(inboundKeys[1]);
+    expect(inboundKeys.every((key) => /^external:\d+$/.test(String(key)))).toBe(true);
   });
 
   it("選択groupのholding値を保持しつつsnapshotの外部group IDを匿名化する", async () => {

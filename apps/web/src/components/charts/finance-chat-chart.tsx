@@ -48,6 +48,17 @@ function getBalanceGradientOffset(values: number[]): number | undefined {
   return (maximum / (maximum - minimum)) * 100;
 }
 
+export function getFinanceChartLineStroke(
+  series: FinanceChart["series"][number],
+  values: number[],
+  gradientId: string,
+): string {
+  if (series.amountType === "balance" && getBalanceGradientOffset(values) !== undefined) {
+    return `url(#${gradientId})`;
+  }
+  return getFinanceChartSeriesColor(series, values);
+}
+
 function formatValue(value: number, unit: FinanceChart["unit"], compact = false): string {
   if (unit === "count") return `${Math.round(value).toLocaleString("ja-JP")}件`;
   if (unit === "percent") return `${Number(value.toFixed(1)).toLocaleString("ja-JP")}%`;
@@ -113,11 +124,11 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
             type="monotone"
             dataKey={seriesKey(index)}
             name={series.name}
-            stroke={
-              getBalanceGradientOffset(seriesValues[index] ?? []) === undefined
-                ? getFinanceChartSeriesColor(series, seriesValues[index] ?? [])
-                : `url(#${chartId}-series-${index})`
-            }
+            stroke={getFinanceChartLineStroke(
+              series,
+              seriesValues[index] ?? [],
+              `${chartId}-series-${index}`,
+            )}
             strokeWidth={2}
           />
         ))}
