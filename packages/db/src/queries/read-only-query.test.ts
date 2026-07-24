@@ -823,6 +823,44 @@ describe("executeReadOnlyQuery", () => {
     ).rejects.toThrow("SQLの実行時間が上限を超えました。");
   });
 
+  it("request abort時に高コストquery subprocessを中断する", async () => {
+    const now = new Date().toISOString();
+    const account = await db.query.accounts.findFirst({
+      where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
+    });
+    if (!account) throw new Error("Test account was not created.");
+
+    await db.insert(schema.transactions).values(
+      Array.from({ length: 249 }, (_, index) => ({
+        mfId: `abort-transaction-${index}`,
+        date: "2026-07-12",
+        accountId: account.id,
+        description: `Test transaction ${index}`,
+        amount: index + 1,
+        type: "expense",
+        createdAt: now,
+        updatedAt: now,
+      })),
+    );
+
+    const abortController = new AbortController();
+    const abortReason = new Error("request aborted");
+    const result = executeReadOnlyQuery(
+      db,
+      `SELECT COUNT(*) AS count
+       FROM transactions a
+       JOIN transactions b ON 1 = 1
+       JOIN transactions c ON 1 = 1
+       JOIN transactions d ON 1 = 1`,
+      "group-a",
+      databasePath,
+      abortController.signal,
+    );
+    setTimeout(() => abortController.abort(abortReason), 20);
+
+    await expect(result).rejects.toBe(abortReason);
+  });
+
   it("computed cellがSQLite heap上限を超える前にqueryを中断する", async () => {
     const commonTableExpressions = ["value_0(value) AS (SELECT 'x')"];
     for (let index = 1; index <= 27; index += 1) {

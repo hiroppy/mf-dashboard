@@ -655,6 +655,7 @@ function runSandboxedQuery(
   databasePath: string,
   query: string,
   groupId: string,
+  abortSignal?: AbortSignal,
 ): Promise<NonNullable<QueryProcessMessage["result"]>> {
   const child = spawn(process.execPath, ["--eval", QUERY_PROCESS_SOURCE], {
     env: {
@@ -685,7 +686,13 @@ function runSandboxedQuery(
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      abortSignal?.removeEventListener("abort", abortSandbox);
       callback();
+    }
+
+    function abortSandbox(): void {
+      child.kill("SIGKILL");
+      finish(() => reject(abortSignal?.reason ?? new Error("SQLの実行を中断しました。")));
     }
 
     function armTimeout(duration: number, errorMessage: string): void {
@@ -697,6 +704,11 @@ function runSandboxedQuery(
     }
 
     armTimeout(READ_ONLY_QUERY_SETUP_TIMEOUT_MS, "SQL sandboxの準備時間が上限を超えました。");
+    if (abortSignal?.aborted) {
+      abortSandbox();
+      return;
+    }
+    abortSignal?.addEventListener("abort", abortSandbox, { once: true });
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -744,8 +756,10 @@ export async function executeReadOnlyQuery(
   sql: string,
   groupId: string,
   databasePath = getDbPath(),
+  abortSignal?: AbortSignal,
 ) {
+  abortSignal?.throwIfAborted();
   const query = normalizeReadOnlySql(sql);
   validateReferencedTables(query);
-  return runSandboxedQuery(databasePath, query, groupId);
+  return runSandboxedQuery(databasePath, query, groupId, abortSignal);
 }

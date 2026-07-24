@@ -37,9 +37,9 @@ export function createDatabaseQueryTool(
         .max(READ_ONLY_QUERY_MAX_SQL_LENGTH)
         .describe("実行するSQLiteのSELECTまたはWITH文。現在グループには:groupIdを使用する"),
     }),
-    execute: async ({ sql }) => {
+    execute: async ({ sql }, { abortSignal }) => {
       beforeExecute();
-      return await executeReadOnlyQuery(db, sql, groupId);
+      return await executeReadOnlyQuery(db, sql, groupId, undefined, abortSignal);
     },
   });
 }

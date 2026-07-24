@@ -57,6 +57,7 @@ describe("createDatabaseQueryTool", () => {
 
   it("groupIdをAI入力に公開せずSQL実行時に渡す", async () => {
     const tool = createDatabaseQueryTool(db, "group-a");
+    const abortController = new AbortController();
     vi.mocked(executeReadOnlyQuery).mockResolvedValue({
       columns: [],
       rows: [],
@@ -64,12 +65,17 @@ describe("createDatabaseQueryTool", () => {
       truncated: false,
     });
 
-    await tool.execute?.({ sql: "SELECT * FROM groups WHERE id = :groupId" }, execOptions);
+    await tool.execute?.(
+      { sql: "SELECT * FROM groups WHERE id = :groupId" },
+      { ...execOptions, abortSignal: abortController.signal },
+    );
 
     expect(executeReadOnlyQuery).toHaveBeenCalledWith(
       db,
       "SELECT * FROM groups WHERE id = :groupId",
       "group-a",
+      undefined,
+      abortController.signal,
     );
   });
 });
