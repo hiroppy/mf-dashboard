@@ -137,6 +137,31 @@ describe("POST /api/chat", () => {
     await expect(response.text()).resolves.toContain("tool-output-available");
   });
 
+  it("aborts a stalled request body with the server-owned deadline", async () => {
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
+    const slowRequest = {
+      body: new ReadableStream<Uint8Array>({ start: () => undefined }),
+      headers: new Headers(),
+      signal: new AbortController().signal,
+    } as Request;
+
+    const responsePromise = POST(slowRequest);
+    timeoutController.abort(new Error("request timeout"));
+    const response = await responsePromise;
+    timeoutSpy.mockRestore();
+
+    expect(response.status).toBe(408);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "REQUEST_TIMEOUT",
+        message: "チャットリクエストが時間切れになりました。",
+      },
+    });
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.streamText).not.toHaveBeenCalled();
+  });
+
   it("disables tools during the reserved final response step", async () => {
     await POST(request({ messages }));
 

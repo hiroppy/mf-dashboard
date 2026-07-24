@@ -147,29 +147,50 @@ function hasValidConversationBounds(messages: UIMessage[]): boolean {
   );
 }
 
-async function readRequestText(request: Request): Promise<string | undefined> {
+async function readRequestText(
+  request: Request,
+  abortSignal: AbortSignal,
+): Promise<string | null | undefined> {
   if (!request.body) return "";
 
   const reader = request.body.getReader();
   const decoder = new TextDecoder();
   let byteLength = 0;
   let text = "";
+  let abortRead: () => void = () => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    abortRead = () => reject(abortSignal.reason ?? new Error("Request aborted."));
+    abortSignal.addEventListener("abort", abortRead, { once: true });
+  });
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) return text + decoder.decode();
+  try {
+    abortSignal.throwIfAborted();
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) return text + decoder.decode();
 
-    byteLength += value.byteLength;
-    if (byteLength > MAX_REQUEST_BYTES) {
-      await reader.cancel().catch(() => undefined);
-      return undefined;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_REQUEST_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      text += decoder.decode(value, { stream: true });
     }
-    text += decoder.decode(value, { stream: true });
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    if (!abortSignal.aborted) throw error;
+    return null;
+  } finally {
+    abortSignal.removeEventListener("abort", abortRead);
   }
 }
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
+  const requestSignal = AbortSignal.any([
+    request.signal,
+    AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS),
+  ]);
 
   const contentLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
@@ -177,7 +198,10 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const requestText = await readRequestText(request);
+    const requestText = await readRequestText(request, requestSignal);
+    if (requestText === null) {
+      return errorResponse(408, "REQUEST_TIMEOUT", "チャットリクエストが時間切れになりました。");
+    }
     if (requestText === undefined) {
       return errorResponse(413, "REQUEST_TOO_LARGE", "チャット履歴が大きすぎます。");
     }
@@ -256,7 +280,7 @@ export async function POST(request: Request): Promise<Response> {
     const assistantCharts: FinanceChart[] = [];
     let assistantText = "";
     const result = streamText({
-      abortSignal: request.signal,
+      abortSignal: requestSignal,
       experimental_transform: smoothStream(),
       maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
       model,
