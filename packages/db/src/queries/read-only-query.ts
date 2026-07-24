@@ -69,7 +69,6 @@ const QUERY_PROCESS_SOURCE = String.raw`
       if (columns.length > processData.maxColumns) {
         throw new Error("結果列は" + processData.maxColumns + "個以内で指定してください。");
       }
-
       const rows = [];
       let byteLength = 0;
       let truncated = false;
@@ -451,7 +450,10 @@ function runSandboxedQuery(
   groupId: string,
 ): Promise<NonNullable<QueryProcessMessage["result"]>> {
   const child = spawn(process.execPath, ["--eval", QUERY_PROCESS_SOURCE], {
-    env: { NODE_ENV: process.env.NODE_ENV ?? "production" },
+    env: {
+      NODE_ENV: process.env.NODE_ENV ?? "production",
+      TZ: process.env.TZ ?? "Asia/Tokyo",
+    },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const processData = JSON.stringify({

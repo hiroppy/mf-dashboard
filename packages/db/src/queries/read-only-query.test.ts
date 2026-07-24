@@ -690,6 +690,33 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it("同名結果列をlibsqlの一意な列名で値を失わず返す", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT 1 AS duplicate_name, 2 AS duplicate_name",
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      columns: ["duplicate_name", "duplicate_name:1"],
+      rows: [{ duplicate_name: 1, "duplicate_name:1": 2 }],
+    });
+  });
+
+  it("sandbox query processで日本時間を使用する", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT datetime('2026-07-24 15:30:00', 'localtime') AS local_datetime",
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ local_datetime: "2026-07-25 00:30:00" }],
+    });
+  });
+
   it("execution deadlineで高コストqueryを中断する", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
