@@ -205,15 +205,25 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it.each([
+    'SELECT description FROM "transactions"',
+    'WITH value AS (SELECT 1 AS amount) SELECT amount FROM "value"',
+    'WITH "value" AS (SELECT 1 AS amount) SELECT amount FROM "value"',
+  ])("allowlist内のquoted tableまたはCTEを実行できる: %s", async (sql) => {
+    await expect(executeReadOnlyQuery(db, sql, "group-a", databasePath)).resolves.toMatchObject({
+      rowCount: 1,
+    });
+  });
+
   it("RECURSIVE keywordなしの自己参照CTEを拒否する", async () => {
-    await expect(
-      executeReadOnlyQuery(
-        db,
-        "WITH cnt(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM cnt) SELECT max(x) FROM cnt",
-        "",
-        databasePath,
-      ),
-    ).rejects.toThrow("再帰CTEは使用できません。");
+    for (const sql of [
+      "WITH cnt(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM cnt) SELECT max(x) FROM cnt",
+      'WITH "cnt"(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM "cnt") SELECT max(x) FROM "cnt"',
+    ]) {
+      await expect(executeReadOnlyQuery(db, sql, "", databasePath)).rejects.toThrow(
+        "再帰CTEは使用できません。",
+      );
+    }
   });
 
   it("末尾の行コメントを外側のLIMITで壊さない", async () => {

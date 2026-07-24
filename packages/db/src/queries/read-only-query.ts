@@ -172,7 +172,7 @@ function getQuotedTextEnd(sql: string, start: number): number {
       index += 1;
       continue;
     }
-    if (closingCharacter !== "]" && sql[index + 1] === closingCharacter) {
+    if (sql[index + 1] === closingCharacter) {
       index += 2;
       continue;
     }
@@ -462,6 +462,28 @@ interface CommonTableExpression {
   name: string;
 }
 
+interface QuotedIdentifier {
+  end: number;
+  name: string;
+}
+
+function readQuotedIdentifier(sql: string, start: number): QuotedIdentifier | undefined {
+  const openingCharacter = sql[start];
+  if (!openingCharacter || !['"', "'", "`", "["].includes(openingCharacter)) return undefined;
+
+  const closingCharacter = openingCharacter === "[" ? "]" : openingCharacter;
+  const end = getQuotedTextEnd(sql, start);
+  if (end === sql.length && sql[end - 1] !== closingCharacter) return undefined;
+
+  return {
+    end,
+    name: sql
+      .slice(start + 1, end - 1)
+      .replaceAll(closingCharacter + closingCharacter, closingCharacter)
+      .toLowerCase(),
+  };
+}
+
 function findClosingParenthesis(sql: string, openingIndex: number): number {
   let depth = 0;
 
@@ -476,19 +498,23 @@ function findClosingParenthesis(sql: string, openingIndex: number): number {
   return -1;
 }
 
-function findCommonTableExpressions(maskedSql: string): CommonTableExpression[] {
-  const withMatch = /^\s*with\b\s*/i.exec(maskedSql);
+function findCommonTableExpressions(
+  maskedSql: string,
+  commentMaskedSql: string,
+): CommonTableExpression[] {
+  const withMatch = /^\s*with\b\s*/i.exec(commentMaskedSql);
   if (!withMatch) return [];
 
   const definitions: CommonTableExpression[] = [];
   let index = withMatch[0].length;
 
   while (index < maskedSql.length) {
-    const nameMatch = /^[a-z_][\w$]*/i.exec(maskedSql.slice(index));
-    if (!nameMatch) break;
+    const quotedName = readQuotedIdentifier(commentMaskedSql, index);
+    const nameMatch = quotedName ? undefined : /^[a-z_][\w$]*/i.exec(maskedSql.slice(index));
+    if (!quotedName && !nameMatch) break;
 
-    const name = nameMatch[0].toLowerCase();
-    index += nameMatch[0].length;
+    const name = quotedName?.name ?? nameMatch![0].toLowerCase();
+    index = quotedName?.end ?? index + nameMatch![0].length;
     index += /^\s*/.exec(maskedSql.slice(index))![0].length;
 
     if (maskedSql[index] === "(") {
@@ -511,10 +537,10 @@ function findCommonTableExpressions(maskedSql: string): CommonTableExpression[] 
     });
 
     index = closingIndex + 1;
-    index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+    index += /^\s*/.exec(commentMaskedSql.slice(index))![0].length;
     if (maskedSql[index] !== ",") break;
     index += 1;
-    index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+    index += /^\s*/.exec(commentMaskedSql.slice(index))![0].length;
   }
 
   return definitions;
@@ -523,7 +549,7 @@ function findCommonTableExpressions(maskedSql: string): CommonTableExpression[] 
 function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
   const commentMasked = maskComments(sql);
-  const commonTableExpressions = findCommonTableExpressions(masked);
+  const commonTableExpressions = findCommonTableExpressions(masked, commentMasked);
   const cteNames = new Set(commonTableExpressions.map(({ name }) => name));
   const sourceClauseDepths = new Set<number>();
   let depth = 0;
@@ -534,9 +560,32 @@ function validateReferencedTables(sql: string): void {
     const followingSql = commentMasked.slice(match.index! + match[0]!.length);
     const startsSource =
       token === "from" || token === "join" || (token === "," && sourceClauseDepths.has(depth));
+    let hasQuotedSource = false;
 
-    if (startsSource && /^\s*\(*\s*["'`[]/.test(followingSql)) {
-      throw new Error("テーブル名はschemaに記載された形式で指定してください。");
+    if (startsSource) {
+      const prefix = /^\s*\(*\s*/.exec(followingSql)![0];
+      const quotedSourceIndex = match.index! + match[0]!.length + prefix.length;
+      const quotedSource = readQuotedIdentifier(commentMasked, quotedSourceIndex);
+
+      if (quotedSource) {
+        if (
+          /^\s*\./.test(commentMasked.slice(quotedSource.end)) ||
+          (!TABLE_NAME_SET.has(quotedSource.name) && !cteNames.has(quotedSource.name))
+        ) {
+          throw new Error("テーブル名はschemaに記載された形式で指定してください。");
+        }
+        if (
+          commonTableExpressions.some(
+            ({ bodyEnd, bodyStart, name }) =>
+              quotedSource.name === name &&
+              quotedSourceIndex >= bodyStart &&
+              quotedSourceIndex < bodyEnd,
+          )
+        ) {
+          throw new Error("再帰CTEは使用できません。");
+        }
+        hasQuotedSource = true;
+      }
     }
 
     if (token === "(") {
@@ -550,11 +599,11 @@ function validateReferencedTables(sql: string): void {
     }
     if (token === "from") {
       sourceClauseDepths.add(depth);
-      expectsSource = true;
+      expectsSource = !hasQuotedSource;
       continue;
     }
     if (token === "join") {
-      expectsSource = true;
+      expectsSource = !hasQuotedSource;
       continue;
     }
     if (
@@ -566,7 +615,7 @@ function validateReferencedTables(sql: string): void {
       continue;
     }
     if (token === "," && sourceClauseDepths.has(depth)) {
-      expectsSource = true;
+      expectsSource = !hasQuotedSource;
       continue;
     }
     if (!expectsSource || token === ",") {
