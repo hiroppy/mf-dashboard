@@ -56,8 +56,8 @@ const QUERY_PROCESS_SOURCE = String.raw`
     const database = await new Database(":memory:", {});
 
     try {
-      await database.exec(processData.scopedDatabaseSql);
       await database.pragma("hard_heap_limit = " + processData.maxSqliteHeapBytes);
+      await database.exec(processData.scopedDatabaseSql);
       const statement = await database.prepare(
         "SELECT * FROM (\n" + processData.query + "\n) AS query_result LIMIT " +
           (processData.maxRows + 1),
