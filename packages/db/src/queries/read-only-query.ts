@@ -1,5 +1,5 @@
+import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { Worker } from "node:worker_threads";
 import { getTableColumns, getTableName, isTable } from "drizzle-orm";
 import { getDbPath } from "../db-path";
 import type { Db } from "../index";
@@ -9,6 +9,7 @@ export const READ_ONLY_QUERY_MAX_ROWS = 200;
 export const READ_ONLY_QUERY_MAX_BYTES = 64 * 1024;
 export const READ_ONLY_QUERY_TIMEOUT_MS = 1_000;
 export const READ_ONLY_QUERY_MAX_SQL_LENGTH = 5_000;
+export const READ_ONLY_QUERY_MAX_SQLITE_HEAP_BYTES = 64 * 1024 * 1024;
 
 const MAX_RESULT_COLUMNS = 32;
 const MAX_JOIN_COUNT = 8;
@@ -28,37 +29,53 @@ const SCHEMA_QUALIFIER = new RegExp(
 );
 const libsqlModulePath = createRequire(import.meta.url).resolve("libsql/promise");
 
-const QUERY_WORKER_SOURCE = String.raw`
-  const { parentPort, workerData } = require("node:worker_threads");
-  const Database = require(workerData.libsqlModulePath);
+const QUERY_PROCESS_SOURCE = String.raw`
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    input += chunk;
+  });
+  process.stdin.on("end", () => {
+    run(JSON.parse(input)).catch((error) => {
+      send({
+        error: error instanceof Error ? error.message : "SQLの実行に失敗しました。",
+      });
+    });
+  });
+
+  function send(message) {
+    process.stdout.write(JSON.stringify(message));
+  }
 
   function serializeValue(value) {
     return value instanceof Uint8Array ? Array.from(value) : value;
   }
 
-  async function run() {
-    const database = new Database(":memory:", {});
+  async function run(processData) {
+    const Database = require(processData.libsqlModulePath);
+    const database = await new Database(":memory:", {});
 
     try {
-      await database.exec(workerData.scopedDatabaseSql);
+      await database.exec(processData.scopedDatabaseSql);
+      await database.pragma("hard_heap_limit = " + processData.maxSqliteHeapBytes);
       const statement = await database.prepare(
-        "SELECT * FROM (\n" + workerData.query + "\n) AS query_result LIMIT " +
-          (workerData.maxRows + 1),
+        "SELECT * FROM (\n" + processData.query + "\n) AS query_result LIMIT " +
+          (processData.maxRows + 1),
       );
       const columns = statement.columns().map((column) => column.name);
-      if (columns.length > workerData.maxColumns) {
-        throw new Error("結果列は" + workerData.maxColumns + "個以内で指定してください。");
+      if (columns.length > processData.maxColumns) {
+        throw new Error("結果列は" + processData.maxColumns + "個以内で指定してください。");
       }
 
       const rows = [];
       let byteLength = 0;
       let truncated = false;
       const iterator = await statement.iterate(
-        /:groupId\b/.test(workerData.query) ? { groupId: workerData.groupId } : {},
+        /:groupId\b/.test(processData.query) ? { groupId: processData.groupId } : {},
       );
 
       for (const resultRow of iterator) {
-        if (rows.length === workerData.maxRows) {
+        if (rows.length === processData.maxRows) {
           truncated = true;
           break;
         }
@@ -67,7 +84,7 @@ const QUERY_WORKER_SOURCE = String.raw`
           columns.map((column) => [column, serializeValue(resultRow[column])]),
         );
         const rowByteLength = Buffer.byteLength(JSON.stringify(row));
-        if (byteLength + rowByteLength > workerData.maxBytes) {
+        if (byteLength + rowByteLength > processData.maxBytes) {
           truncated = true;
           break;
         }
@@ -76,19 +93,13 @@ const QUERY_WORKER_SOURCE = String.raw`
         byteLength += rowByteLength;
       }
 
-      parentPort.postMessage({
+      send({
         result: { columns, rows, rowCount: rows.length, truncated },
       });
     } finally {
       database.close();
     }
   }
-
-  run().catch((error) => {
-    parentPort.postMessage({
-      error: error instanceof Error ? error.message : "SQLの実行に失敗しました。",
-    });
-  });
 `;
 
 export function describeDatabaseSchema(): string {
@@ -127,6 +138,7 @@ export function describeDatabaseSchema(): string {
 - 通常の収支集計では${schema.transactions.isTransfer.name} = 0かつ${schema.transactions.isExcludedFromCalculation.name} = 0を使用する
 - chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（group_id = '0'を除く）に属する内部振替であり、収支集計から除外する
 - chat query sandboxの${transactions}.transfer_counterparty_keyは振替相手口座の匿名stable keyであり、振替の重複排除にはraw IDではなくこの値を使用する
+- 振替元または振替先の口座IDが未解決の振替はchat query sandboxから除外済みであり、収入・支出へ集計しない
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
 - chat query sandboxの${transactions}は現在グループの振替元または振替先口座に関係する行へ限定済み。明示的に絞る場合は${schema.transactions.accountId.name}または${schema.transactions.transferTargetAccountId.name}のいずれかを${groupAccounts}.${schema.groupAccounts.accountId.name}と照合し、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdを使用する
@@ -355,7 +367,11 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
               THEN source.transactions.transfer_target_account_id
             ELSE source.transactions.account_id
           END
-      WHERE account_id IN (${accountIds}) OR transfer_target_account_id IN (${accountIds});
+      WHERE (account_id IN (${accountIds}) OR transfer_target_account_id IN (${accountIds}))
+        AND (
+          type <> 'transfer'
+          OR (account_id IS NOT NULL AND transfer_target_account_id IS NOT NULL)
+        );
     CREATE TABLE asset_history AS
       SELECT * FROM source.asset_history WHERE id IN (${assetHistoryIds});
     CREATE TABLE asset_history_categories AS
@@ -397,7 +413,7 @@ function validateReferencedTables(sql: string): void {
   }
 }
 
-interface QueryWorkerMessage {
+interface QueryProcessMessage {
   error?: string;
   result?: {
     columns: string[];
@@ -411,28 +427,28 @@ function runSandboxedQuery(
   databasePath: string,
   query: string,
   groupId: string,
-): Promise<NonNullable<QueryWorkerMessage["result"]>> {
-  const worker = new Worker(QUERY_WORKER_SOURCE, {
-    eval: true,
-    workerData: {
-      groupId,
-      libsqlModulePath,
-      maxBytes: READ_ONLY_QUERY_MAX_BYTES,
-      maxColumns: MAX_RESULT_COLUMNS,
-      maxRows: READ_ONLY_QUERY_MAX_ROWS,
-      query,
-      scopedDatabaseSql: createScopedDatabaseSql(databasePath, groupId),
-    },
+): Promise<NonNullable<QueryProcessMessage["result"]>> {
+  const child = spawn(process.execPath, ["--eval", QUERY_PROCESS_SOURCE], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const processData = JSON.stringify({
+    groupId,
+    libsqlModulePath,
+    maxBytes: READ_ONLY_QUERY_MAX_BYTES,
+    maxColumns: MAX_RESULT_COLUMNS,
+    maxRows: READ_ONLY_QUERY_MAX_ROWS,
+    maxSqliteHeapBytes: READ_ONLY_QUERY_MAX_SQLITE_HEAP_BYTES,
+    query,
+    scopedDatabaseSql: createScopedDatabaseSql(databasePath, groupId),
   });
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let output = "";
+    let errorOutput = "";
     const timeout = setTimeout(() => {
-      settled = true;
-      void worker
-        .terminate()
-        .then(() => reject(new Error("SQLの実行時間が上限を超えました。")))
-        .catch(reject);
+      child.kill("SIGKILL");
+      finish(() => reject(new Error("SQLの実行時間が上限を超えました。")));
     }, READ_ONLY_QUERY_TIMEOUT_MS);
 
     function finish(callback: () => void): void {
@@ -442,8 +458,30 @@ function runSandboxedQuery(
       callback();
     }
 
-    worker.on("message", (message: QueryWorkerMessage) => {
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      output += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      errorOutput += chunk;
+    });
+    child.once("error", (error) => finish(() => reject(error)));
+    child.once("close", (code) => {
       finish(() => {
+        if (code !== 0) {
+          reject(new Error(errorOutput.trim() || `SQL processが終了しました (code: ${code})。`));
+          return;
+        }
+
+        let message: QueryProcessMessage;
+        try {
+          message = JSON.parse(output) as QueryProcessMessage;
+        } catch {
+          reject(new Error("SQL processから無効な応答を受信しました。"));
+          return;
+        }
+
         if (message.result) {
           resolve(message.result);
         } else {
@@ -451,10 +489,7 @@ function runSandboxedQuery(
         }
       });
     });
-    worker.once("error", (error) => finish(() => reject(error)));
-    worker.once("exit", (code) => {
-      finish(() => reject(new Error(`SQL workerが終了しました (code: ${code})。`)));
-    });
+    child.stdin.end(processData);
   });
 }
 

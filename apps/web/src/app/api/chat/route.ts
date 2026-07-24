@@ -42,7 +42,7 @@ const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタン�
 - 断定できない場合は不足している根拠を明示し、追加確認を促してください。
 - 回答は簡潔な日本語で、実行可能な家計改善策を優先してください。複数の数値や論点がある場合は、短い見出し、箇条書き、太字を適度に使って読みやすくしてください。
 - 複数の項目を2列以上の観点で比較する一覧、順位、内訳は、文章や箇条書きより見やすい場合にMarkdownテーブルで表示してください。列名には利用者向けの自然な日本語を使い、金額や割合は右揃えにしてください。1列だけの一覧は箇条書きか文章にし、単一の数値や短い結論も無理にテーブルにしないでください。
-- ユーザーがグラフ、チャート、可視化を求めた場合は、出力形式を質問せずpresentChartを使用してください。比較、推移、構成比が文章より明確になる場合もpresentChartを使用できます。時系列にはline、項目比較にはbar、単一系列の構成比にはpieを使用し、負債残高にはamountType=liabilityを指定してください。グラフにはqueryDatabaseで取得した値だけを使用し、値を推測しないでください。
+- ユーザーがグラフ、チャート、可視化を求めた場合は、出力形式を質問せずpresentChartを使用してください。比較、推移、構成比が文章より明確になる場合もpresentChartを使用できます。時系列にはline、項目比較にはbar、単一系列の構成比にはpieを使用し、負債残高にはamountType=liabilityを指定してください。unit=percentの値はpercentage point（25%なら0.25ではなく25）で指定してください。グラフにはqueryDatabaseで取得した値だけを使用し、値を推測しないでください。
 - ツール結果が空の場合はデータがないと判断し、条件を勝手に変更したり金額を推測したりしないでください。走査上限や不足情報が示された場合は、回答可能な範囲と不足している条件を明記してください。
 - 推奨や判断を求められた場合は、結論に影響する指標を取得し、事実と解釈を分けてください。必要な指標をツールで取得できない場合は結論を保留してください。`;
 
@@ -102,7 +102,7 @@ function hasValidConversationBounds(messages: UIMessage[]): boolean {
   for (const message of messages) {
     if (message.role === "user" && message.parts.some((part) => part.type !== "text")) return false;
     const textLength = getMessageText(message).length;
-    if (textLength > CHAT_MESSAGE_MAX_LENGTH) return false;
+    if (message.role === "user" && textLength > CHAT_MESSAGE_MAX_LENGTH) return false;
     conversationTextLength += textLength;
   }
 

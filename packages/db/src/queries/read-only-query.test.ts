@@ -444,6 +444,52 @@ describe("executeReadOnlyQuery", () => {
     expect(inboundKeys.every((key) => /^external:\d+$/.test(String(key)))).toBe(true);
   });
 
+  it("endpoint口座IDが未解決の振替をsandboxから除外する", async () => {
+    const now = new Date().toISOString();
+    const selectedAccount = await db.query.accounts.findFirst({
+      where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
+    });
+    if (!selectedAccount) throw new Error("Test account was not created.");
+
+    await db.insert(schema.transactions).values([
+      {
+        mfId: "unresolved-outbound-transfer",
+        date: "2026-07-12",
+        accountId: selectedAccount.id,
+        description: "Unresolved outbound transfer",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        mfId: "unresolved-inbound-transfer",
+        date: "2026-07-12",
+        accountId: null,
+        description: "Unresolved inbound transfer",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Account A",
+        transferTargetAccountId: selectedAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `SELECT description
+         FROM transactions
+         WHERE description LIKE 'Unresolved % transfer'`,
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({ rows: [], rowCount: 0 });
+  });
+
   it("選択groupのholding値を保持しつつsnapshotの外部group IDを匿名化する", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
@@ -579,6 +625,27 @@ describe("executeReadOnlyQuery", () => {
         databasePath,
       ),
     ).rejects.toThrow("SQLの実行時間が上限を超えました。");
+  });
+
+  it("computed cellがSQLite heap上限を超える前にqueryを中断する", async () => {
+    const commonTableExpressions = ["value_0(value) AS (SELECT 'x')"];
+    for (let index = 1; index <= 27; index += 1) {
+      commonTableExpressions.push(
+        `value_${index}(value) AS (
+          SELECT value || value FROM value_${index - 1}
+        )`,
+      );
+    }
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `WITH ${commonTableExpressions.join(",")}
+         SELECT value FROM value_27`,
+        "group-a",
+        databasePath,
+      ),
+    ).rejects.toThrow(/memory|上限/);
   });
 });
 

@@ -231,6 +231,27 @@ describe("POST /api/chat", () => {
     expect(mocks.streamText).not.toHaveBeenCalled();
   });
 
+  it("accepts bounded conversation history with a generated assistant reply over 8,000 chars", async () => {
+    const history = [
+      {
+        id: "assistant-long",
+        role: "assistant",
+        parts: [{ type: "text", text: "a".repeat(8_001) }],
+      },
+      {
+        id: "user-follow-up",
+        role: "user",
+        parts: [{ type: "text", text: "続きを教えて" }],
+      },
+    ];
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: history });
+
+    const response = await POST(request({ messages: history }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.streamText).toHaveBeenCalledOnce();
+  });
+
   it("rejects invalid group IDs", async () => {
     const response = await POST(request({ groupId: 42, messages }));
 

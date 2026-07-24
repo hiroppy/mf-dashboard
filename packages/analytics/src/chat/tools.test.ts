@@ -13,11 +13,14 @@ const execOptions = {
 
 describe("createFinanceChatTools", () => {
   it("exposes one general database tool and validated navigation", () => {
-    expect(Object.keys(createFinanceChatTools(db, groupId))).toEqual([
+    const tools = createFinanceChatTools(db, groupId);
+
+    expect(Object.keys(tools)).toEqual([
       "queryDatabase",
       "presentChart",
       "getFinanceDashboardRoute",
     ]);
+    expect(tools.presentChart.description).toContain("25%は0.25ではなく25");
   });
 
   it("limits total tool calls across the tool set", async () => {

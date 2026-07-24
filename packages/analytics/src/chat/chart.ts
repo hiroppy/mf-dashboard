@@ -6,7 +6,10 @@ export const financeChartSchema = z
   .object({
     title: z.string().trim().min(1).max(100),
     chartType: z.enum(["line", "bar", "pie"]),
-    unit: z.enum(["currency", "count", "percent"]).optional(),
+    unit: z
+      .enum(["currency", "count", "percent"])
+      .describe("percent uses percentage points: use 25 for 25%, not 0.25")
+      .optional(),
     series: z
       .array(
         z.object({
