@@ -31,6 +31,8 @@ export function closeDb() {
 }
 
 export type Db = LibSQLDatabase<typeof schema>;
+export type DbTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type DbExecutor = Db | DbTransaction;
 
 export async function initDb() {
   const db = getDb();

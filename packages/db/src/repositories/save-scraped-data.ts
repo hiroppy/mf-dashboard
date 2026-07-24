@@ -1,6 +1,6 @@
 import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { ScrapedData } from "../types";
 import { now } from "../utils";
@@ -31,6 +31,12 @@ function log(...args: unknown[]) {
  * - group_accountsへのリンク
  */
 export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
+  await db.transaction(async (transaction) => {
+    await saveScrapedDataAtomically(transaction, data);
+  });
+}
+
+async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
   const today = getJstTodayIsoDate();
 
   log("Saving scraped data to database...");
@@ -169,6 +175,12 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
  * - spendingTargets
  */
 export async function saveGroupOnlyData(db: Db, data: ScrapedData): Promise<void> {
+  await db.transaction(async (transaction) => {
+    await saveGroupOnlyDataAtomically(transaction, data);
+  });
+}
+
+async function saveGroupOnlyDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
   log("Saving group-only data to database...");
 
   // 1. Save group

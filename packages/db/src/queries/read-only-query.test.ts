@@ -852,6 +852,13 @@ describe("normalizeReadOnlySql", () => {
     );
   });
 
+  it.each(["SELECT '--', randomblob(67108864)", "SELECT '/*', load_extension('/tmp/extension')"])(
+    "文字列内のcomment markerで後続の禁止関数を隠せない: %s",
+    (sql) => {
+      expect(() => normalizeReadOnlySql(sql)).toThrow(/実行量|filesystem/);
+    },
+  );
+
   it("長すぎるSQLを拒否する", () => {
     expect(() => normalizeReadOnlySql(`SELECT '${"x".repeat(5_000)}'`)).toThrow(
       "SQLは5000文字以内で指定してください。",

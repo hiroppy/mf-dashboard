@@ -1,5 +1,5 @@
 import { eq, inArray, like, sql } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { CashFlowItem } from "../types";
 import { convertToIsoDate, now, upsertById } from "../utils";
@@ -7,7 +7,7 @@ import { convertToIsoDate, now, upsertById } from "../utils";
 const BATCH_SIZE = 500;
 
 export async function saveTransaction(
-  db: Db,
+  db: DbExecutor,
   item: CashFlowItem,
   accountIdMap?: Map<string, number>,
 ): Promise<void> {

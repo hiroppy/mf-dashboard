@@ -158,6 +158,25 @@ export function describeDatabaseSchema(): string {
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
 
+function getQuotedTextEnd(sql: string, start: number): number {
+  const closingCharacter = sql[start] === "[" ? "]" : sql[start]!;
+  let index = start + 1;
+
+  while (index < sql.length) {
+    if (sql[index] !== closingCharacter) {
+      index += 1;
+      continue;
+    }
+    if (closingCharacter !== "]" && sql[index + 1] === closingCharacter) {
+      index += 2;
+      continue;
+    }
+    return index + 1;
+  }
+
+  return sql.length;
+}
+
 function maskComments(sql: string): string {
   let result = "";
   let index = 0;
@@ -182,6 +201,13 @@ function maskComments(sql: string): string {
       continue;
     }
 
+    if (character === "'" || character === '"' || character === "`" || character === "[") {
+      const end = getQuotedTextEnd(sql, index);
+      result += sql.slice(index, end);
+      index = end;
+      continue;
+    }
+
     result += character;
     index += 1;
   }
@@ -198,23 +224,8 @@ function maskCommentsAndQuotedText(sql: string): string {
     const character = commentMaskedSql[index];
 
     if (character === "'" || character === '"' || character === "`" || character === "[") {
-      const closingCharacter = character === "[" ? "]" : character;
       const start = index;
-      index += 1;
-
-      while (index < commentMaskedSql.length) {
-        if (commentMaskedSql[index] !== closingCharacter) {
-          index += 1;
-          continue;
-        }
-        if (closingCharacter !== "]" && commentMaskedSql[index + 1] === closingCharacter) {
-          index += 2;
-          continue;
-        }
-        index += 1;
-        break;
-      }
-
+      index = getQuotedTextEnd(commentMaskedSql, start);
       result += " ".repeat(index - start);
       continue;
     }
