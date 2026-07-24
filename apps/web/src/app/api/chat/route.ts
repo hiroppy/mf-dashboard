@@ -191,6 +191,10 @@ export async function POST(request: Request): Promise<Response> {
     request.signal,
     AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS),
   ]);
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") {
+    return errorResponse(415, "INVALID_CONTENT_TYPE", "application/json形式が必要です。");
+  }
 
   const contentLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {

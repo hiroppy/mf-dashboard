@@ -142,7 +142,7 @@ describe("POST /api/chat", () => {
     const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
     const slowRequest = {
       body: new ReadableStream<Uint8Array>({ start: () => undefined }),
-      headers: new Headers(),
+      headers: new Headers({ "content-type": "application/json" }),
       signal: new AbortController().signal,
     } as Request;
 
@@ -156,6 +156,26 @@ describe("POST /api/chat", () => {
       error: {
         code: "REQUEST_TIMEOUT",
         message: "チャットリクエストが時間切れになりました。",
+      },
+    });
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.streamText).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-JSON content before reading finance data", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: JSON.stringify({ messages }),
+      }),
+    );
+
+    expect(response.status).toBe(415);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "INVALID_CONTENT_TYPE",
+        message: "application/json形式が必要です。",
       },
     });
     expect(mocks.getDb).not.toHaveBeenCalled();
@@ -207,7 +227,11 @@ describe("POST /api/chat", () => {
 
   it("rejects malformed JSON", async () => {
     const response = await POST(
-      new Request("http://localhost/api/chat", { method: "POST", body: "{" }),
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      }),
     );
 
     expect(response.status).toBe(400);
@@ -257,6 +281,7 @@ describe("POST /api/chat", () => {
     });
     const chunkedRequest = new Request("http://localhost/api/chat", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body,
       duplex: "half",
     } as RequestInit & { duplex: "half" });
