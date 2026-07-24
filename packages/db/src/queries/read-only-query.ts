@@ -15,6 +15,7 @@ export const READ_ONLY_QUERY_MAX_SQLITE_HEAP_BYTES = 64 * 1024 * 1024;
 const MAX_RESULT_COLUMNS = 32;
 const MAX_JOIN_COUNT = 8;
 const MAX_UNION_COUNT = 8;
+const GLOBAL_SNAPSHOT_GROUP_ID = "0";
 
 const WRITE_KEYWORDS =
   /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|replace|rollback|savepoint|update|vacuum)\b/i;
@@ -152,7 +153,7 @@ export function describeDatabaseSchema(): string {
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
 - 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
-- chat query sandboxの${dailySnapshots}は選択中グループで取得した最新の完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
+- chat query sandboxの${dailySnapshots}は全口座を取得するno-group（group_id = '0'）の最新完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
 - chat query sandboxの${dailySnapshots}.${schema.dailySnapshots.groupId.name}は選択中グループへ匿名化投影済み。保有情報のgroup scopeは${holdings}から${groupAccounts}を経由して確認する
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
@@ -258,12 +259,13 @@ function quoteSqlText(value: string): string {
 function createScopedDatabaseSql(databasePath: string, groupId: string): string {
   const sourceDatabase = quoteSqlText(databasePath);
   const selectedGroup = quoteSqlText(groupId);
+  const globalSnapshotGroup = quoteSqlText(GLOBAL_SNAPSHOT_GROUP_ID);
   const accountIds = `SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}`;
   const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
   const latestHoldingSnapshotId = `
     SELECT id
     FROM source.daily_snapshots
-    WHERE group_id = ${selectedGroup}
+    WHERE group_id = ${globalSnapshotGroup}
       AND refresh_completed = 1
     ORDER BY date DESC, id DESC
     LIMIT 1
@@ -387,7 +389,12 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
               THEN source.transactions.transfer_target_account_id
             ELSE source.transactions.account_id
           END
-      WHERE (account_id IN (${accountIds}) OR transfer_target_account_id IN (${accountIds}))
+      WHERE (
+        (type = 'transfer' AND (
+          account_id IN (${accountIds}) OR transfer_target_account_id IN (${accountIds})
+        ))
+        OR (type <> 'transfer' AND account_id IN (${accountIds}))
+      )
         AND (
           type <> 'transfer'
           OR (account_id IS NOT NULL AND transfer_target_account_id IS NOT NULL)

@@ -27,6 +27,13 @@ beforeEach(async () => {
   await resetTestDb(db);
   const now = new Date().toISOString();
   await db.insert(schema.groups).values({
+    id: "0",
+    name: "No Group",
+    isCurrent: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.insert(schema.groups).values({
     id: "group-a",
     name: "Group A",
     isCurrent: true,
@@ -135,6 +142,38 @@ describe("executeReadOnlyQuery", () => {
       rowCount: 1,
       truncated: false,
     });
+  });
+
+  it("通常取引はtransfer targetではなくsource accountでgroup scopeする", async () => {
+    const now = new Date().toISOString();
+    const selectedAccount = await db.query.accounts.findFirst({
+      where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
+    });
+    const externalAccount = await db.query.accounts.findFirst({
+      where: (accounts, { eq }) => eq(accounts.mfId, "account-b"),
+    });
+    if (!selectedAccount || !externalAccount) throw new Error("Test accounts were not created.");
+
+    await db.insert(schema.transactions).values({
+      mfId: "malformed-external-expense",
+      date: "2026-07-12",
+      accountId: externalAccount.id,
+      description: "External expense",
+      amount: 1_000,
+      type: "expense",
+      transferTargetAccountId: selectedAccount.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT description FROM transactions WHERE mf_id IS NULL AND description = 'External expense'",
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({ rows: [], rowCount: 0 });
   });
 
   it("groupIdを必要としないSELECTとCTEも実行できる", async () => {
@@ -490,7 +529,7 @@ describe("executeReadOnlyQuery", () => {
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
   });
 
-  it("選択groupの最新完了snapshotだけを保持し外部groupの新しいsnapshotを除外する", async () => {
+  it("最新global snapshotのholding値を選択group口座へ限定する", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
       where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
@@ -536,7 +575,7 @@ describe("executeReadOnlyQuery", () => {
     const selectedSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "group-a",
+        groupId: "0",
         date: "2026-07-11",
         createdAt: now,
         updatedAt: now,
@@ -556,7 +595,7 @@ describe("executeReadOnlyQuery", () => {
     const incompleteSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "group-a",
+        groupId: "0",
         date: "2026-07-13",
         refreshCompleted: false,
         createdAt: now,
@@ -604,7 +643,7 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
-  it("選択groupの最新完了snapshotが空なら過去のholding値を引き継がない", async () => {
+  it("最新global snapshotが空なら過去のholding値を引き継がない", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
       where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
@@ -626,7 +665,7 @@ describe("executeReadOnlyQuery", () => {
     const oldSnapshot = await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: "group-a",
+        groupId: "0",
         date: "2026-07-11",
         createdAt: now,
         updatedAt: now,
@@ -634,7 +673,7 @@ describe("executeReadOnlyQuery", () => {
       .returning()
       .get();
     await db.insert(schema.dailySnapshots).values({
-      groupId: "group-a",
+      groupId: "0",
       date: "2026-07-12",
       createdAt: now,
       updatedAt: now,
