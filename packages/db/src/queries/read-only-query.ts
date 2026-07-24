@@ -8,6 +8,7 @@ import * as schema from "../schema/schema";
 export const READ_ONLY_QUERY_MAX_ROWS = 200;
 export const READ_ONLY_QUERY_MAX_BYTES = 64 * 1024;
 export const READ_ONLY_QUERY_TIMEOUT_MS = 1_000;
+export const READ_ONLY_QUERY_SETUP_TIMEOUT_MS = 5_000;
 export const READ_ONLY_QUERY_MAX_SQL_LENGTH = 5_000;
 export const READ_ONLY_QUERY_MAX_SQLITE_HEAP_BYTES = 64 * 1024 * 1024;
 
@@ -44,7 +45,7 @@ const QUERY_PROCESS_SOURCE = String.raw`
   });
 
   function send(message) {
-    process.stdout.write(JSON.stringify(message));
+    process.stdout.write(JSON.stringify(message) + "\n");
   }
 
   function serializeValue(value) {
@@ -58,6 +59,7 @@ const QUERY_PROCESS_SOURCE = String.raw`
     try {
       await database.pragma("hard_heap_limit = " + processData.maxSqliteHeapBytes);
       await database.exec(processData.scopedDatabaseSql);
+      send({ ready: true });
       const statement = await database.prepare(
         "SELECT * FROM (\n" + processData.query + "\n) AS query_result LIMIT " +
           (processData.maxRows + 1),
@@ -139,6 +141,7 @@ export function describeDatabaseSchema(): string {
 - chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（group_id = '0'を除く）に属する内部振替であり、収支集計から除外する
 - chat query sandboxの${transactions}.transfer_counterparty_keyは振替相手口座の匿名stable keyであり、振替の重複排除にはraw IDではなくこの値を使用する
 - 振替元または振替先の口座IDが未解決の振替はchat query sandboxから除外済みであり、収入・支出へ集計しない
+- chat query sandboxのaccounts・holdings・transactionsにあるmf_idは匿名化のため常にNULL。件数にはid、振替の重複排除にはtransfer_counterparty_keyを使用する
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
 - chat query sandboxの${transactions}は現在グループの振替元または振替先口座に関係する行へ限定済み。明示的に絞る場合は${schema.transactions.accountId.name}または${schema.transactions.transferTargetAccountId.name}のいずれかを${groupAccounts}.${schema.groupAccounts.accountId.name}と照合し、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdを使用する
@@ -208,8 +211,14 @@ function maskCommentsAndQuotedText(sql: string): string {
 }
 
 export function normalizeReadOnlySql(sql: string): string {
-  const normalized = sql.trim().replace(/;\s*$/, "");
-  const masked = maskCommentsAndQuotedText(normalized);
+  let normalized = sql.trim();
+  let masked = maskCommentsAndQuotedText(normalized);
+  const trailingSqlIndex = masked.trimEnd().length - 1;
+
+  if (normalized[trailingSqlIndex] === ";") {
+    normalized = normalized.slice(0, trailingSqlIndex) + normalized.slice(trailingSqlIndex + 1);
+    masked = maskCommentsAndQuotedText(normalized);
+  }
 
   if (normalized.length > READ_ONLY_QUERY_MAX_SQL_LENGTH) {
     throw new Error(`SQLは${READ_ONLY_QUERY_MAX_SQL_LENGTH}文字以内で指定してください。`);
@@ -425,6 +434,7 @@ function validateReferencedTables(sql: string): void {
 
 interface QueryProcessMessage {
   error?: string;
+  ready?: boolean;
   result?: {
     columns: string[];
     rows: Record<string, unknown>[];
@@ -456,10 +466,8 @@ function runSandboxedQuery(
     let settled = false;
     let output = "";
     let errorOutput = "";
-    const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      finish(() => reject(new Error("SQLの実行時間が上限を超えました。")));
-    }, READ_ONLY_QUERY_TIMEOUT_MS);
+    let message: QueryProcessMessage | undefined;
+    let timeout: ReturnType<typeof setTimeout>;
 
     function finish(callback: () => void): void {
       if (settled) return;
@@ -468,10 +476,34 @@ function runSandboxedQuery(
       callback();
     }
 
+    function armTimeout(duration: number, errorMessage: string): void {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        child.kill("SIGKILL");
+        finish(() => reject(new Error(errorMessage)));
+      }, duration);
+    }
+
+    armTimeout(READ_ONLY_QUERY_SETUP_TIMEOUT_MS, "SQL sandboxの準備時間が上限を超えました。");
+
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       output += chunk;
+      let lineEnd = output.indexOf("\n");
+
+      while (lineEnd !== -1) {
+        const line = output.slice(0, lineEnd);
+        output = output.slice(lineEnd + 1);
+        const nextMessage = JSON.parse(line) as QueryProcessMessage;
+
+        if (nextMessage.ready) {
+          armTimeout(READ_ONLY_QUERY_TIMEOUT_MS, "SQLの実行時間が上限を超えました。");
+        } else {
+          message = nextMessage;
+        }
+        lineEnd = output.indexOf("\n");
+      }
     });
     child.stderr.on("data", (chunk: string) => {
       errorOutput += chunk;
@@ -484,18 +516,10 @@ function runSandboxedQuery(
           return;
         }
 
-        let message: QueryProcessMessage;
-        try {
-          message = JSON.parse(output) as QueryProcessMessage;
-        } catch {
-          reject(new Error("SQL processから無効な応答を受信しました。"));
-          return;
-        }
-
-        if (message.result) {
+        if (message?.result) {
           resolve(message.result);
         } else {
-          reject(new Error(message.error ?? "SQLの実行に失敗しました。"));
+          reject(new Error(message?.error ?? "SQL processから無効な応答を受信しました。"));
         }
       });
     });

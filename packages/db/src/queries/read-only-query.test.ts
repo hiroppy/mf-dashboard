@@ -718,6 +718,10 @@ describe("normalizeReadOnlySql", () => {
     );
   });
 
+  it("末尾コメント前のstatement terminatorを除去する", () => {
+    expect(normalizeReadOnlySql("SELECT 1; -- explanation")).toBe("SELECT 1 -- explanation");
+  });
+
   it("文字列内のschema風テキストを許可する", () => {
     expect(normalizeReadOnlySql("SELECT 'main.transactions' AS text")).toBe(
       "SELECT 'main.transactions' AS text",
