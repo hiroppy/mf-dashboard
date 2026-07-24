@@ -123,6 +123,7 @@ describe("POST /api/chat", () => {
         tools,
         stopWhen: "finite-stop-condition",
         system: expect.stringContaining("金額、取引、口座、URLを推測・捏造しない"),
+        timeout: { totalMs: 55_000 },
       }),
     );
     expect(mocks.toUIMessageStreamResponse).toHaveBeenCalledWith(

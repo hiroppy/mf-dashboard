@@ -23,6 +23,7 @@ const MAX_GENERATION_STEPS = 9;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_MESSAGES = 20;
 const MAX_CONVERSATION_TEXT_LENGTH = 32_000;
+const CHAT_REQUEST_TIMEOUT_MS = 55_000;
 const SIGNATURE_METADATA_KEY = "serverSignature";
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
@@ -272,6 +273,7 @@ export async function POST(request: Request): Promise<Response> {
       prepareStep: ({ stepNumber }) =>
         stepNumber === MAX_GENERATION_STEPS - 1 ? { toolChoice: "none" } : undefined,
       system: getSystemPrompt(),
+      timeout: { totalMs: CHAT_REQUEST_TIMEOUT_MS },
       messages: await convertToModelMessages(modelInputMessages, { tools }),
       tools,
       stopWhen: stepCountIs(MAX_GENERATION_STEPS),
