@@ -147,10 +147,10 @@ export function describeDatabaseSchema(): string {
 - 総資産のカテゴリ内訳は最新の${assetHistory}を${assetHistoryCategories}.${schema.assetHistoryCategories.assetHistoryId.name} = ${assetHistory}.${schema.assetHistory.id.name}でJOINし、${schema.assetHistoryCategories.categoryName.name}と${schema.assetHistoryCategories.amount.name}を使用する
 - 銘柄名や資産・負債の区分は${holdings}、評価額・数量・単価・前日比・含み損益は${holdingValues}にある。${holdingValues}.${schema.holdingValues.holdingId.name} = ${holdings}.${schema.holdings.id.name}でJOINする
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
-- 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は各負債の最新${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
+- 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
-- 銘柄・負債・投資の現在値は、${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINし、${schema.dailySnapshots.refreshCompleted.name} = 1の中から銘柄ごとに${schema.dailySnapshots.date.name} DESC, ${dailySnapshots}.${schema.dailySnapshots.id.name} DESCの先頭1件を使用する
-- ${dailySnapshots}.${schema.dailySnapshots.groupId.name}は取得時のグループであり、選択中グループの口座と一致するとは限らない。銘柄・負債・投資を現在グループへ絞る目的で${dailySnapshots}.${schema.dailySnapshots.groupId.name} = :groupIdを使用してはいけない。必ず${holdings}から${groupAccounts}を経由して絞る
+- chat query sandboxの${holdings}・${holdingValues}・${dailySnapshots}は、選択中グループの口座に紐づく保有情報を含む最新の完了snapshot 1件だけへ限定済み。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
+- chat query sandboxの${dailySnapshots}.${schema.dailySnapshots.groupId.name}は選択中グループへ匿名化投影済み。保有情報のgroup scopeは${holdings}から${groupAccounts}を経由して確認する
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
 
@@ -247,7 +247,17 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
   const sourceDatabase = quoteSqlText(databasePath);
   const selectedGroup = quoteSqlText(groupId);
   const accountIds = `SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}`;
-  const holdingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
+  const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
+  const latestHoldingSnapshotId = `
+    SELECT holding_values.snapshot_id
+    FROM source.holding_values
+    JOIN source.daily_snapshots
+      ON source.daily_snapshots.id = source.holding_values.snapshot_id
+    WHERE source.holding_values.holding_id IN (${groupHoldingIds})
+      AND source.daily_snapshots.refresh_completed = 1
+    ORDER BY source.daily_snapshots.date DESC, source.daily_snapshots.id DESC
+    LIMIT 1
+  `;
   const assetHistoryIds = `SELECT id FROM source.asset_history WHERE group_id = ${selectedGroup}`;
 
   return `
@@ -267,6 +277,21 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
       SELECT * FROM source.asset_categories;
     CREATE TABLE account_statuses AS
       SELECT * FROM source.account_statuses WHERE account_id IN (${accountIds});
+    CREATE TABLE daily_snapshots AS
+      SELECT
+        id,
+        ${selectedGroup} AS group_id,
+        date,
+        refresh_completed,
+        created_at,
+        updated_at
+      FROM source.daily_snapshots
+      WHERE id IN (${latestHoldingSnapshotId});
+    CREATE TABLE holding_values AS
+      SELECT *
+      FROM source.holding_values
+      WHERE snapshot_id IN (${latestHoldingSnapshotId})
+        AND holding_id IN (${groupHoldingIds});
     CREATE TABLE holdings AS
       SELECT
         id,
@@ -281,22 +306,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
         updated_at,
         is_active
       FROM source.holdings
-      WHERE id IN (${holdingIds});
-    CREATE TABLE daily_snapshots AS
-      SELECT
-        id,
-        ${selectedGroup} AS group_id,
-        date,
-        refresh_completed,
-        created_at,
-        updated_at
-      FROM source.daily_snapshots
-      WHERE group_id = ${selectedGroup}
-        OR id IN (
-          SELECT snapshot_id FROM source.holding_values WHERE holding_id IN (${holdingIds})
-        );
-    CREATE TABLE holding_values AS
-      SELECT * FROM source.holding_values WHERE holding_id IN (${holdingIds});
+      WHERE id IN (SELECT holding_id FROM holding_values);
     CREATE TABLE transactions AS
       WITH external_transfer_candidates AS (
         SELECT

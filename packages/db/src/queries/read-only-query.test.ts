@@ -490,17 +490,41 @@ describe("executeReadOnlyQuery", () => {
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
   });
 
-  it("選択groupのholding値を保持しつつsnapshotの外部group IDを匿名化する", async () => {
+  it("選択groupの最新完了snapshotだけを保持しつつ外部group IDを匿名化する", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
       where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
     });
     if (!account) throw new Error("Test account was not created.");
 
-    const holding = await db
+    const oldHolding = await db
       .insert(schema.holdings)
       .values({
-        mfId: "holding-a",
+        mfId: "holding-a-old",
+        accountId: account.id,
+        name: "Asset A",
+        type: "asset",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const currentHolding = await db
+      .insert(schema.holdings)
+      .values({
+        mfId: "holding-a-current",
+        accountId: account.id,
+        name: "Asset A",
+        type: "asset",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const incompleteHolding = await db
+      .insert(schema.holdings)
+      .values({
+        mfId: "holding-a-incomplete",
         accountId: account.id,
         name: "Asset A",
         type: "asset",
@@ -513,7 +537,7 @@ describe("executeReadOnlyQuery", () => {
       .insert(schema.dailySnapshots)
       .values({
         groupId: "group-a",
-        date: "2026-07-12",
+        date: "2026-07-11",
         createdAt: now,
         updatedAt: now,
       })
@@ -529,18 +553,36 @@ describe("executeReadOnlyQuery", () => {
       })
       .returning()
       .get();
+    const incompleteSnapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "group-a",
+        date: "2026-07-13",
+        refreshCompleted: false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
     await db.insert(schema.holdingValues).values([
       {
-        holdingId: holding.id,
+        holdingId: oldHolding.id,
         snapshotId: selectedSnapshot.id,
         amount: 10_000,
         createdAt: now,
         updatedAt: now,
       },
       {
-        holdingId: holding.id,
+        holdingId: currentHolding.id,
         snapshotId: externalSnapshot.id,
         amount: 20_000,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        holdingId: incompleteHolding.id,
+        snapshotId: incompleteSnapshot.id,
+        amount: 30_000,
         createdAt: now,
         updatedAt: now,
       },
@@ -557,11 +599,8 @@ describe("executeReadOnlyQuery", () => {
         databasePath,
       ),
     ).resolves.toMatchObject({
-      rows: [
-        { group_id: "group-a", amount: 10_000 },
-        { group_id: "group-a", amount: 20_000 },
-      ],
-      rowCount: 2,
+      rows: [{ group_id: "group-a", amount: 20_000 }],
+      rowCount: 1,
     });
   });
 
