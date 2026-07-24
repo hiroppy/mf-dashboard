@@ -706,6 +706,16 @@ describe("normalizeReadOnlySql", () => {
     );
   });
 
+  it.each([
+    "SELECT readfile('/etc/hosts')",
+    "SELECT writefile('/tmp/output', 'content')",
+    "SELECT load_extension('/tmp/extension')",
+  ])("filesystemへアクセスするSQL関数を拒否する: %s", (sql) => {
+    expect(() => normalizeReadOnlySql(sql)).toThrow(
+      "filesystemへアクセスするSQL関数は使用できません。",
+    );
+  });
+
   it("長すぎるSQLを拒否する", () => {
     expect(() => normalizeReadOnlySql(`SELECT '${"x".repeat(5_000)}'`)).toThrow(
       "SQLは5000文字以内で指定してください。",

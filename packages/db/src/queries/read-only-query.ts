@@ -20,6 +20,7 @@ const WRITE_KEYWORDS =
   /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|replace|rollback|savepoint|update|vacuum)\b/i;
 const EXPENSIVE_SQL =
   /\b(?:cross\s+join|group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob|with\s+recursive)\b/i;
+const FILESYSTEM_SQL_FUNCTIONS = /\b(?:load_extension|readfile|writefile)\s*\(/i;
 
 const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
 
@@ -238,6 +239,9 @@ export function normalizeReadOnlySql(sql: string): string {
   if (EXPENSIVE_SQL.test(masked)) {
     throw new Error("実行量または返却サイズが大きくなるSQLは実行できません。");
   }
+  if (FILESYSTEM_SQL_FUNCTIONS.test(masked)) {
+    throw new Error("filesystemへアクセスするSQL関数は使用できません。");
+  }
   if ((masked.match(/\bjoin\b/gi)?.length ?? 0) > MAX_JOIN_COUNT) {
     throw new Error(`JOINは${MAX_JOIN_COUNT}個以内で指定してください。`);
   }
@@ -449,6 +453,7 @@ function runSandboxedQuery(
   groupId: string,
 ): Promise<NonNullable<QueryProcessMessage["result"]>> {
   const child = spawn(process.execPath, ["--eval", QUERY_PROCESS_SOURCE], {
+    env: { NODE_ENV: process.env.NODE_ENV ?? "production" },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const processData = JSON.stringify({

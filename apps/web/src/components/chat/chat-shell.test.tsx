@@ -498,7 +498,7 @@ describe("ChatShell", () => {
     expect(screen.queryByText("表示しない明細")).toBeNull();
   });
 
-  it("shows only the latest SQL in the loading indicator", () => {
+  it("does not expose SQL in the loading indicator", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
       close: vi.fn<() => void>(),
@@ -538,8 +538,8 @@ describe("ChatShell", () => {
 
     render(<ChatShell />);
 
-    expect(screen.getByText("SELECT COUNT(*) FROM holdings WHERE type = 'liability'")).toBeTruthy();
+    expect(screen.queryByText("SELECT COUNT(*) FROM holdings WHERE type = 'liability'")).toBeNull();
     expect(screen.queryByText("SELECT * FROM holdings")).toBeNull();
-    expect(screen.getByText("SQL実行中")).toBeTruthy();
+    expect(screen.getByText("家計データを確認中")).toBeTruthy();
   });
 });
