@@ -153,6 +153,19 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it("column list付きCTEを実行できる", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "WITH totals(month, amount) AS (SELECT '2026-07', 100) SELECT * FROM totals",
+        "",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ month: "2026-07", amount: 100 }],
+    });
+  });
+
   it("末尾の行コメントを外側のLIMITで壊さない", async () => {
     await expect(
       executeReadOnlyQuery(db, "SELECT 1 AS value -- explanation", "", databasePath),
@@ -291,6 +304,86 @@ describe("executeReadOnlyQuery", () => {
     ).resolves.toMatchObject({
       rows: [{ is_internal_transfer: 1 }],
     });
+  });
+
+  it("外部振替先をraw IDなしのstable keyで区別する", async () => {
+    const now = new Date().toISOString();
+    const accounts = await db.query.accounts.findMany();
+    const selectedAccount = accounts.find(({ mfId }) => mfId === "account-a");
+    const externalAccount = accounts.find(({ mfId }) => mfId === "account-b");
+    if (!selectedAccount || !externalAccount) throw new Error("Test accounts were not created.");
+
+    const anotherExternalAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "account-c",
+        name: "Card C",
+        type: "card",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.transactions).values([
+      {
+        mfId: "outbound-transfer-a",
+        date: "2026-07-12",
+        accountId: selectedAccount.id,
+        description: "Outbound transfer A",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Card B",
+        transferTargetAccountId: externalAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        mfId: "outbound-transfer-b",
+        date: "2026-07-12",
+        accountId: selectedAccount.id,
+        description: "Outbound transfer B",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Card C",
+        transferTargetAccountId: anotherExternalAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        mfId: "outbound-transfer-a-duplicate",
+        date: "2026-07-12",
+        accountId: selectedAccount.id,
+        description: "Outbound transfer A duplicate",
+        amount: 10_000,
+        type: "transfer",
+        isTransfer: true,
+        transferTarget: "Card B",
+        transferTargetAccountId: externalAccount.id,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const result = await executeReadOnlyQuery(
+      db,
+      `SELECT transfer_target_account_id, transfer_counterparty_key
+       FROM transactions
+       WHERE description LIKE 'Outbound transfer%'
+       ORDER BY description`,
+      "group-a",
+      databasePath,
+    );
+    const keys = result.rows.map(({ transfer_counterparty_key }) => transfer_counterparty_key);
+
+    expect(
+      result.rows.every(({ transfer_target_account_id }) => transfer_target_account_id === null),
+    ).toBe(true);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(2);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys.every((key) => /^external:\d+$/.test(String(key)))).toBe(true);
   });
 
   it("選択groupのholding値を保持しつつsnapshotの外部group IDを匿名化する", async () => {

@@ -100,7 +100,7 @@ describe("POST /api/chat", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/event-stream");
     expect(mocks.createFinanceChatTools).toHaveBeenCalledWith(db, "group-a");
-    expect(mocks.stepCountIs).toHaveBeenCalledWith(8);
+    expect(mocks.stepCountIs).toHaveBeenCalledWith(9);
     expect(mocks.convertToModelMessages).toHaveBeenCalledWith(messages, { tools });
     expect(mocks.streamText).toHaveBeenCalledWith(
       expect.objectContaining({

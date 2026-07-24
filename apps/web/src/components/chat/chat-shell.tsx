@@ -14,7 +14,10 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { DEFAULT_CHAT_SUGGESTED_PROMPTS } from "../../lib/chat-config";
+import {
+  DEFAULT_CHAT_SUGGESTED_PROMPTS,
+  normalizeChatSuggestedPrompts,
+} from "../../lib/chat-config";
 import { CHAT_MESSAGE_MAX_LENGTH } from "../../lib/chat-limits";
 import { cn } from "../../lib/utils";
 import { FinanceChatChart } from "../charts/finance-chat-chart";
@@ -217,6 +220,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
   };
 
   const draftLength = draft.trim().length;
+  const visibleSuggestedPrompts = normalizeChatSuggestedPrompts(suggestedPrompts);
 
   const handleResizeMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!isResizingRef.current) return;
@@ -405,7 +409,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
             <form className="border-t p-4" onSubmit={handleSubmit}>
               {messages.length === 0 && !isSubmitting && !error && (
                 <div aria-label="質問の候補" className="mb-3 flex flex-wrap gap-2">
-                  {suggestedPrompts.map((prompt) => (
+                  {visibleSuggestedPrompts.map((prompt) => (
                     <button
                       key={prompt}
                       type="button"

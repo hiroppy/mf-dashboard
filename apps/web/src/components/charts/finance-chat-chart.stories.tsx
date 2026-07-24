@@ -46,3 +46,17 @@ export const ExpenseBreakdown: Story = {
     },
   },
 };
+
+export const LiabilityBalances: Story = {
+  args: {
+    chart: {
+      title: "負債残高",
+      chartType: "bar",
+      series: [{ name: "負債", amountType: "liability" }],
+      data: [
+        { label: "住宅ローン", values: [20_000_000] },
+        { label: "カード", values: [120_000] },
+      ],
+    },
+  },
+};

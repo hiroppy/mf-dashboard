@@ -11,7 +11,7 @@ export const financeChartSchema = z
       .array(
         z.object({
           name: z.string().trim().min(1).max(40),
-          amountType: z.enum(["income", "expense", "balance"]),
+          amountType: z.enum(["income", "expense", "balance", "liability"]),
         }),
       )
       .min(1)

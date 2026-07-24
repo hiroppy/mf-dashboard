@@ -126,6 +126,7 @@ export function describeDatabaseSchema(): string {
 - 収支は上記で分類した収入合計から支出合計を引いた値であり、全取引の単純なSUMではない。同一の振替や対応する通常明細を重複集計しない
 - 通常の収支集計では${schema.transactions.isTransfer.name} = 0かつ${schema.transactions.isExcludedFromCalculation.name} = 0を使用する
 - chat query sandboxの${transactions}.is_internal_transfer = 1は、振替元・振替先が同じユーザー定義group（group_id = '0'を除く）に属する内部振替であり、収支集計から除外する
+- chat query sandboxの${transactions}.transfer_counterparty_keyは振替先口座の匿名stable keyであり、振替の重複排除にはraw IDではなくこの値を使用する
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
 - chat query sandboxの${transactions}は現在グループの振替元または振替先口座に関係する行へ限定済み。明示的に絞る場合は${schema.transactions.accountId.name}または${schema.transactions.transferTargetAccountId.name}のいずれかを${groupAccounts}.${schema.groupAccounts.accountId.name}と照合し、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdを使用する
@@ -285,6 +286,17 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE holding_values AS
       SELECT * FROM source.holding_values WHERE holding_id IN (${holdingIds});
     CREATE TABLE transactions AS
+      WITH external_transfer_accounts AS (
+        SELECT
+          transfer_target_account_id AS external_account_id,
+          ROW_NUMBER() OVER (ORDER BY transfer_target_account_id) AS anonymized_id
+        FROM source.transactions
+        WHERE type = 'transfer'
+          AND account_id IN (${accountIds})
+          AND transfer_target_account_id IS NOT NULL
+          AND transfer_target_account_id NOT IN (${accountIds})
+        GROUP BY transfer_target_account_id
+      )
       SELECT
         id,
         NULL AS mf_id,
@@ -302,6 +314,14 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
         CASE WHEN transfer_target_account_id IN (${accountIds}) THEN transfer_target_account_id END
           AS transfer_target_account_id,
         CASE
+          WHEN type <> 'transfer' THEN NULL
+          WHEN transfer_target_account_id IN (${accountIds})
+            THEN 'account:' || transfer_target_account_id
+          WHEN external_transfer_accounts.anonymized_id IS NOT NULL
+            THEN 'external:' || external_transfer_accounts.anonymized_id
+          ELSE 'external:unknown'
+        END AS transfer_counterparty_key,
+        CASE
           WHEN type = 'transfer' AND EXISTS (
             SELECT 1
             FROM source.group_accounts source_group
@@ -317,6 +337,9 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
         created_at,
         updated_at
       FROM source.transactions
+      LEFT JOIN external_transfer_accounts
+        ON external_transfer_accounts.external_account_id =
+          source.transactions.transfer_target_account_id
       WHERE account_id IN (${accountIds}) OR transfer_target_account_id IN (${accountIds});
     CREATE TABLE asset_history AS
       SELECT * FROM source.asset_history WHERE id IN (${assetHistoryIds});
@@ -342,8 +365,8 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
 function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
   const cteNames = new Set(
-    [...masked.matchAll(/(?:\bwith\b|,)\s*([a-z_][\w$]*)\s+as\s*\(/gi)].map((match) =>
-      match[1]!.toLowerCase(),
+    [...masked.matchAll(/(?:\bwith\b|,)\s*([a-z_][\w$]*)\s*(?:\([^)]*\)\s*)?as\s*\(/gi)].map(
+      (match) => match[1]!.toLowerCase(),
     ),
   );
 

@@ -1,3 +1,5 @@
+import { CHAT_MESSAGE_MAX_LENGTH } from "./chat-limits";
+
 export const DEFAULT_CHAT_SUGGESTED_PROMPTS = [
   "今月の収支は？",
   "先月と比べてどう？",
@@ -5,11 +7,14 @@ export const DEFAULT_CHAT_SUGGESTED_PROMPTS = [
   "総資産を教えて",
 ] as const;
 
-export function parseChatSuggestedPrompts(value?: string): string[] {
-  const prompts = value
-    ?.split(",")
+export function normalizeChatSuggestedPrompts(prompts: readonly string[]): string[] {
+  return prompts
     .map((prompt) => prompt.trim())
-    .filter(Boolean);
+    .filter((prompt) => prompt.length > 0 && prompt.length <= CHAT_MESSAGE_MAX_LENGTH);
+}
 
-  return prompts?.length ? prompts : [...DEFAULT_CHAT_SUGGESTED_PROMPTS];
+export function parseChatSuggestedPrompts(value?: string): string[] {
+  const prompts = normalizeChatSuggestedPrompts(value?.split(",") ?? []);
+
+  return prompts.length ? prompts : [...DEFAULT_CHAT_SUGGESTED_PROMPTS];
 }

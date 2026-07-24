@@ -89,4 +89,16 @@ describe("financeChartSchema", () => {
       }).success,
     ).toBe(true);
   });
+
+  it("accepts liability semantics for positive liability balances", () => {
+    expect(
+      financeChartSchema.safeParse({
+        title: "負債残高",
+        chartType: "bar",
+        unit: "currency",
+        series: [{ name: "負債", amountType: "liability" }],
+        data: [{ label: "住宅ローン", values: [20_000_000] }],
+      }).success,
+    ).toBe(true);
+  });
 });

@@ -13,4 +13,8 @@ describe("parseChatSuggestedPrompts", () => {
   it.each([undefined, "", " , , "])("uses defaults when no prompts are configured", (value) => {
     expect(parseChatSuggestedPrompts(value)).toEqual(DEFAULT_CHAT_SUGGESTED_PROMPTS);
   });
+
+  it("removes prompts that exceed the server message limit", () => {
+    expect(parseChatSuggestedPrompts(`${"x".repeat(8_001)}, 資産を確認`)).toEqual(["資産を確認"]);
+  });
 });

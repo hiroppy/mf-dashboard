@@ -225,6 +225,26 @@ describe("ChatShell", () => {
     expect(screen.getByLabelText("質問の候補")).toBeTruthy();
   });
 
+  it("does not render an overlong suggested prompt", () => {
+    const addUserMessage = vi.fn<(text: string) => void>();
+    vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
+      addUserMessage,
+      close: vi.fn<() => void>(),
+      draft: "",
+      isOpen: true,
+      isSubmitting: false,
+      messages: [],
+      open: vi.fn<() => void>(),
+      setDraft: vi.fn<(draft: string) => void>(),
+    });
+
+    render(<ChatShell suggestedPrompts={["x".repeat(8_001), "資産を確認"]} />);
+
+    expect(screen.queryByRole("button", { name: "x".repeat(8_001) })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "資産を確認" }));
+    expect(addUserMessage).toHaveBeenCalledOnce();
+  });
+
   it("resizes the desktop panel from its left edge", () => {
     render(
       <ChatProvider initialOpen>

@@ -29,9 +29,13 @@ function seriesKey(index: number): string {
   return `value${index}`;
 }
 
-function getSeriesColor(series: FinanceChart["series"][number], values: number[]): string {
+export function getFinanceChartSeriesColor(
+  series: FinanceChart["series"][number],
+  values: number[],
+): string {
   if (series.amountType === "income") return semanticColors.income;
   if (series.amountType === "expense") return semanticColors.expense;
+  if (series.amountType === "liability") return semanticColors.balanceNegative;
   return values.every((value) => value < 0)
     ? semanticColors.balanceNegative
     : semanticColors.balancePositive;
@@ -111,7 +115,7 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
             name={series.name}
             stroke={
               getBalanceGradientOffset(seriesValues[index] ?? []) === undefined
-                ? getSeriesColor(series, seriesValues[index] ?? [])
+                ? getFinanceChartSeriesColor(series, seriesValues[index] ?? [])
                 : `url(#${chartId}-series-${index})`
             }
             strokeWidth={2}
@@ -128,7 +132,7 @@ export function FinanceChatChart({ chart }: FinanceChatChartProps) {
             key={series.name}
             dataKey={seriesKey(index)}
             name={series.name}
-            fill={getSeriesColor(series, seriesValues[index] ?? [])}
+            fill={getFinanceChartSeriesColor(series, seriesValues[index] ?? [])}
             radius={[3, 3, 0, 0]}
           >
             {series.amountType === "balance" &&
