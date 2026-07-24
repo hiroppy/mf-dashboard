@@ -234,6 +234,8 @@ export async function POST(request: Request): Promise<Response> {
       },
       onError: releaseChatSlot,
       onFinish: releaseChatSlot,
+      prepareStep: ({ stepNumber }) =>
+        stepNumber === MAX_GENERATION_STEPS - 1 ? { toolChoice: "none" } : undefined,
       system: getSystemPrompt(),
       messages: await convertToModelMessages(modelInputMessages, { tools }),
       tools,

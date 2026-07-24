@@ -118,6 +118,7 @@ describe("POST /api/chat", () => {
         onAbort: mocks.releaseChatSlot,
         onError: mocks.releaseChatSlot,
         onFinish: mocks.releaseChatSlot,
+        prepareStep: expect.any(Function),
         tools,
         stopWhen: "finite-stop-condition",
         system: expect.stringContaining("金額、取引、口座、URLを推測・捏造しない"),
@@ -132,6 +133,17 @@ describe("POST /api/chat", () => {
       }),
     );
     await expect(response.text()).resolves.toContain("tool-output-available");
+  });
+
+  it("disables tools during the reserved final response step", async () => {
+    await POST(request({ messages }));
+
+    const prepareStep = mocks.streamText.mock.calls[0]![0].prepareStep as (options: {
+      stepNumber: number;
+    }) => unknown;
+
+    expect(prepareStep({ stepNumber: 7 })).toBeUndefined();
+    expect(prepareStep({ stepNumber: 8 })).toEqual({ toolChoice: "none" });
   });
 
   it("releases the concurrency slot when the model stream errors", async () => {
