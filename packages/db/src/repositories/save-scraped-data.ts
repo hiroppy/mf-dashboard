@@ -2,7 +2,7 @@ import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type { ScrapedData } from "../types";
+import type { CashFlowItem, ScrapedData } from "../types";
 import { now } from "../utils";
 import { upsertAccounts, saveAccountStatuses, buildAccountIdMap } from "./accounts";
 import { getOrCreateCategory } from "./categories";
@@ -16,7 +16,7 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { saveTransaction } from "./transactions";
+import { replaceTransactionsForMonth, saveTransaction } from "./transactions";
 
 const isCI = process.env.CI === "true";
 function log(...args: unknown[]) {
@@ -36,13 +36,28 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
 
 export async function saveScrapedDataBatch(
   db: Db,
-  data: { fullData?: ScrapedData; groupOnlyData: ScrapedData[] },
-): Promise<void> {
-  await db.transaction(async (transaction) => {
+  data: {
+    fullData?: ScrapedData;
+    groupOnlyData: ScrapedData[];
+    historyMonths?: Array<{ items: CashFlowItem[]; month: string }>;
+  },
+): Promise<number[]> {
+  return db.transaction(async (transaction) => {
     if (data.fullData) await saveScrapedDataAtomically(transaction, data.fullData);
     for (const groupData of data.groupOnlyData) {
       await saveGroupOnlyDataAtomically(transaction, groupData);
     }
+
+    const savedCounts: number[] = [];
+    if (data.historyMonths?.length) {
+      const accountIdMap = await buildAccountIdMap(transaction);
+      for (const { items, month } of data.historyMonths) {
+        savedCounts.push(
+          await replaceTransactionsForMonth(transaction, month, items, accountIdMap),
+        );
+      }
+    }
+    return savedCounts;
   });
 }
 

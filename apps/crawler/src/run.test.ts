@@ -65,6 +65,13 @@ beforeEach(async () => {
   });
   vi.mocked(runNotificationPhase).mockResolvedValue(null);
   vi.mocked(notifyWebRefresh).mockResolvedValue(undefined);
+  vi.mocked(runSavePhase).mockResolvedValue([]);
+  vi.mocked(runCashFlowHistoryPhase).mockImplementation(
+    async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
+      if (!publishHistory) throw new Error("publishHistory is required");
+      await publishHistory([]);
+    },
+  );
   vi.mocked(runScrapePhase).mockImplementation(async (_page, _config, progress) => {
     for (const [step, metadata] of [
       [CRAWLER_STEPS.groupList],
@@ -150,5 +157,41 @@ describe("runCrawler progress", () => {
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
+  });
+
+  test("history replacementsをcurrent dataと同じsave phaseへ渡す", async () => {
+    vi.mocked(runLoadPhase).mockReturnValue({
+      skipRefresh: false,
+      cleanupGroups: false,
+      authState: "configured",
+      dbPath: "/tmp/demo.db",
+      dbExists: true,
+      scrapeMode: "history",
+      isHistoryMode: true,
+      isDebug: false,
+      isHeaded: false,
+    });
+    const historyMonths = [{ items: [], month: "2026-06" }];
+    vi.mocked(runCashFlowHistoryPhase).mockImplementation(
+      async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
+        if (!publishHistory) throw new Error("publishHistory is required");
+        await publishHistory(historyMonths);
+      },
+    );
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress);
+
+    expect(runSavePhase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      historyMonths,
+    );
   });
 });

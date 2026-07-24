@@ -166,4 +166,37 @@ describe("saveScrapedData", () => {
     await expect(db.select().from(schema.dailySnapshots).all()).resolves.toEqual([]);
     await expect(db.select().from(schema.holdingValues).all()).resolves.toEqual([]);
   });
+
+  test("後続の履歴月保存失敗時もcurrent dataと先行月をrollbackする", async () => {
+    const fullData = createScrapedData();
+    const item = {
+      mfId: "history-a",
+      date: "2026-05-01",
+      category: "Category A",
+      subCategory: null,
+      description: "Transaction A",
+      amount: 1_000,
+      type: "expense" as const,
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+    };
+
+    await expect(
+      saveScrapedDataBatch(db, {
+        fullData,
+        groupOnlyData: [],
+        historyMonths: [
+          { month: "2026-05", items: [item] },
+          {
+            month: "2026-06",
+            items: [{ ...item, mfId: "history-b", amount: undefined as unknown as number }],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/transactions/);
+
+    await expect(db.select().from(schema.groups).all()).resolves.toEqual([]);
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+    await expect(db.select().from(schema.dailySnapshots).all()).resolves.toEqual([]);
+  });
 });

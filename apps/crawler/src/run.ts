@@ -39,24 +39,28 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
 
     await using groupScope = await createGroupScope(activeRuntime.page);
     const scrapeResult = await runScrapePhase(activeRuntime.page, config, progress);
-    await runCrawlerStep(progress, CRAWLER_STEPS.databaseSave, async () => {
-      await runSavePhase(
+    await runCrawlerStep(progress, CRAWLER_STEPS.databaseSave, () =>
+      runCashFlowHistoryPhase(
         activeRuntime.db,
         activeRuntime.page,
-        scrapeResult,
+        config,
         activeRuntime.categoryDecision,
-      );
-      await runCleanupPhase(activeRuntime.db, scrapeResult.groupDataList, config);
-    });
+        progress,
+        async (historyMonths) => {
+          const savedCounts = await runSavePhase(
+            activeRuntime.db,
+            activeRuntime.page,
+            scrapeResult,
+            activeRuntime.categoryDecision,
+            historyMonths,
+          );
+          await runCleanupPhase(activeRuntime.db, scrapeResult.groupDataList, config);
+          return savedCounts;
+        },
+      ),
+    );
     await runCrawlerStep(progress, CRAWLER_STEPS.institutionCategories, () =>
       runInstitutionCategoryPhase(activeRuntime.db, activeRuntime.page),
-    );
-    await runCashFlowHistoryPhase(
-      activeRuntime.db,
-      activeRuntime.page,
-      config,
-      activeRuntime.categoryDecision,
-      progress,
     );
     await runCrawlerStep(progress, CRAWLER_STEPS.analytics, () =>
       runAnalyticsPhase(activeRuntime.db, scrapeResult.groupDataList),

@@ -104,7 +104,7 @@ export async function findExistingTransactionMfIds(db: Db, mfIds: string[]): Pro
  * 指定月のトランザクションを削除
  * @param month "2026-01" 形式
  */
-export async function deleteTransactionsForMonth(db: Db, month: string): Promise<number> {
+export async function deleteTransactionsForMonth(db: DbExecutor, month: string): Promise<number> {
   const result = await db
     .delete(schema.transactions)
     .where(like(schema.transactions.date, `${month}%`))
@@ -178,8 +178,8 @@ function prepareTransactionData(
 /**
  * 指定月のトランザクションを保存（既存データは削除して上書き）
  */
-export async function saveTransactionsForMonth(
-  db: Db,
+export async function replaceTransactionsForMonth(
+  db: DbExecutor,
   month: string,
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
@@ -236,4 +236,28 @@ export async function saveTransactionsForMonth(
   }
 
   return validItems.length;
+}
+
+export async function saveTransactionsForMonths(
+  db: Db,
+  months: Array<{ items: CashFlowItem[]; month: string }>,
+  accountIdMap?: Map<string, number>,
+): Promise<number[]> {
+  return db.transaction(async (transaction) => {
+    const savedCounts: number[] = [];
+    for (const { items, month } of months) {
+      savedCounts.push(await replaceTransactionsForMonth(transaction, month, items, accountIdMap));
+    }
+    return savedCounts;
+  });
+}
+
+export async function saveTransactionsForMonth(
+  db: Db,
+  month: string,
+  items: CashFlowItem[],
+  accountIdMap?: Map<string, number>,
+): Promise<number> {
+  const [savedCount = 0] = await saveTransactionsForMonths(db, [{ items, month }], accountIdMap);
+  return savedCount;
 }

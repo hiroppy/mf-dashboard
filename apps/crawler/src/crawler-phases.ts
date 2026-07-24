@@ -8,8 +8,9 @@ import { deleteGroupsNotIn } from "@mf-dashboard/db/repository/groups";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
-  saveTransactionsForMonth,
+  saveTransactionsForMonths,
 } from "@mf-dashboard/db/repository/transactions";
+import type { CashFlowItem } from "@mf-dashboard/db/types";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
@@ -193,7 +194,8 @@ export async function runSavePhase(
   page: Page,
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
-): Promise<void> {
+  historyMonths: Array<{ items: CashFlowItem[]; month: string }> = [],
+): Promise<number[]> {
   phase("Save");
   const noGroupData = scrapeResult.groupDataList.find((groupData) => isNoGroup(groupData.group.id));
   let fullData: ReturnType<typeof buildScrapedData> | undefined;
@@ -230,7 +232,11 @@ export async function runSavePhase(
     return buildGroupOnlyScrapedData(groupData);
   });
 
-  await saveScrapedDataBatch(db, { fullData, groupOnlyData: groupOnlyScrapedData });
+  return saveScrapedDataBatch(db, {
+    fullData,
+    groupOnlyData: groupOnlyScrapedData,
+    historyMonths,
+  });
 }
 
 export async function runCleanupPhase(
@@ -273,15 +279,21 @@ export async function runCashFlowHistoryPhase(
   config: Pick<CrawlerConfig, "isHistoryMode">,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
+  publishHistory: (
+    months: Array<{ items: CashFlowItem[]; month: string }>,
+  ) => Promise<number[]> = async (months) => {
+    const accountIdMap = await buildAccountIdMap(db);
+    return saveTransactionsForMonths(db, months, accountIdMap);
+  },
 ): Promise<void> {
   phase("Cash Flow History");
 
   if (!config.isHistoryMode) {
     log("Skipping cash flow history (SCRAPE_MODE is not history)");
+    await publishHistory([]);
     return;
   }
 
-  const accountIdMap = await buildAccountIdMap(db);
   const now = new Date();
   const maxMonths = getHistoryMaxMonths(now);
 
@@ -347,6 +359,11 @@ export async function runCashFlowHistoryPhase(
       },
     });
 
+    const preparedMonths: Array<{
+      items: CashFlowItem[];
+      month: string;
+      stepId?: string;
+    }> = [];
     for (const { month, progressMonth = month, data: monthData } of historyResults) {
       let stepId = monthSteps.get(progressMonth);
       if (progress && !stepId) {
@@ -363,13 +380,18 @@ export async function runCashFlowHistoryPhase(
             usage: categoryDecision.usage,
           })
         : monthData;
-      const savedCount = await saveTransactionsForMonth(
-        db,
+      preparedMonths.push({
+        items: categorizedMonthData.items,
         month,
-        categorizedMonthData.items,
-        accountIdMap,
-      );
-      log(`  ${month}: saved ${savedCount} transactions`);
+        stepId,
+      });
+    }
+
+    const savedCounts = await publishHistory(
+      preparedMonths.map(({ items, month }) => ({ items, month })),
+    );
+    for (const [index, { month, stepId }] of preparedMonths.entries()) {
+      log(`  ${month}: saved ${savedCounts[index] ?? 0} transactions`);
       if (progress && stepId) await progress.completeStep(stepId);
     }
   } catch (failure) {
