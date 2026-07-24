@@ -35,7 +35,8 @@ describe("createDatabaseQueryTool", () => {
     expect(description).toContain("現在グループの総資産はasset_history.group_id = :groupId");
     expect(description).toContain("評価額・数量・単価・前日比・含み損益はholding_values");
     expect(description).toContain("投資情報には主に「株式(現物)」「投資信託」");
-    expect(description).toContain("最新の完了snapshot 1件だけへ限定済み");
+    expect(description).toContain("選択中グループで取得した最新の完了snapshot 1件");
+    expect(description).toContain("最新snapshotが空なら過去の保有情報は含まれない");
     expect(description).toContain("daily_snapshots.group_idは選択中グループへ匿名化投影済み");
     expect(description).toContain("mf_idは匿名化のため常にNULL");
     expect(description).toContain("transactions.is_internal_transfer = 1");

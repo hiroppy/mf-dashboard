@@ -490,7 +490,7 @@ describe("executeReadOnlyQuery", () => {
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
   });
 
-  it("選択groupの最新完了snapshotだけを保持しつつ外部group IDを匿名化する", async () => {
+  it("選択groupの最新完了snapshotだけを保持し外部groupの新しいsnapshotを除外する", async () => {
     const now = new Date().toISOString();
     const account = await db.query.accounts.findFirst({
       where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
@@ -599,7 +599,65 @@ describe("executeReadOnlyQuery", () => {
         databasePath,
       ),
     ).resolves.toMatchObject({
-      rows: [{ group_id: "group-a", amount: 20_000 }],
+      rows: [{ group_id: "group-a", amount: 10_000 }],
+      rowCount: 1,
+    });
+  });
+
+  it("選択groupの最新完了snapshotが空なら過去のholding値を引き継がない", async () => {
+    const now = new Date().toISOString();
+    const account = await db.query.accounts.findFirst({
+      where: (accounts, { eq }) => eq(accounts.mfId, "account-a"),
+    });
+    if (!account) throw new Error("Test account was not created.");
+
+    const oldHolding = await db
+      .insert(schema.holdings)
+      .values({
+        mfId: "holding-a-old",
+        accountId: account.id,
+        name: "Asset A",
+        type: "asset",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const oldSnapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "group-a",
+        date: "2026-07-11",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.dailySnapshots).values({
+      groupId: "group-a",
+      date: "2026-07-12",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.holdingValues).values({
+      holdingId: oldHolding.id,
+      snapshotId: oldSnapshot.id,
+      amount: 10_000,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `SELECT
+           (SELECT COUNT(*) FROM holdings) AS holding_count,
+           (SELECT date FROM daily_snapshots) AS snapshot_date`,
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ holding_count: 0, snapshot_date: "2026-07-12" }],
       rowCount: 1,
     });
   });

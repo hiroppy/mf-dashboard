@@ -153,7 +153,7 @@ export function describeDatabaseSchema(): string {
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
 - 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
-- chat query sandboxの${holdings}・${holdingValues}・${dailySnapshots}は、選択中グループの口座に紐づく保有情報を含む最新の完了snapshot 1件だけへ限定済み。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
+- chat query sandboxの${dailySnapshots}は選択中グループで取得した最新の完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
 - chat query sandboxの${dailySnapshots}.${schema.dailySnapshots.groupId.name}は選択中グループへ匿名化投影済み。保有情報のgroup scopeは${holdings}から${groupAccounts}を経由して確認する
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
@@ -262,13 +262,11 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
   const accountIds = `SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}`;
   const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
   const latestHoldingSnapshotId = `
-    SELECT holding_values.snapshot_id
-    FROM source.holding_values
-    JOIN source.daily_snapshots
-      ON source.daily_snapshots.id = source.holding_values.snapshot_id
-    WHERE source.holding_values.holding_id IN (${groupHoldingIds})
-      AND source.daily_snapshots.refresh_completed = 1
-    ORDER BY source.daily_snapshots.date DESC, source.daily_snapshots.id DESC
+    SELECT id
+    FROM source.daily_snapshots
+    WHERE group_id = ${selectedGroup}
+      AND refresh_completed = 1
+    ORDER BY date DESC, id DESC
     LIMIT 1
   `;
   const assetHistoryIds = `SELECT id FROM source.asset_history WHERE group_id = ${selectedGroup}`;
