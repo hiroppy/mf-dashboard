@@ -830,6 +830,7 @@ describe("normalizeReadOnlySql", () => {
     "UPDATE groups SET name = 'x'",
     "DELETE FROM groups",
     "DROP TABLE groups",
+    "REPLACE INTO groups (id) VALUES ('x')",
     "WITH value AS (SELECT 1) DELETE FROM groups",
     "PRAGMA table_info(groups)",
   ])("書き込みまたは管理SQLを拒否する: %s", (sql) => {
@@ -871,6 +872,12 @@ describe("normalizeReadOnlySql", () => {
   it("文字列とコメント内の禁止語はSQL操作として扱わない", () => {
     expect(normalizeReadOnlySql("/* delete */ SELECT 'update' AS text;")).toBe(
       "/* delete */ SELECT 'update' AS text",
+    );
+  });
+
+  it("read-only replace functionを許可する", () => {
+    expect(normalizeReadOnlySql("SELECT replace(description, ' ', '') FROM transactions")).toBe(
+      "SELECT replace(description, ' ', '') FROM transactions",
     );
   });
 

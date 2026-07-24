@@ -18,7 +18,8 @@ const MAX_UNION_COUNT = 8;
 const GLOBAL_SNAPSHOT_GROUP_ID = "0";
 
 const WRITE_KEYWORDS =
-  /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|replace|rollback|savepoint|update|vacuum)\b/i;
+  /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|rollback|savepoint|update|vacuum)\b/i;
+const WRITE_REPLACE_STATEMENT = /\breplace\b(?!\s*\()/i;
 const EXPENSIVE_SQL =
   /\b(?:cross\s+join|group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob|with\s+recursive)\b/i;
 const FILESYSTEM_SQL_FUNCTIONS = /\b(?:load_extension|readfile|writefile)\s*\(/i;
@@ -262,7 +263,7 @@ export function normalizeReadOnlySql(sql: string): string {
   if (masked.includes(";")) {
     throw new Error("一度に実行できるSQLは1文だけです。");
   }
-  if (WRITE_KEYWORDS.test(masked)) {
+  if (WRITE_KEYWORDS.test(masked) || WRITE_REPLACE_STATEMENT.test(masked)) {
     throw new Error("データを変更するSQLは実行できません。");
   }
   if (SCHEMA_QUALIFIER.test(masked)) {
