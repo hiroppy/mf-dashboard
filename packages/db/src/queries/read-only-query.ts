@@ -22,6 +22,10 @@ const WRITE_KEYWORDS =
 const EXPENSIVE_SQL =
   /\b(?:cross\s+join|group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob|with\s+recursive)\b/i;
 const FILESYSTEM_SQL_FUNCTIONS = /\b(?:load_extension|readfile|writefile)\s*\(/i;
+const QUOTED_EXPENSIVE_SQL_FUNCTIONS =
+  /(?:["'`](?:group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob)["'`]|\[(?:group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob)\])\s*\(/i;
+const QUOTED_FILESYSTEM_SQL_FUNCTIONS =
+  /(?:["'`](?:load_extension|readfile|writefile)["'`]|\[(?:load_extension|readfile|writefile)\])\s*\(/i;
 
 const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
 
@@ -240,11 +244,13 @@ function maskCommentsAndQuotedText(sql: string): string {
 export function normalizeReadOnlySql(sql: string): string {
   let normalized = sql.trim();
   let masked = maskCommentsAndQuotedText(normalized);
+  let commentMasked = maskComments(normalized);
   const trailingSqlIndex = masked.trimEnd().length - 1;
 
   if (normalized[trailingSqlIndex] === ";") {
     normalized = normalized.slice(0, trailingSqlIndex) + normalized.slice(trailingSqlIndex + 1);
     masked = maskCommentsAndQuotedText(normalized);
+    commentMasked = maskComments(normalized);
   }
 
   if (normalized.length > READ_ONLY_QUERY_MAX_SQL_LENGTH) {
@@ -262,10 +268,13 @@ export function normalizeReadOnlySql(sql: string): string {
   if (SCHEMA_QUALIFIER.test(masked)) {
     throw new Error("データベースschemaを直接指定するSQLは実行できません。");
   }
-  if (EXPENSIVE_SQL.test(masked)) {
+  if (EXPENSIVE_SQL.test(masked) || QUOTED_EXPENSIVE_SQL_FUNCTIONS.test(commentMasked)) {
     throw new Error("実行量または返却サイズが大きくなるSQLは実行できません。");
   }
-  if (FILESYSTEM_SQL_FUNCTIONS.test(masked)) {
+  if (
+    FILESYSTEM_SQL_FUNCTIONS.test(masked) ||
+    QUOTED_FILESYSTEM_SQL_FUNCTIONS.test(commentMasked)
+  ) {
     throw new Error("filesystemへアクセスするSQL関数は使用できません。");
   }
   if ((masked.match(/\bjoin\b/gi)?.length ?? 0) > MAX_JOIN_COUNT) {

@@ -846,18 +846,21 @@ describe("normalizeReadOnlySql", () => {
     "SELECT readfile('/etc/hosts')",
     "SELECT writefile('/tmp/output', 'content')",
     "SELECT load_extension('/tmp/extension')",
+    `SELECT substr(CAST("readfile"('/etc/hosts') AS TEXT), 1, 20)`,
+    "SELECT [writefile]('/tmp/output', 'content')",
   ])("filesystemへアクセスするSQL関数を拒否する: %s", (sql) => {
     expect(() => normalizeReadOnlySql(sql)).toThrow(
       "filesystemへアクセスするSQL関数は使用できません。",
     );
   });
 
-  it.each(["SELECT '--', randomblob(67108864)", "SELECT '/*', load_extension('/tmp/extension')"])(
-    "文字列内のcomment markerで後続の禁止関数を隠せない: %s",
-    (sql) => {
-      expect(() => normalizeReadOnlySql(sql)).toThrow(/実行量|filesystem/);
-    },
-  );
+  it.each([
+    "SELECT '--', randomblob(67108864)",
+    "SELECT '/*', load_extension('/tmp/extension')",
+    `SELECT "randomblob"(67108864)`,
+  ])("文字列内のcomment markerで後続の禁止関数を隠せない: %s", (sql) => {
+    expect(() => normalizeReadOnlySql(sql)).toThrow(/実行量|filesystem/);
+  });
 
   it("長すぎるSQLを拒否する", () => {
     expect(() => normalizeReadOnlySql(`SELECT '${"x".repeat(5_000)}'`)).toThrow(
