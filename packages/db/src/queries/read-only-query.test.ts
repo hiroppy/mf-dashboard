@@ -205,6 +205,26 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it("subquery内で定義したCTEをそのquery scope内で実行できる", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT * FROM (WITH totals AS (SELECT 100 AS amount) SELECT * FROM totals)",
+        "",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({ rows: [{ amount: 100 }] });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT * FROM (WITH totals AS (SELECT 100 AS amount) SELECT * FROM totals) nested JOIN totals",
+        "",
+        databasePath,
+      ),
+    ).rejects.toThrow("許可されていないテーブル totals は参照できません。");
+  });
+
   it.each([
     'SELECT description FROM "transactions"',
     'WITH value AS (SELECT 1 AS amount) SELECT amount FROM "value"',
@@ -547,6 +567,79 @@ describe("executeReadOnlyQuery", () => {
         "group-a",
         databasePath,
       ),
+    ).resolves.toMatchObject({ rows: [], rowCount: 0 });
+  });
+
+  it("global groupではfallback accountの未照合holdingを保持する", async () => {
+    const now = new Date().toISOString();
+    const fallbackAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "unknown",
+        name: "-",
+        type: "manual",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const holding = await db
+      .insert(schema.holdings)
+      .values({
+        mfId: "unmatched-holding",
+        accountId: fallbackAccount.id,
+        name: "Unmatched Asset",
+        type: "asset",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const snapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "0",
+        date: "2026-07-12",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.holdingValues).values({
+      holdingId: holding.id,
+      snapshotId: snapshot.id,
+      amount: 12_345,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `SELECT h.name, hv.amount
+         FROM holdings h
+         JOIN holding_values hv ON hv.holding_id = h.id`,
+        "0",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ name: "Unmatched Asset", amount: 12_345 }],
+      rowCount: 1,
+    });
+  });
+
+  it("refreshとのversionを保証できないanalytics reportをsandboxへ公開しない", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.analyticsReports).values({
+      groupId: "group-a",
+      date: "2026-07-24",
+      summary: "古い分析",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(db, "SELECT summary FROM analytics_reports", "group-a", databasePath),
     ).resolves.toMatchObject({ rows: [], rowCount: 0 });
   });
 

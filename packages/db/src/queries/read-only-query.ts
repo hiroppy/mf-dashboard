@@ -296,7 +296,12 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
   const sourceDatabase = quoteSqlText(databasePath);
   const selectedGroup = quoteSqlText(groupId);
   const globalSnapshotGroup = quoteSqlText(GLOBAL_SNAPSHOT_GROUP_ID);
-  const accountIds = `SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}`;
+  const accountIds = `
+    SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}
+    UNION
+    SELECT id FROM source.accounts
+    WHERE mf_id = 'unknown' AND ${selectedGroup} = ${globalSnapshotGroup}
+  `;
   const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
   const latestHoldingSnapshotId = `
     SELECT id
@@ -442,7 +447,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE spending_targets AS
       SELECT * FROM source.spending_targets WHERE group_id = ${selectedGroup};
     CREATE TABLE analytics_reports AS
-      SELECT * FROM source.analytics_reports WHERE group_id = ${selectedGroup};
+      SELECT * FROM source.analytics_reports WHERE 0;
     CREATE INDEX group_accounts_group_id_idx ON group_accounts(group_id);
     CREATE INDEX group_accounts_account_id_idx ON group_accounts(account_id);
     CREATE INDEX holdings_account_id_idx ON holdings(account_id);
@@ -460,6 +465,8 @@ interface CommonTableExpression {
   bodyEnd: number;
   bodyStart: number;
   name: string;
+  scopeEnd: number;
+  scopeStart: number;
 }
 
 interface QuotedIdentifier {
@@ -502,45 +509,53 @@ function findCommonTableExpressions(
   maskedSql: string,
   commentMaskedSql: string,
 ): CommonTableExpression[] {
-  const withMatch = /^\s*with\b\s*/i.exec(commentMaskedSql);
-  if (!withMatch) return [];
-
   const definitions: CommonTableExpression[] = [];
-  let index = withMatch[0].length;
+  for (const withMatch of commentMaskedSql.matchAll(/\bwith\b\s*/gi)) {
+    const withIndex = withMatch.index!;
+    const precedingIndex = commentMaskedSql.slice(0, withIndex).search(/\S\s*$/);
+    if (precedingIndex >= 0 && maskedSql[precedingIndex] !== "(") continue;
 
-  while (index < maskedSql.length) {
-    const quotedName = readQuotedIdentifier(commentMaskedSql, index);
-    const nameMatch = quotedName ? undefined : /^[a-z_][\w$]*/i.exec(maskedSql.slice(index));
-    if (!quotedName && !nameMatch) break;
+    const scopeEnd =
+      precedingIndex >= 0 ? findClosingParenthesis(maskedSql, precedingIndex) : maskedSql.length;
+    if (scopeEnd === -1) continue;
 
-    const name = quotedName?.name ?? nameMatch![0].toLowerCase();
-    index = quotedName?.end ?? index + nameMatch![0].length;
-    index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+    let index = withIndex + withMatch[0].length;
+    while (index < scopeEnd) {
+      const quotedName = readQuotedIdentifier(commentMaskedSql, index);
+      const nameMatch = quotedName ? undefined : /^[a-z_][\w$]*/i.exec(maskedSql.slice(index));
+      if (!quotedName && !nameMatch) break;
 
-    if (maskedSql[index] === "(") {
-      const columnListEnd = findClosingParenthesis(maskedSql, index);
-      if (columnListEnd === -1) break;
-      index = columnListEnd + 1;
+      const name = quotedName?.name ?? nameMatch![0].toLowerCase();
+      index = quotedName?.end ?? index + nameMatch![0].length;
+      index += /^\s*/.exec(maskedSql.slice(index))![0].length;
+
+      if (maskedSql[index] === "(") {
+        const columnListEnd = findClosingParenthesis(maskedSql, index);
+        if (columnListEnd === -1) break;
+        index = columnListEnd + 1;
+      }
+
+      const asMatch = /^\s*as\s*(?:(?:not\s+)?materialized\s*)?\(/i.exec(maskedSql.slice(index));
+      if (!asMatch) break;
+
+      const openingIndex = index + asMatch[0].lastIndexOf("(");
+      const closingIndex = findClosingParenthesis(maskedSql, openingIndex);
+      if (closingIndex === -1) break;
+
+      definitions.push({
+        bodyEnd: closingIndex,
+        bodyStart: openingIndex + 1,
+        name,
+        scopeEnd,
+        scopeStart: withIndex,
+      });
+
+      index = closingIndex + 1;
+      index += /^\s*/.exec(commentMaskedSql.slice(index))![0].length;
+      if (maskedSql[index] !== ",") break;
+      index += 1;
+      index += /^\s*/.exec(commentMaskedSql.slice(index))![0].length;
     }
-
-    const asMatch = /^\s*as\s*(?:(?:not\s+)?materialized\s*)?\(/i.exec(maskedSql.slice(index));
-    if (!asMatch) break;
-
-    const openingIndex = index + asMatch[0].lastIndexOf("(");
-    const closingIndex = findClosingParenthesis(maskedSql, openingIndex);
-    if (closingIndex === -1) break;
-
-    definitions.push({
-      bodyEnd: closingIndex,
-      bodyStart: openingIndex + 1,
-      name,
-    });
-
-    index = closingIndex + 1;
-    index += /^\s*/.exec(commentMaskedSql.slice(index))![0].length;
-    if (maskedSql[index] !== ",") break;
-    index += 1;
-    index += /^\s*/.exec(commentMaskedSql.slice(index))![0].length;
   }
 
   return definitions;
@@ -550,7 +565,11 @@ function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
   const commentMasked = maskComments(sql);
   const commonTableExpressions = findCommonTableExpressions(masked, commentMasked);
-  const cteNames = new Set(commonTableExpressions.map(({ name }) => name));
+  const isCteInScope = (name: string, index: number) =>
+    commonTableExpressions.some(
+      (definition) =>
+        definition.name === name && index >= definition.scopeStart && index < definition.scopeEnd,
+    );
   const sourceClauseDepths = new Set<number>();
   let depth = 0;
   let expectsSource = false;
@@ -570,7 +589,8 @@ function validateReferencedTables(sql: string): void {
       if (quotedSource) {
         if (
           /^\s*\./.test(commentMasked.slice(quotedSource.end)) ||
-          (!TABLE_NAME_SET.has(quotedSource.name) && !cteNames.has(quotedSource.name))
+          (!TABLE_NAME_SET.has(quotedSource.name) &&
+            !isCteInScope(quotedSource.name, quotedSourceIndex))
         ) {
           throw new Error("テーブル名はschemaに記載された形式で指定してください。");
         }
@@ -634,7 +654,7 @@ function validateReferencedTables(sql: string): void {
     ) {
       throw new Error("再帰CTEは使用できません。");
     }
-    if (!TABLE_NAME_SET.has(token) && !cteNames.has(token)) {
+    if (!TABLE_NAME_SET.has(token) && !isCteInScope(token, match.index!)) {
       throw new Error(`許可されていないテーブル ${token} は参照できません。`);
     }
   }
