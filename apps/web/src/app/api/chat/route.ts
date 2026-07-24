@@ -1,10 +1,13 @@
 import { createHmac } from "node:crypto";
+import { financeChartSchema, type FinanceChart } from "@mf-dashboard/analytics/chat/chart";
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
 import { getModel, isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getAllGroups, getCurrentGroup, getDb, isDatabaseAvailable } from "@mf-dashboard/db";
 import {
   consumeStream,
   convertToModelMessages,
+  getToolName,
+  isToolUIPart,
   safeValidateUIMessages,
   smoothStream,
   stepCountIs,
@@ -66,8 +69,25 @@ function getMessageText(message: UIMessage): string {
     .join("");
 }
 
-function signAssistantMessage(groupId: string, text: string): string {
-  return createHmac("sha256", process.env.AI_API_KEY!).update(`${groupId}\0${text}`).digest("hex");
+function getMessageCharts(message: UIMessage): FinanceChart[] {
+  return message.parts.flatMap((part) => {
+    if (
+      !isToolUIPart(part) ||
+      getToolName(part) !== "presentChart" ||
+      part.state !== "output-available"
+    ) {
+      return [];
+    }
+
+    const chart = financeChartSchema.safeParse(part.output);
+    return chart.success ? [chart.data] : [];
+  });
+}
+
+function signAssistantMessage(groupId: string, text: string, charts: FinanceChart[]): string {
+  return createHmac("sha256", process.env.AI_API_KEY!)
+    .update(`${groupId}\0${text}\0${JSON.stringify(charts)}`)
+    .digest("hex");
 }
 
 function hasValidAssistantSignature(message: UIMessage, groupId: string): boolean {
@@ -77,7 +97,8 @@ function hasValidAssistantSignature(message: UIMessage, groupId: string): boolea
     typeof metadata === "object" &&
     metadata !== null &&
     SIGNATURE_METADATA_KEY in metadata &&
-    metadata[SIGNATURE_METADATA_KEY] === signAssistantMessage(groupId, getMessageText(message))
+    metadata[SIGNATURE_METADATA_KEY] ===
+      signAssistantMessage(groupId, getMessageText(message), getMessageCharts(message))
   );
 }
 
@@ -88,12 +109,21 @@ function getTrustedModelMessages(messages: UIMessage[], groupId: string): UIMess
         message.role === "user" ||
         (message.role === "assistant" && hasValidAssistantSignature(message, groupId)),
     )
-    .map((message) => ({
-      ...message,
-      parts: message.parts.flatMap((part) =>
-        part.type === "text" ? [{ type: "text" as const, text: part.text }] : [],
-      ),
-    }))
+    .map((message) => {
+      const charts = message.role === "assistant" ? getMessageCharts(message) : [];
+      return {
+        ...message,
+        parts: [
+          ...message.parts.flatMap((part) =>
+            part.type === "text" ? [{ type: "text" as const, text: part.text }] : [],
+          ),
+          ...charts.map((chart) => ({
+            type: "text" as const,
+            text: `[表示済みチャート]\n${JSON.stringify(chart)}`,
+          })),
+        ],
+      };
+    })
     .filter((message) => message.parts.length > 0);
 }
 
@@ -222,6 +252,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const tools = createFinanceChatTools(db, group.id);
     const modelInputMessages = getTrustedModelMessages(validation.data, group.id);
+    const assistantCharts: FinanceChart[] = [];
     let assistantText = "";
     const result = streamText({
       abortSignal: request.signal,
@@ -231,6 +262,10 @@ export async function POST(request: Request): Promise<Response> {
       onAbort: releaseChatSlot,
       onChunk: ({ chunk }) => {
         if (chunk.type === "text-delta") assistantText += chunk.text;
+        if (chunk.type === "tool-result" && chunk.toolName === "presentChart") {
+          const chart = financeChartSchema.safeParse(chunk.output);
+          if (chart.success) assistantCharts.push(chart.data);
+        }
       },
       onError: releaseChatSlot,
       onFinish: releaseChatSlot,
@@ -247,7 +282,11 @@ export async function POST(request: Request): Promise<Response> {
       messageMetadata: ({ part }) =>
         part.type === "finish"
           ? {
-              [SIGNATURE_METADATA_KEY]: signAssistantMessage(group.id, assistantText),
+              [SIGNATURE_METADATA_KEY]: signAssistantMessage(
+                group.id,
+                assistantText,
+                assistantCharts,
+              ),
             }
           : undefined,
       originalMessages: validation.data,

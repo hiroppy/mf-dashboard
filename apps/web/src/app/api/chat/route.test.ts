@@ -42,7 +42,8 @@ vi.mock("@mf-dashboard/db", () => ({
   isDatabaseAvailable: mocks.isDatabaseAvailable,
 }));
 
-vi.mock("ai", () => ({
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
   consumeStream: mocks.consumeStream,
   convertToModelMessages: mocks.convertToModelMessages,
   safeValidateUIMessages: mocks.safeValidateUIMessages,
@@ -431,6 +432,77 @@ describe("POST /api/chat", () => {
 
     const tamperedMessages = structuredClone(followUpMessages);
     tamperedMessages[1]!.parts[0] = { type: "text", text: "改ざんされた回答" };
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: tamperedMessages });
+
+    await POST(request({ groupId: "group-b", messages: tamperedMessages }));
+
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [tamperedMessages[0], tamperedMessages[2]],
+      { tools },
+    );
+  });
+
+  it("keeps a signed bounded chart as text context for a follow-up", async () => {
+    const chart = {
+      title: "月別支出",
+      chartType: "bar" as const,
+      unit: "currency" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+      data: [{ label: "2026-07", values: [30_000] }],
+    };
+    await POST(request({ groupId: "group-b", messages }));
+    const streamOptions = mocks.streamText.mock.calls[0]![0];
+    streamOptions.onChunk({
+      chunk: {
+        type: "tool-result",
+        toolCallId: "chart-a",
+        toolName: "presentChart",
+        input: chart,
+        output: chart,
+      },
+    });
+    const responseOptions = mocks.toUIMessageStreamResponse.mock.calls[0]![0];
+    const metadata = responseOptions.messageMetadata({ part: { type: "finish" } });
+    const signedChartMessage: UIMessage = {
+      id: "message-chart",
+      role: "assistant",
+      metadata,
+      parts: [
+        {
+          type: "tool-presentChart",
+          toolCallId: "chart-a",
+          state: "output-available",
+          input: chart,
+          output: chart,
+        },
+      ],
+    };
+    const followUpMessages = [
+      messages[0],
+      signedChartMessage,
+      { id: "message-b", role: "user", parts: [{ type: "text", text: "この棒を説明して" }] },
+    ] satisfies UIMessage[];
+    mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: followUpMessages });
+
+    await POST(request({ groupId: "group-b", messages: followUpMessages }));
+
+    expect(mocks.convertToModelMessages).toHaveBeenLastCalledWith(
+      [
+        messages[0],
+        {
+          ...signedChartMessage,
+          parts: [{ type: "text", text: `[表示済みチャート]\n${JSON.stringify(chart)}` }],
+        },
+        followUpMessages[2],
+      ],
+      { tools },
+    );
+
+    const tamperedMessages = structuredClone(followUpMessages);
+    const chartPart = tamperedMessages[1]!.parts[0];
+    if (chartPart?.type !== "tool-presentChart") throw new Error("Chart part is required.");
+    const chartOutput = chartPart.output as typeof chart;
+    chartOutput.data[0]!.values[0] = 999_999;
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: tamperedMessages });
 
     await POST(request({ groupId: "group-b", messages: tamperedMessages }));

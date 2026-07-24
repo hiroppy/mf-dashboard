@@ -107,6 +107,37 @@ describe("ChatProvider", () => {
     ]);
   });
 
+  it("keeps a bounded chart result for a follow-up request", () => {
+    const chart = {
+      title: "月別支出",
+      chartType: "bar" as const,
+      unit: "currency" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+      data: [{ label: "2026-07", values: [30_000] }],
+    };
+    const [message] = prepareChatMessagesForRequest([
+      {
+        id: "assistant-chart",
+        role: "assistant",
+        metadata: { serverSignature: "signature-a" },
+        parts: [
+          {
+            type: "tool-presentChart",
+            toolCallId: "chart-a",
+            state: "output-available",
+            input: chart,
+            output: chart,
+          },
+        ],
+      },
+    ]);
+
+    expect(message).toMatchObject({
+      id: "assistant-chart",
+      parts: [{ type: "tool-presentChart", input: chart, output: chart }],
+    });
+  });
+
   it("keeps only the latest complete exchange and current user message", () => {
     const messages = Array.from({ length: 10 }, (_, index) => [
       {

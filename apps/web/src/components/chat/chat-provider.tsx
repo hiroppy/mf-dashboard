@@ -1,7 +1,8 @@
 "use client";
 
 import { useChat, type UIMessage } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { financeChartSchema } from "@mf-dashboard/analytics/chat/chart";
+import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { usePathname } from "next/navigation";
 import {
   createContext,
@@ -37,13 +38,27 @@ interface ChatProviderProps {
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 
+function prepareMessagePartForRequest(part: UIMessage["parts"][number]): UIMessage["parts"] {
+  if (part.type === "text") return [{ type: "text", text: part.text }];
+  if (
+    !isToolUIPart(part) ||
+    getToolName(part) !== "presentChart" ||
+    part.state !== "output-available"
+  ) {
+    return [];
+  }
+
+  const chart = financeChartSchema.safeParse(part.output);
+  return chart.success
+    ? ([{ ...part, input: chart.data, output: chart.data }] as UIMessage["parts"])
+    : [];
+}
+
 export function prepareChatMessagesForRequest(messages: UIMessage[]): UIMessage[] {
   return messages
     .map((message) => ({
       ...message,
-      parts: message.parts.flatMap((part) =>
-        part.type === "text" ? [{ type: "text" as const, text: part.text }] : [],
-      ),
+      parts: message.parts.flatMap(prepareMessagePartForRequest),
     }))
     .filter((message) => message.parts.length > 0)
     .slice(-CHAT_REQUEST_MAX_MESSAGES);
