@@ -22,6 +22,7 @@ interface AssertionContext {
     expectedRenderedLinks?: string[];
     expectedTextFacts?: string[];
     expectedTextPairs?: Array<[string, string]>;
+    expectedTextPatterns?: string[];
     expectedTextLinks?: string[];
     expectedToolRoutes?: string[];
     forbiddenTextTerms?: string[];
@@ -239,6 +240,12 @@ export default function assertFinanceChatOutput(
   );
   if (forbiddenTerms.length > 0) {
     return fail(`本文に内部用語が含まれています: ${forbiddenTerms.join(", ")}`);
+  }
+  const missingTextPatterns = (config.expectedTextPatterns ?? []).filter(
+    (pattern) => !new RegExp(pattern).test(actual.text),
+  );
+  if (missingTextPatterns.length > 0) {
+    return fail(`本文が期待する表現に一致しません: ${missingTextPatterns.join(", ")}`);
   }
   const missingFacts = (config.expectedTextFacts ?? []).filter(
     (fact) => !includesFact(actual.text, fact),

@@ -117,11 +117,11 @@
     evaluationDate: "2026-07-31T03:00:00.000Z"
   assert:
     - type: is-json
-    - type: regex
-      value: (データ|取引|支出|記録|明細).*(ありません|見つかりません|確認できません|記録されていません|0件)
     - type: javascript
       value: file://./assertions.ts
       config:
+        expectedTextPatterns:
+          - (データ|取引|支出|記録|明細).*(ありません|見つかりません|確認できません|記録されていません|0件)
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []

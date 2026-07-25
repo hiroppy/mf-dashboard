@@ -533,6 +533,34 @@ describe("assertFinanceChatOutput", () => {
     }
   });
 
+  it("checks no-data wording only in the answer text", () => {
+    const config = {
+      expectedCharts: [],
+      expectedTextLinks: [],
+      expectedTextPatterns: ["(データ|支出).*(ありません|記録されていません)"],
+      expectedToolRoutes: [],
+    };
+    const toolTrace = [
+      {
+        input: { sql: "SELECT 1 -- データがありません" },
+        output: {},
+        succeeded: true,
+        toolName: "queryDatabase",
+      },
+    ];
+
+    expect(
+      assertFinanceChatOutput(output({ text: "対象期間については回答を保留します。", toolTrace }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "対象期間の支出は記録されていません。", toolTrace }), {
+        config,
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("requires exact transaction rows without additional rows", () => {
     const text = [
       "| 日付 | 内容 | 金額 |",

@@ -19,7 +19,10 @@ describe("finance chat evaluation cases", () => {
   });
 
   it("forbids fabricated amounts only in the no-data case", () => {
-    expect(getCase("データのない期間で金額を捏造しない")).toContain("forbidAmounts: true");
+    const noDataCase = getCase("データのない期間で金額を捏造しない");
+    expect(noDataCase).toContain("forbidAmounts: true");
+    expect(noDataCase).toContain("expectedTextPatterns:");
+    expect(noDataCase).not.toContain("type: regex");
   });
 
   it("requires database provenance for every data-backed answer", () => {
