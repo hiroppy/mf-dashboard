@@ -63,3 +63,27 @@ export const LongContent: Story = {
     </Dialog>
   ),
 };
+
+export const WithoutBackdropBlur: Story = {
+  args: {
+    children: null,
+  },
+  render: () => (
+    <Dialog>
+      <DialogTrigger>
+        <button
+          type="button"
+          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          ダイアログを開く
+        </button>
+      </DialogTrigger>
+      <DialogContent backdropBlur={false}>
+        <DialogTitle>背景ぼかしなし</DialogTitle>
+        <DialogDescription>
+          背景を暗く保ったまま、ぼかしを無効にしたダイアログです。
+        </DialogDescription>
+      </DialogContent>
+    </Dialog>
+  ),
+};

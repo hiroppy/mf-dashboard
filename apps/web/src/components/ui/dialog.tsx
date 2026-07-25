@@ -33,16 +33,18 @@ function DialogTrigger({ children, className }: DialogTriggerProps) {
 }
 
 interface DialogContentProps {
+  backdropBlur?: boolean;
   children: ReactNode;
   className?: string;
 }
 
-function DialogContent({ children, className }: DialogContentProps) {
+function DialogContent({ backdropBlur = true, children, className }: DialogContentProps) {
   return (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop
         className={cn(
-          "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm",
+          "fixed inset-0 z-50 bg-black/40",
+          backdropBlur && "backdrop-blur-sm",
           "transition-opacity duration-200",
           "data-[ending-style]:opacity-0",
           "data-[starting-style]:opacity-0",

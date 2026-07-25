@@ -24,6 +24,7 @@ interface ChatContextValue {
   isSubmitting: boolean;
   messages: UIMessage[];
   addUserMessage: (text: string) => void;
+  clear: () => void;
   close: () => void;
   open: () => void;
   setDraft: (draft: string) => void;
@@ -124,12 +125,17 @@ function GroupChatProvider({
       }),
     [],
   );
-  const { error, messages, sendMessage, status } = useChat({
+  const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     id: `finance-chat:${groupId ?? "current"}`,
     messages: initialMessages,
     transport,
   });
   const isSubmitting = status === "submitted" || status === "streaming";
+  const clear = useCallback(() => {
+    setMessages([]);
+    setDraft("");
+    clearError();
+  }, [clearError, setMessages]);
   const close = useCallback(() => setIsOpen(false), [setIsOpen]);
   const open = useCallback(() => setIsOpen(true), [setIsOpen]);
 
@@ -152,6 +158,7 @@ function GroupChatProvider({
         isSubmitting,
         messages,
         addUserMessage,
+        clear,
         close,
         open,
         setDraft,
