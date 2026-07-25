@@ -171,6 +171,18 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it("recognizes an unquoted HTML anchor as a rendered link", () => {
+    expect(
+      toEvaluationOutput({
+        text: "<a href=/0/cf/2026-07>収支</a>",
+        steps: [],
+      }),
+    ).toMatchObject({
+      renderedLinks: ["/0/cf/2026-07"],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
+
   it("recognizes a rendered Markdown reference link", () => {
     expect(
       toEvaluationOutput({

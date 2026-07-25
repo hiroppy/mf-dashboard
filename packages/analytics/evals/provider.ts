@@ -98,9 +98,9 @@ function getRenderedLinks(text: string): string[] {
   const markdownLinks = [...text.matchAll(/(?<!!)\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
     (match) => match[1]!,
   );
-  const htmlLinks = [...text.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)].map(
-    (match) => match[1]!,
-  );
+  const htmlLinks = [
+    ...text.matchAll(/<a\b[^>]*\bhref=(?:"([^"]+)"|'([^']+)'|([^\s>]+))[^>]*>/gi),
+  ].map((match) => (match[1] ?? match[2] ?? match[3])!);
   const definitions = new Map(
     [...text.matchAll(/^\s*\[([^\]]+)\]:\s*(\S+)/gm)].map((match) => [
       match[1]!.toLocaleLowerCase(),

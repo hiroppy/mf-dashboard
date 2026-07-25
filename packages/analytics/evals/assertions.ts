@@ -13,6 +13,7 @@ interface AssertionContext {
   config?: {
     databaseQuery?: {
       expectEmpty?: boolean;
+      expectedRowCount?: number;
       forbiddenSqlPatterns?: string[];
       outputCells?: Array<{ columnPattern: string; value: string }>;
       outputRows?: string[][];
@@ -321,11 +322,19 @@ export default function assertFinanceChatOutput(
             ),
           ),
       );
+    const hasIncompleteRows =
+      relevantResults.some((result) => result.truncated) ||
+      (databaseQuery.expectedRowCount !== undefined &&
+        relevantResults.reduce((count, result) => count + result.rows.length, 0) !==
+          databaseQuery.expectedRowCount);
     if (relevantResults.length === 0) {
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
     }
     if (missingOutputCells.length > 0 || missingOutputRows.length > 0) {
       return fail("queryDatabase結果の列・行と期待値の対応が一致しません。");
+    }
+    if (hasIncompleteRows) {
+      return fail("queryDatabase結果がtruncatedまたは期待row数と異なります。");
     }
     if (hasUnexpectedRows) return fail("データなし回答のqueryDatabase結果が空ではありません。");
   }

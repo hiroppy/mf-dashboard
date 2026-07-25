@@ -211,6 +211,7 @@ describe("assertFinanceChatOutput", () => {
   it("requires a relevant successful database query for data-backed cases", () => {
     const config = {
       databaseQuery: {
+        expectedRowCount: 1,
         forbiddenSqlPatterns: ["\\b313235\\b"],
         outputCells: [{ columnPattern: "income|収入", value: "313235" }],
         sqlPatterns: [
@@ -277,6 +278,50 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
+                sql: "SELECT SUM(AMOUNT) AS income FROM TRANSACTIONS t WHERE :groupId = t.GROUP_ID AND DATE LIKE '2026-07%'",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 2,
+                rows: [{ income: 313_235 }, { income: 1 }],
+                truncated: false,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
+                sql: "SELECT SUM(AMOUNT) AS income FROM TRANSACTIONS t WHERE :groupId = t.GROUP_ID AND DATE LIKE '2026-07%'",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 1,
+                rows: [{ income: 313_235 }],
+                truncated: true,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(
         output({

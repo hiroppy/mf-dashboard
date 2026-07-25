@@ -30,6 +30,7 @@
           outputCells:
             - { columnPattern: "income|収入", value: "313235" }
             - { columnPattern: "expense|支出", value: "219894" }
+          expectedRowCount: 1
 
 - description: 食費内訳が正しい合計と構造化chartを返す
   vars:
@@ -73,6 +74,7 @@
             - [食料品, "24833"]
             - [外食, "12214"]
             - [カフェ, "4790"]
+          expectedRowCount: 3
 
 - description: 日付別支出が各明細を同じMarkdown表行に返す
   vars:
@@ -102,6 +104,7 @@
           outputRows:
             - ["東京ガス ガス代", "3435"]
             - [成城石井, "3152"]
+          expectedRowCount: 2
 
 - description: 明示的なページ要求だけがroute tool由来のリンクを返す
   vars:
