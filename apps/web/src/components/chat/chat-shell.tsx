@@ -327,7 +327,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
             </header>
 
             <Dialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
-              <DialogContent className="w-[calc(100%-2rem)] max-w-sm">
+              <DialogContent backdropBlur={false} className="w-[calc(100%-2rem)] max-w-sm">
                 <DialogTitle>チャットをクリアしますか？</DialogTitle>
                 <DialogDescription>
                   会話履歴と入力中のメッセージが削除されます。この操作は取り消せません。
