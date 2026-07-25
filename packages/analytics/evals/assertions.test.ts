@@ -120,6 +120,21 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
+        output({
+          text: [
+            "## 2026年7月の収入・支出・収支",
+            "| 項目 | 金額 |",
+            "| --- | ---: |",
+            "| 収入 | 313,235円 |",
+            "| 支出 | 219,894円 |",
+            "| 収支 | 93,341円 |",
+          ].join("\n"),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
         output({ text: "収入は219,894円 / 支出は313,235円 / 収支は93,341円です。" }),
         { config },
       ),
@@ -303,6 +318,17 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: trace(
             "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
             [],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT SUM(amount) FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ "SUM(amount)": null }],
           ),
         }),
         { config },

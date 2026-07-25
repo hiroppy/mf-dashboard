@@ -95,23 +95,30 @@ function validateTextPairs(text: string, expectedPairs: Array<[string, string]>)
       }
 
       const expectedValue = Number(value);
+      const directClaims = segments.flatMap((segment) => {
+        const directAmount = [...segment.matchAll(/([-−▲△]?)(\d+(?:\.\d+)?)(万|億|兆)?円/g)]
+          .map((match) => {
+            const sign = match[1] ? -1 : 1;
+            const scale =
+              { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
+            return sign * Number(match[2]) * scale;
+          })
+          .at(0);
+        if (directAmount === undefined) return [];
+
+        return [
+          {
+            amount: directAmount,
+            negated:
+              /\d(?:万|億|兆)?円[^。！？\n]{0,12}(?:ではなく|でなく|ではない|ではありません)/.test(
+                segment,
+              ),
+          },
+        ];
+      });
       return (
-        segments.length === 0 ||
-        segments.some((segment) => {
-          const directAmount = [...segment.matchAll(/([-−▲△]?)(\d+(?:\.\d+)?)(万|億|兆)?円/g)]
-            .map((match) => {
-              const sign = match[1] ? -1 : 1;
-              const scale =
-                { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
-              return sign * Number(match[2]) * scale;
-            })
-            .at(0);
-          const directClaimIsNegated =
-            /\d(?:万|億|兆)?円[^。！？\n]{0,12}(?:ではなく|でなく|ではない|ではありません)/.test(
-              segment,
-            );
-          return directAmount !== expectedValue || directClaimIsNegated;
-        })
+        directClaims.length === 0 ||
+        directClaims.some(({ amount, negated }) => amount !== expectedValue || negated)
       );
     })
     .map(([label, value]) => `${label}=${value}`);
@@ -262,7 +269,11 @@ export default function assertFinanceChatOutput(
     );
     const hasUnexpectedRows =
       databaseQuery.expectEmpty === true &&
-      relevantResults.some((result) => result.rowCount !== 0 || result.rows.length !== 0);
+      relevantResults.some(
+        (result) =>
+          result.rows.length > 0 &&
+          !result.rows.every((row) => Object.values(row).every((value) => value === null)),
+      );
     if (relevantResults.length === 0) {
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
     }
