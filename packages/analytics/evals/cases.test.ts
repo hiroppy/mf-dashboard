@@ -49,4 +49,10 @@ describe("finance chat evaluation cases", () => {
     expect(noDataCase).toContain("2027-01");
     expect(noDataCase).toContain("expectEmpty: true");
   });
+
+  it("requires a rendered link for the explicit link request", () => {
+    expect(getCase("明示的なページ要求だけがroute tool由来のリンクを返す")).toContain(
+      'expectedRenderedLinks: ["/0/cf/2026-07"]',
+    );
+  });
 });

@@ -95,6 +95,7 @@ describe("toEvaluationOutput", () => {
           data: [{ label: "食料品", values: [24833] }],
         },
       ],
+      renderedLinks: ["/0/cf/2026-07"],
       toolTrace: [
         {
           input: { sql: "SELECT amount FROM transactions" },
@@ -140,6 +141,7 @@ describe("toEvaluationOutput", () => {
     ).toEqual({
       text: "[収支を確認](/0/cf/2026-07)",
       charts: [],
+      renderedLinks: ["/0/cf/2026-07"],
       toolTrace: [],
       toolRoutes: [],
       textLinks: ["/0/cf/2026-07"],
@@ -172,6 +174,7 @@ describe("FinanceChatProvider", () => {
       output: JSON.stringify({
         text: "回答",
         charts: [],
+        renderedLinks: [],
         toolTrace: [],
         toolRoutes: [],
         textLinks: [],

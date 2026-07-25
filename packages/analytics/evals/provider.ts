@@ -48,6 +48,7 @@ interface ToolTraceEntry {
 export interface EvaluationOutput {
   text: string;
   charts: FinanceChart[];
+  renderedLinks: string[];
   toolTrace: ToolTraceEntry[];
   toolRoutes: string[];
   textLinks: string[];
@@ -93,13 +94,18 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
-function getTextLinks(text: string): string[] {
+function getRenderedLinks(text: string): string[] {
   const markdownLinks = [...text.matchAll(/\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
     (match) => match[1]!,
   );
   const htmlLinks = [...text.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)].map(
     (match) => match[1]!,
   );
+
+  return unique([...markdownLinks, ...htmlLinks]);
+}
+
+function getTextLinks(text: string): string[] {
   const rawLinks = [...text.matchAll(/(?:https?:)?\/\/[^\s<>)"']+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
@@ -108,7 +114,7 @@ function getTextLinks(text: string): string[] {
     ...routeText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ].map((match) => match[0]);
 
-  return unique([...markdownLinks, ...htmlLinks, ...rawLinks, ...routeCandidates]);
+  return unique([...getRenderedLinks(text), ...rawLinks, ...routeCandidates]);
 }
 
 export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
@@ -142,6 +148,7 @@ export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
   return {
     text: response.text,
     charts,
+    renderedLinks: getRenderedLinks(response.text),
     toolTrace,
     toolRoutes: unique(toolRoutes),
     textLinks: getTextLinks(response.text),

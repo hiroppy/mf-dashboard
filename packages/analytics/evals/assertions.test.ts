@@ -5,6 +5,7 @@ function output(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
     charts: [],
+    renderedLinks: [],
     toolTrace: [],
     toolRoutes: [],
     textLinks: [],
@@ -78,7 +79,11 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false });
 
-    for (const text of ["収支は-93,341円です。", "収支は93,341.5円です。"]) {
+    for (const text of [
+      "収支は-93,341円です。",
+      "収支はマイナス93,341円です。",
+      "収支は93,341.5円です。",
+    ]) {
       expect(
         assertFinanceChatOutput(output({ text }), {
           config: {
@@ -382,6 +387,11 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "FROM TRANSACTIONS を実行しました。", toolTrace }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires chart structure and order", () => {
@@ -577,6 +587,7 @@ describe("assertFinanceChatOutput", () => {
   it("requires every Markdown link to match a route tool result", () => {
     const config = {
       expectedCharts: [],
+      expectedRenderedLinks: ["/0/cf/2026-07"],
       expectedTextLinks: ["/0/cf/2026-07"],
       expectedToolRoutes: ["/0/cf/2026-07"],
     };
@@ -585,17 +596,29 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           text: "[2026年7月の収支を確認](/0/cf/2026-07)",
+          renderedLinks: ["/0/cf/2026-07"],
           toolRoutes: ["/0/cf/2026-07"],
           textLinks: ["/0/cf/2026-07"],
         }),
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "パスは /0/cf/2026-07",
+          toolRoutes: ["/0/cf/2026-07"],
+          textLinks: ["/0/cf/2026-07"],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
 
     expect(
       assertFinanceChatOutput(
         output({
           text: "[2026年7月の収支を確認](/0/cf/2026-07)",
+          renderedLinks: ["/0/cf/2026-07"],
           textLinks: ["/0/cf/2026-07"],
         }),
         { config },

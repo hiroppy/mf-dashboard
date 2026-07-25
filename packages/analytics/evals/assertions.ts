@@ -19,6 +19,7 @@ interface AssertionContext {
     };
     expectedCharts?: ChartExpectation[];
     expectedMarkdownRows?: string[][];
+    expectedRenderedLinks?: string[];
     expectedTextFacts?: string[];
     expectedTextPairs?: Array<[string, string]>;
     expectedTextLinks?: string[];
@@ -38,6 +39,7 @@ interface AssertionResult {
 const evaluationOutputSchema = z.object({
   text: z.string(),
   charts: z.array(financeChartSchema),
+  renderedLinks: z.array(z.string()),
   toolTrace: z.array(
     z.object({
       input: z.unknown(),
@@ -102,14 +104,13 @@ function validateTextPairs(
 
       const expectedValue = Number(value);
       const directClaims = segments.flatMap((segment) => {
-        const amounts = [...segment.matchAll(/([-−▲△]?)(\d+(?:\.\d+)?)(万|億|兆)?円/g)].map(
-          (match) => {
-            const sign = match[1] ? -1 : 1;
-            const scale =
-              { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
-            return sign * Number(match[2]) * scale;
-          },
-        );
+        const amounts = [
+          ...segment.matchAll(/((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?円/g),
+        ].map((match) => {
+          const sign = match[1] ? -1 : 1;
+          const scale = { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
+          return sign * Number(match[2]) * scale;
+        });
         if (amounts.length === 0) return [];
 
         return [
@@ -232,8 +233,9 @@ export default function assertFinanceChatOutput(
   if (!actual) return fail("出力がfinance chatの評価JSON形式ではありません。");
 
   const config = context.config ?? {};
+  const lowerText = actual.text.toLocaleLowerCase();
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
-    actual.text.includes(term),
+    lowerText.includes(term.toLocaleLowerCase()),
   );
   if (forbiddenTerms.length > 0) {
     return fail(`本文に内部用語が含まれています: ${forbiddenTerms.join(", ")}`);
@@ -324,6 +326,15 @@ export default function assertFinanceChatOutput(
   if (JSON.stringify(actual.textLinks) !== JSON.stringify(expectedLinks)) {
     return fail(
       `本文linkが期待値と異なります: expected=${JSON.stringify(expectedLinks)}, actual=${JSON.stringify(actual.textLinks)}`,
+    );
+  }
+  const expectedRenderedLinks = config.expectedRenderedLinks;
+  if (
+    expectedRenderedLinks &&
+    JSON.stringify(actual.renderedLinks) !== JSON.stringify(expectedRenderedLinks)
+  ) {
+    return fail(
+      `描画可能linkが期待値と異なります: expected=${JSON.stringify(expectedRenderedLinks)}, actual=${JSON.stringify(actual.renderedLinks)}`,
     );
   }
   const provenRoutes = new Set(actual.toolRoutes);
