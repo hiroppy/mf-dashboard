@@ -25,6 +25,7 @@ interface AssertionContext {
     expectedToolRoutes?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    textPairBoundaries?: string[];
   };
 }
 
@@ -75,13 +76,18 @@ function includesFact(text: string, fact: string): boolean {
   return new RegExp(`(?<![\\d.\\-−▲△])${normalizedFact}(?![\\d.])`).test(normalizeText(text));
 }
 
-function validateTextPairs(text: string, expectedPairs: Array<[string, string]>): string[] {
+function validateTextPairs(
+  text: string,
+  expectedPairs: Array<[string, string]>,
+  boundaries: string[],
+): string[] {
   const normalizedText = normalizeText(text);
-  const labels = expectedPairs.map(([label]) => normalizeText(label));
+  const expectedLabels = expectedPairs.map(([label]) => normalizeText(label));
+  const labels = [...expectedLabels, ...boundaries.map(normalizeText)];
 
   return expectedPairs
     .filter(([, value], pairIndex) => {
-      const normalizedLabel = labels[pairIndex]!;
+      const normalizedLabel = expectedLabels[pairIndex]!;
       const segments: string[] = [];
       let labelIndex = normalizedText.indexOf(normalizedLabel);
       while (labelIndex !== -1) {
@@ -96,19 +102,19 @@ function validateTextPairs(text: string, expectedPairs: Array<[string, string]>)
 
       const expectedValue = Number(value);
       const directClaims = segments.flatMap((segment) => {
-        const directAmount = [...segment.matchAll(/([-−▲△]?)(\d+(?:\.\d+)?)(万|億|兆)?円/g)]
-          .map((match) => {
+        const amounts = [...segment.matchAll(/([-−▲△]?)(\d+(?:\.\d+)?)(万|億|兆)?円/g)].map(
+          (match) => {
             const sign = match[1] ? -1 : 1;
             const scale =
               { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
             return sign * Number(match[2]) * scale;
-          })
-          .at(0);
-        if (directAmount === undefined) return [];
+          },
+        );
+        if (amounts.length === 0) return [];
 
         return [
           {
-            amount: directAmount,
+            amounts,
             negated:
               /\d(?:万|億|兆)?円[^。！？\n]{0,12}(?:ではなく|でなく|ではない|ではありません)/.test(
                 segment,
@@ -118,7 +124,9 @@ function validateTextPairs(text: string, expectedPairs: Array<[string, string]>)
       });
       return (
         directClaims.length === 0 ||
-        directClaims.some(({ amount, negated }) => amount !== expectedValue || negated)
+        directClaims.some(
+          ({ amounts, negated }) => negated || amounts.some((amount) => amount !== expectedValue),
+        )
       );
     })
     .map(([label, value]) => `${label}=${value}`);
@@ -236,7 +244,11 @@ export default function assertFinanceChatOutput(
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
   }
-  const missingPairs = validateTextPairs(actual.text, config.expectedTextPairs ?? []);
+  const missingPairs = validateTextPairs(
+    actual.text,
+    config.expectedTextPairs ?? [],
+    config.textPairBoundaries ?? [],
+  );
   if (missingPairs.length > 0) {
     return fail(`本文のラベルと値の組み合わせが期待値と異なります: ${missingPairs.join(", ")}`);
   }
@@ -272,7 +284,9 @@ export default function assertFinanceChatOutput(
       relevantResults.some(
         (result) =>
           result.rows.length > 0 &&
-          !result.rows.every((row) => Object.values(row).every((value) => value === null)),
+          !result.rows.every((row) =>
+            Object.values(row).every((value) => value === null || value === 0),
+          ),
       );
     if (relevantResults.length === 0) {
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");

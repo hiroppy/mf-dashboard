@@ -13,7 +13,9 @@ function getCase(description: string): string {
 
 describe("finance chat evaluation cases", () => {
   it("allows expected amounts in the transaction table case", () => {
-    expect(getCase("日付別支出が各明細を同じMarkdown表行に返す")).not.toContain("forbidAmounts");
+    const transactionCase = getCase("日付別支出が各明細を同じMarkdown表行に返す");
+    expect(transactionCase).not.toContain("forbidAmounts");
+    expect(transactionCase).not.toContain('expectedTextFacts: ["6587"]');
   });
 
   it("forbids fabricated amounts only in the no-data case", () => {

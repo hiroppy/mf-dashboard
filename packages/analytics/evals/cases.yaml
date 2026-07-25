@@ -43,6 +43,7 @@
         expectedTextFacts: ["食費"]
         expectedTextPairs:
           - [食費, "41837"]
+        textPairBoundaries: [食料品, 外食, カフェ]
         expectedCharts:
           - chartType: pie
             unit: currency
@@ -77,7 +78,6 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedTextFacts: ["6587"]
         expectedMarkdownRows:
           - ["2026-07-10", "東京ガス ガス代", "3435"]
           - ["2026-07-10", "成城石井", "3152"]

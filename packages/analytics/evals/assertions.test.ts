@@ -172,10 +172,21 @@ describe("assertFinanceChatOutput", () => {
             expectedTextLinks: [],
             expectedTextPairs: [["食費", "41837"]],
             expectedToolRoutes: [],
+            textPairBoundaries: ["食料品", "外食", "カフェ"],
           },
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入の予算は313,235円、実績は0円です。" }), {
+        config: {
+          expectedCharts: [],
+          expectedTextLinks: [],
+          expectedTextPairs: [["収入", "313235"]],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires a relevant successful database query for data-backed cases", () => {
@@ -329,6 +340,17 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: trace(
             "SELECT SUM(amount) FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
             [{ "SUM(amount)": null }],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT COUNT(*) FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ "COUNT(*)": 0 }],
           ),
         }),
         { config },
