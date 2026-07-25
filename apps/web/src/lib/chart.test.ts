@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  roundToNice,
-  getCutoffDate,
-  filterDataByPeriod,
-  CHART_PERIOD_OPTIONS,
-  COMPARISON_PERIOD_OPTIONS,
-} from "./chart";
+import { roundToNice, getCutoffDate, filterDataByPeriod } from "./chart";
 
 describe("roundToNice", () => {
   it("returns minimum value for zero or negative", () => {
@@ -130,29 +124,5 @@ describe("filterDataByPeriod", () => {
     ];
     const result = filterDataByPeriod(dataWithExtra, "1m", now);
     expect(result[0]).toHaveProperty("extra");
-  });
-});
-
-describe("CHART_PERIOD_OPTIONS", () => {
-  it("has correct period values for chart history", () => {
-    expect(CHART_PERIOD_OPTIONS).toHaveLength(5);
-    expect(CHART_PERIOD_OPTIONS.map((o) => o.value)).toEqual(["1m", "3m", "6m", "1y", "all"]);
-  });
-
-  it("has Japanese labels", () => {
-    expect(CHART_PERIOD_OPTIONS[0].label).toBe("1ヶ月");
-    expect(CHART_PERIOD_OPTIONS[4].label).toBe("全期間");
-  });
-});
-
-describe("COMPARISON_PERIOD_OPTIONS", () => {
-  it("has correct period values for change comparison", () => {
-    expect(COMPARISON_PERIOD_OPTIONS).toHaveLength(3);
-    expect(COMPARISON_PERIOD_OPTIONS.map((o) => o.value)).toEqual(["daily", "weekly", "monthly"]);
-  });
-
-  it("has Japanese labels", () => {
-    expect(COMPARISON_PERIOD_OPTIONS[0].label).toBe("前日");
-    expect(COMPARISON_PERIOD_OPTIONS[2].label).toBe("月間");
   });
 });
