@@ -17,6 +17,11 @@
         expectedTextLinks: []
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
         databaseQuery:
+          predicatePatterns:
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
+            - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
+            - '\bis_excluded_from_calculation\b'
+            - '\bis_internal_transfer\b'
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
@@ -60,6 +65,11 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseQuery:
+          predicatePatterns:
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
+            - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
+            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
+            - '\bis_excluded_from_calculation\b'
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
@@ -92,6 +102,10 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseQuery:
+          predicatePatterns:
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
+            - '\bdate\b[\s\S]{0,160}2026-07-10|2026-07-10[\s\S]{0,160}\bdate\b'
+            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
@@ -137,6 +151,10 @@
         expectedTextLinks: []
         forbidAmounts: true
         databaseQuery:
+          predicatePatterns:
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
+            - '\bdate\b[\s\S]{0,160}2027-01|2027-01[\s\S]{0,160}\bdate\b'
+            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'

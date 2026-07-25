@@ -17,6 +17,7 @@ interface AssertionContext {
       forbiddenSqlPatterns?: string[];
       outputCells?: Array<{ columnPattern: string; value: string }>;
       outputRows?: string[][];
+      predicatePatterns?: string[];
       sqlPatterns: string[];
     };
     expectedCharts?: ChartExpectation[];
@@ -247,13 +248,23 @@ function getRelevantDatabaseResult(
     typeof trace.input.sql === "string"
       ? trace.input.sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")
       : "";
+  const maskedSql = sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, (literal) =>
+    " ".repeat(literal.length),
+  );
+  const predicateIndex = maskedSql.search(/\b(?:where|join)\b/i);
+  const predicateSql = predicateIndex === -1 ? "" : sql.slice(predicateIndex);
   const hasRequiredPredicates = config.sqlPatterns.every((pattern) =>
     new RegExp(pattern, "i").test(sql),
+  );
+  const hasRequiredPredicateClauses = (config.predicatePatterns ?? []).every((pattern) =>
+    new RegExp(pattern, "i").test(predicateSql),
   );
   const hasForbiddenLiteral = (config.forbiddenSqlPatterns ?? []).some((pattern) =>
     new RegExp(pattern, "i").test(sql),
   );
-  if (!hasRequiredPredicates || hasForbiddenLiteral) return undefined;
+  if (!hasRequiredPredicates || !hasRequiredPredicateClauses || hasForbiddenLiteral) {
+    return undefined;
+  }
 
   const result = databaseResultSchema.safeParse(trace.output);
   return result.success ? result.data : undefined;

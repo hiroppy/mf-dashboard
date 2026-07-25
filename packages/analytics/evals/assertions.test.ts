@@ -217,6 +217,7 @@ describe("assertFinanceChatOutput", () => {
         expectedRowCount: 1,
         forbiddenSqlPatterns: ["\\b313235\\b"],
         outputCells: [{ columnPattern: "income|収入", value: "313235" }],
+        predicatePatterns: [":groupId", "2026-07"],
         sqlPatterns: [
           "\\btransactions\\b",
           "(?:\\bgroup_id\\b\\s*=\\s*:groupId|:groupId\\s*=\\s*(?:\\w+\\.)?group_id\\b)",
@@ -378,6 +379,43 @@ describe("assertFinanceChatOutput", () => {
           ],
         }),
         { config },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects SQL terms that appear only in a projection literal", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
+                sql: "SELECT 'transactions 2026-07 group_id = :groupId amount' AS note, 313234 + 1 AS income",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 1,
+                rows: [{ income: 313_235 }],
+                truncated: false,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseQuery: {
+              expectedRowCount: 1,
+              outputCells: [{ columnPattern: "income", value: "313235" }],
+              predicatePatterns: [":groupId", "2026-07"],
+              sqlPatterns: ["transactions", "amount"],
+            },
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
       ),
     ).toMatchObject({ pass: false });
   });

@@ -184,6 +184,18 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it("recognizes whitespace around an HTML href assignment", () => {
+    expect(
+      toEvaluationOutput({
+        text: '<a href = "/0/cf/2026-07">収支</a>',
+        steps: [],
+      }),
+    ).toMatchObject({
+      renderedLinks: ["/0/cf/2026-07"],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
+
   it("recognizes a rendered Markdown reference link", () => {
     expect(
       toEvaluationOutput({
