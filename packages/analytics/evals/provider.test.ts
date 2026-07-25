@@ -35,12 +35,36 @@ describe("toEvaluationOutput", () => {
       text: "[2026年7月の収支を確認](/0/cf/2026-07)",
       steps: [
         {
+          toolCalls: [
+            {
+              toolCallId: "query-1",
+              toolName: "queryDatabase",
+              input: { sql: "SELECT amount FROM transactions" },
+            },
+            {
+              toolCallId: "route-1",
+              toolName: "getFinanceDashboardRoute",
+              input: { page: "cashFlow", month: "2026-07" },
+            },
+            {
+              toolCallId: "chart-1",
+              toolName: "presentChart",
+              input: { title: "食費" },
+            },
+          ],
           toolResults: [
             {
+              toolCallId: "query-1",
+              toolName: "queryDatabase",
+              output: [{ amount: 24_833 }],
+            },
+            {
+              toolCallId: "route-1",
               toolName: "getFinanceDashboardRoute",
               output: { href: "/0/cf/2026-07" },
             },
             {
+              toolCallId: "chart-1",
               toolName: "presentChart",
               output: {
                 title: "食費",
@@ -66,6 +90,32 @@ describe("toEvaluationOutput", () => {
           data: [{ label: "食料品", values: [24833] }],
         },
       ],
+      toolTrace: [
+        {
+          input: { sql: "SELECT amount FROM transactions" },
+          output: [{ amount: 24_833 }],
+          succeeded: true,
+          toolName: "queryDatabase",
+        },
+        {
+          input: { page: "cashFlow", month: "2026-07" },
+          output: { href: "/0/cf/2026-07" },
+          succeeded: true,
+          toolName: "getFinanceDashboardRoute",
+        },
+        {
+          input: { title: "食費" },
+          output: {
+            title: "食費",
+            chartType: "pie",
+            unit: "currency",
+            series: [{ name: "支出", amountType: "expense" }],
+            data: [{ label: "食料品", values: [24833] }],
+          },
+          succeeded: true,
+          toolName: "presentChart",
+        },
+      ],
       toolRoutes: ["/0/cf/2026-07"],
       textLinks: ["/0/cf/2026-07"],
     });
@@ -80,6 +130,7 @@ describe("toEvaluationOutput", () => {
     ).toEqual({
       text: "[収支を確認](/0/cf/2026-07)",
       charts: [],
+      toolTrace: [],
       toolRoutes: [],
       textLinks: ["/0/cf/2026-07"],
     });
@@ -107,7 +158,13 @@ describe("FinanceChatProvider", () => {
         vars: { evaluationDate: "2026-07-31T03:00:00.000Z" },
       }),
     ).resolves.toEqual({
-      output: JSON.stringify({ text: "回答", charts: [], toolRoutes: [], textLinks: [] }),
+      output: JSON.stringify({
+        text: "回答",
+        charts: [],
+        toolTrace: [],
+        toolRoutes: [],
+        textLinks: [],
+      }),
     });
 
     expect(dependencies.isDatabaseAvailable).toBeDefined();

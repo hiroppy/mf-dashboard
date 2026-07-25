@@ -19,20 +19,36 @@ import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
 
 interface ToolResult {
+  toolCallId: string;
   toolName: string;
   output: unknown;
+}
+
+interface ToolCall {
+  input: unknown;
+  toolCallId: string;
+  toolName: string;
 }
 
 export interface ChatResponse {
   text: string;
   steps: ReadonlyArray<{
+    toolCalls: ReadonlyArray<ToolCall>;
     toolResults: ReadonlyArray<ToolResult>;
   }>;
+}
+
+interface ToolTraceEntry {
+  input: unknown;
+  output?: unknown;
+  succeeded: boolean;
+  toolName: string;
 }
 
 export interface EvaluationOutput {
   text: string;
   charts: FinanceChart[];
+  toolTrace: ToolTraceEntry[];
   toolRoutes: string[];
   textLinks: string[];
 }
@@ -99,6 +115,17 @@ function getTextLinks(text: string): string[] {
 
 export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
   const toolResults = response.steps.flatMap((step) => step.toolResults);
+  const toolTrace = response.steps.flatMap((step) =>
+    step.toolCalls.map((call) => {
+      const result = step.toolResults.find(({ toolCallId }) => toolCallId === call.toolCallId);
+      return {
+        input: call.input,
+        output: result?.output,
+        succeeded: result !== undefined,
+        toolName: call.toolName,
+      };
+    }),
+  );
   const charts = toolResults.flatMap((result) => {
     if (result.toolName !== "presentChart") return [];
     const chart = financeChartSchema.safeParse(result.output);
@@ -117,6 +144,7 @@ export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
   return {
     text: response.text,
     charts,
+    toolTrace,
     toolRoutes: unique(toolRoutes),
     textLinks: getTextLinks(response.text),
   };

@@ -17,6 +17,7 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        requiresDatabaseQuery: true
 
 - description: 食費内訳が正しい合計と構造化chartを返す
   vars:
@@ -42,6 +43,7 @@
               - { label: カフェ, values: [4790] }
         expectedToolRoutes: []
         expectedTextLinks: []
+        requiresDatabaseQuery: true
 
 - description: 日付別支出が各明細を同じMarkdown表行に返す
   vars:
@@ -59,6 +61,7 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        requiresDatabaseQuery: true
 
 - description: 明示的なページ要求だけがroute tool由来のリンクを返す
   vars:
@@ -89,3 +92,4 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         forbidAmounts: true
+        requiresDatabaseQuery: true

@@ -5,6 +5,7 @@ function output(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
     charts: [],
+    toolTrace: [],
     toolRoutes: [],
     textLinks: [],
     ...overrides,
@@ -123,6 +124,56 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "収支は93,341円です。最終的な収支は1,000円です。" }), {
+        config: {
+          expectedCharts: [],
+          expectedTextPairs: [["収支", "93341"]],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("requires a successful database query for data-backed cases", () => {
+    const config = {
+      expectedCharts: [],
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+      requiresDatabaseQuery: true,
+    };
+
+    expect(assertFinanceChatOutput(output(), { config })).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: { sql: "SELECT 1" },
+              succeeded: false,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: { sql: "SELECT 1" },
+              output: [{ value: 1 }],
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   it("requires chart structure and order", () => {

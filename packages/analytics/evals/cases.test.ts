@@ -19,4 +19,18 @@ describe("finance chat evaluation cases", () => {
   it("forbids fabricated amounts only in the no-data case", () => {
     expect(getCase("データのない期間で金額を捏造しない")).toContain("forbidAmounts: true");
   });
+
+  it("requires database provenance for every data-backed answer", () => {
+    for (const description of [
+      "月次収支が収入・支出・収支の正しい値を返す",
+      "食費内訳が正しい合計と構造化chartを返す",
+      "日付別支出が各明細を同じMarkdown表行に返す",
+      "データのない期間で金額を捏造しない",
+    ]) {
+      expect(getCase(description)).toContain("requiresDatabaseQuery: true");
+    }
+    expect(getCase("明示的なページ要求だけがroute tool由来のリンクを返す")).not.toContain(
+      "requiresDatabaseQuery",
+    );
+  });
 });

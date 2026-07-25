@@ -18,6 +18,7 @@ interface AssertionContext {
     expectedTextLinks?: string[];
     expectedToolRoutes?: string[];
     forbidAmounts?: boolean;
+    requiresDatabaseQuery?: boolean;
   };
 }
 
@@ -30,6 +31,14 @@ interface AssertionResult {
 const evaluationOutputSchema = z.object({
   text: z.string(),
   charts: z.array(financeChartSchema),
+  toolTrace: z.array(
+    z.object({
+      input: z.unknown(),
+      output: z.unknown().optional(),
+      succeeded: z.boolean(),
+      toolName: z.string(),
+    }),
+  ),
   toolRoutes: z.array(z.string()),
   textLinks: z.array(z.string()),
 });
@@ -58,17 +67,31 @@ function validateTextPairs(text: string, expectedPairs: Array<[string, string]>)
   return expectedPairs
     .filter(([, value], pairIndex) => {
       const normalizedLabel = labels[pairIndex]!;
-      const labelIndex = normalizedText.indexOf(normalizedLabel);
-      if (labelIndex === -1) return true;
+      const segments: string[] = [];
+      let labelIndex = normalizedText.indexOf(normalizedLabel);
+      while (labelIndex !== -1) {
+        const valueStart = labelIndex + normalizedLabel.length;
+        const nextLabelIndex = labels.reduce((nearest, candidate) => {
+          const candidateIndex = normalizedText.indexOf(candidate, valueStart);
+          return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
+        }, normalizedText.length);
+        segments.push(normalizedText.slice(valueStart, nextLabelIndex));
+        labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
+      }
 
-      const valueStart = labelIndex + normalizedLabel.length;
-      const nextLabelIndex = labels.reduce((nearest, candidate, index) => {
-        if (index === pairIndex) return nearest;
-        const candidateIndex = normalizedText.indexOf(candidate, valueStart);
-        return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
-      }, normalizedText.length);
+      const expectedValue = Number(value);
+      const claimedAmounts = segments.flatMap((segment) =>
+        [...segment.matchAll(/([-−▲△]?)(\d+(?:\.\d+)?)(万|億|兆)?円/g)].map((match) => {
+          const sign = match[1] ? -1 : 1;
+          const scale = { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
+          return sign * Number(match[2]) * scale;
+        }),
+      );
 
-      return !includesFact(normalizedText.slice(valueStart, nextLabelIndex), value);
+      return (
+        !segments.some((segment) => includesFact(segment, value)) ||
+        claimedAmounts.some((amount) => amount !== expectedValue)
+      );
     })
     .map(([label, value]) => `${label}=${value}`);
 }
@@ -151,6 +174,22 @@ export default function assertFinanceChatOutput(
       /(?:収入|支出|収支|残高|金額)[^\d\n]{0,8}-?\d[\d,.]*(?![\d年月日件])/.test(actual.text))
   ) {
     return fail("データのない回答に金額が含まれています。");
+  }
+  if (
+    config.requiresDatabaseQuery &&
+    !actual.toolTrace.some(
+      ({ input, output, succeeded, toolName }) =>
+        toolName === "queryDatabase" &&
+        succeeded &&
+        output !== undefined &&
+        typeof input === "object" &&
+        input !== null &&
+        "sql" in input &&
+        typeof input.sql === "string" &&
+        input.sql.trim().length > 0,
+    )
+  ) {
+    return fail("回答に成功したqueryDatabaseの取得根拠がありません。");
   }
 
   const chartExpectations = config.expectedCharts ?? [];
