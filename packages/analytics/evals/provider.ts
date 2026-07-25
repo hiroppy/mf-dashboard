@@ -105,10 +105,8 @@ function getTextLinks(text: string): string[] {
   );
   const routeText = text.replace(/<[^>]*>/g, "");
   const routeCandidates = [
-    ...routeText.matchAll(/\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+){0,2}/g),
-  ]
-    .map((match) => match[0])
-    .filter((candidate) => financeChatHrefSchema.safeParse(candidate).success);
+    ...routeText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
+  ].map((match) => match[0]);
 
   return unique([...markdownLinks, ...htmlLinks, ...rawLinks, ...routeCandidates]);
 }

@@ -146,6 +146,21 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "食費は41,837円で、内訳は食料品24,833円、外食12,214円、カフェ4,790円です。",
+        }),
+        {
+          config: {
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedTextPairs: [["食費", "41837"]],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   it("requires a relevant successful database query for data-backed cases", () => {
@@ -201,7 +216,7 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: [
             {
               input: {
-                sql: "SELECT SUM(amount) AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
+                sql: "SELECT SUM(AMOUNT) AS income FROM TRANSACTIONS WHERE GROUP_ID = :groupId AND DATE LIKE '2026-07%'",
               },
               output: {
                 columns: ["income"],
@@ -324,7 +339,7 @@ describe("assertFinanceChatOutput", () => {
   it("requires chart structure and order", () => {
     const charts = [
       {
-        title: "食費",
+        title: "2026年7月の食費",
         chartType: "pie",
         unit: "currency",
         series: [{ name: "支出", amountType: "expense" }],
@@ -342,7 +357,7 @@ describe("assertFinanceChatOutput", () => {
           expectedCharts: [
             {
               chartType: "pie",
-              titleIncludes: ["食費"],
+              titleIncludes: ["2026年7月", "食費"],
               unit: "currency",
               series: [{ name: "支出", amountType: "expense" }],
               data: [
@@ -361,7 +376,16 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(output({ charts: [{ ...charts[0], title: "2026年7月の収入" }] }), {
         config: {
-          expectedCharts: [{ chartType: "pie", titleIncludes: ["食費"] }],
+          expectedCharts: [{ chartType: "pie", titleIncludes: ["2026年7月", "食費"] }],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ charts: [{ ...charts[0], title: "2025年6月の食費" }] }), {
+        config: {
+          expectedCharts: [{ chartType: "pie", titleIncludes: ["2026年7月", "食費"] }],
           expectedTextLinks: [],
           expectedToolRoutes: [],
         },
@@ -469,6 +493,13 @@ describe("assertFinanceChatOutput", () => {
     };
 
     expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: true });
+    for (const equivalentDate of ["2026年7月10日", "2026/07/10"]) {
+      expect(
+        assertFinanceChatOutput(output({ text: text.replaceAll("2026-07-10", equivalentDate) }), {
+          config,
+        }),
+      ).toMatchObject({ pass: true });
+    }
     expect(
       assertFinanceChatOutput(
         output({

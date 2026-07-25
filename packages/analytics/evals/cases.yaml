@@ -46,7 +46,7 @@
         expectedCharts:
           - chartType: pie
             unit: currency
-            titleIncludes: [食費]
+            titleIncludes: [2026年7月, 食費]
             series:
               - { name: 支出, amountType: expense }
             data:

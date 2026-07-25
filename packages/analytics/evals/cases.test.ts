@@ -38,6 +38,7 @@ describe("finance chat evaluation cases", () => {
     const foodCase = getCase("食費内訳が正しい合計と構造化chartを返す");
     expect(foodCase).toContain("expectedTextPairs:");
     expect(foodCase).toContain('- [食費, "41837"]');
+    expect(foodCase).toContain("titleIncludes: [2026年7月, 食費]");
   });
 
   it("requires group, period, and empty-result provenance for no-data", () => {
