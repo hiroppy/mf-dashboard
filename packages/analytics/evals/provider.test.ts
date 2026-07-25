@@ -24,6 +24,7 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
       .fn<ProviderDependencies["getModel"]>()
       .mockReturnValue({} as ReturnType<ProviderDependencies["getModel"]>),
     isDatabaseAvailable: () => true,
+    isSymbolicLink: () => false,
     isLLMEnabled: () => true,
     ...overrides,
   };
@@ -194,6 +195,42 @@ describe("toEvaluationOutput", () => {
       textLinks: ["/0/cf/2026-07"],
     });
   });
+
+  it("recognizes a rendered Markdown shortcut reference link", () => {
+    expect(
+      toEvaluationOutput({
+        text: "[2026年7月の収支]\n\n[2026年7月の収支]: /0/cf/2026-07",
+        steps: [],
+      }),
+    ).toMatchObject({
+      renderedLinks: ["/0/cf/2026-07"],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
+
+  it("evaluates text emitted before and after tool calls", () => {
+    expect(
+      toEvaluationOutput({
+        text: "最終回答",
+        steps: [
+          {
+            text: "[未検証リンク](/0/cf/2026-07)",
+            toolCalls: [],
+            toolResults: [],
+          },
+          {
+            text: "最終回答",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      text: "[未検証リンク](/0/cf/2026-07)\n最終回答",
+      renderedLinks: ["/0/cf/2026-07"],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
 });
 
 describe("FinanceChatProvider", () => {
@@ -246,6 +283,17 @@ describe("FinanceChatProvider", () => {
 
     await expect(provider.callApi("質問")).resolves.toEqual({
       error: "評価では匿名化されたdata/demo.dbのみ使用できます。",
+    });
+    expect(dependencies.generate).not.toHaveBeenCalled();
+    expect(dependencies.getDb).not.toHaveBeenCalled();
+  });
+
+  it("rejects a symlinked demo database before opening it", async () => {
+    const dependencies = createDependencies({ isSymbolicLink: () => true });
+    const provider = new FinanceChatProvider({}, dependencies);
+
+    await expect(provider.callApi("質問")).resolves.toEqual({
+      error: "評価用data/demo.dbにシンボリックリンクは使用できません。",
     });
     expect(dependencies.generate).not.toHaveBeenCalled();
     expect(dependencies.getDb).not.toHaveBeenCalled();

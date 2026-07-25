@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { closeDb, getCurrentGroup, getDb, type Db } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
@@ -33,6 +33,7 @@ interface ToolCall {
 export interface ChatResponse {
   text: string;
   steps: ReadonlyArray<{
+    text?: string;
     toolCalls: ReadonlyArray<ToolCall>;
     toolResults: ReadonlyArray<ToolResult>;
   }>;
@@ -74,6 +75,7 @@ export interface ProviderDependencies {
   getDb: () => Db;
   getModel: typeof getModel;
   isDatabaseAvailable: (path: string) => boolean;
+  isSymbolicLink: (path: string) => boolean;
   isLLMEnabled: typeof isLLMEnabled;
 }
 
@@ -87,6 +89,7 @@ const defaultDependencies: ProviderDependencies = {
   getDb,
   getModel,
   isDatabaseAvailable: existsSync,
+  isSymbolicLink: (path) => lstatSync(path).isSymbolicLink(),
   isLLMEnabled,
 };
 
@@ -112,8 +115,15 @@ function getRenderedLinks(text: string): string[] {
     const href = definitions.get(reference);
     return href ? [href] : [];
   });
+  const textWithoutDefinitions = text.replace(/^\s*\[[^\]]+\]:\s*\S+.*$/gm, "");
+  const shortcutReferenceLinks = [
+    ...textWithoutDefinitions.matchAll(/(?<!!)\[([^\]]+)\](?![[(])/g),
+  ].flatMap((match) => {
+    const href = definitions.get(match[1]!.toLocaleLowerCase());
+    return href ? [href] : [];
+  });
 
-  return unique([...markdownLinks, ...htmlLinks, ...referenceLinks]);
+  return unique([...markdownLinks, ...htmlLinks, ...referenceLinks, ...shortcutReferenceLinks]);
 }
 
 function getTextLinks(text: string): string[] {
@@ -129,6 +139,9 @@ function getTextLinks(text: string): string[] {
 }
 
 export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
+  const stepTexts = response.steps.flatMap((step) => (step.text ? [step.text] : []));
+  if (response.text && stepTexts.at(-1) !== response.text) stepTexts.push(response.text);
+  const text = stepTexts.length > 0 ? stepTexts.join("\n") : response.text;
   const toolResults = response.steps.flatMap((step) => step.toolResults);
   const toolTrace = response.steps.flatMap((step) =>
     step.toolCalls.map((call) => {
@@ -157,12 +170,12 @@ export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
   });
 
   return {
-    text: response.text,
+    text,
     charts,
-    renderedLinks: getRenderedLinks(response.text),
+    renderedLinks: getRenderedLinks(text),
     toolTrace,
     toolRoutes: unique(toolRoutes),
-    textLinks: getTextLinks(response.text),
+    textLinks: getTextLinks(text),
   };
 }
 
@@ -207,10 +220,13 @@ export default class FinanceChatProvider implements ApiProvider {
             "評価用demo.dbがありません。`pnpm --filter @mf-dashboard/db build:demo`を実行してください。",
         };
       }
+      const demoDatabasePath = this.dependencies.getDemoDatabasePath();
+      if (this.dependencies.isSymbolicLink(demoDatabasePath)) {
+        return { error: "評価用data/demo.dbにシンボリックリンクは使用できません。" };
+      }
       const canonicalDatabasePath = this.dependencies.canonicalizeDatabasePath(databasePath);
-      const canonicalDemoDatabasePath = this.dependencies.canonicalizeDatabasePath(
-        this.dependencies.getDemoDatabasePath(),
-      );
+      const canonicalDemoDatabasePath =
+        this.dependencies.canonicalizeDatabasePath(demoDatabasePath);
       if (canonicalDatabasePath !== canonicalDemoDatabasePath) {
         return { error: "評価では匿名化されたdata/demo.dbのみ使用できます。" };
       }

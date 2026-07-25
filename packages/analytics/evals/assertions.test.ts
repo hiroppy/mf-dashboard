@@ -82,6 +82,9 @@ describe("assertFinanceChatOutput", () => {
     for (const text of [
       "収支は-93,341円です。",
       "収支はマイナス93,341円です。",
+      "収支は赤字93,341円です。",
+      "収支は93,341円の赤字です。",
+      "収支は損失93,341円です。",
       "収支は93,341.5円です。",
     ]) {
       expect(
@@ -469,6 +472,29 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT COUNT(*) AS 件数 FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ 件数: 0 }],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2027年1月の支出は0件ではありません。",
+          toolTrace: trace(
+            "SELECT COUNT(*) AS count FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ count: 0 }],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   it("checks forbidden internal terms only in the answer text", () => {
@@ -715,6 +741,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(output({ text: `${text}\n| 2026-07-10 | 架空明細 | 1,000円 |` }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: `\`\`\`markdown\n${text}\n\`\`\`` }), {
         config,
       }),
     ).toMatchObject({ pass: false });

@@ -113,7 +113,16 @@ function validateTextPairs(
         const amounts = [
           ...claimSegment.matchAll(/((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?円/g),
         ].map((match) => {
-          const sign = match[1] ? -1 : 1;
+          const matchIndex = match.index ?? 0;
+          const before = claimSegment.slice(Math.max(0, matchIndex - 8), matchIndex);
+          const after = claimSegment.slice(
+            matchIndex + match[0].length,
+            matchIndex + match[0].length + 8,
+          );
+          const semanticNegative =
+            /(?:赤字|損失)[^。！？\n\d]{0,4}$/.test(before) ||
+            /^[^。！？\n\d]{0,3}(?:赤字|損失)/.test(after);
+          const sign = match[1] || semanticNegative ? -1 : 1;
           const scale = { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
           return sign * Number(match[2]) * scale;
         });
@@ -173,9 +182,26 @@ function validateMarkdownRows(text: string, expectedRows: string[][]): string[] 
       ? `${date[1]}-${date[2]!.padStart(2, "0")}-${date[3]!.padStart(2, "0")}`
       : normalized;
   };
-  const actualRows = text
-    .split("\n")
-    .filter((line) => line.includes("|"))
+  const tableLines: string[] = [];
+  let candidateLines: string[] = [];
+  const flushCandidate = () => {
+    const hasSeparator = candidateLines.some((line) => {
+      const cells = line
+        .replace(/^\s*\||\|\s*$/g, "")
+        .split("|")
+        .map((cell) => cell.trim());
+      return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+    });
+    if (hasSeparator) tableLines.push(...candidateLines);
+    candidateLines = [];
+  };
+  for (const line of text.replace(/```[\s\S]*?```/g, "").split("\n")) {
+    if (line.includes("|")) candidateLines.push(line);
+    else flushCandidate();
+  }
+  flushCandidate();
+
+  const actualRows = tableLines
     .map((line) =>
       line
         .replace(/^\s*\||\|\s*$/g, "")
@@ -315,11 +341,7 @@ export default function assertFinanceChatOutput(
         (result) =>
           result.rows.length > 0 &&
           !result.rows.every((row) =>
-            Object.entries(row).every(
-              ([column, value]) =>
-                (value === 0 && /count/i.test(column)) ||
-                (value === null && /(?:sum|total|amount)/i.test(column)),
-            ),
+            Object.values(row).every((value) => value === 0 || value === null),
           ),
       );
     const hasIncompleteRows =
@@ -337,6 +359,12 @@ export default function assertFinanceChatOutput(
       return fail("queryDatabase結果がtruncatedまたは期待row数と異なります。");
     }
     if (hasUnexpectedRows) return fail("データなし回答のqueryDatabase結果が空ではありません。");
+    if (
+      databaseQuery.expectEmpty === true &&
+      /0件(?:では|じゃ)(?:ありません|ない)/.test(actual.text)
+    ) {
+      return fail("データなし回答が0件という結論を否定しています。");
+    }
   }
 
   const chartExpectations = config.expectedCharts ?? [];
