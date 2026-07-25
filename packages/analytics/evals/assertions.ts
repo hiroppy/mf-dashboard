@@ -13,8 +13,10 @@ interface AssertionContext {
     expectedCharts?: ChartExpectation[];
     expectedMarkdownRows?: string[][];
     expectedTextFacts?: string[];
+    expectedTextPairs?: Array<[string, string]>;
     expectedTextLinks?: string[];
     expectedToolRoutes?: string[];
+    forbidAmounts?: boolean;
   };
 }
 
@@ -41,6 +43,19 @@ function normalizeText(value: string): string {
   return value.normalize("NFKC").replace(/[,\s*_`¥￥]/g, "");
 }
 
+function validateTextPairs(text: string, expectedPairs: Array<[string, string]>): string[] {
+  const clauses = text.split(/[。、\n|;]/).map(normalizeText);
+  return expectedPairs
+    .filter(([label, value]) => {
+      const normalizedLabel = normalizeText(label);
+      const normalizedValue = normalizeText(value);
+      return !clauses.some(
+        (clause) => clause.includes(normalizedLabel) && clause.includes(normalizedValue),
+      );
+    })
+    .map(([label, value]) => `${label}=${value}`);
+}
+
 function validateChart(actual: FinanceChart, expected: ChartExpectation, index: number): string[] {
   const errors: string[] = [];
   if (expected.chartType && actual.chartType !== expected.chartType) {
@@ -53,14 +68,8 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation, index: 
     errors.push(`chart ${index + 1} のseriesまたは順序が期待値と異なります`);
   }
 
-  for (const expectedPoint of expected.data ?? []) {
-    const actualPoint = actual.data.find(({ label }) => label === expectedPoint.label);
-    if (
-      !actualPoint ||
-      JSON.stringify(actualPoint.values) !== JSON.stringify(expectedPoint.values)
-    ) {
-      errors.push(`chart ${index + 1} の${expectedPoint.label}が期待値と異なります`);
-    }
+  if (expected.data && JSON.stringify(actual.data) !== JSON.stringify(expected.data)) {
+    errors.push(`chart ${index + 1} のdataまたは順序が期待値と異なります`);
   }
   return errors;
 }
@@ -101,6 +110,13 @@ export default function assertFinanceChatOutput(
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
+  }
+  const missingPairs = validateTextPairs(actual.text, config.expectedTextPairs ?? []);
+  if (missingPairs.length > 0) {
+    return fail(`本文のラベルと値の組み合わせが期待値と異なります: ${missingPairs.join(", ")}`);
+  }
+  if (config.forbidAmounts && /\d[\d,]*\s*円|[¥￥]\s*\d/.test(actual.text)) {
+    return fail("データのない回答に金額が含まれています。");
   }
 
   const chartExpectations = config.expectedCharts ?? [];

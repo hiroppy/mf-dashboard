@@ -9,14 +9,18 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedTextFacts: ["2026年7月", "313235", "219894", "93341"]
+        expectedTextFacts: ["2026年7月"]
+        expectedTextPairs:
+          - [収入, "313235"]
+          - [支出, "219894"]
+          - [収支, "93341"]
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
 
 - description: 食費内訳が正しい合計と構造化chartを返す
   vars:
-    question: 2026年7月の食費合計と内訳を円グラフで見せて
+    question: 2026年7月の食費合計と内訳を、金額の多い順の円グラフで見せて
     evaluationDate: "2026-07-31T03:00:00.000Z"
   assert:
     - type: is-json
@@ -52,6 +56,7 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        forbidAmounts: true
 
 - description: 明示的なページ要求だけがroute tool由来のリンクを返す
   vars:

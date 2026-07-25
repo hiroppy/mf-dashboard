@@ -5,7 +5,7 @@ fixture. It evaluates final answer facts, chart structure, Markdown transaction 
 provenance without grading the complete tool trajectory.
 
 ```bash
-pnpm --filter @mf-dashboard/db build:demo
+pnpm --filter @mf-dashboard/db build:demo --period=2026-07
 AI_PROVIDER=openai AI_MODEL=<model> AI_API_KEY=<key> \
   pnpm --filter @mf-dashboard/analytics eval:chat
 ```

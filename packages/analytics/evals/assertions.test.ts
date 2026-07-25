@@ -17,7 +17,12 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output(), {
         config: {
           expectedCharts: [],
-          expectedTextFacts: ["313235", "219894", "93341"],
+          expectedTextFacts: ["2026年7月"],
+          expectedTextPairs: [
+            ["収入", "313235"],
+            ["支出", "219894"],
+            ["収支", "93341"],
+          ],
           expectedTextLinks: [],
           expectedToolRoutes: [],
         },
@@ -27,6 +32,26 @@ describe("assertFinanceChatOutput", () => {
 
   it("rejects malformed evaluation output", () => {
     expect(assertFinanceChatOutput("not json", {})).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it("rejects amounts bound to the wrong financial labels", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は219,894円、支出は313,235円、収支は93,341円です。" }),
+        {
+          config: {
+            expectedCharts: [],
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires chart structure and order", () => {
@@ -66,12 +91,60 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
 
     expect(
+      assertFinanceChatOutput(
+        output({
+          charts: [
+            {
+              ...charts[0],
+              data: [...charts[0]!.data, { label: "その他", values: [100000] }],
+            },
+          ],
+        }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                chartType: "pie",
+                unit: "currency",
+                data: [
+                  { label: "食料品", values: [24833] },
+                  { label: "外食", values: [12214] },
+                  { label: "カフェ", values: [4790] },
+                ],
+              },
+            ],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+
+    expect(
       assertFinanceChatOutput(output({ charts: [...charts, charts[0]] }), {
         config: {
           expectedCharts: [{ chartType: "pie" }],
           expectedTextLinks: [],
           expectedToolRoutes: [],
         },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("rejects fabricated amounts in a no-data answer", () => {
+    const config = {
+      expectedCharts: [],
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+      forbidAmounts: true,
+    };
+
+    expect(
+      assertFinanceChatOutput(output({ text: "対象期間のデータはありません。" }), { config }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、支出は100,000円です。" }), {
+        config,
       }),
     ).toMatchObject({ pass: false });
   });
