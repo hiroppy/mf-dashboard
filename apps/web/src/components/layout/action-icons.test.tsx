@@ -227,6 +227,8 @@ describe("ActionIcons", () => {
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
     );
+    // Under full-suite load, React may commit the failed POST recovery after the fetch resolves.
+    // Wait for that recovery before sending the SSE event that reconciles the ambiguous request.
     expect(await screen.findByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
 
     await emitStatus({ running: false });
