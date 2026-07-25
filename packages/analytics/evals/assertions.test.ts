@@ -382,6 +382,37 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("accepts repeated database results when each result is complete", () => {
+    const queryResult = {
+      input: {
+        sql: "SELECT SUM(amount) AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
+      },
+      output: {
+        columns: ["income"],
+        rowCount: 1,
+        rows: [{ income: 313_235 }],
+        truncated: false,
+      },
+      succeeded: true,
+      toolName: "queryDatabase",
+    };
+
+    expect(
+      assertFinanceChatOutput(output({ toolTrace: [queryResult, queryResult] }), {
+        config: {
+          databaseQuery: {
+            expectedRowCount: 1,
+            outputCells: [{ columnPattern: "income", value: "313235" }],
+            sqlPatterns: ["transactions", ":groupId", "2026-07", "amount"],
+          },
+          expectedCharts: [],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it("requires an empty result from a period-scoped no-data query", () => {
     const config = {
       databaseQuery: {

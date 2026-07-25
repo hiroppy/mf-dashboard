@@ -347,8 +347,7 @@ export default function assertFinanceChatOutput(
     const hasIncompleteRows =
       relevantResults.some((result) => result.truncated) ||
       (databaseQuery.expectedRowCount !== undefined &&
-        relevantResults.reduce((count, result) => count + result.rows.length, 0) !==
-          databaseQuery.expectedRowCount);
+        relevantResults.some((result) => result.rows.length !== databaseQuery.expectedRowCount));
     if (relevantResults.length === 0) {
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
     }
