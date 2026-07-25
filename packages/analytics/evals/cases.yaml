@@ -17,7 +17,16 @@
         expectedTextLinks: []
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
         databaseQuery:
-          sqlIncludes: [transactions]
+          sqlPatterns:
+            - '\btransactions\b'
+            - '\bgroup_id\b\s*=\s*:groupId'
+            - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
+            - '\bamount\b'
+            - '\btype\b'
+            - '\bis_excluded_from_calculation\b'
+            - '\bis_internal_transfer\b'
+          forbiddenSqlPatterns:
+            - '\b(?:313235|219894|93341)\b'
           outputFacts: ["313235", "219894"]
 
 - description: 食費内訳が正しい合計と構造化chartを返す
@@ -47,7 +56,16 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseQuery:
-          sqlIncludes: [transactions]
+          sqlPatterns:
+            - '\btransactions\b'
+            - '\bgroup_id\b\s*=\s*:groupId'
+            - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
+            - '\bamount\b'
+            - '\bcategory\b'
+            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
+            - '\bis_excluded_from_calculation\b'
+          forbiddenSqlPatterns:
+            - '\b(?:24833|12214|4790|41837)\b'
           outputFacts: ["24833", "12214", "4790"]
 
 - description: 日付別支出が各明細を同じMarkdown表行に返す
@@ -67,7 +85,15 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseQuery:
-          sqlIncludes: [transactions]
+          sqlPatterns:
+            - '\btransactions\b'
+            - '\bgroup_id\b\s*=\s*:groupId'
+            - '\bdate\b[\s\S]{0,160}2026-07-10|2026-07-10[\s\S]{0,160}\bdate\b'
+            - '\bamount\b'
+            - '\bdescription\b'
+            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
+          forbiddenSqlPatterns:
+            - '\b(?:3435|3152|6587)\b'
           outputFacts: ["3435", "3152"]
 
 - description: 明示的なページ要求だけがroute tool由来のリンクを返す
@@ -100,4 +126,9 @@
         expectedTextLinks: []
         forbidAmounts: true
         databaseQuery:
-          sqlIncludes: [transactions]
+          sqlPatterns:
+            - '\btransactions\b'
+            - '\bgroup_id\b\s*=\s*:groupId'
+            - '\bdate\b[\s\S]{0,160}2027-01|2027-01[\s\S]{0,160}\bdate\b'
+            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
+          expectEmpty: true

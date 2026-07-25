@@ -151,8 +151,14 @@ describe("assertFinanceChatOutput", () => {
   it("requires a relevant successful database query for data-backed cases", () => {
     const config = {
       databaseQuery: {
-        sqlIncludes: ["transactions"],
+        forbiddenSqlPatterns: ["\\b313235\\b"],
         outputFacts: ["313235"],
+        sqlPatterns: [
+          "\\btransactions\\b",
+          "\\bgroup_id\\b\\s*=\\s*:groupId",
+          "2026-07",
+          "\\bamount\\b",
+        ],
       },
       expectedCharts: [],
       expectedTextLinks: [],
@@ -180,7 +186,7 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: [
             {
               input: { sql: "SELECT 1" },
-              output: [{ value: 1 }],
+              output: { columns: ["value"], rowCount: 1, rows: [{ value: 1 }], truncated: false },
               succeeded: true,
               toolName: "queryDatabase",
             },
@@ -194,12 +200,95 @@ describe("assertFinanceChatOutput", () => {
         output({
           toolTrace: [
             {
-              input: { sql: "SELECT amount FROM transactions" },
-              output: [{ amount: 313_235 }],
+              input: {
+                sql: "SELECT SUM(amount) AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 1,
+                rows: [{ income: 313_235 }],
+                truncated: false,
+              },
               succeeded: true,
               toolName: "queryDatabase",
             },
           ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
+                sql: "SELECT 313235 AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%' AND amount >= 0",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 1,
+                rows: [{ income: 313_235 }],
+                truncated: false,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("requires an empty result from a period-scoped no-data query", () => {
+    const config = {
+      databaseQuery: {
+        expectEmpty: true,
+        sqlPatterns: ["\\btransactions\\b", ":groupId", "2027-01"],
+      },
+      expectedCharts: [],
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+    };
+    const trace = (sql: string, rows: Array<Record<string, unknown>>) => [
+      {
+        input: { sql },
+        output: { columns: ["amount"], rowCount: rows.length, rows, truncated: false },
+        succeeded: true,
+        toolName: "queryDatabase",
+      },
+    ];
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
+            [],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ amount: 1_000 }],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [],
+          ),
         }),
         { config },
       ),

@@ -56,7 +56,12 @@ describe("toEvaluationOutput", () => {
             {
               toolCallId: "query-1",
               toolName: "queryDatabase",
-              output: [{ amount: 24_833 }],
+              output: {
+                columns: ["amount"],
+                rowCount: 1,
+                rows: [{ amount: 24_833 }],
+                truncated: false,
+              },
             },
             {
               toolCallId: "route-1",
@@ -93,7 +98,12 @@ describe("toEvaluationOutput", () => {
       toolTrace: [
         {
           input: { sql: "SELECT amount FROM transactions" },
-          output: [{ amount: 24_833 }],
+          output: {
+            columns: ["amount"],
+            rowCount: 1,
+            rows: [{ amount: 24_833 }],
+            truncated: false,
+          },
           succeeded: true,
           toolName: "queryDatabase",
         },

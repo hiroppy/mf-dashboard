@@ -12,8 +12,10 @@ interface ChartExpectation {
 interface AssertionContext {
   config?: {
     databaseQuery?: {
+      expectEmpty?: boolean;
+      forbiddenSqlPatterns?: string[];
       outputFacts?: string[];
-      sqlIncludes: string[];
+      sqlPatterns: string[];
     };
     expectedCharts?: ChartExpectation[];
     expectedMarkdownRows?: string[][];
@@ -48,6 +50,15 @@ const evaluationOutputSchema = z.object({
 });
 
 type EvaluationOutput = z.infer<typeof evaluationOutputSchema>;
+
+const databaseResultSchema = z.object({
+  columns: z.array(z.string()),
+  rowCount: z.number().int().nonnegative(),
+  rows: z.array(z.record(z.string(), z.unknown())),
+  truncated: z.boolean(),
+});
+
+type DatabaseResult = z.infer<typeof databaseResultSchema>;
 
 function fail(reason: string): AssertionResult {
   return { pass: false, score: 0, reason };
@@ -155,11 +166,12 @@ function parseOutput(output: string): EvaluationOutput | undefined {
   }
 }
 
-function isRelevantDatabaseQuery(
+function getRelevantDatabaseResult(
   trace: EvaluationOutput["toolTrace"][number],
-  sqlIncludes: string[],
-): boolean {
+  config: NonNullable<AssertionContext["config"]>["databaseQuery"],
+): DatabaseResult | undefined {
   if (
+    !config ||
     trace.toolName !== "queryDatabase" ||
     !trace.succeeded ||
     trace.output === undefined ||
@@ -167,11 +179,23 @@ function isRelevantDatabaseQuery(
     trace.input === null ||
     !("sql" in trace.input)
   ) {
-    return false;
+    return undefined;
   }
 
-  const sql = trace.input.sql;
-  return typeof sql === "string" && sqlIncludes.every((term) => sql.includes(term));
+  const sql =
+    typeof trace.input.sql === "string"
+      ? trace.input.sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "")
+      : "";
+  const hasRequiredPredicates = config.sqlPatterns.every((pattern) =>
+    new RegExp(pattern, "i").test(sql),
+  );
+  const hasForbiddenLiteral = (config.forbiddenSqlPatterns ?? []).some((pattern) =>
+    new RegExp(pattern, "i").test(sql),
+  );
+  if (!hasRequiredPredicates || hasForbiddenLiteral) return undefined;
+
+  const result = databaseResultSchema.safeParse(trace.output);
+  return result.success ? result.data : undefined;
 }
 
 export default function assertFinanceChatOutput(
@@ -209,14 +233,26 @@ export default function assertFinanceChatOutput(
   }
   const databaseQuery = config.databaseQuery;
   if (databaseQuery) {
-    const relevantQueries = actual.toolTrace.filter((trace) =>
-      isRelevantDatabaseQuery(trace, databaseQuery.sqlIncludes),
-    );
-    const queryOutput = JSON.stringify(relevantQueries.map(({ output }) => output));
+    const relevantResults = actual.toolTrace.flatMap((trace) => {
+      const result = getRelevantDatabaseResult(trace, databaseQuery);
+      return result ? [result] : [];
+    });
     const missingQueryFacts = (databaseQuery.outputFacts ?? []).filter(
-      (fact) => !includesFact(queryOutput, fact),
+      (fact) =>
+        !relevantResults.some((result) =>
+          result.rows.some((row) =>
+            Object.values(row).some(
+              (value) =>
+                (typeof value === "number" || typeof value === "string") &&
+                normalizeText(String(value)) === normalizeText(fact),
+            ),
+          ),
+        ),
     );
-    if (relevantQueries.length === 0 || missingQueryFacts.length > 0) {
+    const hasUnexpectedRows =
+      databaseQuery.expectEmpty === true &&
+      relevantResults.some((result) => result.rowCount !== 0 || result.rows.length !== 0);
+    if (relevantResults.length === 0 || missingQueryFacts.length > 0 || hasUnexpectedRows) {
       return fail(
         `回答に関連するqueryDatabaseの取得根拠がありません: ${missingQueryFacts.join(", ")}`,
       );

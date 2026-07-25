@@ -39,4 +39,11 @@ describe("finance chat evaluation cases", () => {
     expect(foodCase).toContain("expectedTextPairs:");
     expect(foodCase).toContain('- [食費, "41837"]');
   });
+
+  it("requires group, period, and empty-result provenance for no-data", () => {
+    const noDataCase = getCase("データのない期間で金額を捏造しない");
+    expect(noDataCase).toContain(":groupId");
+    expect(noDataCase).toContain("2027-01");
+    expect(noDataCase).toContain("expectEmpty: true");
+  });
 });
