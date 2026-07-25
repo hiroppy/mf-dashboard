@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest";
+import assertFinanceChatOutput from "./assertions";
+
+function output(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+    charts: [],
+    toolRoutes: [],
+    textLinks: [],
+    ...overrides,
+  });
+}
+
+describe("assertFinanceChatOutput", () => {
+  it("accepts normalized text facts and an output without unsolicited charts or links", () => {
+    expect(
+      assertFinanceChatOutput(output(), {
+        config: {
+          expectedCharts: [],
+          expectedTextFacts: ["313235", "219894", "93341"],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it("rejects malformed evaluation output", () => {
+    expect(assertFinanceChatOutput("not json", {})).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it("requires chart structure and order", () => {
+    const charts = [
+      {
+        title: "食費",
+        chartType: "pie",
+        unit: "currency",
+        series: [{ name: "支出", amountType: "expense" }],
+        data: [
+          { label: "食料品", values: [24833] },
+          { label: "外食", values: [12214] },
+          { label: "カフェ", values: [4790] },
+        ],
+      },
+    ];
+
+    expect(
+      assertFinanceChatOutput(output({ charts }), {
+        config: {
+          expectedCharts: [
+            {
+              chartType: "pie",
+              unit: "currency",
+              series: [{ name: "支出", amountType: "expense" }],
+              data: [
+                { label: "食料品", values: [24833] },
+                { label: "外食", values: [12214] },
+                { label: "カフェ", values: [4790] },
+              ],
+            },
+          ],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+
+    expect(
+      assertFinanceChatOutput(output({ charts: [...charts, charts[0]] }), {
+        config: {
+          expectedCharts: [{ chartType: "pie" }],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("requires transaction facts to occur in the same Markdown row", () => {
+    const text = [
+      "| 日付 | 内容 | 金額 |",
+      "| --- | --- | ---: |",
+      "| 2026-07-10 | 東京ガス | 3,435円 |",
+      "| 2026-07-10 | 成城石井 | 3,152円 |",
+    ].join("\n");
+    const config = {
+      expectedCharts: [],
+      expectedMarkdownRows: [
+        ["2026-07-10", "東京ガス", "3435"],
+        ["2026-07-10", "成城石井", "3152"],
+      ],
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+    };
+
+    expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: text.replace("東京ガス | 3,435", "東京ガス | 3,152") }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  it("requires every Markdown link to match a route tool result", () => {
+    const config = {
+      expectedCharts: [],
+      expectedTextLinks: ["/0/cf/2026-07"],
+      expectedToolRoutes: ["/0/cf/2026-07"],
+    };
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "[2026年7月の収支を確認](/0/cf/2026-07)",
+          toolRoutes: ["/0/cf/2026-07"],
+          textLinks: ["/0/cf/2026-07"],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "[2026年7月の収支を確認](/0/cf/2026-07)",
+          textLinks: ["/0/cf/2026-07"],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+});

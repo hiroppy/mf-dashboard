@@ -1,0 +1,142 @@
+import { z } from "zod";
+import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
+
+interface ChartExpectation {
+  chartType?: FinanceChart["chartType"];
+  data?: Array<{ label: string; values: number[] }>;
+  series?: Array<FinanceChart["series"][number]>;
+  unit?: FinanceChart["unit"];
+}
+
+interface AssertionContext {
+  config?: {
+    expectedCharts?: ChartExpectation[];
+    expectedMarkdownRows?: string[][];
+    expectedTextFacts?: string[];
+    expectedTextLinks?: string[];
+    expectedToolRoutes?: string[];
+  };
+}
+
+interface AssertionResult {
+  pass: boolean;
+  score: number;
+  reason: string;
+}
+
+const evaluationOutputSchema = z.object({
+  text: z.string(),
+  charts: z.array(financeChartSchema),
+  toolRoutes: z.array(z.string()),
+  textLinks: z.array(z.string()),
+});
+
+type EvaluationOutput = z.infer<typeof evaluationOutputSchema>;
+
+function fail(reason: string): AssertionResult {
+  return { pass: false, score: 0, reason };
+}
+
+function normalizeText(value: string): string {
+  return value.normalize("NFKC").replace(/[,\s*_`¥￥]/g, "");
+}
+
+function validateChart(actual: FinanceChart, expected: ChartExpectation, index: number): string[] {
+  const errors: string[] = [];
+  if (expected.chartType && actual.chartType !== expected.chartType) {
+    errors.push(`chart ${index + 1} のtypeが${expected.chartType}ではありません`);
+  }
+  if (expected.unit && actual.unit !== expected.unit) {
+    errors.push(`chart ${index + 1} のunitが${expected.unit}ではありません`);
+  }
+  if (expected.series && JSON.stringify(actual.series) !== JSON.stringify(expected.series)) {
+    errors.push(`chart ${index + 1} のseriesまたは順序が期待値と異なります`);
+  }
+
+  for (const expectedPoint of expected.data ?? []) {
+    const actualPoint = actual.data.find(({ label }) => label === expectedPoint.label);
+    if (
+      !actualPoint ||
+      JSON.stringify(actualPoint.values) !== JSON.stringify(expectedPoint.values)
+    ) {
+      errors.push(`chart ${index + 1} の${expectedPoint.label}が期待値と異なります`);
+    }
+  }
+  return errors;
+}
+
+function validateMarkdownRows(text: string, expectedRows: string[][]): string[] {
+  const rows = text
+    .split("\n")
+    .filter((line) => line.includes("|"))
+    .map(normalizeText);
+
+  return expectedRows
+    .filter((expected) => {
+      const fragments = expected.map(normalizeText);
+      return !rows.some((row) => fragments.every((fragment) => row.includes(fragment)));
+    })
+    .map((row) => row.join(" / "));
+}
+
+function parseOutput(output: string): EvaluationOutput | undefined {
+  try {
+    const parsed = evaluationOutputSchema.safeParse(JSON.parse(output));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export default function assertFinanceChatOutput(
+  output: string,
+  context: AssertionContext,
+): AssertionResult {
+  const actual = parseOutput(output);
+  if (!actual) return fail("出力がfinance chatの評価JSON形式ではありません。");
+
+  const config = context.config ?? {};
+  const missingFacts = (config.expectedTextFacts ?? []).filter(
+    (fact) => !normalizeText(actual.text).includes(normalizeText(fact)),
+  );
+  if (missingFacts.length > 0) {
+    return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
+  }
+
+  const chartExpectations = config.expectedCharts ?? [];
+  if (actual.charts.length !== chartExpectations.length) {
+    return fail(
+      `chart数が期待値と異なります: expected=${chartExpectations.length}, actual=${actual.charts.length}`,
+    );
+  }
+  const chartErrors = chartExpectations.flatMap((expected, index) =>
+    validateChart(actual.charts[index]!, expected, index),
+  );
+  if (chartErrors.length > 0) return fail(chartErrors.join("; "));
+
+  const missingRows = validateMarkdownRows(actual.text, config.expectedMarkdownRows ?? []);
+  if (missingRows.length > 0) {
+    return fail(`同じMarkdown表行に期待する明細がありません: ${missingRows.join(", ")}`);
+  }
+
+  const expectedRoutes = config.expectedToolRoutes ?? [];
+  if (JSON.stringify(actual.toolRoutes) !== JSON.stringify(expectedRoutes)) {
+    return fail(
+      `route tool結果が期待値と異なります: expected=${JSON.stringify(expectedRoutes)}, actual=${JSON.stringify(actual.toolRoutes)}`,
+    );
+  }
+
+  const expectedLinks = config.expectedTextLinks ?? [];
+  if (JSON.stringify(actual.textLinks) !== JSON.stringify(expectedLinks)) {
+    return fail(
+      `本文linkが期待値と異なります: expected=${JSON.stringify(expectedLinks)}, actual=${JSON.stringify(actual.textLinks)}`,
+    );
+  }
+  const provenRoutes = new Set(actual.toolRoutes);
+  const unprovenLinks = actual.textLinks.filter((link) => !provenRoutes.has(link));
+  if (unprovenLinks.length > 0) {
+    return fail(`route toolに由来しない本文linkがあります: ${unprovenLinks.join(", ")}`);
+  }
+
+  return { pass: true, score: 1, reason: "期待するfinance chat出力です。" };
+}

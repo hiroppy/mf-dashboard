@@ -1,0 +1,10 @@
+description: mf-dashboard finance chat evaluation
+
+providers:
+  - id: file://./provider.ts
+    label: production finance chat
+
+prompts:
+  - "{{question}}"
+
+tests: file://./cases.yaml
