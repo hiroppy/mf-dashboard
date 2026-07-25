@@ -249,6 +249,7 @@ describe("assertFinanceChatOutput", () => {
         expectedRowCount: 1,
         forbiddenSqlPatterns: ["\\b313235\\b"],
         outputCells: [{ columnPattern: "income|収入", value: "313235" }],
+        outputSqlPatterns: ["\\bsum\\s*\\(\\s*amount\\s*\\)\\s+as\\s+income\\b"],
         predicatePatterns: [":groupId", "\\bdate\\b\\s*like"],
         sqlPatterns: [
           "\\btransactions\\b",
@@ -514,6 +515,66 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            ...Array.from({ length: 50 }, () => trace([{ income: 1 }], false)),
+            trace([{ income: 313_235 }], false),
+          ],
+        }),
+        {
+          config: {
+            databaseQuery: {
+              expectedRowCount: 1,
+              outputCells: [{ columnPattern: "income", value: "313235" }],
+              sqlPatterns: ["transactions", ":groupId", "2026-07", "amount"],
+            },
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("rejects constant projections as finance evidence", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
+                sql: "SELECT 313234 + 1 AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 1,
+                rows: [{ income: 313_235 }],
+                truncated: false,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseQuery: {
+              expectedRowCount: 1,
+              outputCells: [{ columnPattern: "income", value: "313235" }],
+              outputSqlPatterns: ["\\bsum\\s*\\(\\s*amount\\s*\\)\\s+as\\s+income\\b"],
+              predicatePatterns: [":groupId", "\\bdate\\b\\s*like"],
+              sqlPatterns: ["transactions", "amount"],
+            },
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   it("combines complementary complete query results", () => {

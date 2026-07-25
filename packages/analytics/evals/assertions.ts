@@ -17,6 +17,7 @@ interface AssertionContext {
       forbiddenSqlPatterns?: string[];
       outputCells?: Array<{ columnPattern: string; value: string }>;
       outputRows?: string[][];
+      outputSqlPatterns?: string[];
       predicatePatterns?: string[];
       sqlPatterns: string[];
     };
@@ -282,10 +283,18 @@ function getRelevantDatabaseResult(
   const hasRequiredPredicateClauses = (config.predicatePatterns ?? []).every((pattern) =>
     new RegExp(pattern, "i").test(predicateSql),
   );
+  const hasRequiredOutputExpressions = (config.outputSqlPatterns ?? []).every((pattern) =>
+    new RegExp(pattern, "i").test(sql),
+  );
   const hasForbiddenLiteral = (config.forbiddenSqlPatterns ?? []).some((pattern) =>
     new RegExp(pattern, "i").test(sql),
   );
-  if (!hasRequiredPredicates || !hasRequiredPredicateClauses || hasForbiddenLiteral) {
+  if (
+    !hasRequiredPredicates ||
+    !hasRequiredPredicateClauses ||
+    !hasRequiredOutputExpressions ||
+    hasForbiddenLiteral
+  ) {
     return undefined;
   }
 
@@ -350,42 +359,83 @@ export default function assertFinanceChatOutput(
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
     }
     const completeResults = relevantResults.filter((result) => !result.truncated);
-    const evidenceSets = completeResults.reduce<DatabaseResult[][]>(
-      (sets, result) => [...sets, ...sets.map((set) => [...set, result])],
-      [[]],
-    );
-    const hasCompleteEvidence = evidenceSets.slice(1).some((results) => {
-      const rows = results.flatMap((result) => result.rows);
-      const hasExpectedCells = (databaseQuery.outputCells ?? []).every(
-        ({ columnPattern, value: expectedValue }) =>
-          rows.some((row) =>
-            Object.entries(row).some(
-              ([column, value]) =>
-                new RegExp(columnPattern, "i").test(column) &&
-                (typeof value === "number" || typeof value === "string") &&
-                normalizeText(String(value)) === normalizeText(expectedValue),
-            ),
+    const expectedCells = databaseQuery.outputCells ?? [];
+    const expectedRows = databaseQuery.outputRows ?? [];
+    const fullCellMask = (1 << expectedCells.length) - 1;
+    const fullRowMask = (1 << expectedRows.length) - 1;
+    const maxRows =
+      databaseQuery.expectedRowCount ??
+      Math.max(1, ...completeResults.map((result) => result.rows.length));
+    interface EvidenceState {
+      cellMask: number;
+      provesNoData: boolean;
+      rowCount: number;
+      rowMask: number;
+      used: boolean;
+    }
+    const toKey = (state: EvidenceState) =>
+      `${state.rowCount}:${state.cellMask}:${state.rowMask}:${Number(state.provesNoData)}:${Number(state.used)}`;
+    let states = new Map<string, EvidenceState>();
+    const emptyState: EvidenceState = {
+      cellMask: 0,
+      provesNoData: true,
+      rowCount: 0,
+      rowMask: 0,
+      used: false,
+    };
+    states.set(toKey(emptyState), emptyState);
+    for (const result of completeResults) {
+      const resultCellMask = expectedCells.reduce((mask, expectation, index) => {
+        const matched = result.rows.some((row) =>
+          Object.entries(row).some(
+            ([column, value]) =>
+              new RegExp(expectation.columnPattern, "i").test(column) &&
+              (typeof value === "number" || typeof value === "string") &&
+              normalizeText(String(value)) === normalizeText(expectation.value),
           ),
-      );
-      const hasExpectedRows = (databaseQuery.outputRows ?? []).every((expectedRow) =>
-        rows.some((row) => {
+        );
+        return matched ? mask | (1 << index) : mask;
+      }, 0);
+      const resultRowMask = expectedRows.reduce((mask, expectedRow, index) => {
+        const matched = result.rows.some((row) => {
           const values = Object.values(row)
             .filter((value): value is number | string =>
               ["number", "string"].includes(typeof value),
             )
             .map((value) => normalizeText(String(value)));
           return expectedRow.every((expected) => values.includes(normalizeText(expected)));
-        }),
-      );
-      const hasExpectedRowCount =
-        databaseQuery.expectedRowCount === undefined ||
-        rows.length === databaseQuery.expectedRowCount;
-      const provesNoData =
-        databaseQuery.expectEmpty !== true ||
-        rows.length === 0 ||
-        rows.every((row) => Object.values(row).every((value) => value === 0 || value === null));
-      return hasExpectedCells && hasExpectedRows && hasExpectedRowCount && provesNoData;
-    });
+        });
+        return matched ? mask | (1 << index) : mask;
+      }, 0);
+      const resultProvesNoData =
+        result.rows.length === 0 ||
+        result.rows.every((row) =>
+          Object.values(row).every((value) => value === 0 || value === null),
+        );
+      const nextStates = new Map(states);
+      for (const state of states.values()) {
+        const rowCount = state.rowCount + result.rows.length;
+        if (rowCount > maxRows) continue;
+        const nextState: EvidenceState = {
+          cellMask: state.cellMask | resultCellMask,
+          provesNoData: state.provesNoData && resultProvesNoData,
+          rowCount,
+          rowMask: state.rowMask | resultRowMask,
+          used: true,
+        };
+        nextStates.set(toKey(nextState), nextState);
+      }
+      states = nextStates;
+    }
+    const hasCompleteEvidence = [...states.values()].some(
+      (state) =>
+        state.used &&
+        state.cellMask === fullCellMask &&
+        state.rowMask === fullRowMask &&
+        (databaseQuery.expectedRowCount === undefined ||
+          state.rowCount === databaseQuery.expectedRowCount) &&
+        (databaseQuery.expectEmpty !== true || state.provesNoData),
+    );
     if (!hasCompleteEvidence) {
       return fail("queryDatabase結果に期待する完全な根拠行がありません。");
     }
