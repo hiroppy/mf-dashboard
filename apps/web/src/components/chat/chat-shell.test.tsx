@@ -241,7 +241,7 @@ describe("ChatShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "資産を確認" }));
 
     expect(addUserMessage).toHaveBeenCalledWith("資産を確認");
-    expect(screen.queryByRole("button", { name: "先月と比べてどう？" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "先月より増えた支出カテゴリは？" })).toBeNull();
     expect(screen.getByLabelText("質問の候補")).toBeTruthy();
   });
 
@@ -518,7 +518,7 @@ describe("ChatShell", () => {
     expect(screen.queryByText("表示しない明細")).toBeNull();
   });
 
-  it("does not expose SQL in the loading indicator", () => {
+  it("shows only the latest SQL in the loading indicator", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
       close: vi.fn<() => void>(),
@@ -558,8 +558,7 @@ describe("ChatShell", () => {
 
     render(<ChatShell />);
 
-    expect(screen.queryByText("SELECT COUNT(*) FROM holdings WHERE type = 'liability'")).toBeNull();
+    expect(screen.getByText("SELECT COUNT(*) FROM holdings WHERE type = 'liability'")).toBeTruthy();
     expect(screen.queryByText("SELECT * FROM holdings")).toBeNull();
-    expect(screen.getByText("家計データを確認中")).toBeTruthy();
   });
 });

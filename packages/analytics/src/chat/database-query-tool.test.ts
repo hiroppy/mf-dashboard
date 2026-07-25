@@ -38,6 +38,8 @@ describe("createDatabaseQueryTool", () => {
     expect(description).toContain("group_accounts(");
     expect(description).toContain("現在グループの総資産はasset_history.group_id = :groupId");
     expect(description).toContain("評価額・数量・単価・前日比・含み損益はholding_values");
+    expect(description).toContain("「最も赤字幅が大きい」は合計値を昇順に並べる");
+    expect(description).toContain("holding_values.amount（評価額）を損失として扱わない");
     expect(description).toContain("投資情報には主に「株式(現物)」「投資信託」");
     expect(description).toContain("no-group（group_id = '0'）の最新完了snapshot 1件");
     expect(description).toContain("最新snapshotが空なら過去の保有情報は含まれない");

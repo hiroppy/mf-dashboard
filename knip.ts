@@ -5,9 +5,6 @@ const config: KnipConfig = {
     "apps/crawler": {
       ignore: ["src/hooks/helpers.ts"],
     },
-    "packages/db": {
-      ignoreDependencies: ["libsql"],
-    },
   },
 };
 

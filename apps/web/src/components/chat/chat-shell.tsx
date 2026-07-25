@@ -103,6 +103,24 @@ function getFinanceCharts(message: UIMessage): FinanceChart[] {
   });
 }
 
+function getLatestDatabaseQuery(messages: UIMessage[]): string | undefined {
+  const message = messages.at(-1);
+  if (message?.role !== "assistant") return undefined;
+
+  const query = message.parts.findLast(
+    (part) => isToolUIPart(part) && getToolName(part) === "queryDatabase",
+  );
+  if (!query || !("input" in query)) return undefined;
+
+  const input = query.input;
+  return typeof input === "object" &&
+    input !== null &&
+    "sql" in input &&
+    typeof input.sql === "string"
+    ? input.sql.trim()
+    : undefined;
+}
+
 export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }: ChatShellProps) {
   const { addUserMessage, close, draft, error, isOpen, isSubmitting, messages, open, setDraft } =
     useFinanceChat();
@@ -112,6 +130,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
   const isResizingRef = useRef(false);
   const shouldFollowLatestRef = useRef(true);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const latestDatabaseQuery = getLatestDatabaseQuery(messages);
 
   const closeChat = useCallback(() => {
     close();
@@ -371,7 +390,18 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                       <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
                       <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" />
                     </span>
-                    <span className="text-xs text-muted-foreground">家計データを確認中</span>
+                    {latestDatabaseQuery ? (
+                      <span
+                        className="min-w-0 max-w-md font-mono text-xs text-muted-foreground"
+                        title={latestDatabaseQuery}
+                      >
+                        <span className="block truncate">
+                          {latestDatabaseQuery.replace(/\s+/g, " ")}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">家計データを確認中</span>
+                    )}
                     <span className="sr-only">家計データを分析中...</span>
                   </span>
                 </output>

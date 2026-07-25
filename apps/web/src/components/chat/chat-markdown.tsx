@@ -25,7 +25,6 @@ function createComponents(allowedHrefs: ReadonlySet<string>): Components {
     h1: ({ children }) => <h1 className="text-lg font-semibold">{children}</h1>,
     h2: ({ children }) => <h2 className="text-base font-semibold">{children}</h2>,
     h3: ({ children }) => <h3 className="text-sm font-semibold">{children}</h3>,
-    img: ({ alt }) => <span>{alt}</span>,
     strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   };
 }
@@ -45,6 +44,7 @@ export function ChatMarkdown({
     <Streamdown
       animated
       components={createComponents(new Set(allowedHrefs))}
+      disallowedElements={["img"]}
       isAnimating={isAnimating}
       mode={isAnimating ? "streaming" : "static"}
       plugins={{ cjk }}

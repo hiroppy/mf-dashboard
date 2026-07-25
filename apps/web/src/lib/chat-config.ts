@@ -1,10 +1,10 @@
 import { CHAT_MESSAGE_MAX_LENGTH } from "./chat-limits";
 
 export const DEFAULT_CHAT_SUGGESTED_PROMPTS = [
-  "今月の収支は？",
-  "先月と比べてどう？",
-  "削れそうな支出はある？",
-  "総資産を教えて",
+  "先月より増えた支出カテゴリは？",
+  "今月の普段より大きい支出は？",
+  "削減効果が大きそうな支出は？",
+  "保有株で値動きや比率が気になる銘柄は？",
 ] as const;
 
 export function normalizeChatSuggestedPrompts(prompts: readonly string[]): string[] {

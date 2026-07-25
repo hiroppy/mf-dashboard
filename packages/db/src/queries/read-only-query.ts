@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { getTableColumns, getTableName, isTable } from "drizzle-orm";
 import { getDbPath } from "../db-path";
 import type { Db } from "../index";
@@ -35,7 +34,6 @@ const SCHEMA_QUALIFIER = new RegExp(
   String.raw`\b(?:main|source|temp)\s*\.\s*(?:${TABLE_NAMES.join("|")})\b`,
   "i",
 );
-const libsqlModulePath = createRequire(import.meta.url).resolve("libsql/promise");
 
 const QUERY_PROCESS_SOURCE = String.raw`
   let input = "";
@@ -44,11 +42,13 @@ const QUERY_PROCESS_SOURCE = String.raw`
     input += chunk;
   });
   process.stdin.on("end", () => {
-    run(JSON.parse(input)).catch((error) => {
+    try {
+      run(JSON.parse(input));
+    } catch (error) {
       send({
         error: error instanceof Error ? error.message : "SQLの実行に失敗しました。",
       });
-    });
+    }
   });
 
   function send(message) {
@@ -59,15 +59,15 @@ const QUERY_PROCESS_SOURCE = String.raw`
     return value instanceof Uint8Array ? Array.from(value) : value;
   }
 
-  async function run(processData) {
-    const Database = require(processData.libsqlModulePath);
-    const database = await new Database(":memory:", {});
+  function run(processData) {
+    const { DatabaseSync } = require("node:sqlite");
+    const database = new DatabaseSync(":memory:");
 
     try {
-      await database.pragma("hard_heap_limit = " + processData.maxSqliteHeapBytes);
-      await database.exec(processData.scopedDatabaseSql);
+      database.exec("PRAGMA hard_heap_limit = " + processData.maxSqliteHeapBytes);
+      database.exec(processData.scopedDatabaseSql);
       send({ ready: true });
-      const statement = await database.prepare(
+      const statement = database.prepare(
         "SELECT * FROM (\n" + processData.query + "\n) AS query_result LIMIT " +
           (processData.maxRows + 1),
       );
@@ -78,7 +78,7 @@ const QUERY_PROCESS_SOURCE = String.raw`
       const rows = [];
       let byteLength = 0;
       let truncated = false;
-      const iterator = await statement.iterate(
+      const iterator = statement.iterate(
         /:groupId\b/.test(processData.query) ? { groupId: processData.groupId } : {},
       );
 
@@ -155,6 +155,7 @@ export function describeDatabaseSchema(): string {
 - 現在グループの総資産は${assetHistory}.${schema.assetHistory.groupId.name} = :groupIdで絞り、${schema.assetHistory.date.name}が最新の行の${schema.assetHistory.totalAssets.name}を使用する。保有銘柄の件数や評価額から総資産を推測・再計算しない
 - 総資産のカテゴリ内訳は最新の${assetHistory}を${assetHistoryCategories}.${schema.assetHistoryCategories.assetHistoryId.name} = ${assetHistory}.${schema.assetHistory.id.name}でJOINし、${schema.assetHistoryCategories.categoryName.name}と${schema.assetHistoryCategories.amount.name}を使用する
 - 銘柄名や資産・負債の区分は${holdings}、評価額・数量・単価・前日比・含み損益は${holdingValues}にある。${holdingValues}.${schema.holdingValues.holdingId.name} = ${holdings}.${schema.holdings.id.name}でJOINする
+- 保有銘柄の「赤字」「赤字幅」「損失」「含み損」は${holdingValues}.${schema.holdingValues.unrealizedGain.name} < 0を使用し、${holdingValues}.${schema.holdingValues.amount.name}（評価額）を損失として扱わない。同名銘柄が複数口座にある場合は${holdings}.${schema.holdings.name.name}ごとに${holdingValues}.${schema.holdingValues.unrealizedGain.name}をSUMし、「最も赤字幅が大きい」は合計値を昇順に並べる
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
 - 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
@@ -697,7 +698,6 @@ function runSandboxedQuery(
   });
   const processData = JSON.stringify({
     groupId,
-    libsqlModulePath,
     maxBytes: READ_ONLY_QUERY_MAX_BYTES,
     maxColumns: MAX_RESULT_COLUMNS,
     maxRows: READ_ONLY_QUERY_MAX_ROWS,
@@ -711,6 +711,7 @@ function runSandboxedQuery(
     let output = "";
     let errorOutput = "";
     let message: QueryProcessMessage | undefined;
+    let termination: { reason: unknown } | undefined;
     let timeout: ReturnType<typeof setTimeout>;
 
     function finish(callback: () => void): void {
@@ -721,25 +722,21 @@ function runSandboxedQuery(
       callback();
     }
 
-    function abortSandbox(): void {
+    function terminateSandbox(reason: unknown): void {
+      if (termination) return;
+      termination = { reason };
+      clearTimeout(timeout);
       child.kill("SIGKILL");
-      finish(() => reject(abortSignal?.reason ?? new Error("SQLの実行を中断しました。")));
+    }
+
+    function abortSandbox(): void {
+      terminateSandbox(abortSignal?.reason ?? new Error("SQLの実行を中断しました。"));
     }
 
     function armTimeout(duration: number, errorMessage: string): void {
       clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        child.kill("SIGKILL");
-        finish(() => reject(new Error(errorMessage)));
-      }, duration);
+      timeout = setTimeout(() => terminateSandbox(new Error(errorMessage)), duration);
     }
-
-    armTimeout(READ_ONLY_QUERY_SETUP_TIMEOUT_MS, "SQL sandboxの準備時間が上限を超えました。");
-    if (abortSignal?.aborted) {
-      abortSandbox();
-      return;
-    }
-    abortSignal?.addEventListener("abort", abortSandbox, { once: true });
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -766,6 +763,10 @@ function runSandboxedQuery(
     child.once("error", (error) => finish(() => reject(error)));
     child.once("close", (code) => {
       finish(() => {
+        if (termination) {
+          reject(termination.reason);
+          return;
+        }
         if (code !== 0) {
           reject(new Error(errorOutput.trim() || `SQL processが終了しました (code: ${code})。`));
           return;
@@ -778,7 +779,14 @@ function runSandboxedQuery(
         }
       });
     });
-    child.stdin.end(processData);
+
+    armTimeout(READ_ONLY_QUERY_SETUP_TIMEOUT_MS, "SQL sandboxの準備時間が上限を超えました。");
+    abortSignal?.addEventListener("abort", abortSandbox, { once: true });
+    if (abortSignal?.aborted) {
+      abortSandbox();
+    } else {
+      child.stdin.end(processData);
+    }
   });
 }
 

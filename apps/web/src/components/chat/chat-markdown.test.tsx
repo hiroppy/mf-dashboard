@@ -48,11 +48,12 @@ describe("ChatMarkdown", () => {
     expect(screen.getByText("別グループ")).toBeTruthy();
   });
 
-  it("does not request Markdown images", () => {
+  it("omits Markdown images and their blocked placeholders", () => {
     render(<ChatMarkdown>{"![追跡画像](https://tracker.example/pixel)"}</ChatMarkdown>);
 
     expect(document.querySelector("img")).toBeNull();
-    expect(screen.getByText("追跡画像")).toBeTruthy();
+    expect(screen.queryByText("追跡画像")).toBeNull();
+    expect(screen.queryByText(/Image blocked/)).toBeNull();
   });
 
   it("renders strong emphasis next to Japanese text", () => {
