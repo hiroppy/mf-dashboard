@@ -11,14 +11,18 @@ interface ChartExpectation {
 
 interface AssertionContext {
   config?: {
+    databaseQuery?: {
+      outputFacts?: string[];
+      sqlIncludes: string[];
+    };
     expectedCharts?: ChartExpectation[];
     expectedMarkdownRows?: string[][];
     expectedTextFacts?: string[];
     expectedTextPairs?: Array<[string, string]>;
     expectedTextLinks?: string[];
     expectedToolRoutes?: string[];
+    forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
-    requiresDatabaseQuery?: boolean;
   };
 }
 
@@ -89,7 +93,8 @@ function validateTextPairs(text: string, expectedPairs: Array<[string, string]>)
       );
 
       return (
-        !segments.some((segment) => includesFact(segment, value)) ||
+        claimedAmounts.length === 0 ||
+        !claimedAmounts.includes(expectedValue) ||
         claimedAmounts.some((amount) => amount !== expectedValue)
       );
     })
@@ -150,6 +155,25 @@ function parseOutput(output: string): EvaluationOutput | undefined {
   }
 }
 
+function isRelevantDatabaseQuery(
+  trace: EvaluationOutput["toolTrace"][number],
+  sqlIncludes: string[],
+): boolean {
+  if (
+    trace.toolName !== "queryDatabase" ||
+    !trace.succeeded ||
+    trace.output === undefined ||
+    typeof trace.input !== "object" ||
+    trace.input === null ||
+    !("sql" in trace.input)
+  ) {
+    return false;
+  }
+
+  const sql = trace.input.sql;
+  return typeof sql === "string" && sqlIncludes.every((term) => sql.includes(term));
+}
+
 export default function assertFinanceChatOutput(
   output: string,
   context: AssertionContext,
@@ -158,6 +182,12 @@ export default function assertFinanceChatOutput(
   if (!actual) return fail("出力がfinance chatの評価JSON形式ではありません。");
 
   const config = context.config ?? {};
+  const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
+    actual.text.includes(term),
+  );
+  if (forbiddenTerms.length > 0) {
+    return fail(`本文に内部用語が含まれています: ${forbiddenTerms.join(", ")}`);
+  }
   const missingFacts = (config.expectedTextFacts ?? []).filter(
     (fact) => !includesFact(actual.text, fact),
   );
@@ -177,21 +207,20 @@ export default function assertFinanceChatOutput(
   ) {
     return fail("データのない回答に金額が含まれています。");
   }
-  if (
-    config.requiresDatabaseQuery &&
-    !actual.toolTrace.some(
-      ({ input, output, succeeded, toolName }) =>
-        toolName === "queryDatabase" &&
-        succeeded &&
-        output !== undefined &&
-        typeof input === "object" &&
-        input !== null &&
-        "sql" in input &&
-        typeof input.sql === "string" &&
-        input.sql.trim().length > 0,
-    )
-  ) {
-    return fail("回答に成功したqueryDatabaseの取得根拠がありません。");
+  const databaseQuery = config.databaseQuery;
+  if (databaseQuery) {
+    const relevantQueries = actual.toolTrace.filter((trace) =>
+      isRelevantDatabaseQuery(trace, databaseQuery.sqlIncludes),
+    );
+    const queryOutput = JSON.stringify(relevantQueries.map(({ output }) => output));
+    const missingQueryFacts = (databaseQuery.outputFacts ?? []).filter(
+      (fact) => !includesFact(queryOutput, fact),
+    );
+    if (relevantQueries.length === 0 || missingQueryFacts.length > 0) {
+      return fail(
+        `回答に関連するqueryDatabaseの取得根拠がありません: ${missingQueryFacts.join(", ")}`,
+      );
+    }
   }
 
   const chartExpectations = config.expectedCharts ?? [];

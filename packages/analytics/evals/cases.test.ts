@@ -27,10 +27,16 @@ describe("finance chat evaluation cases", () => {
       "日付別支出が各明細を同じMarkdown表行に返す",
       "データのない期間で金額を捏造しない",
     ]) {
-      expect(getCase(description)).toContain("requiresDatabaseQuery: true");
+      expect(getCase(description)).toContain("databaseQuery:");
     }
     expect(getCase("明示的なページ要求だけがroute tool由来のリンクを返す")).not.toContain(
-      "requiresDatabaseQuery",
+      "databaseQuery:",
     );
+  });
+
+  it("binds the food total to the food label", () => {
+    const foodCase = getCase("食費内訳が正しい合計と構造化chartを返す");
+    expect(foodCase).toContain("expectedTextPairs:");
+    expect(foodCase).toContain('- [食費, "41837"]');
   });
 });

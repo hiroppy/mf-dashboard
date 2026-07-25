@@ -140,14 +140,23 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は313235件、支出は219,894円、収支は93,341円です。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
-  it("requires a successful database query for data-backed cases", () => {
+  it("requires a relevant successful database query for data-backed cases", () => {
     const config = {
+      databaseQuery: {
+        sqlIncludes: ["transactions"],
+        outputFacts: ["313235"],
+      },
       expectedCharts: [],
       expectedTextLinks: [],
       expectedToolRoutes: [],
-      requiresDatabaseQuery: true,
     };
 
     expect(assertFinanceChatOutput(output(), { config })).toMatchObject({ pass: false });
@@ -179,7 +188,48 @@ describe("assertFinanceChatOutput", () => {
         }),
         { config },
       ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: { sql: "SELECT amount FROM transactions" },
+              output: [{ amount: 313_235 }],
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        { config },
+      ),
     ).toMatchObject({ pass: true });
+  });
+
+  it("checks forbidden internal terms only in the answer text", () => {
+    const config = {
+      expectedCharts: [],
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+      forbiddenTextTerms: ["transactions", ":groupId"],
+    };
+    const toolTrace = [
+      {
+        input: { sql: "SELECT amount FROM transactions WHERE group_id = :groupId" },
+        output: [],
+        succeeded: true,
+        toolName: "queryDatabase",
+      },
+    ];
+
+    expect(assertFinanceChatOutput(output({ toolTrace }), { config })).toMatchObject({
+      pass: true,
+    });
+    expect(
+      assertFinanceChatOutput(output({ text: "transactionsを確認しました。", toolTrace }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires chart structure and order", () => {

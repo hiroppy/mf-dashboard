@@ -4,8 +4,6 @@
     evaluationDate: "2026-07-31T03:00:00.000Z"
   assert:
     - type: is-json
-    - type: not-regex
-      value: (transactions|is_transfer|is_excluded_from_calculation|:groupId)
     - type: javascript
       value: file://./assertions.ts
       config:
@@ -17,7 +15,10 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
-        requiresDatabaseQuery: true
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+        databaseQuery:
+          sqlIncludes: [transactions]
+          outputFacts: ["313235", "219894"]
 
 - description: 食費内訳が正しい合計と構造化chartを返す
   vars:
@@ -30,7 +31,9 @@
     - type: javascript
       value: file://./assertions.ts
       config:
-        expectedTextFacts: ["食費", "41837"]
+        expectedTextFacts: ["食費"]
+        expectedTextPairs:
+          - [食費, "41837"]
         expectedCharts:
           - chartType: pie
             unit: currency
@@ -43,7 +46,9 @@
               - { label: カフェ, values: [4790] }
         expectedToolRoutes: []
         expectedTextLinks: []
-        requiresDatabaseQuery: true
+        databaseQuery:
+          sqlIncludes: [transactions]
+          outputFacts: ["24833", "12214", "4790"]
 
 - description: 日付別支出が各明細を同じMarkdown表行に返す
   vars:
@@ -61,7 +66,9 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
-        requiresDatabaseQuery: true
+        databaseQuery:
+          sqlIncludes: [transactions]
+          outputFacts: ["3435", "3152"]
 
 - description: 明示的なページ要求だけがroute tool由来のリンクを返す
   vars:
@@ -92,4 +99,5 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         forbidAmounts: true
-        requiresDatabaseQuery: true
+        databaseQuery:
+          sqlIncludes: [transactions]
