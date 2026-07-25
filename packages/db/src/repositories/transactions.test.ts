@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import * as schema from "../schema/schema";
 import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
@@ -13,13 +16,16 @@ import {
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
 let db: Db;
+let temporaryDirectory: string;
 
 beforeAll(async () => {
-  db = await createTestDb();
+  temporaryDirectory = mkdtempSync(join(tmpdir(), "mf-dashboard-transactions-"));
+  db = await createTestDb(`file:${join(temporaryDirectory, "test.db")}`);
 });
 
 afterAll(() => {
   closeTestDb(db);
+  rmSync(temporaryDirectory, { recursive: true });
 });
 
 beforeEach(async () => {

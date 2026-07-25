@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { AccountStatus } from "../types";
 import { now, convertToIsoDate, upsertById } from "../utils";
@@ -56,7 +56,7 @@ export async function saveAccountStatus(
 }
 
 export async function updateAccountCategory(
-  db: Db,
+  db: DbExecutor,
   mfId: string,
   categoryName: string,
 ): Promise<void> {
@@ -73,7 +73,7 @@ export async function updateAccountCategory(
  * 全アカウントのname/mfIdからidへのマップを構築
  * トランザクション保存時のaccount_idルックアップ用
  */
-export async function buildAccountIdMap(db: Db): Promise<Map<string, number>> {
+export async function buildAccountIdMap(db: DbExecutor): Promise<Map<string, number>> {
   const accounts = await db.select().from(schema.accounts).all();
   const map = new Map<string, number>();
 
@@ -88,7 +88,7 @@ export async function buildAccountIdMap(db: Db): Promise<Map<string, number>> {
 /**
  * 複数アカウントの一括upsert
  */
-export async function upsertAccounts(db: Db, accounts: AccountStatus[]): Promise<void> {
+export async function upsertAccounts(db: DbExecutor, accounts: AccountStatus[]): Promise<void> {
   if (accounts.length === 0) return;
 
   const timestamp = now();
@@ -128,7 +128,7 @@ export async function upsertAccounts(db: Db, accounts: AccountStatus[]): Promise
  * 複数アカウントステータスの一括upsert
  */
 export async function saveAccountStatuses(
-  db: Db,
+  db: DbExecutor,
   statuses: Array<{ accountId: number; status: AccountStatus }>,
 ): Promise<void> {
   if (statuses.length === 0) return;

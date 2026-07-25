@@ -2,10 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
-import { saveGroupOnlyData, saveScrapedData } from "@mf-dashboard/db/repository/save-scraped-data";
+import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
   hasTransactionsForMonth,
-  saveTransactionsForMonth,
+  saveTransactionsForMonths,
 } from "@mf-dashboard/db/repository/transactions";
 import type { CashFlowSummary } from "@mf-dashboard/db/types";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -38,13 +38,12 @@ vi.mock("@mf-dashboard/db/repository/accounts", () => ({
 }));
 
 vi.mock("@mf-dashboard/db/repository/save-scraped-data", () => ({
-  saveScrapedData: vi.fn<() => Promise<void>>(),
-  saveGroupOnlyData: vi.fn<() => Promise<void>>(),
+  saveScrapedDataBatch: vi.fn<() => Promise<number[]>>(),
 }));
 
 vi.mock("@mf-dashboard/db/repository/transactions", () => ({
   hasTransactionsForMonth: vi.fn<() => Promise<boolean>>(),
-  saveTransactionsForMonth: vi.fn<() => Promise<number>>(),
+  saveTransactionsForMonths: vi.fn<() => Promise<number[]>>(),
 }));
 
 vi.mock("./scrapers/cash-flow-history.js", () => ({
@@ -138,10 +137,11 @@ beforeEach(() => {
   vi.mocked(buildScrapedData).mockClear();
   vi.mocked(buildGroupOnlyScrapedData).mockClear();
   vi.mocked(buildAccountIdMap).mockReset();
-  vi.mocked(saveScrapedData).mockReset();
-  vi.mocked(saveGroupOnlyData).mockReset();
+  vi.mocked(saveScrapedDataBatch).mockReset();
+  vi.mocked(saveScrapedDataBatch).mockResolvedValue([]);
   vi.mocked(hasTransactionsForMonth).mockReset();
-  vi.mocked(saveTransactionsForMonth).mockReset();
+  vi.mocked(saveTransactionsForMonths).mockReset();
+  vi.mocked(saveTransactionsForMonths).mockResolvedValue([]);
   vi.mocked(scrapeCashFlowHistory).mockReset();
   vi.mocked(switchGroup).mockReset();
 });
@@ -245,7 +245,13 @@ describe("runSavePhase", () => {
       expect.objectContaining({ cashFlow: categorizedCashFlow }),
       expect.objectContaining({ group: expect.objectContaining({ id: "0" }) }),
     );
-    expect(saveScrapedData).toHaveBeenCalledWith(db, { kind: "full" });
+    expect(saveScrapedDataBatch).toHaveBeenCalledWith(db, {
+      cleanupGroupIds: undefined,
+      fullData: { kind: "full" },
+      groupOnlyData: [{ kind: "group-only" }],
+      historyMonths: [],
+      institutionCategories: undefined,
+    });
   });
 });
 
@@ -303,7 +309,7 @@ describe("runCashFlowHistoryPhase", () => {
         await callbacks?.onMonthStart?.("2026-06");
         return [{ month: "2026-05", progressMonth: "2026-06", data: monthData }];
       });
-      vi.mocked(saveTransactionsForMonth).mockResolvedValue(1);
+      vi.mocked(saveTransactionsForMonths).mockResolvedValue([1]);
 
       await runCashFlowHistoryPhase(
         {} as never,
@@ -387,7 +393,7 @@ describe("runCashFlowHistoryPhase", () => {
         await callbacks?.onMonthStart?.("2026-06");
         return [{ month: "2026-06", data: monthData }];
       });
-      vi.mocked(saveTransactionsForMonth).mockRejectedValue(new Error("database unavailable"));
+      vi.mocked(saveTransactionsForMonths).mockRejectedValue(new Error("database unavailable"));
 
       await expect(
         runCashFlowHistoryPhase(
@@ -429,7 +435,7 @@ describe("runCashFlowHistoryPhase", () => {
         await callbacks?.onMonthComplete?.("2026-06");
         return [{ month: "2026-06", data: monthData }];
       });
-      vi.mocked(saveTransactionsForMonth).mockResolvedValue(1);
+      vi.mocked(saveTransactionsForMonths).mockResolvedValue([1]);
 
       await runCashFlowHistoryPhase(
         db as Parameters<typeof runCashFlowHistoryPhase>[0],
@@ -473,7 +479,7 @@ describe("runCashFlowHistoryPhase", () => {
       { month: "2026-06", data: originalCashFlow },
     ]);
     vi.mocked(categorizeCashFlowMonth).mockResolvedValue(categorizedCashFlow);
-    vi.mocked(saveTransactionsForMonth).mockResolvedValue(1);
+    vi.mocked(saveTransactionsForMonths).mockResolvedValue([1]);
 
     await runCashFlowHistoryPhase(
       db as Parameters<typeof runCashFlowHistoryPhase>[0],
@@ -489,10 +495,9 @@ describe("runCashFlowHistoryPhase", () => {
       config: categoryDecision.config,
       usage: categoryDecision.usage,
     });
-    expect(saveTransactionsForMonth).toHaveBeenCalledWith(
+    expect(saveTransactionsForMonths).toHaveBeenCalledWith(
       db,
-      "2026-06",
-      categorizedCashFlow.items,
+      [{ items: categorizedCashFlow.items, month: "2026-06" }],
       accountIdMap,
     );
   });

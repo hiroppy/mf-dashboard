@@ -1,12 +1,18 @@
 import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type { ScrapedData } from "../types";
+import type { CashFlowItem, ScrapedData } from "../types";
 import { now } from "../utils";
-import { upsertAccounts, saveAccountStatuses, buildAccountIdMap } from "./accounts";
+import {
+  upsertAccounts,
+  saveAccountStatuses,
+  buildAccountIdMap,
+  updateAccountCategory,
+} from "./accounts";
 import { getOrCreateCategory } from "./categories";
 import {
+  deleteGroupsNotIn,
   upsertGroup,
   updateGroupLastScrapedAt,
   clearGroupAccountLinks,
@@ -16,7 +22,7 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { saveTransaction } from "./transactions";
+import { replaceTransactionsForMonth, saveTransaction } from "./transactions";
 
 const isCI = process.env.CI === "true";
 function log(...args: unknown[]) {
@@ -31,6 +37,43 @@ function log(...args: unknown[]) {
  * - group_accountsへのリンク
  */
 export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
+  await saveScrapedDataBatch(db, { fullData: data, groupOnlyData: [] });
+}
+
+export async function saveScrapedDataBatch(
+  db: Db,
+  data: {
+    cleanupGroupIds?: string[];
+    fullData?: ScrapedData;
+    groupOnlyData: ScrapedData[];
+    historyMonths?: Array<{ items: CashFlowItem[]; month: string }>;
+    institutionCategories?: ReadonlyMap<string, string>;
+  },
+): Promise<number[]> {
+  return db.transaction(async (transaction) => {
+    if (data.fullData) await saveScrapedDataAtomically(transaction, data.fullData);
+    for (const groupData of data.groupOnlyData) {
+      await saveGroupOnlyDataAtomically(transaction, groupData);
+    }
+    for (const [mfId, category] of data.institutionCategories ?? []) {
+      await updateAccountCategory(transaction, mfId, category);
+    }
+
+    const savedCounts: number[] = [];
+    if (data.historyMonths?.length) {
+      const accountIdMap = await buildAccountIdMap(transaction);
+      for (const { items, month } of data.historyMonths) {
+        savedCounts.push(
+          await replaceTransactionsForMonth(transaction, month, items, accountIdMap),
+        );
+      }
+    }
+    if (data.cleanupGroupIds) await deleteGroupsNotIn(transaction, data.cleanupGroupIds);
+    return savedCounts;
+  });
+}
+
+async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
   const today = getJstTodayIsoDate();
 
   log("Saving scraped data to database...");
@@ -169,6 +212,10 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
  * - spendingTargets
  */
 export async function saveGroupOnlyData(db: Db, data: ScrapedData): Promise<void> {
+  await saveScrapedDataBatch(db, { groupOnlyData: [data] });
+}
+
+async function saveGroupOnlyDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
   log("Saving group-only data to database...");
 
   // 1. Save group

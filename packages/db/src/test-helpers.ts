@@ -6,11 +6,12 @@ import type { Db } from "./index";
 import * as schema from "./schema/schema";
 
 /**
- * テスト用のインメモリ DB を作成し、マイグレーションを適用して返す。
+ * テスト用 DB を作成し、マイグレーションを適用して返す。
+ * 既定はインメモリで、file URLを渡すと複数connectionを使うqueryも検証できる。
  * beforeAll で1回だけ呼び出し、テスト間は resetTestDb でデータをクリアする。
  */
-export async function createTestDb(): Promise<Db> {
-  const client = createClient({ url: ":memory:" });
+export async function createTestDb(url = ":memory:"): Promise<Db> {
+  const client = createClient({ url });
   const db = drizzle(client, { schema });
 
   // マイグレーション適用

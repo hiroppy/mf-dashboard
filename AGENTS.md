@@ -10,7 +10,6 @@ This repository is a monorepo built with pnpm workspaces and Turborepo.
 | -------------------- | ---------------------------------------------- |
 | `.agents/skills`     | Shared repository-specific agent workflows     |
 | `apps/crawler`       | Money Forward scraper                          |
-| `apps/mcp`           | MCP server for supported AI assistants         |
 | `apps/web`           | Next.js dashboard                              |
 | `packages/analytics` | Shared financial analysis and tool definitions |
 | `packages/db`        | Shared database schema and repositories        |

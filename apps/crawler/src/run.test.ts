@@ -6,7 +6,6 @@ import {
   runAnalyticsPhase,
   runAuthPhase,
   runCashFlowHistoryPhase,
-  runCleanupPhase,
   runInstitutionCategoryPhase,
   runLoadPhase,
   runNotificationPhase,
@@ -25,8 +24,7 @@ vi.mock("./crawler-phases.js", () => ({
   runAnalyticsPhase: vi.fn<() => void>(),
   runAuthPhase: vi.fn<() => void>(),
   runCashFlowHistoryPhase: vi.fn<() => void>(),
-  runCleanupPhase: vi.fn<() => void>(),
-  runInstitutionCategoryPhase: vi.fn<() => void>(),
+  runInstitutionCategoryPhase: vi.fn<() => Map<string, string>>(),
   runLoadPhase: vi.fn<() => void>(),
   runNotificationPhase: vi.fn<() => void>(),
   runSavePhase: vi.fn<() => void>(),
@@ -65,6 +63,14 @@ beforeEach(async () => {
   });
   vi.mocked(runNotificationPhase).mockResolvedValue(null);
   vi.mocked(notifyWebRefresh).mockResolvedValue(undefined);
+  vi.mocked(runSavePhase).mockResolvedValue([]);
+  vi.mocked(runInstitutionCategoryPhase).mockResolvedValue(new Map([["account-a", "銀行"]]));
+  vi.mocked(runCashFlowHistoryPhase).mockImplementation(
+    async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
+      if (!publishHistory) throw new Error("publishHistory is required");
+      await publishHistory([]);
+    },
+  );
   vi.mocked(runScrapePhase).mockImplementation(async (_page, _config, progress) => {
     for (const [step, metadata] of [
       [CRAWLER_STEPS.groupList],
@@ -103,13 +109,13 @@ afterEach(async () => {
 });
 
 describe("runCrawler progress", () => {
-  test("group cleanup 失敗を database save step に記録する", async () => {
+  test("atomic database save失敗を database save step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
       source: "test",
       startedAt: "2026-07-01T00:00:00.000Z",
     });
-    vi.mocked(runCleanupPhase).mockRejectedValueOnce(new Error("database cleanup failed"));
+    vi.mocked(runSavePhase).mockRejectedValueOnce(new Error("database cleanup failed"));
 
     await expect(runCrawler(progress)).rejects.toThrow("database cleanup failed");
 
@@ -138,17 +144,54 @@ describe("runCrawler progress", () => {
       { step: "liabilities", status: "done" },
       { step: "cash_flow_history", status: "done" },
       { step: "group_data", status: "done" },
-      { step: "database_save", status: "done" },
       { step: "institution_categories", status: "done" },
+      { step: "database_save", status: "done" },
       { step: "analytics", status: "done" },
       { step: "notification", status: "done" },
       { step: "web_cache_refresh", status: "done" },
     ]);
     expect(runAuthPhase).toHaveBeenCalledOnce();
     expect(runSavePhase).toHaveBeenCalledOnce();
-    expect(runCleanupPhase).toHaveBeenCalledOnce();
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
+  });
+
+  test("history replacementsをcurrent dataと同じsave phaseへ渡す", async () => {
+    vi.mocked(runLoadPhase).mockReturnValue({
+      skipRefresh: false,
+      cleanupGroups: false,
+      authState: "configured",
+      dbPath: "/tmp/demo.db",
+      dbExists: true,
+      scrapeMode: "history",
+      isHistoryMode: true,
+      isDebug: false,
+      isHeaded: false,
+    });
+    const historyMonths = [{ items: [], month: "2026-06" }];
+    vi.mocked(runCashFlowHistoryPhase).mockImplementation(
+      async (_db, _page, _config, _categoryDecision, _progress, publishHistory) => {
+        if (!publishHistory) throw new Error("publishHistory is required");
+        await publishHistory(historyMonths);
+      },
+    );
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress);
+
+    expect(runSavePhase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      historyMonths,
+      undefined,
+      new Map([["account-a", "銀行"]]),
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { eq, notInArray } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { Group } from "../types";
 import { now, upsertById } from "../utils";
@@ -13,7 +13,7 @@ export async function getCurrentGroupId(db: Db): Promise<string | null> {
   return group?.id ?? null;
 }
 
-export async function clearGroupAccountLinks(db: Db, groupId: string): Promise<void> {
+export async function clearGroupAccountLinks(db: DbExecutor, groupId: string): Promise<void> {
   await db.delete(schema.groupAccounts).where(eq(schema.groupAccounts.groupId, groupId)).run();
 }
 
@@ -34,7 +34,7 @@ export async function linkAccountToGroup(
     .run();
 }
 
-export async function upsertGroup(db: Db, group: Group): Promise<void> {
+export async function upsertGroup(db: DbExecutor, group: Group): Promise<void> {
   // isCurrent=trueの場合のみ、他のグループをfalseにする
   if (group.isCurrent) {
     await db.update(schema.groups).set({ isCurrent: false, updatedAt: now() }).run();
@@ -58,7 +58,7 @@ export async function upsertGroup(db: Db, group: Group): Promise<void> {
 }
 
 export async function updateGroupLastScrapedAt(
-  db: Db,
+  db: DbExecutor,
   groupId: string,
   timestamp: string,
 ): Promise<void> {
@@ -69,7 +69,7 @@ export async function updateGroupLastScrapedAt(
     .run();
 }
 
-export async function deleteGroupsNotIn(db: Db, groupIds: string[]): Promise<void> {
+export async function deleteGroupsNotIn(db: DbExecutor, groupIds: string[]): Promise<void> {
   if (groupIds.length === 0) return;
   await db.delete(schema.groups).where(notInArray(schema.groups.id, groupIds)).run();
 }
@@ -78,7 +78,7 @@ export async function deleteGroupsNotIn(db: Db, groupIds: string[]): Promise<voi
  * 複数アカウントリンクの一括insert
  */
 export async function linkAccountsToGroup(
-  db: Db,
+  db: DbExecutor,
   groupId: string,
   accountIds: number[],
 ): Promise<void> {

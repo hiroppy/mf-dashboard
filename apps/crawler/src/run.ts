@@ -1,10 +1,10 @@
 import { closeDb } from "@mf-dashboard/db";
+import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import {
   handleCrawlerFailure,
   runAnalyticsPhase,
   runAuthPhase,
   runCashFlowHistoryPhase,
-  runCleanupPhase,
   runInstitutionCategoryPhase,
   runLoadPhase,
   runNotificationPhase,
@@ -19,7 +19,7 @@ import {
   runCrawlerStep,
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
-import { error, info } from "./logger.js";
+import { error, info, warn } from "./logger.js";
 import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
@@ -39,24 +39,40 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
 
     await using groupScope = await createGroupScope(activeRuntime.page);
     const scrapeResult = await runScrapePhase(activeRuntime.page, config, progress);
-    await runCrawlerStep(progress, CRAWLER_STEPS.databaseSave, async () => {
-      await runSavePhase(
+    const cleanupResult = config.cleanupGroups
+      ? buildCleanupGroupIds(scrapeResult.groupDataList)
+      : null;
+    if (config.cleanupGroups && !cleanupResult) {
+      warn(
+        "Skipped group cleanup because no groups were scraped; group selector retrieval may have failed.",
+      );
+    }
+    const institutionCategories = await runCrawlerStep(
+      progress,
+      CRAWLER_STEPS.institutionCategories,
+      () => runInstitutionCategoryPhase(activeRuntime.page),
+    );
+    await runCrawlerStep(progress, CRAWLER_STEPS.databaseSave, () =>
+      runCashFlowHistoryPhase(
         activeRuntime.db,
         activeRuntime.page,
-        scrapeResult,
+        config,
         activeRuntime.categoryDecision,
-      );
-      await runCleanupPhase(activeRuntime.db, scrapeResult.groupDataList, config);
-    });
-    await runCrawlerStep(progress, CRAWLER_STEPS.institutionCategories, () =>
-      runInstitutionCategoryPhase(activeRuntime.db, activeRuntime.page),
-    );
-    await runCashFlowHistoryPhase(
-      activeRuntime.db,
-      activeRuntime.page,
-      config,
-      activeRuntime.categoryDecision,
-      progress,
+        progress,
+        async (historyMonths) => {
+          const savedCounts = await runSavePhase(
+            activeRuntime.db,
+            activeRuntime.page,
+            scrapeResult,
+            activeRuntime.categoryDecision,
+            historyMonths,
+            cleanupResult?.ids,
+            institutionCategories,
+          );
+          if (cleanupResult) info("Cleaned up groups not found in MoneyForward");
+          return savedCounts;
+        },
+      ),
     );
     await runCrawlerStep(progress, CRAWLER_STEPS.analytics, () =>
       runAnalyticsPhase(activeRuntime.db, scrapeResult.groupDataList),

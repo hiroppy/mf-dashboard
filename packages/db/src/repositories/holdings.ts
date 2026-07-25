@@ -1,12 +1,12 @@
 import { eq, and } from "drizzle-orm";
-import type { Db } from "../index";
+import type { DbExecutor } from "../index";
 import { schema } from "../index";
 import type { HoldingType } from "../types";
 import { now, upsertById } from "../utils";
 
 // 毎回新規作成（同じ銘柄でも別レコードとして保存）
 export async function createHolding(
-  db: Db,
+  db: DbExecutor,
   accountId: number,
   name: string,
   type: HoldingType,
@@ -37,7 +37,7 @@ export async function createHolding(
 }
 
 export async function saveHoldingValue(
-  db: Db,
+  db: DbExecutor,
   holdingId: number,
   snapshotId: number,
   values: {

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadEnvFile } from "node:process";
 import type { NextConfig } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
 
 const rootEnvPath = join(import.meta.dirname, "../../.env");
 
@@ -9,21 +10,24 @@ if (existsSync(rootEnvPath)) {
   loadEnvFile(rootEnvPath);
 }
 
-const isStaticDemoBuild = process.env.DEMO_MODE === "true";
+export default function createNextConfig(phase: string): NextConfig {
+  const isStaticDemoBuild = process.env.DEMO_MODE === "true" && phase === PHASE_PRODUCTION_BUILD;
 
-const nextConfig: NextConfig = {
-  output: isStaticDemoBuild ? "export" : "standalone",
-  outputFileTracingRoot: join(import.meta.dirname, "../.."),
-  pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
-  typedRoutes: true,
-  images: {
-    unoptimized: true,
-  },
-  trailingSlash: true,
-  reactCompiler: true,
-  experimental: {
-    typedEnv: true,
-  },
-};
-
-export default nextConfig;
+  return {
+    output: isStaticDemoBuild ? "export" : "standalone",
+    outputFileTracingRoot: join(import.meta.dirname, "../.."),
+    pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
+    env: {
+      NEXT_PUBLIC_STATIC_DEMO_BUILD: isStaticDemoBuild ? "true" : "false",
+    },
+    typedRoutes: true,
+    images: {
+      unoptimized: true,
+    },
+    trailingSlash: true,
+    reactCompiler: true,
+    experimental: {
+      typedEnv: true,
+    },
+  };
+}

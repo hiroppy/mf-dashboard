@@ -1,7 +1,7 @@
 import { formatIsoDateKey, getDaysInMonth, getJstDateParts } from "@mf-dashboard/date-utils";
 import { eq, type SQL } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
-import type { Db } from "./index";
+import type { Db, DbExecutor } from "./index";
 
 /** 現在時刻を ISO 8601 文字列で返す */
 export function now(): string {
@@ -18,7 +18,7 @@ export function now(): string {
  * Returns the record's ID.
  */
 export async function upsertById<T extends { id: number }>(
-  db: Db,
+  db: DbExecutor,
   table: SQLiteTable,
   condition: SQL,
   insertValues: Record<string, unknown>,
@@ -85,7 +85,7 @@ export async function upsertOne<T extends { id: number }>(
  * Returns the record's ID.
  */
 export async function getOrCreate(
-  db: Db,
+  db: DbExecutor,
   table: SQLiteTable,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   nameColumn: SQLiteColumn<any>,

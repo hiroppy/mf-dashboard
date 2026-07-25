@@ -105,6 +105,18 @@ afterEach(() => {
 });
 
 describe("ActionIcons", () => {
+  it("describes the in-app AI assistant in the help dialog", () => {
+    render(<ActionIcons variant="header" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "ヘルプ" }));
+
+    expect(screen.getByText("AI アシスタント")).not.toBeNull();
+    expect(
+      screen.getByText("Webアプリ内で家計・資産・投資データを自然言語で照会できます。"),
+    ).not.toBeNull();
+    expect(screen.queryByText("MCP 連携")).toBeNull();
+  });
+
   it("moves the repository link from the header into the help dialog", () => {
     render(<ActionIcons variant="header" />);
 
@@ -179,7 +191,7 @@ describe("ActionIcons", () => {
       resolvePost?.(jsonResponse({ available: true, running: true }, 202));
     });
 
-    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
@@ -215,7 +227,7 @@ describe("ActionIcons", () => {
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith("/api/crawler/refresh/", { method: "POST" }),
     );
-    expect(screen.getByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "金融機関データを更新" })).toBeTruthy();
 
     await emitStatus({ running: false });
 
