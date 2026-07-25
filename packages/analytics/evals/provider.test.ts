@@ -8,6 +8,7 @@ import FinanceChatProvider, {
 
 function createDependencies(overrides: Partial<ProviderDependencies> = {}): ProviderDependencies {
   return {
+    canonicalizeDatabasePath: (path) => path,
     closeDb: vi.fn<() => void>(),
     generate: vi.fn<ProviderDependencies["generate"]>().mockResolvedValue({
       text: "回答",
@@ -17,6 +18,7 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
       .fn<ProviderDependencies["getCurrentGroup"]>()
       .mockResolvedValue({ id: "0" }),
     getDatabasePath: () => "/isolated/demo.db",
+    getDemoDatabasePath: () => "/isolated/demo.db",
     getDb: vi.fn<ProviderDependencies["getDb"]>().mockReturnValue({} as Db),
     getModel: vi
       .fn<ProviderDependencies["getModel"]>()
@@ -125,6 +127,19 @@ describe("FinanceChatProvider", () => {
       error:
         "評価用demo.dbがありません。`pnpm --filter @mf-dashboard/db build:demo`を実行してください。",
     });
+  });
+
+  it("rejects a database other than the canonical demo database", async () => {
+    const dependencies = createDependencies({
+      getDatabasePath: () => "/private/moneyforward.db",
+    });
+    const provider = new FinanceChatProvider({}, dependencies);
+
+    await expect(provider.callApi("質問")).resolves.toEqual({
+      error: "評価では匿名化されたdata/demo.dbのみ使用できます。",
+    });
+    expect(dependencies.generate).not.toHaveBeenCalled();
+    expect(dependencies.getDb).not.toHaveBeenCalled();
   });
 
   it("reports missing provider credentials clearly", async () => {

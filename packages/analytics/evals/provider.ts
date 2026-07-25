@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { closeDb, getCurrentGroup, getDb, type Db } from "@mf-dashboard/db";
 import { generateText, stepCountIs } from "ai";
 import type {
@@ -47,7 +48,9 @@ interface GenerateOptions {
 }
 
 export interface ProviderDependencies {
+  canonicalizeDatabasePath: (path: string) => string;
   closeDb: () => void;
+  getDemoDatabasePath: () => string;
   generate: (options: GenerateOptions) => Promise<ChatResponse>;
   getCurrentGroup: (db: Db) => Promise<{ id: string } | undefined>;
   getDatabasePath: () => string | undefined;
@@ -58,7 +61,9 @@ export interface ProviderDependencies {
 }
 
 const defaultDependencies: ProviderDependencies = {
+  canonicalizeDatabasePath: realpathSync,
   closeDb,
+  getDemoDatabasePath: () => fileURLToPath(new URL("../../../data/demo.db", import.meta.url)),
   generate: async (options) => (await generateText(options)) as ChatResponse,
   getCurrentGroup,
   getDatabasePath: () => process.env.DB_PATH,
@@ -148,6 +153,13 @@ export default class FinanceChatProvider implements ApiProvider {
           error:
             "評価用demo.dbがありません。`pnpm --filter @mf-dashboard/db build:demo`を実行してください。",
         };
+      }
+      const canonicalDatabasePath = this.dependencies.canonicalizeDatabasePath(databasePath);
+      const canonicalDemoDatabasePath = this.dependencies.canonicalizeDatabasePath(
+        this.dependencies.getDemoDatabasePath(),
+      );
+      if (canonicalDatabasePath !== canonicalDemoDatabasePath) {
+        return { error: "評価では匿名化されたdata/demo.dbのみ使用できます。" };
       }
       if (!this.dependencies.isLLMEnabled()) {
         return { error: "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。" };
