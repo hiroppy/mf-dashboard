@@ -5,6 +5,7 @@ interface ChartExpectation {
   chartType?: FinanceChart["chartType"];
   data?: Array<{ label: string; values: number[] }>;
   series?: Array<FinanceChart["series"][number]>;
+  titleIncludes?: string[];
   unit?: FinanceChart["unit"];
 }
 
@@ -47,14 +48,27 @@ function includesFact(text: string, fact: string): boolean {
   const normalizedFact = normalizeText(fact);
   if (!/^\d+$/.test(normalizedFact)) return normalizeText(text).includes(normalizedFact);
 
-  return new RegExp(`(?<!\\d)${normalizedFact}(?!\\d)`).test(normalizeText(text));
+  return new RegExp(`(?<![\\d.\\-−▲△])${normalizedFact}(?![\\d.])`).test(normalizeText(text));
 }
 
 function validateTextPairs(text: string, expectedPairs: Array<[string, string]>): string[] {
-  const clauses = text.split(/[。、\n|;]/);
+  const normalizedText = normalizeText(text);
+  const labels = expectedPairs.map(([label]) => normalizeText(label));
+
   return expectedPairs
-    .filter(([label, value]) => {
-      return !clauses.some((clause) => includesFact(clause, label) && includesFact(clause, value));
+    .filter(([, value], pairIndex) => {
+      const normalizedLabel = labels[pairIndex]!;
+      const labelIndex = normalizedText.indexOf(normalizedLabel);
+      if (labelIndex === -1) return true;
+
+      const valueStart = labelIndex + normalizedLabel.length;
+      const nextLabelIndex = labels.reduce((nearest, candidate, index) => {
+        if (index === pairIndex) return nearest;
+        const candidateIndex = normalizedText.indexOf(candidate, valueStart);
+        return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
+      }, normalizedText.length);
+
+      return !includesFact(normalizedText.slice(valueStart, nextLabelIndex), value);
     })
     .map(([label, value]) => `${label}=${value}`);
 }
@@ -66,6 +80,12 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation, index: 
   }
   if (expected.unit && actual.unit !== expected.unit) {
     errors.push(`chart ${index + 1} のunitが${expected.unit}ではありません`);
+  }
+  if (
+    expected.titleIncludes &&
+    expected.titleIncludes.some((token) => !includesFact(actual.title, token))
+  ) {
+    errors.push(`chart ${index + 1} のtitleが期待する対象を含みません`);
   }
   if (expected.series && JSON.stringify(actual.series) !== JSON.stringify(expected.series)) {
     errors.push(`chart ${index + 1} のseriesまたは順序が期待値と異なります`);
@@ -90,8 +110,10 @@ function validateMarkdownRows(text: string, expectedRows: string[][]): string[] 
     )
     .filter((row) => row.some((cell) => /^\d{4}-\d{2}-\d{2}$/.test(cell)));
   const normalizedExpectedRows = expectedRows.map((row) => row.map(normalizeCell));
+  const sortRows = (rows: string[][]) =>
+    [...rows].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 
-  return JSON.stringify(actualRows) === JSON.stringify(normalizedExpectedRows)
+  return JSON.stringify(sortRows(actualRows)) === JSON.stringify(sortRows(normalizedExpectedRows))
     ? []
     : expectedRows.map((row) => row.join(" / "));
 }
@@ -125,7 +147,8 @@ export default function assertFinanceChatOutput(
   }
   if (
     config.forbidAmounts &&
-    /[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)/.test(actual.text)
+    (/[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)/.test(actual.text) ||
+      /(?:収入|支出|収支|残高|金額)[^\d\n]{0,8}-?\d[\d,.]*(?![\d年月日件])/.test(actual.text))
   ) {
     return fail("データのない回答に金額が含まれています。");
   }

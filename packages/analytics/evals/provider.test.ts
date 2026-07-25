@@ -89,6 +89,8 @@ describe("toEvaluationOutput", () => {
     ["https://evil.example/path", "https://evil.example/path"],
     ["<https://evil.example/path>", "https://evil.example/path"],
     ["詳細は /0/cf/2026-07 を確認", "/0/cf/2026-07"],
+    ["詳細は/0/cf/2026-07です", "/0/cf/2026-07"],
+    ['<a href="//evil.example/path">こちら</a>', "//evil.example/path"],
   ])("detects an unproven raw link in %s", (text, expectedLink) => {
     expect(toEvaluationOutput({ text, steps: [] }).textLinks).toEqual([expectedLink]);
   });

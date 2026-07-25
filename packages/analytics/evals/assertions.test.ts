@@ -76,6 +76,53 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+
+    for (const text of ["収支は-93,341円です。", "収支は93,341.5円です。"]) {
+      expect(
+        assertFinanceChatOutput(output({ text }), {
+          config: {
+            expectedCharts: [],
+            expectedTextPairs: [["収支", "93341"]],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    }
+  });
+
+  it("binds label-value pairs across Markdown cells and common separators", () => {
+    const config = {
+      expectedCharts: [],
+      expectedTextPairs: [
+        ["収入", "313235"],
+        ["支出", "219894"],
+        ["収支", "93341"],
+      ] as Array<[string, string]>,
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+    };
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "| 項目 | 金額 |",
+            "| --- | ---: |",
+            "| 収入 | 313,235円 |",
+            "| 支出 | 219,894円 |",
+            "| 収支 | 93,341円 |",
+          ].join("\n"),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は219,894円 / 支出は313,235円 / 収支は93,341円です。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires chart structure and order", () => {
@@ -99,6 +146,7 @@ describe("assertFinanceChatOutput", () => {
           expectedCharts: [
             {
               chartType: "pie",
+              titleIncludes: ["食費"],
               unit: "currency",
               series: [{ name: "支出", amountType: "expense" }],
               data: [
@@ -113,6 +161,16 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+
+    expect(
+      assertFinanceChatOutput(output({ charts: [{ ...charts[0], title: "2026年7月の収入" }] }), {
+        config: {
+          expectedCharts: [{ chartType: "pie", titleIncludes: ["食費"] }],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
 
     expect(
       assertFinanceChatOutput(
@@ -181,6 +239,14 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "対象期間のデータはありません。支出は100000です。" }),
+        {
+          config,
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires exact transaction rows without additional rows", () => {
@@ -201,6 +267,19 @@ describe("assertFinanceChatOutput", () => {
     };
 
     expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: text
+            .split("\n")
+            .toSpliced(2, 2, ...text.split("\n").slice(2).reverse())
+            .join("\n"),
+        }),
+        {
+          config,
+        },
+      ),
+    ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
         output({ text: text.replace("東京ガス ガス代 | 3,435", "東京ガス ガス代 | 34,350") }),

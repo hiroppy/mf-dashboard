@@ -81,11 +81,20 @@ function getTextLinks(text: string): string[] {
   const markdownLinks = [...text.matchAll(/\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
     (match) => match[1]!,
   );
-  const rawLinks = [...text.matchAll(/https?:\/\/[^\s<>)]+|(?:^|[\s(])(\/[^\s<>)]+)/gm)].map(
-    (match) => (match[1] ?? match[0]).trim().replace(/[.,。、!?！？]+$/, ""),
+  const htmlLinks = [...text.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)].map(
+    (match) => match[1]!,
   );
+  const rawLinks = [...text.matchAll(/(?:https?:)?\/\/[^\s<>)"']+/g)].map((match) =>
+    match[0].replace(/[.,。、!?！？]+$/, ""),
+  );
+  const routeText = text.replace(/<[^>]*>/g, "");
+  const routeCandidates = [
+    ...routeText.matchAll(/\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+){0,2}/g),
+  ]
+    .map((match) => match[0])
+    .filter((candidate) => financeChatHrefSchema.safeParse(candidate).success);
 
-  return unique([...markdownLinks, ...rawLinks]);
+  return unique([...markdownLinks, ...htmlLinks, ...rawLinks, ...routeCandidates]);
 }
 
 export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {

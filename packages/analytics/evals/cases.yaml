@@ -33,6 +33,7 @@
         expectedCharts:
           - chartType: pie
             unit: currency
+            titleIncludes: [食費]
             series:
               - { name: 支出, amountType: expense }
             data:
@@ -80,7 +81,7 @@
   assert:
     - type: is-json
     - type: regex
-      value: (データ|取引).*(ありません|見つかりません|確認できません)
+      value: (データ|取引|支出|記録|明細).*(ありません|見つかりません|確認できません|記録されていません|0件)
     - type: javascript
       value: file://./assertions.ts
       config:
