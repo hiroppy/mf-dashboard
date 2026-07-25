@@ -56,7 +56,6 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
-        forbidAmounts: true
 
 - description: 明示的なページ要求だけがroute tool由来のリンクを返す
   vars:
@@ -86,3 +85,4 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        forbidAmounts: true
