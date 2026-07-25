@@ -1,15 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createManifest } from "./manifest";
 
 const publicDirectory = join(import.meta.dirname, "../../public");
-
-function readManifest() {
-  return JSON.parse(readFileSync(join(publicDirectory, "manifest.webmanifest"), "utf8")) as Record<
-    string,
-    unknown
-  >;
-}
 
 function readPngSize(relativePath: string) {
   const image = readFileSync(join(publicDirectory, relativePath));
@@ -20,9 +14,9 @@ function readPngSize(relativePath: string) {
   };
 }
 
-describe("web app manifest", () => {
+describe("createManifest", () => {
   it("provides an installable standalone app rooted at the deployment path", () => {
-    const manifest = readManifest();
+    const manifest = createManifest();
 
     expect(manifest).toMatchObject({
       name: "MoneyForward Me Dashboard",
@@ -35,7 +29,7 @@ describe("web app manifest", () => {
   });
 
   it("provides Android icons at the required sizes with maskable support", () => {
-    const manifest = readManifest();
+    const manifest = createManifest();
 
     expect(manifest.icons).toEqual([
       {
