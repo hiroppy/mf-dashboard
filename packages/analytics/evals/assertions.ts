@@ -110,8 +110,16 @@ function validateTextPairs(
       const directClaims = segments.flatMap((segment) => {
         const explicitBreakdownIndex = segment.search(/内訳(?:は|:|：)?/);
         const parenthesisIndex = segment.search(/[（(]/);
+        const parentheticalText =
+          parenthesisIndex === -1 ? "" : segment.slice(parenthesisIndex + 1).split(/[）)]/, 1)[0]!;
+        const parentheticalAmounts = [
+          ...parentheticalText.matchAll(/\d+(?:\.\d+)?(?:万|億|兆)?円/g),
+        ];
         const parentheticalBreakdownIndex =
-          parenthesisIndex !== -1 && /\d(?:万|億|兆)?円/.test(segment.slice(0, parenthesisIndex))
+          parenthesisIndex !== -1 &&
+          /\d(?:万|億|兆)?円/.test(segment.slice(0, parenthesisIndex)) &&
+          parentheticalAmounts.length >= 2 &&
+          !/(?:正しくは|訂正|ではなく|誤り|実際は)/.test(parentheticalText)
             ? parenthesisIndex
             : -1;
         const claimEnd = [explicitBreakdownIndex, parentheticalBreakdownIndex]
@@ -119,6 +127,10 @@ function validateTextPairs(
           .reduce((earliest, index) => Math.min(earliest, index), segment.length);
         const claimSegment = segment
           .slice(0, claimEnd)
+          .replace(
+            /(\d+(?:\.\d+)?)万(\d+(?:\.\d+)?)円/g,
+            (_, high, low) => `${Number(high) * 10_000 + Number(low)}円`,
+          )
           .replace(/[¥￥]((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?/g, "$1$2$3円");
         const amounts = [
           ...claimSegment.matchAll(/((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?円/g),
@@ -297,7 +309,7 @@ export default function assertFinanceChatOutput(
     return fail(`本文に内部用語が含まれています: ${forbiddenTerms.join(", ")}`);
   }
   const missingTextPatterns = (config.expectedTextPatterns ?? []).filter(
-    (pattern) => !new RegExp(pattern).test(actual.text),
+    (pattern) => !new RegExp(pattern, "s").test(actual.text),
   );
   if (missingTextPatterns.length > 0) {
     return fail(`本文が期待する表現に一致しません: ${missingTextPatterns.join(", ")}`);
@@ -318,7 +330,9 @@ export default function assertFinanceChatOutput(
   }
   if (
     config.forbidAmounts &&
-    (/[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)/.test(actual.text) ||
+    (/[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)|[一二三四五六七八九十百千万億兆〇零]+円/.test(
+      actual.text,
+    ) ||
       /(?:収入|支出|収支|残高|金額|合計|総額)[^\d\n]{0,8}-?\d[\d,.]*(?![\d年月日件])/.test(
         actual.text,
       ))
@@ -334,10 +348,16 @@ export default function assertFinanceChatOutput(
     if (relevantResults.length === 0) {
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
     }
-    const hasCompleteEvidence = relevantResults.some((result) => {
+    const completeResults = relevantResults.filter((result) => !result.truncated);
+    const evidenceSets = completeResults.reduce<DatabaseResult[][]>(
+      (sets, result) => [...sets, ...sets.map((set) => [...set, result])],
+      [[]],
+    );
+    const hasCompleteEvidence = evidenceSets.slice(1).some((results) => {
+      const rows = results.flatMap((result) => result.rows);
       const hasExpectedCells = (databaseQuery.outputCells ?? []).every(
         ({ columnPattern, value: expectedValue }) =>
-          result.rows.some((row) =>
+          rows.some((row) =>
             Object.entries(row).some(
               ([column, value]) =>
                 new RegExp(columnPattern, "i").test(column) &&
@@ -347,7 +367,7 @@ export default function assertFinanceChatOutput(
           ),
       );
       const hasExpectedRows = (databaseQuery.outputRows ?? []).every((expectedRow) =>
-        result.rows.some((row) => {
+        rows.some((row) => {
           const values = Object.values(row)
             .filter((value): value is number | string =>
               ["number", "string"].includes(typeof value),
@@ -358,20 +378,12 @@ export default function assertFinanceChatOutput(
       );
       const hasExpectedRowCount =
         databaseQuery.expectedRowCount === undefined ||
-        result.rows.length === databaseQuery.expectedRowCount;
+        rows.length === databaseQuery.expectedRowCount;
       const provesNoData =
         databaseQuery.expectEmpty !== true ||
-        result.rows.length === 0 ||
-        result.rows.every((row) =>
-          Object.values(row).every((value) => value === 0 || value === null),
-        );
-      return (
-        !result.truncated &&
-        hasExpectedCells &&
-        hasExpectedRows &&
-        hasExpectedRowCount &&
-        provesNoData
-      );
+        rows.length === 0 ||
+        rows.every((row) => Object.values(row).every((value) => value === 0 || value === null));
+      return hasExpectedCells && hasExpectedRows && hasExpectedRowCount && provesNoData;
     });
     if (!hasCompleteEvidence) {
       return fail("queryDatabase結果に期待する完全な根拠行がありません。");

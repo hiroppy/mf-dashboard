@@ -139,6 +139,14 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "収入は313,235円（正しくは0円）、支出は219,894円、収支は93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: [
             "## 2026年7月の収入・支出・収支",
             "| 項目 | 金額 |",
@@ -216,6 +224,12 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({ text: "収入は¥313,235、支出は￥219,894、収支は¥93,341です。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は31万3,235円、支出は21万9,894円、収支は9万3,341円です。" }),
         { config },
       ),
     ).toMatchObject({ pass: true });
@@ -481,6 +495,46 @@ describe("assertFinanceChatOutput", () => {
             databaseQuery: {
               expectedRowCount: 1,
               outputCells: [{ columnPattern: "income", value: "313235" }],
+              sqlPatterns: ["transactions", ":groupId", "2026-07", "amount"],
+            },
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  it("combines complementary complete query results", () => {
+    const sql =
+      "SELECT category, amount FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'";
+    const trace = (category: string, amount: number) => ({
+      input: { sql },
+      output: {
+        columns: ["category", "amount"],
+        rowCount: 1,
+        rows: [{ category, amount }],
+        truncated: false,
+      },
+      succeeded: true,
+      toolName: "queryDatabase",
+    });
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [trace("食料品", 24_833), trace("外食", 12_214), trace("カフェ", 4_790)],
+        }),
+        {
+          config: {
+            databaseQuery: {
+              expectedRowCount: 3,
+              outputRows: [
+                ["食料品", "24833"],
+                ["外食", "12214"],
+                ["カフェ", "4790"],
+              ],
               sqlPatterns: ["transactions", ":groupId", "2026-07", "amount"],
             },
             expectedCharts: [],
@@ -773,6 +827,11 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false });
     expect(
+      assertFinanceChatOutput(output({ text: "支出は一万円ですが、明細はありません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
       assertFinanceChatOutput(
         output({ text: "対象期間のデータはありません。支出は100000です。" }),
         {
@@ -811,6 +870,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(output({ text: "対象期間の支出は記録されていません。", toolTrace }), {
+        config,
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "## 対象期間の支出\n\nありません。", toolTrace }), {
         config,
       }),
     ).toMatchObject({ pass: true });
