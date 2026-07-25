@@ -194,6 +194,26 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation, index: 
   return errors;
 }
 
+function stripMarkdownFences(text: string): string {
+  let fence: { character: string; length: number } | undefined;
+  return text
+    .split("\n")
+    .filter((line) => {
+      if (fence) {
+        const closing = line.match(/^ {0,3}(`+|~+)\s*$/);
+        if (closing && closing[1]![0] === fence.character && closing[1]!.length >= fence.length) {
+          fence = undefined;
+        }
+        return false;
+      }
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})/);
+      if (!opening) return true;
+      fence = { character: opening[1]![0]!, length: opening[1]!.length };
+      return false;
+    })
+    .join("\n");
+}
+
 function validateMarkdownRows(text: string, expectedRows: string[][]): string[] {
   const normalizeCell = (value: string) => {
     const normalized = normalizeText(value)
@@ -206,20 +226,20 @@ function validateMarkdownRows(text: string, expectedRows: string[][]): string[] 
   };
   const tableLines: string[] = [];
   let candidateLines: string[] = [];
+  const isSeparatorLine = (line: string) => {
+    const cells = line
+      .replace(/^\s*\||\|\s*$/g, "")
+      .split("|")
+      .map((cell) => cell.trim());
+    return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  };
   const flushCandidate = () => {
-    const hasSeparator = candidateLines.some((line) => {
-      const cells = line
-        .replace(/^\s*\||\|\s*$/g, "")
-        .split("|")
-        .map((cell) => cell.trim());
-      return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-    });
-    if (hasSeparator) tableLines.push(...candidateLines);
+    if (candidateLines.length >= 2 && isSeparatorLine(candidateLines[1]!)) {
+      tableLines.push(...candidateLines);
+    }
     candidateLines = [];
   };
-  const renderedText = text
-    .replace(/^```[^\n]*\n[\s\S]*?^```\s*$/gm, "")
-    .replace(/^~~~[^\n]*\n[\s\S]*?^~~~\s*$/gm, "");
+  const renderedText = stripMarkdownFences(text);
   for (const line of renderedText.split("\n")) {
     if (line.includes("|")) candidateLines.push(line);
     else flushCandidate();

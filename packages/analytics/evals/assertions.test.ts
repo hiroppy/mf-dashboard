@@ -486,6 +486,46 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("accepts a documented substr date predicate", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS income FROM transactions WHERE group_id = :groupId AND substr(date, 1, 7) = '2026-07'",
+              },
+              output: {
+                columns: ["income"],
+                rowCount: 1,
+                rows: [{ income: 313_235 }],
+                truncated: false,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseQuery: {
+              expectedRowCount: 1,
+              outputCells: [{ columnPattern: "income", value: "313235" }],
+              predicatePatterns: [
+                ":groupId",
+                "\\bsubstr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)\\s*=",
+              ],
+              sqlPatterns: ["transactions", "2026-07", "amount"],
+            },
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   it("accepts complete evidence after an exploratory query", () => {
     const sql =
       "SELECT SUM(amount) AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'";
@@ -1014,6 +1054,18 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: `~~~markdown\n${text}\n~~~` }), {
         config,
       }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "| 2026-07-10 | 東京ガス ガス代 | 3,435円 |",
+            "| 2026-07-10 | 成城石井 | 3,152円 |",
+            "| --- | --- | ---: |",
+          ].join("\n"),
+        }),
+        { config },
+      ),
     ).toMatchObject({ pass: false });
   });
 

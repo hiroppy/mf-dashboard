@@ -100,10 +100,21 @@ function unique<T>(values: T[]): T[] {
 }
 
 function stripMarkdownCode(text: string): string {
-  return text
-    .replace(/^```[^\n]*\n[\s\S]*?^```\s*$/gm, "")
-    .replace(/^~~~[^\n]*\n[\s\S]*?^~~~\s*$/gm, "")
-    .replace(/(`+)[^\n]*?\1/g, "");
+  let fence: { character: string; length: number } | undefined;
+  const renderedLines = text.split("\n").filter((line) => {
+    if (fence) {
+      const closing = line.match(/^ {0,3}(`+|~+)\s*$/);
+      if (closing && closing[1]![0] === fence.character && closing[1]!.length >= fence.length) {
+        fence = undefined;
+      }
+      return false;
+    }
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (!opening) return true;
+    fence = { character: opening[1]![0]!, length: opening[1]!.length };
+    return false;
+  });
+  return renderedLines.join("\n").replace(/(`+)[^\n]*?\1/g, "");
 }
 
 function getRenderedLinks(text: string): string[] {

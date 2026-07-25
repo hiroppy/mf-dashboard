@@ -205,6 +205,7 @@ describe("toEvaluationOutput", () => {
     ["`[収支](/0/cf/2026-07)`", "inline code"],
     ["```markdown\n[収支](/0/cf/2026-07)\n```", "backtick fence"],
     ["~~~markdown\n[収支](/0/cf/2026-07)\n~~~", "tilde fence"],
+    ["  ````markdown\n[収支](/0/cf/2026-07)\n  ````", "indented four-backtick fence"],
   ])("does not recognize a link inside %s (%s)", (text) => {
     expect(toEvaluationOutput({ text, steps: [] }).renderedLinks).toEqual([]);
   });

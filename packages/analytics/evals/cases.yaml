@@ -19,7 +19,7 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '(?:\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)|\bsubstr\s*\(\s*(?:\w+\.)?date\s*,\s*1\s*,\s*(?:7|10)\s*\)\s*=)'
             - '\bis_excluded_from_calculation\b\s*='
             - '\bis_internal_transfer\b\s*='
           outputSqlPatterns:
@@ -70,7 +70,7 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '(?:\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)|\bsubstr\s*\(\s*(?:\w+\.)?date\s*,\s*1\s*,\s*(?:7|10)\s*\)\s*=)'
             - '\btype\b\s*(?:=|in\b)'
             - '\bis_excluded_from_calculation\b\s*='
           outputSqlPatterns:
@@ -110,7 +110,7 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '(?:\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)|\bsubstr\s*\(\s*(?:\w+\.)?date\s*,\s*1\s*,\s*(?:7|10)\s*\)\s*=)'
             - '\btype\b\s*(?:=|in\b)'
           sqlPatterns:
             - '\btransactions\b'
@@ -159,7 +159,7 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '(?:\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)|\bsubstr\s*\(\s*(?:\w+\.)?date\s*,\s*1\s*,\s*(?:7|10)\s*\)\s*=)'
             - '\btype\b\s*(?:=|in\b)'
           sqlPatterns:
             - '\btransactions\b'
