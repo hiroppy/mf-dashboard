@@ -95,7 +95,7 @@ function unique<T>(values: T[]): T[] {
 }
 
 function getRenderedLinks(text: string): string[] {
-  const markdownLinks = [...text.matchAll(/\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
+  const markdownLinks = [...text.matchAll(/(?<!!)\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
     (match) => match[1]!,
   );
   const htmlLinks = [...text.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)].map(

@@ -158,6 +158,18 @@ describe("toEvaluationOutput", () => {
   ])("detects an unproven raw link in %s", (text, expectedLink) => {
     expect(toEvaluationOutput({ text, steps: [] }).textLinks).toEqual([expectedLink]);
   });
+
+  it("does not treat a Markdown image destination as a rendered link", () => {
+    expect(
+      toEvaluationOutput({
+        text: "![2026年7月の収支](/0/cf/2026-07)",
+        steps: [],
+      }),
+    ).toMatchObject({
+      renderedLinks: [],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
 });
 
 describe("FinanceChatProvider", () => {
