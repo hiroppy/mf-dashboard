@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatProvider, prepareChatMessagesForRequest, useFinanceChat } from "./chat-provider";
 
 const mocks = vi.hoisted(() => ({
+  clearError: vi.fn<() => void>(),
   sendMessage: vi.fn<(...args: unknown[]) => unknown>(),
+  setMessages: vi.fn<(...args: unknown[]) => void>(),
   useChat: vi.fn<(...args: unknown[]) => unknown>(),
   usePathname: vi.fn<() => string>(),
 }));
@@ -56,8 +58,10 @@ describe("ChatProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useChat.mockReturnValue({
+      clearError: mocks.clearError,
       messages: [],
       sendMessage: mocks.sendMessage,
+      setMessages: mocks.setMessages,
       status: "ready",
     });
   });
@@ -198,6 +202,34 @@ describe("ChatProvider", () => {
       { text: "最初の質問" },
       { body: { groupId: "group-b" } },
     );
+  });
+
+  it("clears the messages, draft, and error state", () => {
+    function ChatClearer() {
+      const { clear, draft, setDraft } = useFinanceChat();
+
+      return (
+        <>
+          <span>{draft}</span>
+          <button onClick={() => setDraft("入力中")}>下書きを入力</button>
+          <button onClick={clear}>クリア</button>
+        </>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <ChatClearer />
+      </ChatProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "下書きを入力" }));
+    expect(screen.getByText("入力中")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "クリア" }));
+
+    expect(mocks.setMessages).toHaveBeenCalledWith([]);
+    expect(mocks.clearError).toHaveBeenCalledOnce();
+    expect(screen.queryByText("入力中")).toBeNull();
   });
 
   it("resolves the current group on a top-level route", () => {

@@ -43,6 +43,25 @@ export const Response: Story = {
   ),
 };
 
+export const ClearHistory: Story = {
+  render: () => (
+    <ChatProvider initialMessages={[response]} initialOpen>
+      <ChatShell />
+    </ChatProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+
+    await userEvent.click(canvas.getByRole("button", { name: "チャットをクリア" }));
+    await expect(page.getByRole("dialog")).toBeInTheDocument();
+    await expect(page.getByText("チャットをクリアしますか？")).toBeInTheDocument();
+    await userEvent.click(page.getByRole("button", { name: "クリア" }));
+    await expect(canvas.queryByText(response.parts[0].text)).not.toBeInTheDocument();
+    await expect(canvas.getByText("家計の相談を始めましょう")).toBeInTheDocument();
+  },
+};
+
 export const Interaction: Story = {
   render: () => (
     <ChatProvider>

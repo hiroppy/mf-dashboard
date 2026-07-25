@@ -3,7 +3,7 @@
 import { financeChartSchema, type FinanceChart } from "@mf-dashboard/analytics/chat/chart";
 import { financeChatHrefSchema } from "@mf-dashboard/analytics/chat/navigation";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
-import { Bot, Send, Sparkles, X } from "lucide-react";
+import { Bot, Send, Sparkles, Trash2, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -22,6 +22,7 @@ import { CHAT_MESSAGE_MAX_LENGTH } from "../../lib/chat-limits";
 import { cn } from "../../lib/utils";
 import { FinanceChatChart } from "../charts/finance-chat-chart";
 import { Button } from "../ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
 import { ChatMarkdown } from "./chat-markdown";
 import { useFinanceChat } from "./chat-provider";
 
@@ -122,13 +123,24 @@ function getLatestDatabaseQuery(messages: UIMessage[]): string | undefined {
 }
 
 export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }: ChatShellProps) {
-  const { addUserMessage, close, draft, error, isOpen, isSubmitting, messages, open, setDraft } =
-    useFinanceChat();
+  const {
+    addUserMessage,
+    clear,
+    close,
+    draft,
+    error,
+    isOpen,
+    isSubmitting,
+    messages,
+    open,
+    setDraft,
+  } = useFinanceChat();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
   const shouldFollowLatestRef = useRef(true);
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const latestDatabaseQuery = getLatestDatabaseQuery(messages);
 
@@ -141,6 +153,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     if (!isOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isClearDialogOpen) return;
       if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) closeChat();
     };
 
@@ -149,7 +162,7 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeChat, isOpen]);
+  }, [closeChat, isClearDialogOpen, isOpen]);
 
   useEffect(() => {
     if (isOpen) shouldFollowLatestRef.current = true;
@@ -290,16 +303,56 @@ export function ChatShell({ suggestedPrompts = DEFAULT_CHAT_SUGGESTED_PROMPTS }:
                 <Bot aria-hidden="true" className="size-5" />
               </span>
               <h2 className="min-w-0 flex-1 font-semibold">家計AIアシスタント</h2>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="家計AIチャットを閉じる"
-                onClick={closeChat}
-              >
-                <X aria-hidden="true" />
-              </Button>
+              <div className="flex items-center gap-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="チャットをクリア"
+                  disabled={isSubmitting || (messages.length === 0 && draft.length === 0 && !error)}
+                  onClick={() => setIsClearDialogOpen(true)}
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="家計AIチャットを閉じる"
+                  onClick={closeChat}
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </div>
             </header>
+
+            <Dialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+              <DialogContent className="w-[calc(100%-2rem)] max-w-sm">
+                <DialogTitle>チャットをクリアしますか？</DialogTitle>
+                <DialogDescription>
+                  会話履歴と入力中のメッセージが削除されます。この操作は取り消せません。
+                </DialogDescription>
+                <div className="mt-6 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsClearDialogOpen(false)}
+                  >
+                    キャンセル
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => {
+                      clear();
+                      setIsClearDialogOpen(false);
+                    }}
+                  >
+                    クリア
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <div
               ref={messagesRef}

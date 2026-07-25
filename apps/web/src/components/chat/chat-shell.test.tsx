@@ -43,6 +43,7 @@ describe("ChatShell", () => {
   it("shows an accessible configuration hint when chat fails", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       error: new Error("secret provider response"),
@@ -64,6 +65,7 @@ describe("ChatShell", () => {
   it("shows actionable guidance for a conversation size error", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       error: new Error(JSON.stringify({ error: { code: "REQUEST_TOO_LARGE" } })),
@@ -84,6 +86,7 @@ describe("ChatShell", () => {
   it("shows retry guidance when chat concurrency is full", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       error: new Error(JSON.stringify({ error: { code: "CHAT_BUSY" } })),
@@ -105,6 +108,7 @@ describe("ChatShell", () => {
     const addUserMessage = vi.fn<(text: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage,
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "重ねて送らない",
       isOpen: true,
@@ -142,6 +146,7 @@ describe("ChatShell", () => {
     });
     const chatState: ReturnType<typeof chatProvider.useFinanceChat> = {
       addUserMessage: vi.fn<(text: string) => void>(),
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       isOpen: true,
@@ -227,6 +232,7 @@ describe("ChatShell", () => {
     const addUserMessage = vi.fn<(text: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage,
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       isOpen: true,
@@ -249,6 +255,7 @@ describe("ChatShell", () => {
     const addUserMessage = vi.fn<(text: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage,
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       isOpen: true,
@@ -290,6 +297,7 @@ describe("ChatShell", () => {
     const setDraft = vi.fn<(draft: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage,
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "送信するメッセージ",
       isOpen: true,
@@ -318,6 +326,7 @@ describe("ChatShell", () => {
     const setDraft = vi.fn<(draft: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage,
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "x".repeat(8_001),
       isOpen: true,
@@ -347,6 +356,7 @@ describe("ChatShell", () => {
     const addUserMessage = vi.fn<(text: string) => void>();
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage,
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "変換中",
       isOpen: true,
@@ -470,6 +480,7 @@ describe("ChatShell", () => {
   it("renders the latest response while streaming", () => {
     const chatState = {
       addUserMessage: vi.fn<(text: string) => void>(),
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       isOpen: true,
@@ -521,6 +532,7 @@ describe("ChatShell", () => {
   it("shows only the latest SQL in the loading indicator", () => {
     vi.spyOn(chatProvider, "useFinanceChat").mockReturnValue({
       addUserMessage: vi.fn<(text: string) => void>(),
+      clear: vi.fn<() => void>(),
       close: vi.fn<() => void>(),
       draft: "",
       isOpen: true,
