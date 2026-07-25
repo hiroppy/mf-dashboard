@@ -171,7 +171,9 @@ export default function assertFinanceChatOutput(
   if (
     config.forbidAmounts &&
     (/[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)/.test(actual.text) ||
-      /(?:収入|支出|収支|残高|金額)[^\d\n]{0,8}-?\d[\d,.]*(?![\d年月日件])/.test(actual.text))
+      /(?:収入|支出|収支|残高|金額|合計|総額)[^\d\n]{0,8}-?\d[\d,.]*(?![\d年月日件])/.test(
+        actual.text,
+      ))
   ) {
     return fail("データのない回答に金額が含まれています。");
   }

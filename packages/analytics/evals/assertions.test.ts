@@ -134,6 +134,12 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は313,235円ではなく0円です。支出は219,894円、収支は93,341円です。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   it("requires a successful database query for data-backed cases", () => {
@@ -298,6 +304,12 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+    for (const text of [
+      "対象期間のデータはありません。合計100000です。",
+      "対象期間のデータはありません。総額100000です。",
+    ]) {
+      expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: false });
+    }
   });
 
   it("requires exact transaction rows without additional rows", () => {
