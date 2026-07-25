@@ -19,6 +19,7 @@ function createDependencies(overrides: Partial<ProviderDependencies> = {}): Prov
       .mockResolvedValue({ id: "0" }),
     getDatabasePath: () => "/isolated/demo.db",
     getDemoDatabasePath: () => "/isolated/demo.db",
+    getLinkCount: () => 1,
     getDb: vi.fn<ProviderDependencies["getDb"]>().mockReturnValue({} as Db),
     getModel: vi
       .fn<ProviderDependencies["getModel"]>()
@@ -196,6 +197,14 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  it.each([
+    ["`[収支](/0/cf/2026-07)`", "inline code"],
+    ["```markdown\n[収支](/0/cf/2026-07)\n```", "backtick fence"],
+    ["~~~markdown\n[収支](/0/cf/2026-07)\n~~~", "tilde fence"],
+  ])("does not recognize a link inside %s (%s)", (text) => {
+    expect(toEvaluationOutput({ text, steps: [] }).renderedLinks).toEqual([]);
+  });
+
   it("recognizes a rendered Markdown reference link", () => {
     expect(
       toEvaluationOutput({
@@ -306,6 +315,17 @@ describe("FinanceChatProvider", () => {
 
     await expect(provider.callApi("質問")).resolves.toEqual({
       error: "評価用data/demo.dbにシンボリックリンクは使用できません。",
+    });
+    expect(dependencies.generate).not.toHaveBeenCalled();
+    expect(dependencies.getDb).not.toHaveBeenCalled();
+  });
+
+  it("rejects a hard-linked demo database before opening it", async () => {
+    const dependencies = createDependencies({ getLinkCount: () => 2 });
+    const provider = new FinanceChatProvider({}, dependencies);
+
+    await expect(provider.callApi("質問")).resolves.toEqual({
+      error: "評価用data/demo.dbにハードリンクは使用できません。",
     });
     expect(dependencies.generate).not.toHaveBeenCalled();
     expect(dependencies.getDb).not.toHaveBeenCalled();

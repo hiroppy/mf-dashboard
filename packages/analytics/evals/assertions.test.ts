@@ -85,6 +85,8 @@ describe("assertFinanceChatOutput", () => {
       "収支は赤字93,341円です。",
       "収支は93,341円の赤字です。",
       "収支は損失93,341円です。",
+      "収支は93,341円より少ないです。",
+      "収支は93,341円を超えています。",
       "収支は93,341.5円です。",
     ]) {
       expect(
@@ -122,6 +124,14 @@ describe("assertFinanceChatOutput", () => {
             "| 支出 | 219,894円 |",
             "| 収支 | 93,341円 |",
           ].join("\n"),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円（給与300,000円、その他13,235円）、支出は219,894円、収支は93,341円です。",
         }),
         { config },
       ),
@@ -451,6 +461,37 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  it("accepts complete evidence after an exploratory query", () => {
+    const sql =
+      "SELECT SUM(amount) AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'";
+    const trace = (rows: Array<{ income: number }>, truncated: boolean) => ({
+      input: { sql },
+      output: { columns: ["income"], rowCount: rows.length, rows, truncated },
+      succeeded: true,
+      toolName: "queryDatabase",
+    });
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [trace([{ income: 1 }], true), trace([{ income: 313_235 }], false)],
+        }),
+        {
+          config: {
+            databaseQuery: {
+              expectedRowCount: 1,
+              outputCells: [{ columnPattern: "income", value: "313235" }],
+              sqlPatterns: ["transactions", ":groupId", "2026-07", "amount"],
+            },
+            expectedCharts: [],
+            expectedTextLinks: [],
+            expectedToolRoutes: [],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   it("requires an empty result from a period-scoped no-data query", () => {
     const config = {
       databaseQuery: {
@@ -459,7 +500,7 @@ describe("assertFinanceChatOutput", () => {
           "\\btransactions\\b",
           ":groupId",
           "2027-01",
-          "\\b(?:count\\s*\\(\\s*\\*\\s*\\)|sum\\s*\\(\\s*amount\\s*\\))",
+          "\\b(?:count\\s*\\(\\s*(?:\\*|1|(?:\\w+\\.)?id)\\s*\\)|sum\\s*\\(\\s*amount\\s*\\))",
         ],
       },
       expectedCharts: [],
@@ -503,6 +544,17 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: trace(
             "SELECT COUNT(*) AS count FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
             [{ count: 0 }],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT COUNT(id) FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ "COUNT(id)": 0 }],
           ),
         }),
         { config },
@@ -815,6 +867,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(output({ text: `\`\`\`markdown\n${text}\n\`\`\`` }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: `~~~markdown\n${text}\n~~~` }), {
         config,
       }),
     ).toMatchObject({ pass: false });

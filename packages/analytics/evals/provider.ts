@@ -72,6 +72,7 @@ export interface ProviderDependencies {
   generate: (options: GenerateOptions) => Promise<ChatResponse>;
   getCurrentGroup: (db: Db) => Promise<{ id: string } | undefined>;
   getDatabasePath: () => string | undefined;
+  getLinkCount: (path: string) => number;
   getDb: () => Db;
   getModel: typeof getModel;
   isDatabaseAvailable: (path: string) => boolean;
@@ -86,6 +87,7 @@ const defaultDependencies: ProviderDependencies = {
   generate: async (options) => (await generateText(options)) as ChatResponse,
   getCurrentGroup,
   getDatabasePath: () => process.env.DB_PATH,
+  getLinkCount: (path) => lstatSync(path).nlink,
   getDb,
   getModel,
   isDatabaseAvailable: existsSync,
@@ -97,7 +99,15 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+function stripMarkdownCode(text: string): string {
+  return text
+    .replace(/^```[^\n]*\n[\s\S]*?^```\s*$/gm, "")
+    .replace(/^~~~[^\n]*\n[\s\S]*?^~~~\s*$/gm, "")
+    .replace(/(`+)[^\n]*?\1/g, "");
+}
+
 function getRenderedLinks(text: string): string[] {
+  text = stripMarkdownCode(text);
   const markdownLinks = [...text.matchAll(/(?<!!)\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
     (match) => match[1]!,
   );
@@ -223,6 +233,9 @@ export default class FinanceChatProvider implements ApiProvider {
       const demoDatabasePath = this.dependencies.getDemoDatabasePath();
       if (this.dependencies.isSymbolicLink(demoDatabasePath)) {
         return { error: "評価用data/demo.dbにシンボリックリンクは使用できません。" };
+      }
+      if (this.dependencies.getLinkCount(demoDatabasePath) > 1) {
+        return { error: "評価用data/demo.dbにハードリンクは使用できません。" };
       }
       const canonicalDatabasePath = this.dependencies.canonicalizeDatabasePath(databasePath);
       const canonicalDemoDatabasePath =

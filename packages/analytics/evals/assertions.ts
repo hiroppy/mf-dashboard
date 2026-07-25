@@ -108,8 +108,17 @@ function validateTextPairs(
 
       const expectedValue = Number(value);
       const directClaims = segments.flatMap((segment) => {
+        const explicitBreakdownIndex = segment.search(/内訳(?:は|:|：)?/);
+        const parenthesisIndex = segment.search(/[（(]/);
+        const parentheticalBreakdownIndex =
+          parenthesisIndex !== -1 && /\d(?:万|億|兆)?円/.test(segment.slice(0, parenthesisIndex))
+            ? parenthesisIndex
+            : -1;
+        const claimEnd = [explicitBreakdownIndex, parentheticalBreakdownIndex]
+          .filter((index) => index !== -1)
+          .reduce((earliest, index) => Math.min(earliest, index), segment.length);
         const claimSegment = segment
-          .split(/内訳(?:は|:|：)?/, 1)[0]!
+          .slice(0, claimEnd)
           .replace(/[¥￥]((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?/g, "$1$2$3円");
         const amounts = [
           ...claimSegment.matchAll(/((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?円/g),
@@ -132,10 +141,9 @@ function validateTextPairs(
         return [
           {
             amounts,
-            negated:
-              /\d(?:万|億|兆)?円[^。！？\n]{0,12}(?:ではなく|でなく|ではない|ではありません)/.test(
-                claimSegment,
-              ),
+            negated: new RegExp(
+              String.raw`\d(?:万|億|兆)?円[^。！？\n]{0,12}(?:ではなく|でなく|ではない|ではありません|未満|を(?:超え|下回)|より(?:少な|多))`,
+            ).test(claimSegment),
           },
         ];
       });
@@ -196,7 +204,10 @@ function validateMarkdownRows(text: string, expectedRows: string[][]): string[] 
     if (hasSeparator) tableLines.push(...candidateLines);
     candidateLines = [];
   };
-  for (const line of text.replace(/```[\s\S]*?```/g, "").split("\n")) {
+  const renderedText = text
+    .replace(/^```[^\n]*\n[\s\S]*?^```\s*$/gm, "")
+    .replace(/^~~~[^\n]*\n[\s\S]*?^~~~\s*$/gm, "");
+  for (const line of renderedText.split("\n")) {
     if (line.includes("|")) candidateLines.push(line);
     else flushCandidate();
   }
@@ -320,9 +331,12 @@ export default function assertFinanceChatOutput(
       const result = getRelevantDatabaseResult(trace, databaseQuery);
       return result ? [result] : [];
     });
-    const missingOutputCells = (databaseQuery.outputCells ?? []).filter(
-      ({ columnPattern, value: expectedValue }) =>
-        !relevantResults.some((result) =>
+    if (relevantResults.length === 0) {
+      return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
+    }
+    const hasCompleteEvidence = relevantResults.some((result) => {
+      const hasExpectedCells = (databaseQuery.outputCells ?? []).every(
+        ({ columnPattern, value: expectedValue }) =>
           result.rows.some((row) =>
             Object.entries(row).some(
               ([column, value]) =>
@@ -331,44 +345,37 @@ export default function assertFinanceChatOutput(
                 normalizeText(String(value)) === normalizeText(expectedValue),
             ),
           ),
-        ),
-    );
-    const missingOutputRows = (databaseQuery.outputRows ?? []).filter(
-      (expectedRow) =>
-        !relevantResults.some((result) =>
-          result.rows.some((row) => {
-            const values = Object.values(row)
-              .filter((value): value is number | string =>
-                ["number", "string"].includes(typeof value),
-              )
-              .map((value) => normalizeText(String(value)));
-            return expectedRow.every((expected) => values.includes(normalizeText(expected)));
-          }),
-        ),
-    );
-    const hasUnexpectedRows =
-      databaseQuery.expectEmpty === true &&
-      relevantResults.some(
-        (result) =>
-          result.rows.length > 0 &&
-          !result.rows.every((row) =>
-            Object.values(row).every((value) => value === 0 || value === null),
-          ),
       );
-    const hasIncompleteRows =
-      relevantResults.some((result) => result.truncated) ||
-      (databaseQuery.expectedRowCount !== undefined &&
-        relevantResults.some((result) => result.rows.length !== databaseQuery.expectedRowCount));
-    if (relevantResults.length === 0) {
-      return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
+      const hasExpectedRows = (databaseQuery.outputRows ?? []).every((expectedRow) =>
+        result.rows.some((row) => {
+          const values = Object.values(row)
+            .filter((value): value is number | string =>
+              ["number", "string"].includes(typeof value),
+            )
+            .map((value) => normalizeText(String(value)));
+          return expectedRow.every((expected) => values.includes(normalizeText(expected)));
+        }),
+      );
+      const hasExpectedRowCount =
+        databaseQuery.expectedRowCount === undefined ||
+        result.rows.length === databaseQuery.expectedRowCount;
+      const provesNoData =
+        databaseQuery.expectEmpty !== true ||
+        result.rows.length === 0 ||
+        result.rows.every((row) =>
+          Object.values(row).every((value) => value === 0 || value === null),
+        );
+      return (
+        !result.truncated &&
+        hasExpectedCells &&
+        hasExpectedRows &&
+        hasExpectedRowCount &&
+        provesNoData
+      );
+    });
+    if (!hasCompleteEvidence) {
+      return fail("queryDatabase結果に期待する完全な根拠行がありません。");
     }
-    if (missingOutputCells.length > 0 || missingOutputRows.length > 0) {
-      return fail("queryDatabase結果の列・行と期待値の対応が一致しません。");
-    }
-    if (hasIncompleteRows) {
-      return fail("queryDatabase結果がtruncatedまたは期待row数と異なります。");
-    }
-    if (hasUnexpectedRows) return fail("データなし回答のqueryDatabase結果が空ではありません。");
     if (
       databaseQuery.expectEmpty === true &&
       /0件(?:では|じゃ)(?:ありません|ない)/.test(actual.text)

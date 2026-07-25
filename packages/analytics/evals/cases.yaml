@@ -160,5 +160,5 @@
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
             - '\bdate\b[\s\S]{0,160}2027-01|2027-01[\s\S]{0,160}\bdate\b'
             - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
-            - '\b(?:count\s*\(\s*\*\s*\)|sum\s*\(\s*amount\s*\))'
+            - '\b(?:count\s*\(\s*(?:\*|1|(?:\w+\.)?id)\s*\)|sum\s*\(\s*amount\s*\))'
           expectEmpty: true
