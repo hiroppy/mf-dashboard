@@ -82,6 +82,14 @@ describe("toEvaluationOutput", () => {
       textLinks: ["/0/cf/2026-07"],
     });
   });
+
+  it.each([
+    ["https://evil.example/path", "https://evil.example/path"],
+    ["<https://evil.example/path>", "https://evil.example/path"],
+    ["詳細は /0/cf/2026-07 を確認", "/0/cf/2026-07"],
+  ])("detects an unproven raw link in %s", (text, expectedLink) => {
+    expect(toEvaluationOutput({ text, steps: [] }).textLinks).toEqual([expectedLink]);
+  });
 });
 
 describe("FinanceChatProvider", () => {

@@ -43,15 +43,18 @@ function normalizeText(value: string): string {
   return value.normalize("NFKC").replace(/[,\s*_`¥￥]/g, "");
 }
 
+function includesFact(text: string, fact: string): boolean {
+  const normalizedFact = normalizeText(fact);
+  if (!/^\d+$/.test(normalizedFact)) return normalizeText(text).includes(normalizedFact);
+
+  return new RegExp(`(?<!\\d)${normalizedFact}(?!\\d)`).test(normalizeText(text));
+}
+
 function validateTextPairs(text: string, expectedPairs: Array<[string, string]>): string[] {
-  const clauses = text.split(/[。、\n|;]/).map(normalizeText);
+  const clauses = text.split(/[。、\n|;]/);
   return expectedPairs
     .filter(([label, value]) => {
-      const normalizedLabel = normalizeText(label);
-      const normalizedValue = normalizeText(value);
-      return !clauses.some(
-        (clause) => clause.includes(normalizedLabel) && clause.includes(normalizedValue),
-      );
+      return !clauses.some((clause) => includesFact(clause, label) && includesFact(clause, value));
     })
     .map(([label, value]) => `${label}=${value}`);
 }
@@ -106,7 +109,7 @@ export default function assertFinanceChatOutput(
 
   const config = context.config ?? {};
   const missingFacts = (config.expectedTextFacts ?? []).filter(
-    (fact) => !normalizeText(actual.text).includes(normalizeText(fact)),
+    (fact) => !includesFact(actual.text, fact),
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);

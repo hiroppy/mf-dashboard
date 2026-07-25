@@ -54,6 +54,30 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  it("rejects numeric facts with extra digits", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "食費は418,370円です。" }), {
+        config: {
+          expectedCharts: [],
+          expectedTextFacts: ["41837"],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は3,132,350円です。" }), {
+        config: {
+          expectedCharts: [],
+          expectedTextPairs: [["収入", "313235"]],
+          expectedTextLinks: [],
+          expectedToolRoutes: [],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   it("requires chart structure and order", () => {
     const charts = [
       {

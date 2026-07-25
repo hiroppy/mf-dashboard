@@ -72,10 +72,15 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
-function getMarkdownLinks(text: string): string[] {
-  return unique(
-    [...text.matchAll(/\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map((match) => match[1]!),
+function getTextLinks(text: string): string[] {
+  const markdownLinks = [...text.matchAll(/\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map(
+    (match) => match[1]!,
   );
+  const rawLinks = [...text.matchAll(/https?:\/\/[^\s<>)]+|(?:^|[\s(])(\/[^\s<>)]+)/gm)].map(
+    (match) => (match[1] ?? match[0]).trim().replace(/[.,。、!?！？]+$/, ""),
+  );
+
+  return unique([...markdownLinks, ...rawLinks]);
 }
 
 export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
@@ -99,7 +104,7 @@ export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {
     text: response.text,
     charts,
     toolRoutes: unique(toolRoutes),
-    textLinks: getMarkdownLinks(response.text),
+    textLinks: getTextLinks(response.text),
   };
 }
 
