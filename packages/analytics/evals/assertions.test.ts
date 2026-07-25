@@ -192,6 +192,20 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円です。内訳は給与300,000円、その他13,235円です。支出は219,894円、収支は93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は¥313,235、支出は￥219,894、収支は¥93,341です。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   it("requires a relevant successful database query for data-backed cases", () => {
@@ -201,7 +215,7 @@ describe("assertFinanceChatOutput", () => {
         outputCells: [{ columnPattern: "income|収入", value: "313235" }],
         sqlPatterns: [
           "\\btransactions\\b",
-          "\\bgroup_id\\b\\s*=\\s*:groupId",
+          "(?:\\bgroup_id\\b\\s*=\\s*:groupId|:groupId\\s*=\\s*(?:\\w+\\.)?group_id\\b)",
           "2026-07",
           "\\bamount\\b",
         ],
@@ -247,7 +261,7 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: [
             {
               input: {
-                sql: "SELECT SUM(AMOUNT) AS income FROM TRANSACTIONS WHERE GROUP_ID = :groupId AND DATE LIKE '2026-07%'",
+                sql: "SELECT SUM(AMOUNT) AS income FROM TRANSACTIONS t WHERE :groupId = t.GROUP_ID AND DATE LIKE '2026-07%'",
               },
               output: {
                 columns: ["income"],

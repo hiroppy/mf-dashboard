@@ -170,6 +170,18 @@ describe("toEvaluationOutput", () => {
       textLinks: ["/0/cf/2026-07"],
     });
   });
+
+  it("recognizes a rendered Markdown reference link", () => {
+    expect(
+      toEvaluationOutput({
+        text: "[2026年7月の収支][route]\n\n[route]: /0/cf/2026-07",
+        steps: [],
+      }),
+    ).toMatchObject({
+      renderedLinks: ["/0/cf/2026-07"],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
 });
 
 describe("FinanceChatProvider", () => {

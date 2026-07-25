@@ -70,7 +70,7 @@ function fail(reason: string): AssertionResult {
 }
 
 function normalizeText(value: string): string {
-  return value.normalize("NFKC").replace(/[,\s*_`¥￥]/g, "");
+  return value.normalize("NFKC").replace(/[,\s*_`]/g, "");
 }
 
 function includesFact(text: string, fact: string): boolean {
@@ -106,8 +106,11 @@ function validateTextPairs(
 
       const expectedValue = Number(value);
       const directClaims = segments.flatMap((segment) => {
+        const claimSegment = segment
+          .split(/内訳(?:は|:|：)?/, 1)[0]!
+          .replace(/[¥￥]((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?/g, "$1$2$3円");
         const amounts = [
-          ...segment.matchAll(/((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?円/g),
+          ...claimSegment.matchAll(/((?:[-−▲△]|マイナス)?)(\d+(?:\.\d+)?)(万|億|兆)?円/g),
         ].map((match) => {
           const sign = match[1] ? -1 : 1;
           const scale = { 万: 10_000, 億: 100_000_000, 兆: 1_000_000_000_000 }[match[3] ?? ""] ?? 1;
@@ -120,7 +123,7 @@ function validateTextPairs(
             amounts,
             negated:
               /\d(?:万|億|兆)?円[^。！？\n]{0,12}(?:ではなく|でなく|ではない|ではありません)/.test(
-                segment,
+                claimSegment,
               ),
           },
         ];
@@ -161,7 +164,9 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation, index: 
 
 function validateMarkdownRows(text: string, expectedRows: string[][]): string[] {
   const normalizeCell = (value: string) => {
-    const normalized = normalizeText(value).replace(/円$/, "");
+    const normalized = normalizeText(value)
+      .replace(/円$/, "")
+      .replace(/^[¥￥]/, "");
     const date = normalized.match(/^(\d{4})(?:年|[-/])(\d{1,2})(?:月|[-/])(\d{1,2})日?$/);
     return date
       ? `${date[1]}-${date[2]!.padStart(2, "0")}-${date[3]!.padStart(2, "0")}`

@@ -101,8 +101,19 @@ function getRenderedLinks(text: string): string[] {
   const htmlLinks = [...text.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)].map(
     (match) => match[1]!,
   );
+  const definitions = new Map(
+    [...text.matchAll(/^\s*\[([^\]]+)\]:\s*(\S+)/gm)].map((match) => [
+      match[1]!.toLocaleLowerCase(),
+      match[2]!,
+    ]),
+  );
+  const referenceLinks = [...text.matchAll(/(?<!!)\[([^\]]+)\]\[([^\]]*)\]/g)].flatMap((match) => {
+    const reference = (match[2] || match[1])!.toLocaleLowerCase();
+    const href = definitions.get(reference);
+    return href ? [href] : [];
+  });
 
-  return unique([...markdownLinks, ...htmlLinks]);
+  return unique([...markdownLinks, ...htmlLinks, ...referenceLinks]);
 }
 
 function getTextLinks(text: string): string[] {

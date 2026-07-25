@@ -19,7 +19,7 @@
         databaseQuery:
           sqlPatterns:
             - '\btransactions\b'
-            - '\bgroup_id\b\s*=\s*:groupId'
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
             - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
             - '\bamount\b'
             - '\btype\b'
@@ -61,7 +61,7 @@
         databaseQuery:
           sqlPatterns:
             - '\btransactions\b'
-            - '\bgroup_id\b\s*=\s*:groupId'
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
             - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
             - '\bamount\b'
             - '\bcategory\b'
@@ -92,7 +92,7 @@
         databaseQuery:
           sqlPatterns:
             - '\btransactions\b'
-            - '\bgroup_id\b\s*=\s*:groupId'
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
             - '\bdate\b[\s\S]{0,160}2026-07-10|2026-07-10[\s\S]{0,160}\bdate\b'
             - '\bamount\b'
             - '\bdescription\b'
@@ -136,7 +136,7 @@
         databaseQuery:
           sqlPatterns:
             - '\btransactions\b'
-            - '\bgroup_id\b\s*=\s*:groupId'
+            - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
             - '\bdate\b[\s\S]{0,160}2027-01|2027-01[\s\S]{0,160}\bdate\b'
             - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
             - '\b(?:count\s*\(\s*\*\s*\)|sum\s*\(\s*amount\s*\))'
