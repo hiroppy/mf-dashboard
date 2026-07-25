@@ -171,19 +171,29 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、支出は10万円です。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、支出は1.5億円です。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
   });
 
-  it("requires transaction facts to occur in the same Markdown row", () => {
+  it("requires exact transaction rows without additional rows", () => {
     const text = [
       "| 日付 | 内容 | 金額 |",
       "| --- | --- | ---: |",
-      "| 2026-07-10 | 東京ガス | 3,435円 |",
+      "| 2026-07-10 | 東京ガス ガス代 | 3,435円 |",
       "| 2026-07-10 | 成城石井 | 3,152円 |",
     ].join("\n");
     const config = {
       expectedCharts: [],
       expectedMarkdownRows: [
-        ["2026-07-10", "東京ガス", "3435"],
+        ["2026-07-10", "東京ガス ガス代", "3435"],
         ["2026-07-10", "成城石井", "3152"],
       ],
       expectedTextLinks: [],
@@ -193,9 +203,14 @@ describe("assertFinanceChatOutput", () => {
     expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
-        output({ text: text.replace("東京ガス | 3,435", "東京ガス | 3,152") }),
+        output({ text: text.replace("東京ガス ガス代 | 3,435", "東京ガス ガス代 | 34,350") }),
         { config },
       ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: `${text}\n| 2026-07-10 | 架空明細 | 1,000円 |` }), {
+        config,
+      }),
     ).toMatchObject({ pass: false });
   });
 

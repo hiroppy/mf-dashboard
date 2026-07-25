@@ -78,17 +78,22 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation, index: 
 }
 
 function validateMarkdownRows(text: string, expectedRows: string[][]): string[] {
-  const rows = text
+  const normalizeCell = (value: string) => normalizeText(value).replace(/円$/, "");
+  const actualRows = text
     .split("\n")
     .filter((line) => line.includes("|"))
-    .map(normalizeText);
+    .map((line) =>
+      line
+        .replace(/^\s*\||\|\s*$/g, "")
+        .split("|")
+        .map(normalizeCell),
+    )
+    .filter((row) => row.some((cell) => /^\d{4}-\d{2}-\d{2}$/.test(cell)));
+  const normalizedExpectedRows = expectedRows.map((row) => row.map(normalizeCell));
 
-  return expectedRows
-    .filter((expected) => {
-      const fragments = expected.map(normalizeText);
-      return !rows.some((row) => fragments.every((fragment) => row.includes(fragment)));
-    })
-    .map((row) => row.join(" / "));
+  return JSON.stringify(actualRows) === JSON.stringify(normalizedExpectedRows)
+    ? []
+    : expectedRows.map((row) => row.join(" / "));
 }
 
 function parseOutput(output: string): EvaluationOutput | undefined {
@@ -118,7 +123,10 @@ export default function assertFinanceChatOutput(
   if (missingPairs.length > 0) {
     return fail(`本文のラベルと値の組み合わせが期待値と異なります: ${missingPairs.join(", ")}`);
   }
-  if (config.forbidAmounts && /\d[\d,]*\s*円|[¥￥]\s*\d/.test(actual.text)) {
+  if (
+    config.forbidAmounts &&
+    /[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)/.test(actual.text)
+  ) {
     return fail("データのない回答に金額が含まれています。");
   }
 

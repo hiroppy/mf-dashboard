@@ -33,6 +33,8 @@
         expectedCharts:
           - chartType: pie
             unit: currency
+            series:
+              - { name: 支出, amountType: expense }
             data:
               - { label: 食料品, values: [24833] }
               - { label: 外食, values: [12214] }
@@ -51,7 +53,7 @@
       config:
         expectedTextFacts: ["6587"]
         expectedMarkdownRows:
-          - ["2026-07-10", "東京ガス", "3435"]
+          - ["2026-07-10", "東京ガス ガス代", "3435"]
           - ["2026-07-10", "成城石井", "3152"]
         expectedCharts: []
         expectedToolRoutes: []
