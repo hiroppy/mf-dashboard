@@ -14,7 +14,8 @@ interface AssertionContext {
     databaseQuery?: {
       expectEmpty?: boolean;
       forbiddenSqlPatterns?: string[];
-      outputFacts?: string[];
+      outputCells?: Array<{ columnPattern: string; value: string }>;
+      outputRows?: string[][];
       sqlPatterns: string[];
     };
     expectedCharts?: ChartExpectation[];
@@ -276,16 +277,30 @@ export default function assertFinanceChatOutput(
       const result = getRelevantDatabaseResult(trace, databaseQuery);
       return result ? [result] : [];
     });
-    const missingQueryFacts = (databaseQuery.outputFacts ?? []).filter(
-      (fact) =>
+    const missingOutputCells = (databaseQuery.outputCells ?? []).filter(
+      ({ columnPattern, value: expectedValue }) =>
         !relevantResults.some((result) =>
           result.rows.some((row) =>
-            Object.values(row).some(
-              (value) =>
+            Object.entries(row).some(
+              ([column, value]) =>
+                new RegExp(columnPattern, "i").test(column) &&
                 (typeof value === "number" || typeof value === "string") &&
-                normalizeText(String(value)) === normalizeText(fact),
+                normalizeText(String(value)) === normalizeText(expectedValue),
             ),
           ),
+        ),
+    );
+    const missingOutputRows = (databaseQuery.outputRows ?? []).filter(
+      (expectedRow) =>
+        !relevantResults.some((result) =>
+          result.rows.some((row) => {
+            const values = Object.values(row)
+              .filter((value): value is number | string =>
+                ["number", "string"].includes(typeof value),
+              )
+              .map((value) => normalizeText(String(value)));
+            return expectedRow.every((expected) => values.includes(normalizeText(expected)));
+          }),
         ),
     );
     const hasUnexpectedRows =
@@ -294,14 +309,18 @@ export default function assertFinanceChatOutput(
         (result) =>
           result.rows.length > 0 &&
           !result.rows.every((row) =>
-            Object.values(row).every((value) => value === null || value === 0),
+            Object.entries(row).every(
+              ([column, value]) =>
+                (value === 0 && /count/i.test(column)) ||
+                (value === null && /(?:sum|total|amount)/i.test(column)),
+            ),
           ),
       );
     if (relevantResults.length === 0) {
       return fail("回答に必要なpredicateと型を満たすqueryDatabase結果がありません。");
     }
-    if (missingQueryFacts.length > 0) {
-      return fail(`queryDatabase結果に期待する値がありません: ${missingQueryFacts.join(", ")}`);
+    if (missingOutputCells.length > 0 || missingOutputRows.length > 0) {
+      return fail("queryDatabase結果の列・行と期待値の対応が一致しません。");
     }
     if (hasUnexpectedRows) return fail("データなし回答のqueryDatabase結果が空ではありません。");
   }

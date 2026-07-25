@@ -198,7 +198,7 @@ describe("assertFinanceChatOutput", () => {
     const config = {
       databaseQuery: {
         forbiddenSqlPatterns: ["\\b313235\\b"],
-        outputFacts: ["313235"],
+        outputCells: [{ columnPattern: "income|収入", value: "313235" }],
         sqlPatterns: [
           "\\btransactions\\b",
           "\\bgroup_id\\b\\s*=\\s*:groupId",
@@ -269,6 +269,39 @@ describe("assertFinanceChatOutput", () => {
           toolTrace: [
             {
               input: {
+                sql: "SELECT SUM(AMOUNT) AS income, SUM(AMOUNT) AS expense FROM TRANSACTIONS WHERE GROUP_ID = :groupId AND DATE LIKE '2026-07%'",
+              },
+              output: {
+                columns: ["income", "expense"],
+                rowCount: 1,
+                rows: [{ expense: 313_235, income: 219_894 }],
+                truncated: false,
+              },
+              succeeded: true,
+              toolName: "queryDatabase",
+            },
+          ],
+        }),
+        {
+          config: {
+            ...config,
+            databaseQuery: {
+              ...config.databaseQuery,
+              outputCells: [
+                { columnPattern: "income|収入", value: "313235" },
+                { columnPattern: "expense|支出", value: "219894" },
+              ],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: [
+            {
+              input: {
                 sql: "SELECT 313235 AS income FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%' AND amount >= 0",
               },
               output: {
@@ -291,7 +324,12 @@ describe("assertFinanceChatOutput", () => {
     const config = {
       databaseQuery: {
         expectEmpty: true,
-        sqlPatterns: ["\\btransactions\\b", ":groupId", "2027-01"],
+        sqlPatterns: [
+          "\\btransactions\\b",
+          ":groupId",
+          "2027-01",
+          "\\b(?:count\\s*\\(\\s*\\*\\s*\\)|sum\\s*\\(\\s*amount\\s*\\))",
+        ],
       },
       expectedCharts: [],
       expectedTextLinks: [],
@@ -310,8 +348,8 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           toolTrace: trace(
-            "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
-            [],
+            "SELECT COUNT(*) AS count FROM transactions WHERE group_id = :groupId AND date LIKE '2026-07%'",
+            [{ count: 0 }],
           ),
         }),
         { config },
@@ -321,8 +359,8 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           toolTrace: trace(
-            "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
-            [{ amount: 1_000 }],
+            "SELECT COUNT(*) AS count FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ count: 1 }],
           ),
         }),
         { config },
@@ -332,13 +370,24 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           toolTrace: trace(
-            "SELECT amount FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
-            [],
+            "SELECT COUNT(*) AS count FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ count: 0 }],
           ),
         }),
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          toolTrace: trace(
+            "SELECT 0 AS count FROM transactions WHERE group_id = :groupId AND date LIKE '2027-01%'",
+            [{ count: 0 }],
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(
         output({
