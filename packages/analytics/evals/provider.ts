@@ -140,12 +140,26 @@ function getTextLinks(text: string): string[] {
   const rawLinks = [...text.matchAll(/(?:https?:)?\/\/[^\s<>)"']+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
+  const schemeLinks = [...text.matchAll(/\b(?:mailto|tel):[^\s<>)"']+/gi)].map((match) => match[0]);
+  const bareWebLinks = [
+    ...text.matchAll(/\bwww\.[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/[^\s<>)"']*)?/g),
+  ].map((match) => match[0]);
+  const emailLinks = [
+    ...text.matchAll(/(?<![A-Za-z0-9._%+@:-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g),
+  ].map((match) => match[0]);
   const routeText = text.replace(/<[^>]*>/g, "");
   const routeCandidates = [
     ...routeText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ].map((match) => match[0]);
 
-  return unique([...getRenderedLinks(text), ...rawLinks, ...routeCandidates]);
+  return unique([
+    ...getRenderedLinks(text),
+    ...rawLinks,
+    ...schemeLinks,
+    ...bareWebLinks,
+    ...emailLinks,
+    ...routeCandidates,
+  ]);
 }
 
 export function toEvaluationOutput(response: ChatResponse): EvaluationOutput {

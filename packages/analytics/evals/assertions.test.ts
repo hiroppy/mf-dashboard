@@ -147,6 +147,14 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "収入は313,235円（訂正: 0円）、支出は219,894円、収支は93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: [
             "## 2026年7月の収入・支出・収支",
             "| 項目 | 金額 |",
@@ -241,7 +249,7 @@ describe("assertFinanceChatOutput", () => {
         expectedRowCount: 1,
         forbiddenSqlPatterns: ["\\b313235\\b"],
         outputCells: [{ columnPattern: "income|収入", value: "313235" }],
-        predicatePatterns: [":groupId", "2026-07"],
+        predicatePatterns: [":groupId", "\\bdate\\b\\s*like"],
         sqlPatterns: [
           "\\btransactions\\b",
           "(?:\\bgroup_id\\b\\s*=\\s*:groupId|:groupId\\s*=\\s*(?:\\w+\\.)?group_id\\b)",
@@ -408,40 +416,42 @@ describe("assertFinanceChatOutput", () => {
   });
 
   it("rejects SQL terms that appear only in a projection literal", () => {
-    expect(
-      assertFinanceChatOutput(
-        output({
-          toolTrace: [
-            {
-              input: {
-                sql: "SELECT 'transactions 2026-07 group_id = :groupId amount' AS note, 313234 + 1 AS income",
+    const config = {
+      databaseQuery: {
+        expectedRowCount: 1,
+        outputCells: [{ columnPattern: "income", value: "313235" }],
+        predicatePatterns: [":groupId", "\\bdate\\b\\s*like"],
+        sqlPatterns: ["transactions", "amount"],
+      },
+      expectedCharts: [],
+      expectedTextLinks: [],
+      expectedToolRoutes: [],
+    };
+    for (const sql of [
+      "SELECT 'transactions 2026-07 group_id = :groupId amount' AS note, 313234 + 1 AS income",
+      "SELECT amount, 313234 + 1 AS income FROM transactions WHERE 'group_id = :groupId AND date LIKE 2026-07' = 'x'",
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            toolTrace: [
+              {
+                input: { sql },
+                output: {
+                  columns: ["income"],
+                  rowCount: 1,
+                  rows: [{ income: 313_235 }],
+                  truncated: false,
+                },
+                succeeded: true,
+                toolName: "queryDatabase",
               },
-              output: {
-                columns: ["income"],
-                rowCount: 1,
-                rows: [{ income: 313_235 }],
-                truncated: false,
-              },
-              succeeded: true,
-              toolName: "queryDatabase",
-            },
-          ],
-        }),
-        {
-          config: {
-            databaseQuery: {
-              expectedRowCount: 1,
-              outputCells: [{ columnPattern: "income", value: "313235" }],
-              predicatePatterns: [":groupId", "2026-07"],
-              sqlPatterns: ["transactions", "amount"],
-            },
-            expectedCharts: [],
-            expectedTextLinks: [],
-            expectedToolRoutes: [],
-          },
-        },
-      ),
-    ).toMatchObject({ pass: false });
+            ],
+          }),
+          { config },
+        ),
+      ).toMatchObject({ pass: false });
+    }
   });
 
   it("accepts repeated database results when each result is complete", () => {
@@ -828,6 +838,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(output({ text: "支出は一万円ですが、明細はありません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "支出は１２３円ですが、明細はありません。" }), {
         config,
       }),
     ).toMatchObject({ pass: false });

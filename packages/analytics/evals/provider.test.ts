@@ -157,6 +157,10 @@ describe("toEvaluationOutput", () => {
     ["詳細は/0/cf/2026-07です", "/0/cf/2026-07"],
     ["詳細は /0/cf/2026-07/extra です", "/0/cf/2026-07/extra"],
     ['<a href="//evil.example/path">こちら</a>', "//evil.example/path"],
+    ["www.attacker.example", "www.attacker.example"],
+    ["user@example.com", "user@example.com"],
+    ["<user@example.com>", "user@example.com"],
+    ["mailto:evil@example.com", "mailto:evil@example.com"],
   ])("detects an unproven raw link in %s", (text, expectedLink) => {
     expect(toEvaluationOutput({ text, steps: [] }).textLinks).toEqual([expectedLink]);
   });

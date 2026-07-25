@@ -19,9 +19,9 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
-            - '\bis_excluded_from_calculation\b'
-            - '\bis_internal_transfer\b'
+            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '\bis_excluded_from_calculation\b\s*='
+            - '\bis_internal_transfer\b\s*='
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
@@ -67,9 +67,9 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b[\s\S]{0,160}2026-07|2026-07[\s\S]{0,160}\bdate\b'
-            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
-            - '\bis_excluded_from_calculation\b'
+            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '\btype\b\s*(?:=|in\b)'
+            - '\bis_excluded_from_calculation\b\s*='
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
@@ -104,8 +104,8 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b[\s\S]{0,160}2026-07-10|2026-07-10[\s\S]{0,160}\bdate\b'
-            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
+            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '\btype\b\s*(?:=|in\b)'
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
@@ -153,8 +153,8 @@
         databaseQuery:
           predicatePatterns:
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'
-            - '\bdate\b[\s\S]{0,160}2027-01|2027-01[\s\S]{0,160}\bdate\b'
-            - '\btype\b[\s\S]{0,80}expense|expense[\s\S]{0,80}\btype\b'
+            - '\bdate\b\s*(?:=|>=|>|between\b|like\b|glob\b)'
+            - '\btype\b\s*(?:=|in\b)'
           sqlPatterns:
             - '\btransactions\b'
             - '(?:\bgroup_id\b\s*=\s*:groupId|:groupId\s*=\s*(?:\w+\.)?group_id\b)'

@@ -275,7 +275,7 @@ function getRelevantDatabaseResult(
     " ".repeat(literal.length),
   );
   const predicateIndex = maskedSql.search(/\b(?:where|join)\b/i);
-  const predicateSql = predicateIndex === -1 ? "" : sql.slice(predicateIndex);
+  const predicateSql = predicateIndex === -1 ? "" : maskedSql.slice(predicateIndex);
   const hasRequiredPredicates = config.sqlPatterns.every((pattern) =>
     new RegExp(pattern, "i").test(sql),
   );
@@ -328,13 +328,14 @@ export default function assertFinanceChatOutput(
   if (missingPairs.length > 0) {
     return fail(`本文のラベルと値の組み合わせが期待値と異なります: ${missingPairs.join(", ")}`);
   }
+  const normalizedAnswer = actual.text.normalize("NFKC");
   if (
     config.forbidAmounts &&
     (/[¥￥]\s*\d|\d[\d,.]*\s*(?:円|万\s*円|億\s*円|兆\s*円)|[一二三四五六七八九十百千万億兆〇零]+円/.test(
-      actual.text,
+      normalizedAnswer,
     ) ||
       /(?:収入|支出|収支|残高|金額|合計|総額)[^\d\n]{0,8}-?\d[\d,.]*(?![\d年月日件])/.test(
-        actual.text,
+        normalizedAnswer,
       ))
   ) {
     return fail("データのない回答に金額が含まれています。");
