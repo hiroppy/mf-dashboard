@@ -11,6 +11,7 @@ import { chartTooltipStyle } from "../charts/chart-tooltip";
 import { AmountDisplay, getAmountColorClass } from "../ui/amount-display";
 import { CardContent } from "../ui/card";
 import { Pagination } from "../ui/pagination";
+import { useHoldingsFilter } from "./unrealized-gain-card.client";
 
 const PAGE_SIZE = 10;
 
@@ -18,6 +19,8 @@ interface HoldingItem {
   id: number;
   name: string;
   accountName: string | null;
+  institution: string | null;
+  categoryName: string | null;
   amount: number | null;
   unrealizedGain: number | null;
   unrealizedGainPct: number | null;
@@ -36,15 +39,65 @@ interface CategoryGroup {
 interface HoldingsTableClientProps {
   categories: CategoryGroup[];
   hideAccountName?: boolean;
+  enableSharedFilter?: boolean;
+}
+
+export function filterCategories(categories: CategoryGroup[], selectedFilter?: string) {
+  if (!selectedFilter || selectedFilter === "__all__") return categories;
+
+  const [institution, categoryName] = selectedFilter.split("|");
+  return categories
+    .map((group) => {
+      const items = group.items.filter(
+        (item) =>
+          item.institution === institution &&
+          (categoryName === undefined || item.categoryName === categoryName),
+      );
+      return {
+        ...group,
+        items,
+        total: items.reduce((sum, item) => sum + (item.amount ?? 0), 0),
+      };
+    })
+    .filter((group) => group.items.length > 0);
+}
+
+export function HoldingsTableTotal({
+  categories,
+  total,
+  enableSharedFilter = false,
+}: {
+  categories: CategoryGroup[];
+  total: number;
+  enableSharedFilter?: boolean;
+}) {
+  const filter = useHoldingsFilter();
+  const filteredCategories = filterCategories(
+    categories,
+    enableSharedFilter ? filter?.selectedFilter : undefined,
+  );
+  const filteredTotal =
+    enableSharedFilter && filter?.selectedFilter !== "__all__"
+      ? filteredCategories.reduce((sum, category) => sum + category.total, 0)
+      : total;
+
+  return <AmountDisplay amount={filteredTotal} size="lg" weight="bold" />;
 }
 
 export function HoldingsTableClient({
   categories,
   hideAccountName = false,
+  enableSharedFilter = false,
 }: HoldingsTableClientProps) {
+  const filter = useHoldingsFilter();
+  const filteredCategories = filterCategories(
+    categories,
+    enableSharedFilter ? filter?.selectedFilter : undefined,
+  );
+
   return (
     <CardContent className="space-y-4">
-      {categories.map(({ category, items, total: categoryTotal }) => (
+      {filteredCategories.map(({ category, items, total: categoryTotal }) => (
         <CategoryCard
           key={category}
           category={category}

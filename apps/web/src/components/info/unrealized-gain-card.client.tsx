@@ -1,7 +1,7 @@
 "use client";
 
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
 import { TreemapChart } from "../charts/treemap-chart";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -72,12 +72,36 @@ function groupSmallHoldings(
 
 const ALL_FILTER = "__all__";
 
+interface HoldingsFilterContextValue {
+  selectedFilter: string;
+  setSelectedFilter: (value: string) => void;
+}
+
+const HoldingsFilterContext = createContext<HoldingsFilterContextValue | null>(null);
+
+export function HoldingsFilterProvider({ children }: { children: ReactNode }) {
+  const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
+
+  return (
+    <HoldingsFilterContext value={{ selectedFilter, setSelectedFilter }}>
+      {children}
+    </HoldingsFilterContext>
+  );
+}
+
+export function useHoldingsFilter() {
+  return useContext(HoldingsFilterContext);
+}
+
 export function UnrealizedGainCardClient({
   holdings,
   filterOptions,
   hideFilter = false,
 }: UnrealizedGainCardClientProps) {
-  const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
+  const sharedFilter = useHoldingsFilter();
+  const [localFilter, setLocalFilter] = useState(ALL_FILTER);
+  const selectedFilter = sharedFilter?.selectedFilter ?? localFilter;
+  const setSelectedFilter = sharedFilter?.setSelectedFilter ?? setLocalFilter;
 
   const filteredHoldings = useMemo(() => {
     if (selectedFilter === ALL_FILTER) {

@@ -2,16 +2,16 @@ import { getAccountByMfId } from "@mf-dashboard/db";
 import { getLatestTotalAssets } from "@mf-dashboard/db";
 import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
 import { LucideIcon, PiggyBankIcon, LandmarkIcon } from "lucide-react";
-import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
-import { HoldingsTableClient } from "./holdings-table.client";
+import { HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
 
 interface HoldingsTableProps {
   type: "asset" | "liability";
   icon?: LucideIcon;
   mfId?: string;
   groupId?: string;
+  enableSharedFilter?: boolean;
 }
 
 const CONFIG = {
@@ -25,7 +25,13 @@ const CONFIG = {
   },
 } as const;
 
-export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTableProps) {
+export async function HoldingsTable({
+  type,
+  icon,
+  mfId,
+  groupId,
+  enableSharedFilter = false,
+}: HoldingsTableProps) {
   const account = mfId ? await getAccountByMfId(mfId, groupId) : null;
   const allHoldings = account
     ? await getHoldingsByAccountId(account.id, groupId)
@@ -62,6 +68,8 @@ export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTable
         id: number;
         name: string;
         accountName: string | null;
+        institution: string | null;
+        categoryName: string | null;
         amount: number | null;
         unrealizedGain: number | null;
         unrealizedGainPct: number | null;
@@ -83,6 +91,8 @@ export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTable
       id: holding.id,
       name: holding.name,
       accountName: holding.accountName,
+      institution: holding.institution,
+      categoryName: holding.categoryName,
       amount: holding.amount,
       unrealizedGain: holding.unrealizedGain,
       unrealizedGainPct: holding.unrealizedGainPct,
@@ -107,10 +117,18 @@ export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTable
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle icon={Icon}>{config.title}</CardTitle>
-          <AmountDisplay amount={total} size="lg" weight="bold" />
+          <HoldingsTableTotal
+            categories={categories}
+            total={total}
+            enableSharedFilter={enableSharedFilter}
+          />
         </div>
       </CardHeader>
-      <HoldingsTableClient categories={categories} hideAccountName={!!mfId} />
+      <HoldingsTableClient
+        categories={categories}
+        hideAccountName={!!mfId}
+        enableSharedFilter={enableSharedFilter}
+      />
     </Card>
   );
 }
