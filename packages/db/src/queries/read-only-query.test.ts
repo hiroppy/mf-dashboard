@@ -675,6 +675,22 @@ describe("executeReadOnlyQuery", () => {
       })
       .returning()
       .get();
+    await db.insert(schema.accountStatuses).values({
+      accountId: fallbackAccount.id,
+      status: "error",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.transactions).values({
+      mfId: "fallback-account-transaction",
+      date: "2026-07-12",
+      accountId: fallbackAccount.id,
+      description: "Fallback account transaction",
+      amount: 1_000,
+      type: "expense",
+      createdAt: now,
+      updatedAt: now,
+    });
     const snapshot = await db
       .insert(schema.dailySnapshots)
       .values({
@@ -701,7 +717,13 @@ describe("executeReadOnlyQuery", () => {
            hv.amount,
            h.account_id,
            (SELECT COUNT(*) FROM accounts) AS account_count,
-           (SELECT COUNT(*) FROM group_accounts) AS group_account_count
+           (SELECT COUNT(*) FROM group_accounts) AS group_account_count,
+           (SELECT COUNT(*) FROM account_statuses) AS account_status_count,
+           (
+             SELECT COUNT(*)
+             FROM transactions
+             WHERE description = 'Fallback account transaction'
+           ) AS fallback_transaction_count
          FROM holdings h
          JOIN holding_values hv ON hv.holding_id = h.id`,
         "group-a",
@@ -715,6 +737,8 @@ describe("executeReadOnlyQuery", () => {
           account_id: null,
           account_count: 1,
           group_account_count: 1,
+          account_status_count: 0,
+          fallback_transaction_count: 0,
         },
       ],
       rowCount: 1,
