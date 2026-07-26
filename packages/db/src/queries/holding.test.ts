@@ -298,6 +298,39 @@ describe("getHoldingsWithLatestValues", () => {
 
     expect(result).toEqual([]);
   });
+
+  it("未照合の保有資産はグループ選択なしだけで返す", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.groups).values({
+      id: "0",
+      name: "All Accounts",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const fallbackAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "unknown",
+        name: "-",
+        type: "手動",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const snapshotId = await createSnapshot();
+    const holdingId = await createHolding({
+      accountId: fallbackAccount.id,
+      name: "Unmatched Asset A",
+    });
+    await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+
+    await expect(getHoldingsWithLatestValues("0", db)).resolves.toMatchObject([
+      { name: "Unmatched Asset A" },
+    ]);
+    await expect(getHoldingsWithLatestValues(TEST_GROUP_ID, db)).resolves.toEqual([]);
+  });
 });
 
 describe("getHoldingsByAccountId", () => {

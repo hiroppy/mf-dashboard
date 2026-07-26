@@ -147,6 +147,40 @@ describe("saveScrapedData", () => {
     ).resolves.toMatchObject({ groupId: "group-a" });
   });
 
+  test("未登録の金融機関名がある資産は同名口座へ誤って紐づけない", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-account-a",
+      name: "Manual Account A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 0,
+    });
+    data.portfolio.items.push({
+      name: "Manual Account A",
+      type: "保険",
+      institution: "Unregistered Institution A",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+    const unmatchedHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Account A"))
+      .get();
+
+    expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
+  });
+
   test("金融機関名がない手入力負債を同名の登録口座へ紐づける", async () => {
     const data = createScrapedData();
     data.registeredAccounts.accounts.push({

@@ -34,7 +34,14 @@ function resolveHoldingAccountId(
   item: { institution: string; name: string },
   fallbackAccountId: number,
 ): number {
-  return accountIdMap.get(item.institution) ?? accountIdMap.get(item.name) ?? fallbackAccountId;
+  const institutionAccountId = accountIdMap.get(item.institution);
+  if (institutionAccountId !== undefined) return institutionAccountId;
+
+  if (!item.institution) {
+    return accountIdMap.get(item.name) ?? fallbackAccountId;
+  }
+
+  return fallbackAccountId;
 }
 
 /**
