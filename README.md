@@ -8,20 +8,6 @@ Money Forward MEの家計・資産・投資データを定期的に取得し、W
 
 [デモを見る](https://mf-dashboard-demo.vercel.app/) · [本番環境をセットアップする](docs/setup.md)
 
-## デモデータですぐ試す
-
-必要なものはNode.jsとpnpm。
-
-```sh
-git clone https://github.com/hiroppy/mf-dashboard.git
-cd mf-dashboard
-corepack enable pnpm
-pnpm install
-pnpm dev
-```
-
-起動後、ターミナルに表示されるURLをブラウザで開く。この手順では実際のMoney Forward MEアカウントへ接続しない。
-
 ## 本番環境へ導入する
 
 本番環境では、ローカルPC上のDocker ComposeでWeb、crawler、Cloudflare Tunnelを常時稼働させる。Money Forward ME、1Password Service Account、Cloudflare Zero Trustの準備が必要になる。
