@@ -1,0 +1,29 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-testing
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/setup-node
+      - run: pnpm test:mutation
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: mutation-reports
+          path: |
+            apps/*/reports/mutation/mutation.html
+            apps/*/reports/mutation/mutation.json
+            packages/*/reports/mutation/mutation.html
+            packages/*/reports/mutation/mutation.json
+          retention-days: 7

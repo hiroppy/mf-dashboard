@@ -21,17 +21,6 @@ jobs:
       - run: pnpm knip
       - run: pnpm typecheck --affected
       - run: pnpm test --affected
-      - run: pnpm test:mutation
-      - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: mutation-reports
-          path: |
-            apps/*/reports/mutation/mutation.html
-            apps/*/reports/mutation/mutation.json
-            packages/*/reports/mutation/mutation.html
-            packages/*/reports/mutation/mutation.json
-          retention-days: 7
   build-demo:
     runs-on: ubuntu-latest
     steps:
