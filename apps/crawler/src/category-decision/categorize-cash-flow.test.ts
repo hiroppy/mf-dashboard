@@ -153,4 +153,26 @@ describe("categorizeCashFlowMonth", () => {
     );
     expect(JSON.stringify(vi.mocked(warn).mock.calls)).not.toContain("final scrape failed");
   });
+
+  test("再スクレイプ後かつカテゴリ反映前の失敗時は最新取引を返す", async () => {
+    const initialCashFlow = cashFlow("2026-06", [item("initial-new")]);
+    const latestCashFlow = cashFlow("2026-06", [item("initial-new"), item("latest-new")]);
+    vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set());
+    vi.mocked(scrapeCashFlowMonth).mockResolvedValue(latestCashFlow);
+    vi.mocked(scrapeCategoryCandidates).mockRejectedValue(new Error("candidate scrape failed"));
+
+    const result = await categorizeCashFlowMonth({
+      page: {} as Page,
+      db: {} as Parameters<typeof categorizeCashFlowMonth>[0]["db"],
+      cashFlow: initialCashFlow,
+      config,
+      usage: { llmCallsUsed: 0 },
+    });
+
+    expect(result).toBe(latestCashFlow);
+    expect(warn).toHaveBeenCalledWith(
+      "Category decision failed for 2026-06; saving latest scraped cash flow (code: CATEGORY_DECISION_PIPELINE_FAILED).",
+    );
+    expect(JSON.stringify(vi.mocked(warn).mock.calls)).not.toContain("candidate scrape failed");
+  });
 });

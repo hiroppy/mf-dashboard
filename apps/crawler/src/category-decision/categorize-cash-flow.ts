@@ -156,13 +156,13 @@ export async function categorizeCashFlowMonth(options: {
     const categoriesWereApplied = appliedDecisionsForFallback.length > 0;
     const fallbackMessage = categoriesWereApplied
       ? "saving locally reflected categories"
-      : "saving original categories";
+      : "saving latest scraped cash flow";
     warn(
       `Category decision failed for ${cashFlow.month}; ${fallbackMessage} (code: CATEGORY_DECISION_PIPELINE_FAILED).`,
     );
     if (categoriesWereApplied) {
       return applyDecisionsToCashFlow(latestCashFlowForFallback, appliedDecisionsForFallback);
     }
-    return cashFlow;
+    return latestCashFlowForFallback;
   }
 }
