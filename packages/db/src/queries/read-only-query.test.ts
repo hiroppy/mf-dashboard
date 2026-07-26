@@ -640,9 +640,7 @@ describe("executeReadOnlyQuery", () => {
         db,
         `SELECT h.name, hv.amount
          FROM holdings h
-         JOIN holding_values hv ON hv.holding_id = h.id
-         JOIN group_accounts ga ON ga.account_id = h.account_id
-         WHERE ga.group_id = :groupId`,
+         JOIN holding_values hv ON hv.holding_id = h.id`,
         "0",
         databasePath,
       ),
@@ -698,16 +696,27 @@ describe("executeReadOnlyQuery", () => {
     await expect(
       executeReadOnlyQuery(
         db,
-        `SELECT h.name, hv.amount
+        `SELECT
+           h.name,
+           hv.amount,
+           h.account_id,
+           (SELECT COUNT(*) FROM accounts) AS account_count,
+           (SELECT COUNT(*) FROM group_accounts) AS group_account_count
          FROM holdings h
-         JOIN holding_values hv ON hv.holding_id = h.id
-         JOIN group_accounts ga ON ga.account_id = h.account_id
-         WHERE ga.group_id = :groupId`,
+         JOIN holding_values hv ON hv.holding_id = h.id`,
         "group-a",
         databasePath,
       ),
     ).resolves.toMatchObject({
-      rows: [{ name: "Unmatched Group Asset", amount: 12_345 }],
+      rows: [
+        {
+          name: "Unmatched Group Asset",
+          amount: 12_345,
+          account_id: null,
+          account_count: 1,
+          group_account_count: 1,
+        },
+      ],
       rowCount: 1,
     });
   });

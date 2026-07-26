@@ -397,10 +397,15 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
   const globalSnapshotGroup = quoteSqlText(GLOBAL_SNAPSHOT_GROUP_ID);
   const accountIds = `
     SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}
+  `;
+  const holdingAccountIds = `
+    ${accountIds}
     UNION
     SELECT id FROM source.accounts WHERE mf_id = 'unknown'
   `;
-  const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
+  const groupHoldingIds = `
+    SELECT id FROM source.holdings WHERE account_id IN (${holdingAccountIds})
+  `;
   const latestHoldingSnapshotId = `
     SELECT id
     FROM source.daily_snapshots
@@ -417,19 +422,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
     CREATE TABLE groups AS
       SELECT * FROM source.groups WHERE id = ${selectedGroup};
     CREATE TABLE group_accounts AS
-      SELECT * FROM source.group_accounts WHERE group_id = ${selectedGroup}
-      UNION ALL
-      SELECT
-        -1 AS id,
-        ${selectedGroup} AS group_id,
-        id AS account_id,
-        created_at,
-        updated_at
-      FROM source.accounts
-      WHERE mf_id = 'unknown'
-        AND id NOT IN (
-          SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}
-        );
+      SELECT * FROM source.group_accounts WHERE group_id = ${selectedGroup};
     CREATE TABLE institution_categories AS
       SELECT * FROM source.institution_categories;
     CREATE TABLE accounts AS
@@ -459,7 +452,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
       SELECT
         id,
         NULL AS mf_id,
-        account_id,
+        CASE WHEN account_id IN (${accountIds}) THEN account_id END AS account_id,
         category_id,
         name,
         code,
