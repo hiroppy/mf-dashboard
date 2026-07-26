@@ -37,14 +37,14 @@ minimumReleaseAgeExclude:
   - "@ai-sdk/gateway@4.0.22"
 
 overrides:
-  "@playwright/browser-chromium": 1.61.0
-  playwright-core: 1.61.0
+  "@playwright/browser-chromium": 1.62.0
+  playwright-core: 1.62.0
 
 catalog:
   "@libsql/client": 0.17.4
   "@types/node": 25.9.5
   "@vitest/browser-playwright": 4.1.10
   drizzle-orm: 0.45.2
-  playwright: 1.61.0
+  playwright: 1.62.0
   typescript: 6.0.3
   vitest: 4.1.10
