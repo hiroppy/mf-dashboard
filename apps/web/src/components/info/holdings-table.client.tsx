@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getChartColorArray } from "../../lib/colors";
@@ -124,6 +124,14 @@ function CategoryCard({
   const [currentPage, setCurrentPage] = useState(0);
   const scrollTargetRef = useRef<HTMLDivElement>(null);
   const totalPages = Math.ceil(items.length / PAGE_SIZE);
+  const lastPage = Math.max(0, totalPages - 1);
+  const visiblePage = Math.min(currentPage, lastPage);
+
+  useEffect(() => {
+    if (currentPage > lastPage) {
+      setCurrentPage(lastPage);
+    }
+  }, [currentPage, lastPage]);
 
   // Colors are generated for all items (for chart consistency)
   const colors = getChartColorArray(items.length);
@@ -135,7 +143,7 @@ function CategoryCard({
   }));
 
   // Paginate items for the list display
-  const startIndex = currentPage * PAGE_SIZE;
+  const startIndex = visiblePage * PAGE_SIZE;
   const paginatedItems = items.slice(startIndex, startIndex + PAGE_SIZE);
 
   return (
@@ -204,7 +212,7 @@ function CategoryCard({
 
           {/* Pagination */}
           <Pagination
-            currentPage={currentPage}
+            currentPage={visiblePage}
             totalPages={totalPages}
             pageSize={PAGE_SIZE}
             totalItems={items.length}

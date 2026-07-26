@@ -1,7 +1,7 @@
 "use client";
 
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { createContext, type ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { TreemapChart } from "../charts/treemap-chart";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -102,6 +102,15 @@ export function UnrealizedGainCardClient({
   const [localFilter, setLocalFilter] = useState(ALL_FILTER);
   const selectedFilter = sharedFilter?.selectedFilter ?? localFilter;
   const setSelectedFilter = sharedFilter?.setSelectedFilter ?? setLocalFilter;
+
+  useEffect(() => {
+    if (
+      selectedFilter !== ALL_FILTER &&
+      !filterOptions.some((option) => option.value === selectedFilter)
+    ) {
+      setSelectedFilter(ALL_FILTER);
+    }
+  }, [filterOptions, selectedFilter, setSelectedFilter]);
 
   const filteredHoldings = useMemo(() => {
     if (selectedFilter === ALL_FILTER) {

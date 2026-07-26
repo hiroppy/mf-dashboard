@@ -1,0 +1,223 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { filterCategories, HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
+import {
+  HoldingsFilterProvider,
+  UnrealizedGainCardClient,
+  useHoldingsFilter,
+} from "./unrealized-gain-card.client";
+
+const categories = [
+  {
+    category: "株式(現物)",
+    total: 600,
+    items: [
+      {
+        id: 1,
+        name: "銘柄 A",
+        accountName: "証券口座 A",
+        institution: "金融機関 A",
+        categoryName: "株式(現物)",
+        amount: 100,
+        unrealizedGain: 10,
+        unrealizedGainPct: 10,
+        dailyChange: 1,
+        avgCostPrice: 90,
+        quantity: 1,
+        unitPrice: 100,
+      },
+      {
+        id: 2,
+        name: "銘柄 B",
+        accountName: "証券口座 B",
+        institution: "金融機関 B",
+        categoryName: "株式(現物)",
+        amount: 500,
+        unrealizedGain: 20,
+        unrealizedGainPct: 4,
+        dailyChange: 2,
+        avgCostPrice: 480,
+        quantity: 1,
+        unitPrice: 500,
+      },
+    ],
+  },
+  {
+    category: "投資信託",
+    total: 200,
+    items: [
+      {
+        id: 3,
+        name: "投資信託 A",
+        accountName: "証券口座 A",
+        institution: "金融機関 A",
+        categoryName: "投資信託",
+        amount: 200,
+        unrealizedGain: 30,
+        unrealizedGainPct: 15,
+        dailyChange: 3,
+        avgCostPrice: 170,
+        quantity: 1,
+        unitPrice: 200,
+      },
+    ],
+  },
+];
+
+beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn<() => void>();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function FilterButton({ value, children }: { value: string; children: ReactNode }) {
+  const filter = useHoldingsFilter();
+  return (
+    <button type="button" onClick={() => filter?.setSelectedFilter(value)}>
+      {children}
+    </button>
+  );
+}
+
+function SelectedFilter() {
+  return <output aria-label="選択中フィルター">{useHoldingsFilter()?.selectedFilter}</output>;
+}
+
+describe("filterCategories", () => {
+  it("全件選択では元のカテゴリを返す", () => {
+    expect(filterCategories(categories, "__all__")).toBe(categories);
+  });
+
+  it("金融機関を選ぶと、その金融機関の保有資産と合計だけを返す", () => {
+    expect(filterCategories(categories, "金融機関 A")).toEqual([
+      {
+        ...categories[0],
+        items: [categories[0].items[0]],
+        total: 100,
+      },
+      {
+        ...categories[1],
+        items: [categories[1].items[0]],
+        total: 200,
+      },
+    ]);
+  });
+
+  it("金融機関と種別を選ぶと、該当するカテゴリだけを返す", () => {
+    expect(filterCategories(categories, "金融機関 A|投資信託")).toEqual([
+      {
+        ...categories[1],
+        items: [categories[1].items[0]],
+        total: 200,
+      },
+    ]);
+  });
+
+  it("該当する保有資産がなければ空配列を返す", () => {
+    expect(filterCategories(categories, "金融機関 C")).toEqual([]);
+  });
+});
+
+describe("HoldingsTableTotal", () => {
+  it.each([
+    ["全件", "__all__", "800円"],
+    ["一致する金融機関", "金融機関 A", "300円"],
+    ["一致しない金融機関", "金融機関 C", "0円"],
+  ])("%sの合計を表示する", (_label, selectedFilter, expected) => {
+    render(
+      <HoldingsFilterProvider>
+        <FilterButton value={selectedFilter}>フィルター変更</FilterButton>
+        <HoldingsTableTotal categories={categories} total={800} enableSharedFilter />
+      </HoldingsFilterProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "フィルター変更" }));
+
+    expect(screen.getByText(expected)).not.toBeNull();
+  });
+});
+
+describe("HoldingsTableClient", () => {
+  it("後方ページの表示中に絞り込んでも該当する保有資産を表示する", async () => {
+    const institutionAItems = Array.from({ length: 11 }, (_, index) => ({
+      ...categories[0].items[0],
+      id: index + 10,
+      name: `銘柄 A${index + 1}`,
+    }));
+    const institutionBItem = {
+      ...categories[0].items[1],
+      id: 100,
+      name: "絞り込み後の銘柄",
+    };
+    const paginatedCategories = [
+      {
+        category: "株式(現物)",
+        items: [...institutionAItems, institutionBItem],
+        total: 1_600,
+      },
+    ];
+
+    render(
+      <HoldingsFilterProvider>
+        <FilterButton value="金融機関 B">金融機関 B に絞る</FilterButton>
+        <HoldingsTableClient categories={paginatedCategories} enableSharedFilter />
+      </HoldingsFilterProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
+    expect(screen.getByText("絞り込み後の銘柄")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関 B に絞る" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("絞り込み後の銘柄")).not.toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: "次のページ" })).toBeNull();
+  });
+});
+
+describe("UnrealizedGainCardClient", () => {
+  it("更新後の選択肢にない共有フィルターを全件へ戻す", async () => {
+    const holdings = [
+      {
+        name: "銘柄 A",
+        amount: 100,
+        unrealizedGain: 10,
+        unrealizedGainPct: 10,
+        institution: "金融機関 A",
+        categoryName: "株式(現物)",
+      },
+    ];
+    const renderCard = (filterOptions: Array<{ value: string; label: string }>) => (
+      <HoldingsFilterProvider>
+        <FilterButton value="金融機関 A">金融機関 A に絞る</FilterButton>
+        <SelectedFilter />
+        <UnrealizedGainCardClient holdings={holdings} filterOptions={filterOptions} />
+      </HoldingsFilterProvider>
+    );
+    const { rerender } = render(
+      renderCard([
+        { value: "金融機関 A", label: "金融機関 A" },
+        { value: "金融機関 B", label: "金融機関 B" },
+      ]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関 A に絞る" }));
+    expect(screen.getByRole("status", { name: "選択中フィルター" }).textContent).toBe("金融機関 A");
+
+    rerender(
+      renderCard([
+        { value: "金融機関 B", label: "金融機関 B" },
+        { value: "金融機関 C", label: "金融機関 C" },
+      ]),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "選択中フィルター" }).textContent).toBe("__all__");
+    });
+  });
+});
