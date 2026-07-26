@@ -9,7 +9,7 @@ import { buildGroupPath, extractGroupIdFromPath, extractPagePath } from "../../l
 import { cn } from "../../lib/utils";
 import { GroupSelectorDisplay, groupSelectorContainerClassName } from "./group-selector-display";
 
-interface Group {
+export interface Group {
   id: string;
   name: string;
   isCurrent: boolean;
@@ -55,10 +55,7 @@ export function GroupSelectorClient({ groups, defaultGroupId }: GroupSelectorCli
           isPending && "opacity-70 pointer-events-none",
         )}
       >
-        <GroupSelectorDisplay
-          name={selectedGroup?.name ?? "グループ"}
-          lastScrapedAt={selectedGroup?.lastScrapedAt ?? null}
-        />
+        <GroupSelectorDisplay name={selectedGroup?.name ?? "グループ"} />
         <BaseSelect.Icon className="flex shrink-0">
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </BaseSelect.Icon>
