@@ -205,6 +205,22 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "予算は百万円です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("漢数字") });
   });
 
   test("rejects a direct negation of the expected monetary claim", () => {
@@ -488,6 +504,31 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("requires concrete link text for the dashboard route", () => {
+    const pattern =
+      "\\[[^\\]]*(?:2026年7月[^\\]]*収支|収支[^\\]]*2026年7月)[^\\]]*\\](?:\\(/0/cf/2026-07(?:\\s+[^)]*)?\\)|\\[[^\\]]+\\])";
+    const routeOutput = {
+      textLinks: ["/0/cf/2026-07"],
+      textRoutes: ["/0/cf/2026-07"],
+      toolRoutes: ["/0/cf/2026-07"],
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({ ...routeOutput, text: "2026年7月です。[こちら](/0/cf/2026-07)" }),
+        { config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] } },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          ...routeOutput,
+          text: "[2026年7月の収支を確認](/0/cf/2026-07)",
+        }),
+        { config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] } },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("rejects an ungrounded amount in a link-only answer", () => {
     expect(
       assertFinanceChatOutput(
@@ -630,6 +671,60 @@ describe("assertFinanceChatOutput", () => {
       pass: false,
       reason: expect.stringContaining("queryDatabase"),
     });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount AS income FROM transactions WHERE 0 /* 313235 */",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["313235"],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: {
+            rows: [{ date: "2026-07-03", description: "店舗 A", amount: 761 }],
+            truncated: false,
+          },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT substr(date, 1, 10) AS date, description, amount FROM transactions",
+              },
+              output: {
+                rows: [{ date: "2026-07-03", description: "店舗 A", amount: 761 }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["2026-07-03", "店舗 A", "761"]],
+              expectedRowAssociations: [["2026-07-03", "店舗 A", "761"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
         output({

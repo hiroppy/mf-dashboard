@@ -308,8 +308,12 @@ function normalizeRows(rows: Array<Record<string, unknown>>): string[][] {
 function hasSuspiciousProjectionLiteral(sql: string): boolean {
   const projection = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1] ?? "";
   return [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
-    (match) => !["0", "1"].includes(match[1]!),
+    (match) => Number(match[1]) > 100,
   );
+}
+
+function removeSqlComments(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n\r]*/g, " ");
 }
 
 function hasContradictedFact(text: string, fact: string): boolean {
@@ -474,10 +478,11 @@ export default function assertFinanceChatOutput(
       const parsedInput = databaseQueryInputSchema.safeParse(query.input);
       const parsedResult = databaseResultSchema.safeParse(query.output);
       if (!parsedInput.success || !parsedResult.success || parsedResult.data.truncated) return [];
+      const executableSql = removeSqlComments(parsedInput.data.sql);
       const matchesRequiredSql = requiredSqlPatterns.every((pattern) =>
-        pattern.test(parsedInput.data.sql),
+        pattern.test(executableSql),
       );
-      return matchesRequiredSql && !hasSuspiciousProjectionLiteral(parsedInput.data.sql)
+      return matchesRequiredSql && !hasSuspiciousProjectionLiteral(executableSql)
         ? [parsedResult.data]
         : [];
     });
@@ -660,6 +665,14 @@ export default function assertFinanceChatOutput(
   });
   if (validatesRenderedAmounts && unitlessMonetaryClaims.length > 0) {
     return fail("本文に根拠のない単位なし金額があります。");
+  }
+  if (
+    validatesRenderedAmounts &&
+    /[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+円/.test(
+      renderedText,
+    )
+  ) {
+    return fail("本文に根拠のない漢数字金額があります。");
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];
