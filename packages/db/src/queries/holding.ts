@@ -3,6 +3,22 @@ import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 
 const INVESTMENT_CATEGORIES = ["株式(現物)", "投資信託"];
+const UNKNOWN_ACCOUNT_MF_ID = "unknown";
+
+async function getHoldingAccountIdsForGroup(db: Db, groupId: string): Promise<number[]> {
+  const accountIds = await getAccountIdsForGroup(db, groupId);
+  const unknownAccount = await db
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.mfId, UNKNOWN_ACCOUNT_MF_ID))
+    .get();
+
+  if (!unknownAccount || accountIds.includes(unknownAccount.id)) {
+    return accountIds;
+  }
+
+  return [...accountIds, unknownAccount.id];
+}
 
 /**
  * 最新のスナップショットを取得
@@ -54,7 +70,7 @@ export async function getHoldingsWithLatestValues(groupIdParam?: string, db: Db 
   }
 
   const groupId = await resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
+  const accountIds = groupId ? await getHoldingAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(latestSnapshot.id, accountIds);
 
@@ -160,7 +176,7 @@ export async function getHoldingsWithDailyChange(
   }
 
   const groupId = await resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
+  const accountIds = groupId ? await getHoldingAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(
     latestSnapshot.id,

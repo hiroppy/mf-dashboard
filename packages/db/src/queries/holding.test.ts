@@ -278,6 +278,37 @@ describe("getHoldingsWithLatestValues", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Holding A");
   });
+
+  it("金融機関を特定できない保有資産はグループ絞り込み後も返す", async () => {
+    const snapshotId = await createSnapshot();
+    const categoryId = await createAssetCategory("保険");
+    const now = new Date().toISOString();
+    const unknownAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "unknown",
+        name: "-",
+        type: "手動",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const holdingId = await createHolding({
+      accountId: unknownAccount.id,
+      name: "Insurance A",
+      categoryId,
+    });
+    await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+
+    const result = await getHoldingsWithLatestValues(undefined, db);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      name: "Insurance A",
+      categoryName: "保険",
+    });
+  });
 });
 
 describe("getHoldingsByAccountId", () => {
