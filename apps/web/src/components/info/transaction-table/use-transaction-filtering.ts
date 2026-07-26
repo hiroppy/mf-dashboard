@@ -78,9 +78,16 @@ export function useTransactionFiltering({
   yearFilterEnabled = false,
 }: UseTransactionFilteringOptions) {
   const availableYears = useMemo(() => getAvailableYears(transactions), [transactions]);
-  const [selectedYear, setSelectedYear] = useState<string | null>(
+  const [preferredYear, setPreferredYear] = useState<string | null>(
     yearFilterEnabled ? (availableYears[0] ?? null) : null,
   );
+  let selectedYear: string | null = null;
+  if (yearFilterEnabled) {
+    selectedYear =
+      preferredYear && availableYears.includes(preferredYear)
+        ? preferredYear
+        : (availableYears[0] ?? null);
+  }
   const [searchText, setSearchText] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -160,7 +167,7 @@ export function useTransactionFiltering({
   };
 
   const handleYearChange = (year: string) => {
-    setSelectedYear(year);
+    setPreferredYear(year);
     resetPage();
   };
 
