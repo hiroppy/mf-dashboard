@@ -38,4 +38,20 @@ describe("next config", () => {
     expect(config.outputFileTracingRoot).toBeDefined();
     expect(config.pageExtensions).toEqual(["tsx", "ts"]);
   });
+
+  it("configures the documented deployment base path", async () => {
+    const config = await loadConfig(PHASE_PRODUCTION_BUILD, {
+      NEXT_PUBLIC_BASE_PATH: "/dashboard",
+    });
+
+    expect(config.basePath).toBe("/dashboard");
+  });
+
+  it("uses root deployment when the base path is empty", async () => {
+    const config = await loadConfig(PHASE_PRODUCTION_BUILD, {
+      NEXT_PUBLIC_BASE_PATH: "",
+    });
+
+    expect(config.basePath).toBeUndefined();
+  });
 });

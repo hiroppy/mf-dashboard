@@ -12,8 +12,10 @@ if (existsSync(rootEnvPath)) {
 
 export default function createNextConfig(phase: string): NextConfig {
   const isStaticDemoBuild = process.env.DEMO_MODE === "true" && phase === PHASE_PRODUCTION_BUILD;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || undefined;
 
   return {
+    basePath,
     output: isStaticDemoBuild ? "export" : "standalone",
     outputFileTracingRoot: join(import.meta.dirname, "../.."),
     pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
