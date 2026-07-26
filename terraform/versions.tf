@@ -4,7 +4,7 @@ terraform {
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "5.19.0"
+      version = "5.22.0"
     }
     local = {
       source  = "hashicorp/local"
