@@ -210,7 +210,12 @@ describe("assertFinanceChatOutput", () => {
 
   test("requires expected facts to be backed by database results", () => {
     const context = {
-      config: { databaseEvidence: { expectedValues: ["313235"] } },
+      config: {
+        databaseEvidence: {
+          expectedValues: ["313235"],
+          requiredSqlPatterns: ["\\btransactions\\b", "\\bamount\\b"],
+        },
+      },
     };
     expect(assertFinanceChatOutput(output(), context)).toMatchObject({
       pass: false,
@@ -221,7 +226,7 @@ describe("assertFinanceChatOutput", () => {
         output({
           databaseQueries: [
             {
-              input: { sql: "SELECT income FROM transactions" },
+              input: { sql: "SELECT amount AS income FROM transactions" },
               output: { rows: [{ income: 313_235 }], truncated: false },
             },
           ],
@@ -229,16 +234,36 @@ describe("assertFinanceChatOutput", () => {
         context,
       ),
     ).toMatchObject({ pass: true });
-  });
-
-  test("requires an empty or zero database result for no-data claims", () => {
-    const context = { config: { databaseEvidence: { expectNoData: true } } };
     expect(
       assertFinanceChatOutput(
         output({
           databaseQueries: [
             {
-              input: { sql: "SELECT amount FROM transactions" },
+              input: { sql: "SELECT 313235 AS income" },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("requires an empty or zero database result for no-data claims", () => {
+    const context = {
+      config: {
+        databaseEvidence: {
+          expectNoData: true,
+          requiredSqlPatterns: ["\\btransactions\\b", "2030-01"],
+        },
+      },
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
               output: { rows: [{ amount: 1 }], truncated: false },
             },
           ],
@@ -251,7 +276,7 @@ describe("assertFinanceChatOutput", () => {
         output({
           databaseQueries: [
             {
-              input: { sql: "SELECT amount FROM transactions" },
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
               output: { rows: [], truncated: false },
             },
           ],
@@ -259,5 +284,22 @@ describe("assertFinanceChatOutput", () => {
         context,
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT 1" },
+              output: { rows: [], truncated: false },
+            },
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
+              output: { rows: [{ amount: 1_000 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false });
   });
 });

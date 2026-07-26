@@ -17,6 +17,14 @@
         expectedTextLinks: []
         databaseEvidence:
           expectedValues: ["313235", "219894"]
+          requiredSqlPatterns:
+            [
+              "\\btransactions\\b",
+              "2026-07",
+              "\\bamount\\b",
+              "\\btype\\b",
+              "\\b(?:sum|total)\\s*\\(",
+            ]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: 食費の内訳を正しい円グラフで返す
@@ -43,6 +51,14 @@
         expectedTextLinks: []
         databaseEvidence:
           expectedValues: ["24833", "12214", "4790"]
+          requiredSqlPatterns:
+            [
+              "\\btransactions\\b",
+              "2026-07",
+              "\\bamount\\b",
+              "\\b(?:category|sub_category)\\b",
+              "食費",
+            ]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: 指定日の食費明細をMarkdown表で返す
@@ -61,6 +77,14 @@
         expectedTextLinks: []
         databaseEvidence:
           expectedValues: ["2026-07-03", サンマルクカフェ, "761"]
+          requiredSqlPatterns:
+            [
+              "\\btransactions\\b",
+              "2026-07-03",
+              "\\bamount\\b",
+              "\\b(?:category|sub_category)\\b",
+              "食費",
+            ]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: 収支画面へのリンクがroute toolの結果と一致する
@@ -95,4 +119,12 @@
         expectedTextLinks: []
         databaseEvidence:
           expectNoData: true
+          requiredSqlPatterns:
+            [
+              "\\btransactions\\b",
+              "2030-01",
+              "\\bamount\\b",
+              "\\b(?:category|sub_category)\\b",
+              "食費",
+            ]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]

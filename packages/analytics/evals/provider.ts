@@ -21,6 +21,7 @@ import { getModel, isLLMEnabled } from "../src/config";
 interface GeneratedResponse {
   text: string;
   steps: ReadonlyArray<{
+    text: string;
     toolCalls: ReadonlyArray<{
       input: unknown;
       toolCallId: string;
@@ -101,6 +102,11 @@ function getTextLinks(text: string): string[] {
 }
 
 export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
+  const stepText = response.steps
+    .map((step) => step.text)
+    .filter(Boolean)
+    .join("\n");
+  const text = stepText || response.text;
   const toolResults = response.steps.flatMap((step) => step.toolResults);
   const databaseQueries = response.steps.flatMap((step) =>
     step.toolCalls.flatMap((call) => {
@@ -131,11 +137,11 @@ export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutpu
   });
 
   return {
-    text: response.text,
+    text,
     charts,
     databaseQueries,
     toolRoutes: unique(toolRoutes),
-    textLinks: getTextLinks(response.text),
+    textLinks: getTextLinks(text),
   };
 }
 

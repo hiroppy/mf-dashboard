@@ -43,6 +43,7 @@ describe("toEvaluationOutput", () => {
         text: "[収支を見る](/0/cf/2026-07)",
         steps: [
           {
+            text: "[収支を見る](/0/cf/2026-07)",
             toolCalls: [
               {
                 input: { sql: "SELECT amount FROM transactions" },
@@ -92,6 +93,20 @@ describe("toEvaluationOutput", () => {
         steps: [],
       }).textLinks,
     ).toEqual(["/0/cf/2026-07"]);
+  });
+
+  test("collects text from every generation step", () => {
+    expect(
+      toEvaluationOutput({
+        text: "最終回答",
+        steps: [
+          { text: "途中の誤った回答", toolCalls: [], toolResults: [] },
+          { text: "最終回答", toolCalls: [], toolResults: [] },
+        ],
+      }),
+    ).toMatchObject({
+      text: "途中の誤った回答\n最終回答",
+    });
   });
 });
 

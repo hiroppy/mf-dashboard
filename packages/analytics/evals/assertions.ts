@@ -22,6 +22,7 @@ interface AssertionContext {
     databaseEvidence?: {
       expectNoData?: boolean;
       expectedValues?: Array<number | string>;
+      requiredSqlPatterns?: string[];
     };
   };
 }
@@ -44,6 +45,8 @@ const databaseResultSchema = z.object({
   rows: z.array(z.record(z.string(), z.unknown())),
   truncated: z.boolean(),
 });
+
+const databaseQueryInputSchema = z.object({ sql: z.string() });
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
@@ -226,9 +229,17 @@ export default function assertFinanceChatOutput(
 
   const databaseEvidence = config.databaseEvidence;
   if (databaseEvidence) {
+    const requiredSqlPatterns = (databaseEvidence.requiredSqlPatterns ?? []).map(
+      (pattern) => new RegExp(pattern, "i"),
+    );
     const databaseResults = actual.databaseQueries.flatMap((query) => {
+      const parsedInput = databaseQueryInputSchema.safeParse(query.input);
       const parsedResult = databaseResultSchema.safeParse(query.output);
-      return parsedResult.success && !parsedResult.data.truncated ? [parsedResult.data] : [];
+      if (!parsedInput.success || !parsedResult.success || parsedResult.data.truncated) return [];
+      const matchesRequiredSql = requiredSqlPatterns.every((pattern) =>
+        pattern.test(parsedInput.data.sql),
+      );
+      return matchesRequiredSql ? [parsedResult.data] : [];
     });
     if (databaseResults.length === 0) {
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
@@ -244,14 +255,14 @@ export default function assertFinanceChatOutput(
       return fail(`queryDatabase結果に期待する値がありません: ${missingValues.join(", ")}`);
     }
 
-    const hasNoDataResult = databaseResults.some(
+    const hasOnlyNoDataResults = databaseResults.every(
       (result) =>
         result.rows.length === 0 ||
         result.rows.every((row) =>
           Object.values(row).every((value) => value === 0 || value === null),
         ),
     );
-    if (databaseEvidence.expectNoData && !hasNoDataResult) {
+    if (databaseEvidence.expectNoData && !hasOnlyNoDataResults) {
       return fail("queryDatabase結果がデータなしを裏付けていません。");
     }
   }
