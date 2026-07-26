@@ -1,5 +1,5 @@
 import { isLLMEnabled } from "@mf-dashboard/analytics/config";
-import { getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
+import { getAllGroups, getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
 import type { Metadata } from "next";
@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import { ChatProvider } from "../components/chat/chat-provider";
 import { ChatShell } from "../components/chat/chat-shell";
 import { AccountNotifications } from "../components/info/account-notifications";
-import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
@@ -77,9 +76,21 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </div>
     );
   } else {
+    const groups = await getAllGroups();
+    const currentGroup = await getCurrentGroup();
+    const defaultGroupId = currentGroup?.id ?? groups[0]?.id ?? null;
     const dashboard = (
       <SidebarProvider>
-        <Header groupSelector={<GroupSelector />} notifications={<AccountNotifications />} />
+        <Header
+          groups={groups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            isCurrent: group.isCurrent ?? false,
+            lastScrapedAt: group.lastScrapedAt,
+          }))}
+          defaultGroupId={defaultGroupId}
+          notifications={<AccountNotifications />}
+        />
         <div className="flex pt-14">
           <Sidebar />
           <main className="flex-1 lg:ml-60 overflow-x-hidden px-4 py-6 lg:px-8">
@@ -91,7 +102,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     if (!isLLMEnabled() || process.env.NEXT_PUBLIC_STATIC_DEMO_BUILD === "true") {
       content = dashboard;
     } else {
-      const currentGroup = await getCurrentGroup();
       content = (
         <ChatProvider currentGroupId={currentGroup?.id ?? null}>
           {dashboard}

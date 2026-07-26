@@ -23,13 +23,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
+  lastScrapedAt?: string | null;
 }
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
   isPending: boolean;
 }
 
-export function ActionIcons({ variant, notifications }: ActionIconsProps) {
+export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
 
   if (variant === "sidebar") {
@@ -42,8 +43,9 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 
   return (
     <div className="flex items-center gap-1">
-      {notifications}
+      <LastUpdatedAt lastScrapedAt={lastScrapedAt ?? null} />
       <RefreshControl iconSize={iconSize} />
+      {notifications}
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
@@ -355,6 +357,27 @@ function formatStepMetadata(item: CrawlerRunStepDetails): string | null {
     default:
       return null;
   }
+}
+
+interface LastUpdatedAtProps {
+  lastScrapedAt: string | null;
+}
+
+function LastUpdatedAt({ lastScrapedAt }: LastUpdatedAtProps) {
+  const formattedLastScrapedAt = lastScrapedAt ? formatDateTime(lastScrapedAt) : null;
+
+  if (!formattedLastScrapedAt) {
+    return null;
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 border-l pl-2">
+      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+        <span className="hidden sm:inline">更新 </span>
+        <time dateTime={lastScrapedAt ?? undefined}>{formattedLastScrapedAt}</time>
+      </span>
+    </div>
+  );
 }
 
 function HelpButton({ iconSize, className }: { iconSize: string; className?: string }) {

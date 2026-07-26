@@ -2,18 +2,40 @@
 
 import { Menu } from "lucide-react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { extractGroupIdFromPath } from "../../lib/url";
 import { IconButton } from "../ui/icon-button";
 import { ActionIcons } from "./action-icons";
+import { GroupSelectorDisplay, groupSelectorContainerClassName } from "./group-selector-display";
+import { GroupSelectorClient, type Group } from "./group-selector.client";
 import { useSidebar } from "./sidebar-context";
 
 interface HeaderProps {
-  groupSelector: ReactNode;
+  groups: Group[];
+  defaultGroupId: string | null;
   notifications?: ReactNode;
 }
 
-export function Header({ groupSelector, notifications }: HeaderProps) {
+export function Header({ groups, defaultGroupId, notifications }: HeaderProps) {
   const { toggle } = useSidebar();
+  const pathname = usePathname();
+  const urlGroupId = extractGroupIdFromPath(pathname);
+  const selectedGroup =
+    groups.find((group) => group.id === urlGroupId) ??
+    groups.find((group) => group.id === defaultGroupId) ??
+    null;
+
+  let groupSelector: ReactNode = null;
+  if (groups.length > 1 && defaultGroupId) {
+    groupSelector = <GroupSelectorClient groups={groups} defaultGroupId={defaultGroupId} />;
+  } else if (selectedGroup) {
+    groupSelector = (
+      <div className={groupSelectorContainerClassName}>
+        <GroupSelectorDisplay name={selectedGroup.name} />
+      </div>
+    );
+  }
 
   return (
     <header className="fixed top-0 z-50 w-full border-b bg-card text-foreground shadow-sm">
@@ -34,7 +56,11 @@ export function Header({ groupSelector, notifications }: HeaderProps) {
           />
           <div className="flex flex-col gap-0.5">{groupSelector}</div>
         </div>
-        <ActionIcons variant="header" notifications={notifications} />
+        <ActionIcons
+          variant="header"
+          notifications={notifications}
+          lastScrapedAt={selectedGroup?.lastScrapedAt ?? null}
+        />
       </div>
     </header>
   );
