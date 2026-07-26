@@ -121,6 +121,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("extracts a Markdown link with a destination title", () => {
+    const output = toEvaluationOutput({
+      text: '[収支を見る](/0/cf/2026-07 "2026年7月の収支")',
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
+  });
+
   test("collects text from every generation step", () => {
     expect(
       toEvaluationOutput({

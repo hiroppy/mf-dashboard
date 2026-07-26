@@ -201,7 +201,7 @@
             [
               "\\btransactions\\b",
               "2030-01",
-              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
+              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?:\\bamount\\b|\\bcount\\s*\\(\\s*\\*\\s*\\))(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
             ]

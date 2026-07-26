@@ -81,6 +81,36 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("accepts a zero count as no-data evidence", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT COUNT(*) AS count FROM transactions WHERE date LIKE '2030-01%'",
+              },
+              output: { rows: [{ count: 0 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectNoData: true,
+              requiredSqlPatterns: [
+                "\\btransactions\\b",
+                "2030-01",
+                "\\bcount\\s*\\(\\s*\\*\\s*\\)",
+              ],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("uses the final repeated label as the authoritative claim", () => {
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円です。訂正: 収入は0円です。" }), {
@@ -321,6 +351,44 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextLinks: ["/0/cf/2026-07"] } },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("route tool") });
+  });
+
+  test("ignores unused route tool calls when the rendered link is proven", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "[収支を見る](/0/cf/2026-07)",
+          textLinks: ["/0/cf/2026-07"],
+          textRoutes: ["/0/cf/2026-07"],
+          toolRoutes: ["/0/cf/2026-06", "/0/cf/2026-07"],
+        }),
+        {
+          config: {
+            expectedTextLinks: ["/0/cf/2026-07"],
+            expectedToolRoutes: ["/0/cf/2026-07"],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("rejects an ungrounded amount in a link-only answer", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収支は999,999円です。[収支を見る](/0/cf/2026-07)",
+          textLinks: ["/0/cf/2026-07"],
+          textRoutes: ["/0/cf/2026-07"],
+          toolRoutes: ["/0/cf/2026-07"],
+        }),
+        {
+          config: {
+            expectedTextLinks: ["/0/cf/2026-07"],
+            expectedToolRoutes: ["/0/cf/2026-07"],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
   test("rejects internal terms and invented no-data amounts", () => {
@@ -574,6 +642,40 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: {
+            rows: [{ income: 313_235, expense: 219_894 }],
+            truncated: false,
+          },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount AS income, amount AS expense FROM transactions",
+              },
+              output: {
+                rows: [{ income: 219_894, expense: 313_235 }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("関連") });
   });
 
   test("rejects a period fact that is immediately negated", () => {

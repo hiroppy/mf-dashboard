@@ -326,11 +326,17 @@ function rowContainsAssociation(
   row: Record<string, unknown>,
   association: Array<number | string>,
 ): boolean {
-  const rowTerms = [
-    ...Object.keys(row).map(normalize),
-    ...Object.values(row).map((value) => normalize(String(value))),
-  ];
-  return association.every((term) => rowTerms.includes(normalize(String(term))));
+  const expectedTerms = association.map((term) => normalize(String(term)));
+  const rowValues = Object.values(row).map((value) => normalize(String(value)));
+  if (expectedTerms.length === 2) {
+    const [expectedLabel, expectedValue] = expectedTerms;
+    const hasPivotedBinding = Object.entries(row).some(
+      ([key, value]) =>
+        normalize(key) === expectedLabel && normalize(String(value)) === expectedValue,
+    );
+    return hasPivotedBinding || expectedTerms.every((term) => rowValues.includes(term));
+  }
+  return expectedTerms.every((term) => rowValues.includes(term));
 }
 
 export default function assertFinanceChatOutput(
@@ -497,12 +503,16 @@ export default function assertFinanceChatOutput(
   const ungroundedAmounts = getAssertedMonetaryClaims(actual.text).filter(
     (amount) => !groundedAmounts.has(amount),
   );
-  if ((config.expectedTextPairs ?? []).length > 0 && ungroundedAmounts.length > 0) {
+  const validatesRenderedAmounts =
+    (config.expectedTextPairs ?? []).length > 0 ||
+    (config.expectedTextLinks ?? []).length > 0 ||
+    (config.expectedMarkdownRows ?? []).length > 0;
+  if (validatesRenderedAmounts && ungroundedAmounts.length > 0) {
     return fail(`本文に根拠のない金額があります: ${ungroundedAmounts.join(", ")}`);
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];
-  if (!sameValues(actual.toolRoutes, expectedRoutes)) {
+  if (expectedRoutes.some((route) => !actual.toolRoutes.includes(route))) {
     return fail("route tool結果が期待と異なります。");
   }
   const expectedLinks = config.expectedTextLinks ?? [];
