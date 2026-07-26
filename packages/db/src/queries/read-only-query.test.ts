@@ -1055,4 +1055,50 @@ describe("normalizeReadOnlySql", () => {
       "SELECT 'main.transactions' AS text",
     );
   });
+
+  it.each([
+    `SELECT COUNT(*)
+     FROM transactions a
+     JOIN transactions b ON 1 = 1
+     JOIN transactions c ON 1 = 1
+     JOIN transactions d ON 1 = 1
+     JOIN transactions e ON 1 = 1
+     JOIN transactions f ON 1 = 1
+     JOIN transactions g ON 1 = 1
+     JOIN transactions h ON 1 = 1
+     JOIN transactions i ON 1 = 1
+     JOIN transactions j ON 1 = 1`,
+    `SELECT COUNT(*)
+     FROM transactions a, transactions b, transactions c, transactions d, transactions e,
+          transactions f, transactions g, transactions h, transactions i, transactions j`,
+    `SELECT COUNT(*)
+     FROM transactions a, transactions b, transactions c, transactions d, transactions e,
+          transactions f
+     JOIN transactions g ON 1 = 1
+     JOIN transactions h ON 1 = 1
+     JOIN transactions i ON 1 = 1
+     JOIN transactions j ON 1 = 1`,
+  ])("explicit JOINとcomma-style sourceを合計8個までに制限する", (sql) => {
+    expect(() => normalizeReadOnlySql(sql)).toThrow("JOINは8個以内で指定してください。");
+  });
+
+  it.each([
+    `SELECT COUNT(*) FROM ${Array.from(
+      { length: 9 },
+      (_, index) => `transactions source_${index}`,
+    ).join(", ")}`,
+    `SELECT COUNT(*) FROM transactions source_0 ${Array.from(
+      { length: 8 },
+      (_, index) => `JOIN transactions source_${index + 1} ON 1 = 1`,
+    ).join(" ")}`,
+  ])("上限ちょうど8個のsource joinを許可する", (sql) => {
+    expect(normalizeReadOnlySql(sql)).toBe(sql);
+  });
+
+  it("source以外のcommaはJOINとして数えない", () => {
+    const sql =
+      "WITH value AS (SELECT 1), other AS (SELECT 2) SELECT coalesce(value, other), value FROM transactions";
+
+    expect(normalizeReadOnlySql(sql)).toBe(sql);
+  });
 });

@@ -26,6 +26,8 @@ const QUOTED_EXPENSIVE_SQL_FUNCTIONS =
   /(?:["'`](?:group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob)["'`]|\[(?:group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob)\])\s*\(/i;
 const QUOTED_FILESYSTEM_SQL_FUNCTIONS =
   /(?:["'`](?:load_extension|readfile|writefile)["'`]|\[(?:load_extension|readfile|writefile)\])\s*\(/i;
+const SOURCE_CLAUSE_TERMINATOR =
+  /^(?:where|group|having|order|limit|union|except|intersect|window)$/;
 
 const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
 
@@ -243,6 +245,39 @@ function maskCommentsAndQuotedText(sql: string): string {
   return result;
 }
 
+function countCommaSeparatedSources(maskedSql: string): number {
+  const sourceClauseDepths = new Set<number>();
+  let count = 0;
+  let depth = 0;
+
+  for (const match of maskedSql.matchAll(/[a-z_][\w$]*|[(),]/gi)) {
+    const token = match[0]!.toLowerCase();
+
+    if (token === "(") {
+      depth += 1;
+      continue;
+    }
+    if (token === ")") {
+      sourceClauseDepths.delete(depth);
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (token === "from") {
+      sourceClauseDepths.add(depth);
+      continue;
+    }
+    if (sourceClauseDepths.has(depth) && SOURCE_CLAUSE_TERMINATOR.test(token)) {
+      sourceClauseDepths.delete(depth);
+      continue;
+    }
+    if (token === "," && sourceClauseDepths.has(depth)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
 export function normalizeReadOnlySql(sql: string): string {
   let normalized = sql.trim();
   let masked = maskCommentsAndQuotedText(normalized);
@@ -279,7 +314,9 @@ export function normalizeReadOnlySql(sql: string): string {
   ) {
     throw new Error("filesystemへアクセスするSQL関数は使用できません。");
   }
-  if ((masked.match(/\bjoin\b/gi)?.length ?? 0) > MAX_JOIN_COUNT) {
+  const sourceJoinCount =
+    (masked.match(/\bjoin\b/gi)?.length ?? 0) + countCommaSeparatedSources(masked);
+  if (sourceJoinCount > MAX_JOIN_COUNT) {
     throw new Error(`JOINは${MAX_JOIN_COUNT}個以内で指定してください。`);
   }
   if ((masked.match(/\bunion\b/gi)?.length ?? 0) > MAX_UNION_COUNT) {
@@ -643,10 +680,7 @@ function validateReferencedTables(sql: string): void {
       expectsSource = !hasQuotedSource;
       continue;
     }
-    if (
-      sourceClauseDepths.has(depth) &&
-      /^(?:where|group|having|order|limit|union|except|intersect|window)$/.test(token)
-    ) {
+    if (sourceClauseDepths.has(depth) && SOURCE_CLAUSE_TERMINATOR.test(token)) {
       sourceClauseDepths.delete(depth);
       expectsSource = false;
       continue;
