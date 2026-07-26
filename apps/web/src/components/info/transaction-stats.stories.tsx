@@ -102,19 +102,19 @@ export const Default: Story = {
     await expect(descriptions[0]).toHaveTextContent("店舗 B");
     await expect(descriptions[1]).toHaveTextContent("店舗 A");
 
-    const amountSort = screen.getByRole("button", { name: "金額順" });
-    const dateSort = screen.getByRole("button", { name: "日付順" });
-    await expect(amountSort).toHaveAttribute("aria-pressed", "true");
-    await expect(dateSort).toHaveAttribute("aria-pressed", "false");
+    const sortSelect = screen.getByRole("combobox", { name: "並び順" });
+    await expect(sortSelect).toHaveTextContent("金額順");
 
-    await userEvent.click(dateSort);
+    await userEvent.click(sortSelect);
+    await userEvent.click(screen.getByRole("option", { name: "日付順" }));
 
     const dateSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
     await expect(dateSortedDescriptions[0]).toHaveTextContent("店舗 A");
     await expect(dateSortedDescriptions[1]).toHaveTextContent("店舗 B");
-    await expect(dateSort).toHaveAttribute("aria-pressed", "true");
+    await expect(sortSelect).toHaveTextContent("日付順");
 
-    await userEvent.click(amountSort);
+    await userEvent.click(sortSelect);
+    await userEvent.click(screen.getByRole("option", { name: "金額順" }));
 
     const amountSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
     await expect(amountSortedDescriptions[0]).toHaveTextContent("店舗 B");
@@ -126,9 +126,6 @@ export const Default: Story = {
 
     await userEvent.click(canvas.getByRole("button", { name: /食費/ }));
 
-    await expect(screen.getByRole("button", { name: "金額順" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(screen.getByRole("combobox", { name: "並び順" })).toHaveTextContent("金額順");
   },
 };

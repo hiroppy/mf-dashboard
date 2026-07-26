@@ -9,6 +9,7 @@ import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
+import { Select } from "../ui/select";
 import {
   calculateCompositionPercentage,
   sortCategoryTransactions,
@@ -36,6 +37,11 @@ interface TransactionStatsClientProps {
   income: CategoryBreakdown[];
   expense: CategoryBreakdown[];
 }
+
+const sortOptions = [
+  { value: "amount", label: "金額順" },
+  { value: "date", label: "日付順" },
+];
 
 export function TransactionStatsClient({ year, income, expense }: TransactionStatsClientProps) {
   const [selection, setSelection] = useState<{ type: "income" | "expense"; name: string } | null>(
@@ -144,32 +150,16 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
             </div>
 
             <div className="min-h-0 space-y-5 overflow-y-auto p-5 sm:p-6">
-              <fieldset className="flex items-center justify-end gap-2">
-                <legend className="sr-only">並び順</legend>
-                <span aria-hidden="true" className="text-sm text-muted-foreground">
-                  並び順
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={sortBy === "amount" ? "default" : "outline"}
-                    aria-pressed={sortBy === "amount"}
-                    onClick={() => setSortBy("amount")}
-                  >
-                    金額順
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={sortBy === "date" ? "default" : "outline"}
-                    aria-pressed={sortBy === "date"}
-                    onClick={() => setSortBy("date")}
-                  >
-                    日付順
-                  </Button>
-                </div>
-              </fieldset>
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-sm text-muted-foreground">並び順</span>
+                <Select
+                  aria-label="並び順"
+                  className="w-28"
+                  options={sortOptions}
+                  value={sortBy}
+                  onChange={(value) => setSortBy(value as TransactionSort)}
+                />
+              </div>
 
               {(selectedBreakdown.categories.length > 1 ||
                 selectedBreakdown.categories[0] !== selectedBreakdown.name) && (
