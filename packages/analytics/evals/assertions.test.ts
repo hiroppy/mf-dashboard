@@ -358,6 +358,23 @@ describe("assertFinanceChatOutput", () => {
       pass: false,
       reason: expect.stringContaining("期待する値"),
     });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount AS income FROM transactions" },
+              output: { rows: [{ income: 1 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("queryDatabase"),
+    });
   });
 
   test("requires an empty or zero database result for no-data claims", () => {
@@ -425,6 +442,20 @@ describe("assertFinanceChatOutput", () => {
                 sql: "SELECT NULL AS amount FROM transactions WHERE date LIKE '2030-01%'",
               },
               output: { rows: [{ amount: null }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
+              output: { rows: [{ amount: 1_000 }], truncated: false },
             },
           ],
         }),

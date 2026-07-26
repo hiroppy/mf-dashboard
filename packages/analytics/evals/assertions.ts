@@ -289,22 +289,37 @@ export default function assertFinanceChatOutput(
     if (!fixtureResult.success || fixtureResult.data.truncated) {
       return fail("期待値を独立検証するfixture query結果がありません。");
     }
-    const resultValues = fixtureResult.data.rows.flatMap((row) =>
+    const fixtureValues = fixtureResult.data.rows.flatMap((row) =>
       Object.values(row).map((value) => normalize(String(value))),
     );
-    const missingValues = (databaseEvidence.expectedValues ?? []).filter(
-      (value) => !resultValues.includes(normalize(String(value))),
+    const modelValues = databaseResults.flatMap((result) =>
+      result.rows.flatMap((row) => Object.values(row).map((value) => normalize(String(value)))),
     );
-    if (missingValues.length > 0) {
-      return fail(`queryDatabase結果に期待する値がありません: ${missingValues.join(", ")}`);
+    const expectedValues = (databaseEvidence.expectedValues ?? []).map((value) =>
+      normalize(String(value)),
+    );
+    const missingFixtureValues = expectedValues.filter((value) => !fixtureValues.includes(value));
+    if (missingFixtureValues.length > 0) {
+      return fail(`fixture query結果に期待する値がありません: ${missingFixtureValues.join(", ")}`);
+    }
+    const missingModelValues = expectedValues.filter((value) => !modelValues.includes(value));
+    if (missingModelValues.length > 0) {
+      return fail(`queryDatabase結果に期待する値がありません: ${missingModelValues.join(", ")}`);
     }
 
-    const hasOnlyNoDataResults =
+    const fixtureHasOnlyNoData =
       fixtureResult.data.rows.length === 0 ||
       fixtureResult.data.rows.every((row) =>
         Object.values(row).every((value) => value === 0 || value === null),
       );
-    if (databaseEvidence.expectNoData && !hasOnlyNoDataResults) {
+    const modelHasOnlyNoData = databaseResults.every(
+      (result) =>
+        result.rows.length === 0 ||
+        result.rows.every((row) =>
+          Object.values(row).every((value) => value === 0 || value === null),
+        ),
+    );
+    if (databaseEvidence.expectNoData && (!fixtureHasOnlyNoData || !modelHasOnlyNoData)) {
       return fail("queryDatabase結果がデータなしを裏付けていません。");
     }
   }
