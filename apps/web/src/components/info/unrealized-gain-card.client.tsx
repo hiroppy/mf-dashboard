@@ -79,8 +79,20 @@ interface HoldingsFilterContextValue {
 
 const HoldingsFilterContext = createContext<HoldingsFilterContextValue | null>(null);
 
-export function HoldingsFilterProvider({ children }: { children: ReactNode }) {
+export function HoldingsFilterProvider({
+  children,
+  filterAvailable = true,
+}: {
+  children: ReactNode;
+  filterAvailable?: boolean;
+}) {
   const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
+
+  useEffect(() => {
+    if (!filterAvailable) {
+      setSelectedFilter(ALL_FILTER);
+    }
+  }, [filterAvailable]);
 
   return (
     <HoldingsFilterContext value={{ selectedFilter, setSelectedFilter }}>
@@ -91,6 +103,16 @@ export function HoldingsFilterProvider({ children }: { children: ReactNode }) {
 
 export function useHoldingsFilter() {
   return useContext(HoldingsFilterContext);
+}
+
+export function HoldingsFilterReset() {
+  const setSelectedFilter = useHoldingsFilter()?.setSelectedFilter;
+
+  useEffect(() => {
+    setSelectedFilter?.(ALL_FILTER);
+  }, [setSelectedFilter]);
+
+  return null;
 }
 
 export function UnrealizedGainCardClient({

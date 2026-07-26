@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { filterCategories, HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
 import {
   HoldingsFilterProvider,
+  HoldingsFilterReset,
   UnrealizedGainCardClient,
   useHoldingsFilter,
 } from "./unrealized-gain-card.client";
@@ -215,6 +216,33 @@ describe("UnrealizedGainCardClient", () => {
         { value: "金融機関 C", label: "金融機関 C" },
       ]),
     );
+
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "選択中フィルター" }).textContent).toBe("__all__");
+    });
+  });
+
+  it("フィルターUIがなくなると共有フィルターを全件へ戻す", async () => {
+    const renderProvider = (filterAvailable: boolean, reset = false) => (
+      <HoldingsFilterProvider filterAvailable={filterAvailable}>
+        <FilterButton value="金融機関 A">金融機関 A に絞る</FilterButton>
+        <SelectedFilter />
+        {reset && <HoldingsFilterReset />}
+      </HoldingsFilterProvider>
+    );
+    const { rerender } = render(renderProvider(true));
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関 A に絞る" }));
+    expect(screen.getByRole("status", { name: "選択中フィルター" }).textContent).toBe("金融機関 A");
+
+    rerender(renderProvider(false));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "選択中フィルター" }).textContent).toBe("__all__");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関 A に絞る" }));
+    rerender(renderProvider(true, true));
 
     await waitFor(() => {
       expect(screen.getByRole("status", { name: "選択中フィルター" }).textContent).toBe("__all__");

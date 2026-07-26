@@ -19,7 +19,7 @@ export async function BSContent({ groupId }: { groupId?: string }) {
     <PageLayout title="資産" href={mfUrls.portfolio}>
       <BalanceSheetChart groupId={groupId} />
       <AssetHistoryChart groupId={groupId} />
-      <HoldingsFilterProvider>
+      <HoldingsFilterProvider filterAvailable={showUnrealizedGain}>
         {showUnrealizedGain && <UnrealizedGainCard groupId={groupId} />}
         <HoldingsTable type="asset" groupId={groupId} enableSharedFilter />
       </HoldingsFilterProvider>
