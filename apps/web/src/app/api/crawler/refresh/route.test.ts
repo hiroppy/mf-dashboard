@@ -178,6 +178,16 @@ describe("/api/crawler/refresh/", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("rejects an unauthenticated event stream", async () => {
+    mocks.hasValidCloudflareAccess.mockResolvedValue(false);
+
+    const res = await GET(sameOriginGetRequest());
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({ error: "Unauthorized" });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("rejects a crawler run without an origin header", async () => {
     const res = await POST(
       new Request("https://dashboard.example.com/api/crawler/refresh/", { method: "POST" }),

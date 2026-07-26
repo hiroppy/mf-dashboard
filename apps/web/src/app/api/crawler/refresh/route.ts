@@ -117,6 +117,10 @@ async function proxyCrawlerEvents(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (!(await hasValidCloudflareAccess(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!isSameOriginRead(request)) {
     return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
   }
