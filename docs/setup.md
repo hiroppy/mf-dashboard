@@ -110,7 +110,7 @@ DASHBOARD_URL=https://dashboard.example.com
 
 `REFRESH_TOKEN`はcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。`CLOUDFLARE_ACCESS_TEAM_DOMAIN`にはCloudflare Zero Trustで確認したTeam domainを指定する。`DASHBOARD_URL`には、このあとTerraformの`hostname`へ指定する公開URLを設定する。
 
-`CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.4で設定する。
+`CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.3で設定する。
 
 | `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                           |
 | -------------------------------------------- | ---- | -------------------- | ------------------------------------------------------------------------------ |
@@ -162,29 +162,12 @@ allowed_emails = [
 
 `terraform/terraform.tfvars`、Terraform state、`secrets/cloudflared-token`はGit管理対象外。秘密情報を含むため、内容を表示したりコミットしたりしない。
 
-### 3.3 Terraform planの確認
+### 3.3 インフラの適用
 
-まずは適用せず、変更内容だけを確認する。
+Terraformを初期化し、インフラを適用する。
 
 ```sh
 terraform -chdir=terraform init
-terraform -chdir=terraform plan
-```
-
-planでは以下を確認する。
-
-- 意図しない変更や削除がない
-- 対象のゾーンとホスト名が正しい
-- Google IdP、Tunnel、Tunnel設定、DNS、Access Application、メールアドレスの許可ポリシーが作成対象になっている
-- `local_sensitive_file`が`secrets/cloudflared-token`を作成する
-
-既存リソースとの競合や意図しない変更がある場合は適用せず、設定またはインポート方針を見直す。
-
-### 3.4 インフラの適用
-
-planに問題がなければ適用する。
-
-```sh
 terraform -chdir=terraform apply
 ```
 
@@ -211,7 +194,7 @@ CLOUDFLARE_ACCESS_AUD=<上のコマンドで表示された値>
 
 `Output "access_application_aud" not found`と表示された場合、現在のTerraform stateにはoutputがまだ反映されていない。特に以前のバージョンから更新した環境では、最新コードで再度`terraform plan`を確認してから`terraform apply`し、outputをstateへ反映する。Access Applicationを新規作成した直後も、`apply`が最後まで成功していることを確認する。
 
-### 3.5 Docker Composeの起動
+### 3.4 Docker Composeの起動
 
 ビルド前にComposeの設定を検証する。
 
@@ -235,7 +218,7 @@ Terraformの適用が成功し、`secrets/cloudflared-token`が作成された�
 
 スケジュールを変更する場合は`docker/crawler/crontab`を編集し、`docker compose build crawler`でcrawlerを再ビルドする。
 
-### 3.6 TunnelとAccessの動作確認
+### 3.5 TunnelとAccessの動作確認
 
 ```sh
 docker compose ps
