@@ -1,3 +1,4 @@
+import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { consolidateCategories } from "../../lib/aggregation";
 import type { CategoryBreakdown, CategoryTransaction } from "./transaction-stats.client";
 
@@ -23,8 +24,7 @@ export function isTransactionInCurrentMonth(
   transactionDate: string,
   currentDate = new Date(),
 ): boolean {
-  const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
-  return transactionDate.slice(0, 7) === currentMonth;
+  return transactionDate.slice(0, 7) === getJstYearMonthKey(currentDate);
 }
 
 export function sortCategoryTransactions(

@@ -135,7 +135,7 @@ describe("sortCategoryTransactions", () => {
 });
 
 describe("isTransactionInCurrentMonth", () => {
-  const currentDate = new Date(2026, 6, 27);
+  const currentDate = new Date("2026-07-27T00:00:00.000Z");
 
   it("returns true for a transaction in the current month", () => {
     expect(isTransactionInCurrentMonth("2026-07-01", currentDate)).toBe(true);
@@ -145,5 +145,12 @@ describe("isTransactionInCurrentMonth", () => {
   it("returns false for a transaction outside the current month", () => {
     expect(isTransactionInCurrentMonth("2026-06-30", currentDate)).toBe(false);
     expect(isTransactionInCurrentMonth("2025-07-27", currentDate)).toBe(false);
+  });
+
+  it("uses the JST month near a UTC month boundary", () => {
+    const augustInJst = new Date("2026-07-31T15:00:00.000Z");
+
+    expect(isTransactionInCurrentMonth("2026-08-01", augustInJst)).toBe(true);
+    expect(isTransactionInCurrentMonth("2026-07-31", augustInJst)).toBe(false);
   });
 });
