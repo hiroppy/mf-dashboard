@@ -9,6 +9,7 @@ import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
+import { calculateCompositionPercentage } from "./transaction-stats-utils";
 
 export interface CategoryTransaction {
   id: number;
@@ -124,7 +125,10 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
               <div>
                 <p className="text-sm text-muted-foreground">構成比</p>
                 <p className="text-xl font-bold">
-                  {((selectedBreakdown.value / selectedTotal) * 100).toFixed(1)}%
+                  {calculateCompositionPercentage(selectedBreakdown.value, selectedTotal).toFixed(
+                    1,
+                  )}
+                  %
                 </p>
               </div>
               <div>
@@ -134,7 +138,8 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
             </div>
 
             <div className="min-h-0 space-y-5 overflow-y-auto p-5 sm:p-6">
-              {selectedBreakdown.categories.length > 1 && (
+              {(selectedBreakdown.categories.length > 1 ||
+                selectedBreakdown.categories[0] !== selectedBreakdown.name) && (
                 <div>
                   <p className="mb-2 text-sm font-medium">含まれるカテゴリ</p>
                   <div className="flex flex-wrap gap-2">
@@ -164,7 +169,8 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
                       <p className="text-sm text-muted-foreground">
                         {formatDate(transaction.date)}
                         {transaction.accountName ? ` / ${transaction.accountName}` : ""}
-                        {selectedBreakdown.categories.length > 1
+                        {selectedBreakdown.categories.length > 1 ||
+                        selectedBreakdown.categories[0] !== selectedBreakdown.name
                           ? ` / ${transaction.category}`
                           : ""}
                       </p>
