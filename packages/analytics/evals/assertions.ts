@@ -38,6 +38,7 @@ const evaluationOutputSchema = z.object({
   text: z.string(),
   charts: z.array(financeChartSchema),
   databaseQueries: z.array(z.object({ input: z.unknown(), output: z.unknown() })),
+  fixtureResult: z.unknown(),
   toolRoutes: z.array(z.string()),
   textLinks: z.array(z.string()),
 });
@@ -249,8 +250,12 @@ export default function assertFinanceChatOutput(
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
     }
 
-    const resultValues = databaseResults.flatMap((result) =>
-      result.rows.flatMap((row) => Object.values(row).map((value) => normalize(String(value)))),
+    const fixtureResult = databaseResultSchema.safeParse(actual.fixtureResult);
+    if (!fixtureResult.success || fixtureResult.data.truncated) {
+      return fail("期待値を独立検証するfixture query結果がありません。");
+    }
+    const resultValues = fixtureResult.data.rows.flatMap((row) =>
+      Object.values(row).map((value) => normalize(String(value))),
     );
     const missingValues = (databaseEvidence.expectedValues ?? []).filter(
       (value) => !resultValues.includes(normalize(String(value))),
@@ -259,13 +264,11 @@ export default function assertFinanceChatOutput(
       return fail(`queryDatabase結果に期待する値がありません: ${missingValues.join(", ")}`);
     }
 
-    const hasOnlyNoDataResults = databaseResults.every(
-      (result) =>
-        result.rows.length === 0 ||
-        result.rows.every((row) =>
-          Object.values(row).every((value) => value === 0 || value === null),
-        ),
-    );
+    const hasOnlyNoDataResults =
+      fixtureResult.data.rows.length === 0 ||
+      fixtureResult.data.rows.every((row) =>
+        Object.values(row).every((value) => value === 0 || value === null),
+      );
     if (databaseEvidence.expectNoData && !hasOnlyNoDataResults) {
       return fail("queryDatabase結果がデータなしを裏付けていません。");
     }

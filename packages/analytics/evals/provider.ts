@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { closeDb, getCurrentGroup, getDb, type Db } from "@mf-dashboard/db";
+import { executeReadOnlyQuery } from "@mf-dashboard/db/queries/read-only-query";
 import { generateText, stepCountIs } from "ai";
 import type {
   ApiProvider,
@@ -49,6 +50,7 @@ export interface EvaluationOutput {
   text: string;
   charts: FinanceChart[];
   databaseQueries: Array<{ input: unknown; output: unknown }>;
+  fixtureResult: unknown;
   toolRoutes: string[];
   textLinks: string[];
 }
@@ -64,6 +66,7 @@ export interface ProviderDependencies {
   getModel: typeof getModel;
   isFileAvailable: (path: string) => boolean;
   isLLMEnabled: typeof isLLMEnabled;
+  queryFixture: (db: Db, sql: string, groupId: string) => Promise<unknown>;
 }
 
 const defaultDependencies: ProviderDependencies = {
@@ -77,6 +80,7 @@ const defaultDependencies: ProviderDependencies = {
   getModel,
   isFileAvailable: existsSync,
   isLLMEnabled,
+  queryFixture: executeReadOnlyQuery,
 };
 
 function unique(values: string[]): string[] {
@@ -101,7 +105,10 @@ function getTextLinks(text: string): string[] {
   return unique([...markdownLinks, ...autoLinks, ...rawUrls, ...bareRoutes]);
 }
 
-export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
+export function toEvaluationOutput(
+  response: GeneratedResponse,
+  fixtureResult: unknown = null,
+): EvaluationOutput {
   const stepText = response.steps
     .map((step) => step.text)
     .filter(Boolean)
@@ -140,6 +147,7 @@ export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutpu
     text,
     charts,
     databaseQueries,
+    fixtureResult,
     toolRoutes: unique(toolRoutes),
     textLinks: getTextLinks(text),
   };
@@ -214,8 +222,13 @@ export default class FinanceChatProvider implements ApiProvider {
         system: getFinanceChatSystemPrompt(getEvaluationDate(context?.vars?.evaluationDate)),
         tools: createFinanceChatTools(db, group.id),
       });
+      const verificationSql = context?.vars?.verificationSql;
+      const fixtureResult =
+        typeof verificationSql === "string"
+          ? await this.dependencies.queryFixture(db, verificationSql, group.id)
+          : null;
 
-      return { output: JSON.stringify(toEvaluationOutput(response)) };
+      return { output: JSON.stringify(toEvaluationOutput(response, fixtureResult)) };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "評価の実行に失敗しました。" };
     }

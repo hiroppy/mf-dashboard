@@ -2,6 +2,14 @@
   vars:
     question: 2026年7月の収入・支出・収支を教えて
     evaluationDate: "2026-07-31T03:00:00.000Z"
+    verificationSql: >-
+      SELECT
+        SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income,
+        SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense
+      FROM transactions
+      WHERE substr(date, 1, 7) = '2026-07'
+        AND is_transfer = 0
+        AND is_excluded_from_calculation = 0
   assert:
     - type: is-json
     - type: javascript
@@ -38,6 +46,15 @@
   vars:
     question: 2026年7月の食費合計と内訳を円グラフで見せて
     evaluationDate: "2026-07-31T03:00:00.000Z"
+    verificationSql: >-
+      SELECT sub_category AS label, SUM(amount) AS total
+      FROM transactions
+      WHERE substr(date, 1, 7) = '2026-07'
+        AND type = 'expense'
+        AND category = '食費'
+        AND is_transfer = 0
+        AND is_excluded_from_calculation = 0
+      GROUP BY sub_category
   assert:
     - type: is-json
     - type: javascript
@@ -80,6 +97,14 @@
   vars:
     question: 2026年7月3日の食費明細をMarkdown表で教えて
     evaluationDate: "2026-07-31T03:00:00.000Z"
+    verificationSql: >-
+      SELECT date, description, amount
+      FROM transactions
+      WHERE date = '2026-07-03'
+        AND type = 'expense'
+        AND category = '食費'
+        AND is_transfer = 0
+        AND is_excluded_from_calculation = 0
   assert:
     - type: is-json
     - type: javascript
@@ -135,6 +160,14 @@
   vars:
     question: 2030年1月の食費はいくら？
     evaluationDate: "2026-07-31T03:00:00.000Z"
+    verificationSql: >-
+      SELECT SUM(amount) AS total
+      FROM transactions
+      WHERE substr(date, 1, 7) = '2030-01'
+        AND type = 'expense'
+        AND category = '食費'
+        AND is_transfer = 0
+        AND is_excluded_from_calculation = 0
   assert:
     - type: is-json
     - type: javascript

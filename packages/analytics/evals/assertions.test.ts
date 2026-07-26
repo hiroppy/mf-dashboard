@@ -9,6 +9,7 @@ function output(overrides: Record<string, unknown> = {}): string {
     text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
     charts: [],
     databaseQueries: [],
+    fixtureResult: null,
     toolRoutes: [],
     textLinks: [],
     ...overrides,
@@ -261,6 +262,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
           databaseQueries: [
             {
               input: { sql: "SELECT amount AS income FROM transactions" },
@@ -274,6 +276,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
           databaseQueries: [
             {
               input: { sql: "SELECT 313235 AS amount FROM transactions" },
@@ -284,6 +287,25 @@ describe("assertFinanceChatOutput", () => {
         context,
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 1 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount * 0 + 313235 AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("期待する値"),
+    });
   });
 
   test("requires an empty or zero database result for no-data claims", () => {
@@ -298,6 +320,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ amount: 1 }], truncated: false },
           databaseQueries: [
             {
               input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
@@ -311,6 +334,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
           databaseQueries: [
             {
               input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
@@ -324,6 +348,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ amount: 1_000 }], truncated: false },
           databaseQueries: [
             {
               input: { sql: "SELECT 1" },
@@ -341,6 +366,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
           databaseQueries: [
             {
               input: {

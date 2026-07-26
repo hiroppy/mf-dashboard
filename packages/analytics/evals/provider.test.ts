@@ -24,6 +24,9 @@ function dependencies(overrides: Partial<ProviderDependencies> = {}): ProviderDe
       .mockReturnValue({} as ReturnType<ProviderDependencies["getModel"]>),
     isFileAvailable: () => true,
     isLLMEnabled: () => true,
+    queryFixture: vi
+      .fn<ProviderDependencies["queryFixture"]>()
+      .mockResolvedValue({ rows: [], truncated: false }),
     ...overrides,
   };
 }
@@ -81,6 +84,7 @@ describe("toEvaluationOutput", () => {
           output: { rows: [{ amount: 100 }], truncated: false },
         },
       ],
+      fixtureResult: null,
       toolRoutes: ["/0/cf/2026-07"],
       textLinks: ["/0/cf/2026-07"],
     });
@@ -117,7 +121,10 @@ describe("FinanceChatProvider", () => {
 
     const result = await provider.callApi("質問", {
       prompt: {} as never,
-      vars: { evaluationDate: "2026-07-31T03:00:00.000Z" },
+      vars: {
+        evaluationDate: "2026-07-31T03:00:00.000Z",
+        verificationSql: "SELECT amount FROM transactions",
+      },
     });
 
     expect(result.error).toBeUndefined();
@@ -131,6 +138,11 @@ describe("FinanceChatProvider", () => {
     expect(options.tools).toHaveProperty("queryDatabase");
     expect(options.tools).toHaveProperty("presentChart");
     expect(options.tools).toHaveProperty("getFinanceDashboardRoute");
+    expect(deps.queryFixture).toHaveBeenCalledWith(
+      expect.anything(),
+      "SELECT amount FROM transactions",
+      "0",
+    );
     expect(
       options.prepareStep({ stepNumber: FINANCE_CHAT_MAX_GENERATION_STEPS - 2 }),
     ).toBeUndefined();
