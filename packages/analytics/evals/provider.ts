@@ -90,6 +90,8 @@ function unique(values: string[]): string[] {
 
 function removeCode(text: string): string {
   return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/~~[\s\S]*?~~/g, "")
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/`[^`\n]*`/g, "");
@@ -100,11 +102,21 @@ function getTextLinks(text: string): string[] {
   const markdownLinks = [
     ...renderedText.matchAll(/(?<!!)\[[^\]]+]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g),
   ].map((match) => match[1]!);
+  const referenceDefinitions = new Map(
+    [...renderedText.matchAll(/^\s*\[([^\]]+)]:\s*(\S+)/gm)].map((match) => [
+      match[1]!.toLocaleLowerCase(),
+      match[2]!,
+    ]),
+  );
+  const referenceLinks = [...renderedText.matchAll(/\[([^\]]+)]\[([^\]]+)]/g)].flatMap((match) => {
+    const destination = referenceDefinitions.get(match[2]!.toLocaleLowerCase());
+    return destination ? [destination] : [];
+  });
   const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
   const rawUrls = [...renderedText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  return unique([...markdownLinks, ...autoLinks, ...rawUrls]);
+  return unique([...markdownLinks, ...referenceLinks, ...autoLinks, ...rawUrls]);
 }
 
 function getTextRoutes(text: string): string[] {

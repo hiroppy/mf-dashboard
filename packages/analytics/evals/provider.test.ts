@@ -130,6 +130,24 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("extracts a rendered reference-style Markdown link", () => {
+    const output = toEvaluationOutput({
+      text: "[2026年7月の収支を確認][収支]\n\n[収支]: /0/cf/2026-07",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
+  });
+
+  test("excludes links in HTML comments and strikethrough", () => {
+    const output = toEvaluationOutput({
+      text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+  });
+
   test("collects text from every generation step", () => {
     expect(
       toEvaluationOutput({

@@ -68,6 +68,10 @@ function normalize(value: string): string {
   return value.normalize("NFKC").replace(/[,\s*_`]/g, "");
 }
 
+function getRenderedText(text: string): string {
+  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/~~[\s\S]*?~~/g, "");
+}
+
 function getMissingTextPairs(
   text: string,
   expectedPairs: Array<[string, string]>,
@@ -105,11 +109,16 @@ function getMissingTextPairs(
     const monetaryClaims = getAssertedMonetaryClaims(segment);
     const expectedAmount = Number(normalizedValue);
     const expectedClaim = monetaryClaims.find((claim) => claim.amount === expectedAmount);
+    const expectedClaimPrefix =
+      expectedClaim === undefined
+        ? ""
+        : segment.slice(Math.max(0, expectedClaim.index - 12), expectedClaim.index);
     const hasInvalidQualifier =
       expectedClaim !== undefined &&
-      /^(?:未満|以下|超|以上|程度|前後|約|およそ|くらい)/.test(
-        expectedClaim.suffix.replace(/^[\s、,]*/, ""),
-      );
+      (/(?:約|およそ|概ね|だいたい)$/.test(expectedClaimPrefix) ||
+        /^(?:未満|以下|超|以上|程度|前後|約|およそ|くらい)/.test(
+          expectedClaim.suffix.replace(/^[\s、,]*/, ""),
+        ));
     const hasUngroundedAdditionalClaim = monetaryClaims.some((claim) => {
       if (claim.amount === expectedAmount) return false;
       const prefix = segment.slice(0, claim.index);
@@ -367,6 +376,28 @@ function rowContainsAssociation(
   return expectedTerms.every((term) => rowValues.includes(term));
 }
 
+function hasUngroundedTableAmount(
+  tables: MarkdownTable[],
+  allowedPairs: Array<[string, number]>,
+): boolean {
+  return tables.some((table) =>
+    table.rows.some((row) =>
+      row.some((cell, columnIndex) => {
+        if (!/^\d+$/.test(cell)) return false;
+        const amount = Number(cell);
+        const hasColumnBinding = allowedPairs.some(
+          ([label, expectedAmount]) =>
+            expectedAmount === amount && table.header[columnIndex] === normalize(label),
+        );
+        const hasRowBinding = allowedPairs.some(
+          ([label, expectedAmount]) => expectedAmount === amount && row.includes(normalize(label)),
+        );
+        return !hasColumnBinding && !hasRowBinding;
+      }),
+    ),
+  );
+}
+
 export default function assertFinanceChatOutput(
   output: string,
   context: AssertionContext,
@@ -383,7 +414,8 @@ export default function assertFinanceChatOutput(
 
   const actual = result.data;
   const config = context.config ?? {};
-  const normalizedText = normalize(actual.text);
+  const renderedText = getRenderedText(actual.text);
+  const normalizedText = normalize(renderedText);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
     normalizedText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
   );
@@ -392,7 +424,7 @@ export default function assertFinanceChatOutput(
   }
 
   const missingFacts = (config.expectedTextFacts ?? []).filter(
-    (fact) => !normalizedText.includes(normalize(fact)) || hasContradictedFact(actual.text, fact),
+    (fact) => !normalizedText.includes(normalize(fact)) || hasContradictedFact(renderedText, fact),
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
@@ -404,7 +436,7 @@ export default function assertFinanceChatOutput(
     ),
   );
   const missingPairs = getMissingTextPairs(
-    actual.text,
+    renderedText,
     config.expectedTextPairs ?? [],
     chartTextPairs,
   );
@@ -415,7 +447,7 @@ export default function assertFinanceChatOutput(
   }
 
   const missingPatterns = (config.expectedTextPatterns ?? []).filter(
-    (pattern) => !new RegExp(pattern, "s").test(actual.text),
+    (pattern) => !new RegExp(pattern, "s").test(renderedText),
   );
   if (missingPatterns.length > 0) {
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
@@ -424,10 +456,10 @@ export default function assertFinanceChatOutput(
   if (
     config.forbidAmounts &&
     (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:\s*円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+\s*円)/.test(
-      actual.text.normalize("NFKC"),
+      renderedText.normalize("NFKC"),
     ) ||
       /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
-        actual.text.normalize("NFKC"),
+        renderedText.normalize("NFKC"),
       ))
   ) {
     return fail("データのない回答に金額が含まれています。");
@@ -467,6 +499,13 @@ export default function assertFinanceChatOutput(
       return fail("fixture query結果の行が期待値と完全一致しません。");
     }
     if (
+      (databaseEvidence.expectedRowAssociations ?? []).some((association) =>
+        fixtureResult.data.rows.every((row) => !rowContainsAssociation(row, association)),
+      )
+    ) {
+      return fail("fixture query結果に期待する値の関連を保った行がありません。");
+    }
+    if (
       expectedRows.length > 0 &&
       (databaseEvidence.expectedRowAssociations ?? []).some((association) =>
         databaseResults.every((databaseResult) =>
@@ -502,7 +541,7 @@ export default function assertFinanceChatOutput(
     return fail("chartの構造または値が期待と異なります。");
   }
 
-  const markdownTables = getMarkdownTables(actual.text);
+  const markdownTables = getMarkdownTables(renderedText);
   const markdownRows = markdownTables.flatMap((table) => table.rows);
   const expectedMarkdownColumns = (config.expectedMarkdownColumns ?? []).map(normalize);
   if (
@@ -526,7 +565,7 @@ export default function assertFinanceChatOutput(
   }
   if (
     config.exactMarkdownRows &&
-    hasUngroundedAmountOutsideMarkdownTables(actual.text, config.expectedMarkdownRows ?? [])
+    hasUngroundedAmountOutsideMarkdownTables(renderedText, config.expectedMarkdownRows ?? [])
   ) {
     return fail("Markdown表の外に検証できない金額があります。");
   }
@@ -553,8 +592,15 @@ export default function assertFinanceChatOutput(
     ),
     ...chartTextPairs,
   ];
-  const normalizedClaimText = normalizeYenPrefix(actual.text.normalize("NFKC")).replace(/,/g, "");
-  const ungroundedAmounts = getAssertedMonetaryClaims(actual.text).filter((claim) => {
+  if (
+    !config.exactMarkdownRows &&
+    (config.expectedMarkdownRows ?? []).length === 0 &&
+    hasUngroundedTableAmount(markdownTables, allowedTextPairs)
+  ) {
+    return fail("Markdown表に根拠のないラベルと金額があります。");
+  }
+  const normalizedClaimText = normalizeYenPrefix(renderedText.normalize("NFKC")).replace(/,/g, "");
+  const ungroundedAmounts = getAssertedMonetaryClaims(renderedText).filter((claim) => {
     const clauseStart =
       Math.max(
         normalizedClaimText.lastIndexOf("。", claim.index),
@@ -590,6 +636,23 @@ export default function assertFinanceChatOutput(
     return fail(
       `本文に根拠のない金額があります: ${ungroundedAmounts.map((claim) => claim.amount).join(", ")}`,
     );
+  }
+  const unitlessMonetaryClaims = [
+    ...renderedText
+      .normalize("NFKC")
+      .matchAll(
+        /(?:^|[。！？\n、])([^。！？\n、\d]{1,16}?)(?:は|が|も|:|：)\s*(-?\d[\d,]*)(?![\d,年月日件%円千万億兆])/g,
+      ),
+  ].filter((match) => {
+    const label = normalize(match[1]!);
+    const amount = Number(match[2]!.replace(/,/g, ""));
+    return !allowedTextPairs.some(
+      ([expectedLabel, expectedAmount]) =>
+        label.includes(normalize(expectedLabel)) && amount === expectedAmount,
+    );
+  });
+  if (validatesRenderedAmounts && unitlessMonetaryClaims.length > 0) {
+    return fail("本文に根拠のない単位なし金額があります。");
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];

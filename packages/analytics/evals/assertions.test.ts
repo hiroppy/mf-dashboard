@@ -189,6 +189,22 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "予算は999,999です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし") });
   });
 
   test("rejects a direct negation of the expected monetary claim", () => {
@@ -202,7 +218,26 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は約313,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false });
   });
+
+  test.each(["<!-- 2026年7月の収入は313,235円です。 -->", "~~2026年7月の収入は313,235円です。~~"])(
+    "rejects a non-rendered expected claim: %s",
+    (text) => {
+      expect(
+        assertFinanceChatOutput(output({ text }), {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [["収入", "313235"]],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    },
+  );
 
   test("allows grounded breakdown amounts after an expected total", () => {
     const chart = {
@@ -281,6 +316,25 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+
+    const extraBudgetTable = [
+      text,
+      "",
+      "| 項目 | 金額 |",
+      "| --- | ---: |",
+      "| 予算 | 313,235円 |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text: extraBudgetTable }), {
+        config: {
+          expectedTextPairs: [
+            ["収入", "313235"],
+            ["支出", "219894"],
+            ["収支", "93341"],
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
   });
 
   test("compares chart values by label without requiring data order", () => {
@@ -738,6 +792,43 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("関連") });
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: {
+            rows: [{ income: 219_894, expense: 313_235 }],
+            truncated: false,
+          },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT type, SUM(amount) AS total FROM transactions GROUP BY type",
+              },
+              output: {
+                rows: [
+                  { type: "income", total: 313_235 },
+                  { type: "expense", total: 219_894 },
+                ],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("fixture") });
   });
 
   test("rejects a period fact that is immediately negated", () => {
