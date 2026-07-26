@@ -44,6 +44,11 @@ describe("createDatabaseQueryTool", () => {
     expect(description).toContain("no-group（group_id = '0'）の最新完了snapshot 1件");
     expect(description).toContain("最新snapshotが空なら過去の保有情報は含まれない");
     expect(description).toContain("daily_snapshots.group_idは選択中グループへ匿名化投影済み");
+    expect(description).toContain(
+      "金融機関を特定できない保有資産はholdings.account_id = NULLで含まれる",
+    );
+    expect(description).toContain("group_accountsで再度絞り込まない");
+    expect(description).not.toContain("holdings.account_idをgroup_accounts経由で絞る");
     expect(description).toContain("mf_idは匿名化のため常にNULL");
     expect(description).toContain("transactions.is_internal_transfer = 1");
     expect(description).not.toContain("transactionsRelations");

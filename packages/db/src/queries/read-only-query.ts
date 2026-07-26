@@ -161,7 +161,7 @@ export function describeDatabaseSchema(): string {
 - 月はsubstr(${transactions}.${schema.transactions.date.name}, 1, 7)でYYYY-MMとして取得できる
 - ${schema.transactions.category.name}が大カテゴリ、${schema.transactions.subCategory.name}が中カテゴリ、${schema.transactions.description.name}が個別明細の内容
 - chat query sandboxの${transactions}は現在グループの振替元または振替先口座に関係する行へ限定済み。明示的に絞る場合は${schema.transactions.accountId.name}または${schema.transactions.transferTargetAccountId.name}のいずれかを${groupAccounts}.${schema.groupAccounts.accountId.name}と照合し、${groupAccounts}.${schema.groupAccounts.groupId.name} = :groupIdを使用する
-- 現在グループの保有資産も${holdings}.${schema.holdings.accountId.name}を${groupAccounts}経由で絞る
+- chat query sandboxの${holdings}・${holdingValues}は現在グループ向けに限定済み。金融機関を特定できない保有資産は${holdings}.${schema.holdings.accountId.name} = NULLで含まれるため、${groupAccounts}をJOINして再度group scopeしてはいけない
 - 現在グループの総資産は${assetHistory}.${schema.assetHistory.groupId.name} = :groupIdで絞り、${schema.assetHistory.date.name}が最新の行の${schema.assetHistory.totalAssets.name}を使用する。保有銘柄の件数や評価額から総資産を推測・再計算しない
 - 総資産のカテゴリ内訳は最新の${assetHistory}を${assetHistoryCategories}.${schema.assetHistoryCategories.assetHistoryId.name} = ${assetHistory}.${schema.assetHistory.id.name}でJOINし、${schema.assetHistoryCategories.categoryName.name}と${schema.assetHistoryCategories.amount.name}を使用する
 - 銘柄名や資産・負債の区分は${holdings}、評価額・数量・単価・前日比・含み損益は${holdingValues}にある。${holdingValues}.${schema.holdingValues.holdingId.name} = ${holdings}.${schema.holdings.id.name}でJOINする
@@ -169,8 +169,8 @@ export function describeDatabaseSchema(): string {
 - 資産・負債・投資の現在金額には${holdingValues}.${schema.holdingValues.amount.name}を使用する。件数を明示的に求められていない限りCOUNTではなく金額の合計と内訳を取得する
 - 負債は${holdings}.${schema.holdings.type.name} = 'liability'で判定する。負債の総額は${holdingValues}.${schema.holdingValues.amount.name}のSUM、内訳は${holdings}.${schema.holdings.liabilityCategory.name}ごとのSUMとして取得し、件数や登録状況へ読み替えない
 - 資産カテゴリは${holdings}.${schema.holdings.categoryId.name} = ${assetCategories}.${schema.assetCategories.id.name}でJOINする。投資情報には主に「株式(現物)」「投資信託」「債券」「FX」「先物」「暗号資産・FX・貴金属」のカテゴリを使用し、「預金・現金」「暗号資産」「電子マネー・プリペイド」は含めない
-- chat query sandboxの${dailySnapshots}は全口座を取得するno-group（group_id = '0'）の最新完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
-- chat query sandboxの${dailySnapshots}.${schema.dailySnapshots.groupId.name}は選択中グループへ匿名化投影済み。保有情報のgroup scopeは${holdings}から${groupAccounts}を経由して確認する
+- chat query sandboxの${dailySnapshots}は全口座を取得するno-group（group_id = '0'）の最新完了snapshot 1件、${holdings}・${holdingValues}はそのsnapshot内かつ現在グループ口座の行と金融機関を特定できない保有資産だけへ限定済み。最新snapshotが空なら過去の保有情報は含まれない。銘柄・負債・投資の現在値は${holdingValues}.${schema.holdingValues.snapshotId.name} = ${dailySnapshots}.${schema.dailySnapshots.id.name}でJOINして使用する
+- chat query sandboxの${dailySnapshots}.${schema.dailySnapshots.groupId.name}は選択中グループへ匿名化投影済み。保有情報は既にgroup scope済みなので、${groupAccounts}で再度絞り込まない
 - ${directlyGroupedTables}は${schema.assetHistory.groupId.name} = :groupIdで直接絞る`;
 }
 
