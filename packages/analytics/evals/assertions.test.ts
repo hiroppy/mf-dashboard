@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import assertFinanceChatOutput from "./assertions";
 
+const derivedAmountSqlPattern =
+  "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b";
+
 function output(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
@@ -109,6 +112,7 @@ describe("assertFinanceChatOutput", () => {
           expectedCharts: [
             {
               chartType: "pie",
+              titlePatterns: ["2026年7月", "食費"],
               unit: "currency",
               series: [{ name: "支出", amountType: "expense" }],
               data: [
@@ -120,6 +124,24 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ charts: [{ ...chart, title: "2025年7月の食費" }] }), {
+        config: {
+          expectedCharts: [
+            {
+              chartType: "pie",
+              titlePatterns: ["2026年7月", "食費"],
+              unit: "currency",
+              series: [{ name: "支出", amountType: "expense" }],
+              data: [
+                { label: "食料品", values: [24_833] },
+                { label: "外食", values: [12_214] },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -180,12 +202,27 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
     expect(
+      assertFinanceChatOutput(output({ text: "is_internal_transferを除外しました。" }), {
+        config: { forbiddenTextTerms: ["is_internal_transfer"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+    expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、1,000円です。" }), {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
     expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は1万円です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は一万円です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は千円です。" }), {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
@@ -213,7 +250,7 @@ describe("assertFinanceChatOutput", () => {
       config: {
         databaseEvidence: {
           expectedValues: ["313235"],
-          requiredSqlPatterns: ["\\btransactions\\b", "\\bamount\\b"],
+          requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
         },
       },
     };
@@ -239,7 +276,7 @@ describe("assertFinanceChatOutput", () => {
         output({
           databaseQueries: [
             {
-              input: { sql: "SELECT 313235 AS income" },
+              input: { sql: "SELECT 313235 AS amount FROM transactions" },
               output: { rows: [{ income: 313_235 }], truncated: false },
             },
           ],
@@ -254,7 +291,7 @@ describe("assertFinanceChatOutput", () => {
       config: {
         databaseEvidence: {
           expectNoData: true,
-          requiredSqlPatterns: ["\\btransactions\\b", "2030-01"],
+          requiredSqlPatterns: ["\\btransactions\\b", "2030-01", derivedAmountSqlPattern],
         },
       },
     };
@@ -295,6 +332,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
               output: { rows: [{ amount: 1_000 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT NULL AS amount FROM transactions WHERE date LIKE '2030-01%'",
+              },
+              output: { rows: [{ amount: null }], truncated: false },
             },
           ],
         }),

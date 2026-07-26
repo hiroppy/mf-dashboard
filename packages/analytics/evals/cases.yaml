@@ -21,11 +21,18 @@
             [
               "\\btransactions\\b",
               "2026-07",
-              "\\bamount\\b",
+              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\btype\\b",
               "\\b(?:sum|total)\\s*\\(",
             ]
-        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+        forbiddenTextTerms:
+          [
+            transactions,
+            is_transfer,
+            is_internal_transfer,
+            is_excluded_from_calculation,
+            ":groupId",
+          ]
 
 - description: 食費の内訳を正しい円グラフで返す
   vars:
@@ -40,6 +47,7 @@
           - [食費, "41837"]
         expectedCharts:
           - chartType: pie
+            titlePatterns: ["2026年7月", 食費]
             unit: currency
             series:
               - { name: 支出, amountType: expense }
@@ -55,11 +63,18 @@
             [
               "\\btransactions\\b",
               "2026-07",
-              "\\bamount\\b",
+              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
             ]
-        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+        forbiddenTextTerms:
+          [
+            transactions,
+            is_transfer,
+            is_internal_transfer,
+            is_excluded_from_calculation,
+            ":groupId",
+          ]
 
 - description: 指定日の食費明細をMarkdown表で返す
   vars:
@@ -81,11 +96,18 @@
             [
               "\\btransactions\\b",
               "2026-07-03",
-              "\\bamount\\b",
+              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
             ]
-        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+        forbiddenTextTerms:
+          [
+            transactions,
+            is_transfer,
+            is_internal_transfer,
+            is_excluded_from_calculation,
+            ":groupId",
+          ]
 
 - description: 収支画面へのリンクがroute toolの結果と一致する
   vars:
@@ -100,7 +122,14 @@
         expectedCharts: []
         expectedToolRoutes: ["/0/cf/2026-07"]
         expectedTextLinks: ["/0/cf/2026-07"]
-        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+        forbiddenTextTerms:
+          [
+            transactions,
+            is_transfer,
+            is_internal_transfer,
+            is_excluded_from_calculation,
+            ":groupId",
+          ]
 
 - description: データのない期間で金額を推測しない
   vars:
@@ -123,8 +152,15 @@
             [
               "\\btransactions\\b",
               "2030-01",
-              "\\bamount\\b",
+              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
             ]
-        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+        forbiddenTextTerms:
+          [
+            transactions,
+            is_transfer,
+            is_internal_transfer,
+            is_excluded_from_calculation,
+            ":groupId",
+          ]

@@ -5,6 +5,7 @@ interface ChartExpectation {
   chartType: FinanceChart["chartType"];
   data: FinanceChart["data"];
   series: FinanceChart["series"];
+  titlePatterns?: string[];
   unit?: FinanceChart["unit"];
 }
 
@@ -161,6 +162,7 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation): boolea
   return (
     actual.chartType === expected.chartType &&
     actual.unit === expected.unit &&
+    (expected.titlePatterns ?? []).every((pattern) => new RegExp(pattern).test(actual.title)) &&
     JSON.stringify(actual.series) === JSON.stringify(expected.series) &&
     JSON.stringify(sortChartData(actual.data)) === JSON.stringify(sortChartData(expected.data))
   );
@@ -219,7 +221,9 @@ export default function assertFinanceChatOutput(
 
   if (
     config.forbidAmounts &&
-    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円)/.test(actual.text.normalize("NFKC")) ||
+    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+\s*円)/.test(
+      actual.text.normalize("NFKC"),
+    ) ||
       /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
         actual.text.normalize("NFKC"),
       ))
