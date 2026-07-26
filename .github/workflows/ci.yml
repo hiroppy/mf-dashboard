@@ -14,7 +14,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.1.0
+      - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-node
       - run: pnpm lint --format=github
       - run: pnpm format --check
@@ -24,7 +24,7 @@ jobs:
   build-demo:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.1.0
+      - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-node
       - run: pnpm build:demo --affected
   docker-build:
@@ -40,7 +40,7 @@ jobs:
       matrix:
         app: [crawler, web]
     steps:
-      - uses: actions/checkout@v6.1.0
+      - uses: actions/checkout@v7.0.1
       - run: cp .env.example .env
       - run: docker compose build ${{ matrix.app }}
   e2e-web:
@@ -50,7 +50,7 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
-      - uses: actions/checkout@v6.1.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
