@@ -191,6 +191,7 @@ export async function startCrawlerRun(): Promise<CrawlerRunState> {
     progress = await createCrawlerProgressReporter(
       process.env.CRAWLER_STATE_PATH ?? getCrawlerRunStatePath(),
       lock.record,
+      { onUpdate: lock.refreshLease },
     );
   } catch (err) {
     await lock.release();

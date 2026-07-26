@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   acquireCrawlerRunLock,
   CrawlerAlreadyRunningError,
@@ -20,6 +20,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   await rm(tempDir, { recursive: true, force: true });
 });
 
@@ -503,6 +504,36 @@ describe("crawler run lock", () => {
     const lock = await acquireCrawlerRunLock("scheduled", options);
     expect(lock.record.source).toBe("scheduled");
     await lock.release();
+  });
+
+  test("keeps an active manual run locked beyond its original expiry", async () => {
+    const startedAt = Date.now();
+    const options = {
+      getPidStartedAt: () => "current-process-start",
+      lockPath,
+      pidExists: () => true,
+      staleMs: 1_000,
+    };
+
+    vi.useFakeTimers();
+    await runWithCrawlerRunLock(
+      "manual",
+      async (progress) => {
+        vi.setSystemTime(startedAt + 750);
+        await progress.startStep({ code: "authentication", label: "Authenticate" });
+        vi.setSystemTime(startedAt + 1_500);
+
+        await expect(getCrawlerRunState(options)).resolves.toMatchObject({
+          running: true,
+          pid: process.pid,
+          source: "manual",
+        });
+        await expect(acquireCrawlerRunLock("scheduled", options)).rejects.toBeInstanceOf(
+          CrawlerAlreadyRunningError,
+        );
+      },
+      options,
+    );
   });
 
   test("keeps an old identified lock when its live process identity cannot be re-read", async () => {

@@ -39,6 +39,7 @@ export function getCrawlerRunLockPath(): string {
 
 interface CrawlerRunLockRecord {
   id: string;
+  leaseUpdatedAt?: string;
   pid: number;
   pidStartedAt: string | null;
   source: string;
@@ -68,6 +69,7 @@ export class CrawlerAlreadyRunningError extends Error {
 
 interface CrawlerRunLock {
   record: CrawlerRunLockRecord;
+  refreshLease: () => Promise<void>;
   release: () => Promise<void>;
 }
 
@@ -233,6 +235,7 @@ function parseLockRecord(contents: string): CrawlerRunLockRecord | null {
 
   return {
     id: parsed.id,
+    leaseUpdatedAt: typeof parsed.leaseUpdatedAt === "string" ? parsed.leaseUpdatedAt : undefined,
     pid: parsed.pid,
     pidStartedAt,
     source: parsed.source,
@@ -280,7 +283,10 @@ function isStaleLock(
 
   // Manual runs execute asynchronously inside the long-lived trigger server, so
   // the server PID cannot prove that the individual crawler run is still alive.
-  if (record.source === "manual" && isExpired(record.startedAt, options.staleMs)) {
+  if (
+    record.source === "manual" &&
+    isExpired(record.leaseUpdatedAt ?? record.startedAt, options.staleMs)
+  ) {
     return true;
   }
 
@@ -624,6 +630,7 @@ export async function acquireCrawlerRunLock(
 
   const record: CrawlerRunLockRecord = {
     id: randomUUID(),
+    leaseUpdatedAt: new Date().toISOString(),
     pid: process.pid,
     pidStartedAt: resolved.getPidStartedAt(process.pid),
     source,
@@ -659,6 +666,26 @@ export async function acquireCrawlerRunLock(
 
   return {
     record,
+    refreshLease: async () => {
+      const mutationGuard = await waitForLockMutationGuard(resolved);
+      let file: Awaited<ReturnType<typeof open>> | null = null;
+      try {
+        const current = await readLockRecord(resolved.lockPath);
+        if (current?.id !== record.id) {
+          return;
+        }
+
+        record.leaseUpdatedAt = new Date().toISOString();
+        file = await open(resolved.lockPath, "w");
+        await file.writeFile(JSON.stringify(record));
+      } finally {
+        try {
+          await file?.close();
+        } finally {
+          await mutationGuard.release();
+        }
+      }
+    },
     release: async () => {
       const mutationGuard = await waitForLockMutationGuard(resolved);
       try {
@@ -681,7 +708,9 @@ export async function runWithCrawlerRunLock<T>(
   const lock = await acquireCrawlerRunLock(source, options);
   let progress: CrawlerProgressReporter;
   try {
-    progress = await createCrawlerProgressReporter(getOptions(options).statePath, lock.record);
+    progress = await createCrawlerProgressReporter(getOptions(options).statePath, lock.record, {
+      onUpdate: lock.refreshLease,
+    });
   } catch (err) {
     await lock.release();
     throw err;

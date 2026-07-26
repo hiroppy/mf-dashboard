@@ -54,6 +54,10 @@ export interface CrawlerProgressReporter {
   finish: (status: "success" | "failed", reason?: CrawlerReason) => Promise<void>;
 }
 
+interface CrawlerProgressReporterOptions {
+  onUpdate?: () => Promise<void>;
+}
+
 function toStepDetails(
   code: CrawlerCurrentStep["code"],
   metadata: CrawlerStepMetadata = {},
@@ -115,6 +119,7 @@ function runningProgressFor(timeline: CrawlerRunTimelineItem[]) {
 export async function createCrawlerProgressReporter(
   statePath: string,
   run: { id: string; source: string; startedAt: string },
+  reporterOptions: CrawlerProgressReporterOptions = {},
 ): Promise<CrawlerProgressReporter> {
   let state: CrawlerRunStateSnapshot = {
     version: 1,
@@ -130,11 +135,13 @@ export async function createCrawlerProgressReporter(
   };
   const options = { statePath: statePath || getCrawlerRunStatePath() };
   await writeCrawlerRunState(state, options);
+  await reporterOptions.onUpdate?.();
 
   async function update(mutator: (draft: CrawlerRunStateSnapshot) => void): Promise<void> {
     const draft = structuredClone(state);
     mutator(draft);
     await writeCrawlerRunState(draft, options);
+    await reporterOptions.onUpdate?.();
     state = draft;
   }
 
