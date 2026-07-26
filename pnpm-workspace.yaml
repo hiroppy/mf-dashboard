@@ -35,6 +35,7 @@ minimumReleaseAgeExclude:
   - workerd
   - wrangler
   - "@ai-sdk/gateway@4.0.22"
+  - recharts@3.10.1
 
 overrides:
   "@playwright/browser-chromium": 1.62.0
