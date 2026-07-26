@@ -505,15 +505,22 @@ export default function assertFinanceChatOutput(
     ) {
       return fail("fixture query結果に期待する値の関連を保った行がありません。");
     }
-    if (
-      expectedRows.length > 0 &&
-      (databaseEvidence.expectedRowAssociations ?? []).some((association) =>
-        databaseResults.every((databaseResult) =>
-          databaseResult.rows.every((row) => !rowContainsAssociation(row, association)),
-        ),
-      )
-    ) {
-      return fail("queryDatabase結果に期待する値の関連を保った行がありません。");
+    const expectedAssociations = databaseEvidence.expectedRowAssociations ?? [];
+    const maximumExpectedRowCount = Math.max(expectedRows.length, expectedAssociations.length);
+    const modelHasExpectedResult =
+      expectedRows.length === 0 ||
+      databaseResults.some(
+        (databaseResult) =>
+          databaseResult.rows.length <= maximumExpectedRowCount &&
+          expectedAssociations.every((association) =>
+            databaseResult.rows.some((row) => rowContainsAssociation(row, association)),
+          ) &&
+          databaseResult.rows.every((row) =>
+            expectedAssociations.some((association) => rowContainsAssociation(row, association)),
+          ),
+      );
+    if (!modelHasExpectedResult) {
+      return fail("queryDatabase結果に期待しない行があるか、値の関連が不足しています。");
     }
 
     const fixtureHasOnlyNoData =
