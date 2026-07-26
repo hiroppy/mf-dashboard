@@ -38,6 +38,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -82,5 +83,21 @@ describe("Header", () => {
       screen.getByText((_content, element) => element?.tagName === "TIME").getAttribute("datetime"),
     ).toBe("2025-04-30T10:30:00");
     expect(screen.getByRole("button", { name: "更新サービス未接続" })).not.toBeNull();
+  });
+
+  it("uses the configured base path for the logo", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/dashboard");
+
+    render(
+      <SidebarProvider>
+        <Header groups={[]} defaultGroupId={null} />
+      </SidebarProvider>,
+    );
+
+    const imageUrl = new URL(
+      screen.getByRole("img", { name: "Logo" }).getAttribute("src") ?? "",
+      "http://localhost",
+    );
+    expect(imageUrl.searchParams.get("url")).toBe("/dashboard/logo.png");
   });
 });

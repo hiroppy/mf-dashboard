@@ -14,7 +14,6 @@ export interface TransactionForLLMCategorization {
   date: string;
   amount: number;
   type: "income" | "expense";
-  accountName?: string;
   description: string;
 }
 
@@ -39,8 +38,26 @@ export async function generateCategoryDecisionWithLLM(options: {
 }): Promise<LLMCategoryDecision | null> {
   if (!isLLMEnabled()) return null;
 
-  const { transaction, candidates } = options;
-  const categorizationData = JSON.stringify({ transaction, candidates }, null, 2);
+  const categorizationData = JSON.stringify(
+    {
+      transaction: {
+        date: options.transaction.date,
+        amount: options.transaction.amount,
+        type: options.transaction.type,
+        description: options.transaction.description,
+      },
+      candidates: options.candidates.map(
+        ({ largeCategoryId, largeCategoryName, middleCategoryId, middleCategoryName }) => ({
+          largeCategoryId,
+          largeCategoryName,
+          middleCategoryId,
+          middleCategoryName,
+        }),
+      ),
+    },
+    null,
+    2,
+  );
 
   const result = await generateText({
     model: getModel(),

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { Card, CardContent } from "../components/ui/card";
+import { withBasePath } from "../lib/base-path";
 
 export default function Error({
   reset,
@@ -14,7 +15,7 @@ export default function Error({
       <Card className="max-w-lg w-full">
         <CardContent className="text-center py-12 space-y-5">
           <Image
-            src="/cry.png"
+            src={withBasePath("/cry.png")}
             alt="エラーが発生しました"
             width={120}
             height={120}

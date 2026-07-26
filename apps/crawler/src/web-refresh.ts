@@ -31,7 +31,8 @@ export async function notifyWebRefresh(): Promise<void> {
     throw new Error("REFRESH_TOKEN is not set");
   }
 
-  const refreshUrl = new URL("/api/refresh/", baseUrl).toString();
+  const refreshPath = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/refresh/`;
+  const refreshUrl = new URL(refreshPath, baseUrl).toString();
   const maxAttempts = positiveIntegerFromEnv(
     process.env.REFRESH_MAX_ATTEMPTS,
     DEFAULT_MAX_ATTEMPTS,

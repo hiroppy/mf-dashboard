@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { withBasePath } from "../../lib/base-path";
 import { extractGroupIdFromPath } from "../../lib/url";
 import { IconButton } from "../ui/icon-button";
 import { ActionIcons } from "./action-icons";
@@ -48,7 +49,7 @@ export function Header({ groups, defaultGroupId, notifications }: HeaderProps) {
             className="lg:hidden shrink-0"
           />
           <Image
-            src="/logo.png"
+            src={withBasePath("/logo.png")}
             alt="Logo"
             width={758}
             height={708}

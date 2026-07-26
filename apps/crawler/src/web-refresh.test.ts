@@ -53,6 +53,21 @@ describe("notifyWebRefresh", () => {
     });
   });
 
+  test("base path 配下の refresh endpoint へ通知する", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.WEB_URL = "http://web:8765";
+    process.env.NEXT_PUBLIC_BASE_PATH = "/dashboard";
+    process.env.REFRESH_TOKEN = "refresh-token";
+
+    await notifyWebRefresh();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://web:8765/dashboard/api/refresh/",
+      expect.any(Object),
+    );
+  });
+
   test("失敗後に REFRESH_RETRY_DELAY 秒待ってリトライする", async () => {
     vi.useFakeTimers();
     const fetchMock = vi
