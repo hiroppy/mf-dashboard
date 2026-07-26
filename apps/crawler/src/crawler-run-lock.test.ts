@@ -476,6 +476,36 @@ describe("crawler run lock", () => {
     );
   });
 
+  test("keeps an old identified lock when its live process identity cannot be re-read", async () => {
+    const startedAt = new Date(Date.now() - 120_000).toISOString();
+    await writeFile(
+      lockPath,
+      JSON.stringify({
+        id: "live-lock",
+        pid: process.pid,
+        pidStartedAt: "recorded-process-start",
+        source: "scheduled",
+        startedAt,
+      }),
+    );
+    const options = {
+      getPidStartedAt: () => null,
+      lockPath,
+      pidExists: () => true,
+      staleMs: 1_000,
+    };
+
+    await expect(getCrawlerRunState(options)).resolves.toEqual({
+      running: true,
+      pid: process.pid,
+      source: "scheduled",
+      startedAt,
+    });
+    await expect(acquireCrawlerRunLock("manual", options)).rejects.toBeInstanceOf(
+      CrawlerAlreadyRunningError,
+    );
+  });
+
   test("clears a lock when the recorded PID was reused by a restarted process", async () => {
     await writeFile(
       lockPath,

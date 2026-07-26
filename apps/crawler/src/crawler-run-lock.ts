@@ -278,14 +278,12 @@ function isStaleLock(
     return true;
   }
 
-  if (record.pidStartedAt) {
-    const currentPidStartedAt = options.getPidStartedAt(record.pid);
-    if (currentPidStartedAt) {
-      return currentPidStartedAt !== record.pidStartedAt;
-    }
+  if (!record.pidStartedAt) {
+    return isExpired(record.startedAt, options.staleMs);
   }
 
-  return isExpired(record.startedAt, options.staleMs);
+  const currentPidStartedAt = options.getPidStartedAt(record.pid);
+  return currentPidStartedAt ? currentPidStartedAt !== record.pidStartedAt : false;
 }
 
 function isStaleSnapshot(
