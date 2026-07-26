@@ -96,8 +96,6 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-`.env.example`にはDockerイメージをビルドできるサンプル値が入っているが、そのままでは認証や公開環境への接続には使用できない。`docker compose up`を実行する前に、以下の必須値を実際の環境の値へ置き換える。
-
 この時点では、次の値を`.env`へ設定する。
 
 ```dotenv
@@ -223,7 +221,7 @@ docker compose build
 docker compose up -d
 ```
 
-`docker compose config --quiet`が何も表示せず終了すれば、Composeが必要とする環境変数は空ではない。値が実際のCloudflare環境と一致するかまでは検証しないため、`.env.example`の`replace-with-...`や`example.com`を実運用で残さない。`required variable ... is missing a value`と表示された場合は、メッセージに示されたキーが`.env`に存在し、`=`の右側が空でないことを確認する。
+`docker compose config --quiet`が何も表示せず終了すれば、Composeが必要とする環境変数は設定済みである。`required variable ... is missing a value`と表示された場合は、メッセージに示されたキーが`.env`に存在し、`=`の右側が空でないことを確認する。
 
 Terraformの適用が成功し、`secrets/cloudflared-token`が作成されたことを確認してからDocker Composeを起動する。`dc`などのシェルエイリアスは環境によって存在しないため、このガイドでは正式な`docker compose`コマンドを使用する。
 

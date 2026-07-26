@@ -33,6 +33,7 @@ jobs:
     env:
       CLOUDFLARE_ACCESS_AUD: ci-access-audience
       CLOUDFLARE_ACCESS_TEAM_DOMAIN: ci.cloudflareaccess.com
+      DASHBOARD_URL: https://dashboard.example.com
       REFRESH_TOKEN: ci-refresh-token
     strategy:
       fail-fast: false

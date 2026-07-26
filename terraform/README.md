@@ -41,7 +41,7 @@ CLOUDFLARE_ACCESS_TEAM_DOMAIN=<team-name>.cloudflareaccess.com
 CLOUDFLARE_ACCESS_AUD=<上のコマンドで表示された値>
 ```
 
-Team domainはCloudflare Zero Trustで確認できる`cloudflareaccess.com`で終わる値であり、公開先の独自ドメインとは異なる。`CLOUDFLARE_ACCESS_AUD`を含むComposeの必須値を設定したら、リポジトリルートで`docker compose config --quiet`を実行し、必須値が空でないことを検証する。このコマンドは`.env.example`のサンプル値が実際のCloudflare環境と一致するかまでは検証しない。
+Team domainはCloudflare Zero Trustで確認できる`cloudflareaccess.com`で終わる値であり、公開先の独自ドメインとは異なる。`CLOUDFLARE_ACCESS_AUD`を含むComposeの必須値を設定したら、リポジトリルートで`docker compose config --quiet`を実行して設定を検証する。
 
 `Output "access_application_aud" not found`と表示された場合は、最新コードで`terraform plan`を確認してから`terraform apply`し、outputをTerraform stateへ反映する。
 
