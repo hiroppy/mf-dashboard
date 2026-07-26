@@ -30,6 +30,10 @@ jobs:
   docker-build:
     name: Docker build (${{ matrix.app }})
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCESS_AUD: ci-access-audience
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ci.cloudflareaccess.com
+      REFRESH_TOKEN: ci-refresh-token
     strategy:
       fail-fast: false
       matrix:
