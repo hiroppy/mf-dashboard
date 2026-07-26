@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
-    "dev:prod": "DB_PATH=../../data/moneyforward.db CRAWLER_URL=http://127.0.0.1:8766 next dev",
+    "dev:prod": "DB_PATH=../../data/moneyforward.db CRAWLER_URL=http://127.0.0.1:8766 ALLOW_LOCAL_AUTH_BYPASS=true next dev --hostname 127.0.0.1",
     "build": "next build",
     "build:demo": "DB_PATH=../../data/demo.db DEMO_MODE=true next build",
     "start": "next start",

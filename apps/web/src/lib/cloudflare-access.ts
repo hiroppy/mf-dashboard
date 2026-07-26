@@ -3,6 +3,15 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 let cachedTeamDomain: string | null = null;
 let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
+function hasLocalDevelopmentAccess(request: Request): boolean {
+  if (process.env.NODE_ENV !== "development" || process.env.ALLOW_LOCAL_AUTH_BYPASS !== "true") {
+    return false;
+  }
+
+  const hostname = new URL(request.url).hostname;
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
 function getTeamDomain(): string | null {
   const configuredDomain = process.env.CLOUDFLARE_ACCESS_TEAM_DOMAIN?.trim();
   if (!configuredDomain) return null;
@@ -29,7 +38,7 @@ function getJwks(teamDomain: string): ReturnType<typeof createRemoteJWKSet> {
 }
 
 export async function hasValidCloudflareAccess(request: Request): Promise<boolean> {
-  if (process.env.DEMO_MODE === "true") return true;
+  if (process.env.DEMO_MODE === "true" || hasLocalDevelopmentAccess(request)) return true;
 
   const teamDomain = getTeamDomain();
   const audience = process.env.CLOUDFLARE_ACCESS_AUD?.trim();
