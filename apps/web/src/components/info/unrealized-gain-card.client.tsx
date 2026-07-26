@@ -1,7 +1,7 @@
 "use client";
 
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { TreemapChart } from "../charts/treemap-chart";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -72,12 +72,67 @@ function groupSmallHoldings(
 
 const ALL_FILTER = "__all__";
 
+interface HoldingsFilterContextValue {
+  selectedFilter: string;
+  setSelectedFilter: (value: string) => void;
+}
+
+const HoldingsFilterContext = createContext<HoldingsFilterContextValue | null>(null);
+
+export function HoldingsFilterProvider({
+  children,
+  filterAvailable = true,
+}: {
+  children: ReactNode;
+  filterAvailable?: boolean;
+}) {
+  const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
+
+  useEffect(() => {
+    if (!filterAvailable) {
+      setSelectedFilter(ALL_FILTER);
+    }
+  }, [filterAvailable]);
+
+  return (
+    <HoldingsFilterContext value={{ selectedFilter, setSelectedFilter }}>
+      {children}
+    </HoldingsFilterContext>
+  );
+}
+
+export function useHoldingsFilter() {
+  return useContext(HoldingsFilterContext);
+}
+
+export function HoldingsFilterReset() {
+  const setSelectedFilter = useHoldingsFilter()?.setSelectedFilter;
+
+  useEffect(() => {
+    setSelectedFilter?.(ALL_FILTER);
+  }, [setSelectedFilter]);
+
+  return null;
+}
+
 export function UnrealizedGainCardClient({
   holdings,
   filterOptions,
   hideFilter = false,
 }: UnrealizedGainCardClientProps) {
-  const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
+  const sharedFilter = useHoldingsFilter();
+  const [localFilter, setLocalFilter] = useState(ALL_FILTER);
+  const selectedFilter = sharedFilter?.selectedFilter ?? localFilter;
+  const setSelectedFilter = sharedFilter?.setSelectedFilter ?? setLocalFilter;
+
+  useEffect(() => {
+    if (
+      selectedFilter !== ALL_FILTER &&
+      !filterOptions.some((option) => option.value === selectedFilter)
+    ) {
+      setSelectedFilter(ALL_FILTER);
+    }
+  }, [filterOptions, selectedFilter, setSelectedFilter]);
 
   const filteredHoldings = useMemo(() => {
     if (selectedFilter === ALL_FILTER) {
