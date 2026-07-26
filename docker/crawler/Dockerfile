@@ -1,4 +1,4 @@
-FROM node:22.23.1-bookworm-slim
+FROM node:24.18.0-bookworm-slim
 WORKDIR /app
 ENV PNPM_HOME=/pnpm \
     COREPACK_HOME=/pnpm/corepack \
