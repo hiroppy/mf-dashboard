@@ -90,6 +90,49 @@ describe("useTransactionFiltering", () => {
     });
   });
 
+  describe("年フィルタ", () => {
+    const transactions = [
+      createTransaction({ id: 1, date: "2026-01-01", category: "2026年カテゴリー" }),
+      createTransaction({ id: 2, date: "2025-12-31", category: "2025年カテゴリー" }),
+      createTransaction({ id: 3, date: "2025-01-01", category: "2025年カテゴリー" }),
+      createTransaction({ id: 4, date: "2024-12-31", category: "2024年カテゴリー" }),
+    ];
+
+    it("利用可能な年を降順で返し、最新年を初期選択する", () => {
+      const { result } = renderHook(() =>
+        useTransactionFiltering({
+          ...defaultOptions,
+          transactions,
+          yearFilterEnabled: true,
+        }),
+      );
+
+      expect(result.current.availableYears).toEqual(["2026", "2025", "2024"]);
+      expect(result.current.selectedYear).toBe("2026");
+      expect(result.current.categories).toEqual(["2026年カテゴリー"]);
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+    });
+
+    it("選択年の年初から年末までに絞り込み、ページを先頭に戻す", () => {
+      const { result } = renderHook(() =>
+        useTransactionFiltering({
+          ...defaultOptions,
+          transactions,
+          yearFilterEnabled: true,
+        }),
+      );
+
+      act(() => {
+        result.current.setCurrentPage(2);
+        result.current.handleYearChange("2025");
+      });
+
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.categories).toEqual(["2025年カテゴリー"]);
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
+    });
+  });
+
   describe("KPI計算", () => {
     it("収入と支出の合計を計算する", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));

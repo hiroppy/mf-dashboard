@@ -17,6 +17,14 @@ export interface TransactionFilters {
   date: string | null;
 }
 
+export function filterTransactionsByYear(
+  transactions: Transaction[],
+  year: string | null,
+): Transaction[] {
+  if (!year) return transactions;
+  return transactions.filter((transaction) => transaction.date.startsWith(`${year}-`));
+}
+
 export function filterTransactions(
   transactions: Transaction[],
   filters: TransactionFilters,
