@@ -168,6 +168,22 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "予算は313,235円です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
   test("rejects a direct negation of the expected monetary claim", () => {
@@ -176,6 +192,46 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円未満です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("allows grounded breakdown amounts after an expected total", () => {
+    const chart = {
+      title: "食費",
+      chartType: "pie" as const,
+      unit: "currency" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+      data: [
+        { label: "食料品", values: [24_833] },
+        { label: "外食", values: [12_214] },
+        { label: "カフェ", values: [4_790] },
+      ],
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "食費は41,837円です。内訳は食料品24,833円、外食12,214円、カフェ4,790円です。",
+          charts: [chart],
+        }),
+        {
+          config: {
+            expectedTextPairs: [["食費", "41837"]],
+            expectedCharts: [
+              {
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("finds a value after a repeated heading label", () => {
@@ -320,6 +376,7 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: extraRow }), {
         config: {
           exactMarkdownRows: true,
+          expectedMarkdownColumns: ["日付", "内容", "金額"],
           expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
         },
       }),
@@ -730,6 +787,23 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("rejects unverified columns in an exact Markdown table", () => {
+    const text = [
+      "| 日付 | 内容 | 金額 | 口座 |",
+      "| --- | --- | ---: | --- |",
+      "| 2026-07-03 | サンマルクカフェ | 761円 | 架空銀行 |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text }), {
+        config: {
+          exactMarkdownRows: true,
+          expectedMarkdownColumns: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("列") });
+  });
+
   test("rejects a negated no-data expression", () => {
     const pattern =
       "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)(?!とは(?:言え|いえ)ません|わけでは(?:ありません|ない))";
@@ -773,6 +847,24 @@ describe("assertFinanceChatOutput", () => {
         output({
           fixtureResult: { rows: [{ amount: null }], truncated: false },
           databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date < '2030-01'" },
+              output: { rows: [{ amount: 1_000 }], truncated: false },
+            },
             {
               input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
               output: { rows: [], truncated: false },
