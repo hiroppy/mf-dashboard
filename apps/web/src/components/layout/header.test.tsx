@@ -62,7 +62,9 @@ describe("Header", () => {
     );
 
     expect(screen.getByText("Group B")).not.toBeNull();
-    expect(screen.getByText("4/30 15:20")).not.toBeNull();
+    expect(
+      screen.getByText((_content, element) => element?.tagName === "TIME").getAttribute("datetime"),
+    ).toBe("2025-04-30T15:20:00");
     expect(screen.getByRole("button", { name: "更新サービス未接続" })).not.toBeNull();
   });
 
@@ -76,7 +78,9 @@ describe("Header", () => {
     );
 
     expect(screen.getByText("Group A")).not.toBeNull();
-    expect(screen.getByText("4/30 10:30")).not.toBeNull();
+    expect(
+      screen.getByText((_content, element) => element?.tagName === "TIME").getAttribute("datetime"),
+    ).toBe("2025-04-30T10:30:00");
     expect(screen.getByRole("button", { name: "更新サービス未接続" })).not.toBeNull();
   });
 });
