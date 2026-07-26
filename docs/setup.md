@@ -112,19 +112,19 @@ DASHBOARD_URL=https://dashboard.example.com
 
 `CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.3で設定する。
 
-| `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                           |
-| -------------------------------------------- | ---- | -------------------- | ------------------------------------------------------------------------------ |
-| `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                  |
-| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                     |
-| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                     |
-| `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                 |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                            |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                         |
-| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須               |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                      |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                    |
-| `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000` |
-| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない       |
+| `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                             |
+| -------------------------------------------- | ---- | -------------------- | -------------------------------------------------------------------------------- |
+| `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                    |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                       |
+| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
+| `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                              |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                           |
+| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
+| `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000`   |
+| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない         |
 
 Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
 
@@ -265,9 +265,9 @@ terraform -chdir=terraform output -raw tunnel_id
 1. 通知先チャンネルの「連携サービス」からIncoming Webhookを作成する
 2. `.env`の`DISCORD_WEBHOOK_URL`へ、発行された`https://discord.com/api/webhooks/...`形式のURLを設定する
 
-### 家計AIチャット
+### 財務インサイトと家計AIチャット
 
-家計AIチャットを利用する場合は、`.env`に次の3項目を設定する。いずれかが空の場合、チャットUIは表示されず、家計データや外部AI APIへ接続しない。
+財務インサイトと家計AIチャットを利用する場合は、`.env`に次の3項目を設定する。いずれかが空の場合、財務インサイトは生成されず、チャットUIも表示されない。
 
 ```dotenv
 AI_PROVIDER=openai
