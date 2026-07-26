@@ -562,14 +562,22 @@ export default function assertFinanceChatOutput(
         normalizedClaimText.lastIndexOf("？", claim.index),
         normalizedClaimText.lastIndexOf("\n", claim.index),
       ) + 1;
-    const prefix = normalizedClaimText.slice(clauseStart, claim.index);
+    const clausePrefix = normalizedClaimText.slice(clauseStart, claim.index);
+    const bindingStart =
+      Math.max(
+        clauseStart - 1,
+        normalizedClaimText.lastIndexOf("円", claim.index - 1),
+        normalizedClaimText.lastIndexOf("、", claim.index - 1),
+        normalizedClaimText.lastIndexOf("；", claim.index - 1),
+      ) + 1;
+    const bindingPrefix = normalizedClaimText.slice(bindingStart, claim.index);
     const hasLabelBinding = allowedTextPairs.some(
-      ([label, amount]) => amount === claim.amount && prefix.includes(normalize(label)),
+      ([label, amount]) => amount === claim.amount && bindingPrefix.includes(normalize(label)),
     );
     const isExpectedTableAmount =
-      prefix.includes("|") && groundedAmounts.has(claim.amount) && markdownTables.length > 0;
+      clausePrefix.includes("|") && groundedAmounts.has(claim.amount) && markdownTables.length > 0;
     const isExpectedTableSummary =
-      /(?:合計|総額)/.test(prefix) &&
+      /(?:合計|総額)/.test(bindingPrefix) &&
       groundedAmounts.has(claim.amount) &&
       expectedMarkdownAmounts.length > 0;
     return !hasLabelBinding && !isExpectedTableAmount && !isExpectedTableSummary;

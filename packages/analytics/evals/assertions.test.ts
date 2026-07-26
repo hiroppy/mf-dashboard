@@ -184,6 +184,11 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円、予算も313,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
   test("rejects a direct negation of the expected monetary claim", () => {
