@@ -2,7 +2,6 @@ import { isLLMEnabled } from "@mf-dashboard/analytics/config";
 import { getAllGroups, getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
-import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ChatProvider } from "../components/chat/chat-provider";
 import { ChatShell } from "../components/chat/chat-shell";
@@ -10,48 +9,11 @@ import { AccountNotifications } from "../components/info/account-notifications";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
-import { withBasePath } from "../lib/base-path";
 import { parseChatSuggestedPrompts } from "../lib/chat-config";
-import { createMetadataBase } from "../lib/metadata";
+import { createRootMetadata } from "../lib/metadata";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
 
-export const metadata: Metadata = {
-  metadataBase: createMetadataBase(),
-  title: {
-    template: "%s | MoneyForward Me Dashboard",
-    default: "MoneyForward Me Dashboard",
-  },
-  description: "MoneyForward Me のデータを可視化するダッシュボード",
-  manifest: withBasePath("/manifest.webmanifest"),
-  icons: {
-    apple: withBasePath("/apple-touch-icon.png"),
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black",
-    title: "MF Dashboard",
-  },
-  openGraph: {
-    title: "MoneyForward Me Dashboard",
-    description: "MoneyForward Me のデータを可視化するダッシュボード",
-    type: "website",
-    locale: "ja_JP",
-    images: [
-      {
-        url: withBasePath("/logo.png"),
-        width: 758,
-        height: 708,
-        alt: "MoneyForward Me Dashboard",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary",
-    title: "MoneyForward Me Dashboard",
-    description: "MoneyForward Me のデータを可視化するダッシュボード",
-    images: [withBasePath("/logo.png")],
-  },
-};
+export const metadata = createRootMetadata();
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await waitForRuntimeData();

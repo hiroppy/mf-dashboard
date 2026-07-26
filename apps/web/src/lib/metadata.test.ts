@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMetadataBase } from "./metadata";
+import { createMetadataBase, createRootMetadata } from "./metadata";
 
 describe("createMetadataBase", () => {
   it("uses the public demo URL for demo builds", () => {
@@ -34,5 +34,40 @@ describe("createMetadataBase", () => {
     expect(() => createMetadataBase({ NODE_ENV: "production" })).toThrow(
       "DASHBOARD_URL is required for production metadata",
     );
+  });
+});
+
+describe("createRootMetadata", () => {
+  it("uses root-relative asset URLs for root deployments", () => {
+    const metadata = createRootMetadata({ NODE_ENV: "development" });
+
+    expect(metadata.openGraph?.images).toEqual([
+      {
+        url: "/logo.png",
+        width: 758,
+        height: 708,
+        alt: "MoneyForward Me Dashboard",
+      },
+    ]);
+    expect(metadata.twitter?.images).toEqual(["/logo.png"]);
+  });
+
+  it("prefixes asset URLs for subpath deployments", () => {
+    const metadata = createRootMetadata({
+      NODE_ENV: "development",
+      NEXT_PUBLIC_BASE_PATH: "/dashboard",
+    });
+
+    expect(metadata.manifest).toBe("/dashboard/manifest.webmanifest");
+    expect(metadata.icons).toEqual({ apple: "/dashboard/apple-touch-icon.png" });
+    expect(metadata.openGraph?.images).toEqual([
+      {
+        url: "/dashboard/logo.png",
+        width: 758,
+        height: 708,
+        alt: "MoneyForward Me Dashboard",
+      },
+    ]);
+    expect(metadata.twitter?.images).toEqual(["/dashboard/logo.png"]);
   });
 });
