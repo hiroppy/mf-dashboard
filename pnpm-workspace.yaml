@@ -31,6 +31,7 @@ minimumReleaseAgeExclude:
   - workerd
   - wrangler
   - "@ai-sdk/gateway@4.0.22"
+  - recharts@3.10.1
 
 catalog:
   "@stryker-mutator/core": 9.6.1
@@ -40,6 +41,6 @@ catalog:
   "@types/node": 25.9.5
   "@vitest/browser-playwright": 4.1.10
   drizzle-orm: 0.45.2
-  playwright: 1.61.0
+  playwright: 1.62.0
   typescript: 6.0.3
   vitest: 4.1.10

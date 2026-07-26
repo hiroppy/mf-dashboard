@@ -39,6 +39,6 @@ export const CustomClassName: Story = {
   args: {
     href: "https://example.com",
     children: "カスタムスタイル",
-    className: "text-primary font-bold",
+    className: "text-foreground font-bold underline",
   },
 };
