@@ -3,7 +3,7 @@ interface BalanceSheetAsset {
   amount: number;
 }
 
-const ASSET_CATEGORY_ORDER = ["投資信託", "株式(現物)", "預金・現金", "暗号資産"] as const;
+const ASSET_CATEGORY_ORDER = ["投資信託", "株式(現物)", "暗号資産", "預金・現金"] as const;
 
 function getAssetCategoryOrder(category: string): number {
   const index = ASSET_CATEGORY_ORDER.findIndex((orderedCategory) => orderedCategory === category);

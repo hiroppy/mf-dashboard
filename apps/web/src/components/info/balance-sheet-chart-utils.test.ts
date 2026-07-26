@@ -14,8 +14,8 @@ describe("sortBalanceSheetAssets", () => {
     expect(sortBalanceSheetAssets(assets).map(({ category }) => category)).toEqual([
       "投資信託",
       "株式(現物)",
-      "預金・現金",
       "暗号資産",
+      "預金・現金",
       "年金",
     ]);
   });
