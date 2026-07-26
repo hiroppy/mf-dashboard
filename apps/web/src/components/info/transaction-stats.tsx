@@ -1,8 +1,8 @@
 import { getTransactions } from "@mf-dashboard/db";
 import { PieChart as PieChartIcon } from "lucide-react";
-import { consolidateCategories } from "../../lib/aggregation";
-import { PieChart } from "../charts/pie-chart";
 import { EmptyState } from "../ui/empty-state";
+import { createBreakdowns } from "./transaction-stats-utils";
+import { TransactionStatsClient } from "./transaction-stats.client";
 
 interface TransactionStatsProps {
   year: string;
@@ -40,31 +40,19 @@ export async function TransactionStats({ year, groupId }: TransactionStatsProps)
     }
   }
 
-  const expenseByCategory = consolidateCategories(
-    Array.from(expenseCategoryMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value),
-  );
+  const expenseCategories = Array.from(expenseCategoryMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
-  const incomeBySubCategory = consolidateCategories(
-    Array.from(incomeSubCategoryMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value),
-  );
+  const incomeCategories = Array.from(incomeSubCategoryMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
   return (
-    <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-      {incomeBySubCategory.length > 0 && (
-        <PieChart
-          title="収入カテゴリ別内訳"
-          data={incomeBySubCategory}
-          height={280}
-          useCustomColors={false}
-        />
-      )}
-      {expenseByCategory.length > 0 && (
-        <PieChart title="支出カテゴリ別内訳" data={expenseByCategory} height={280} />
-      )}
-    </div>
+    <TransactionStatsClient
+      year={year}
+      income={createBreakdowns(incomeCategories, "income", validTransactions)}
+      expense={createBreakdowns(expenseCategories, "expense", validTransactions)}
+    />
   );
 }
