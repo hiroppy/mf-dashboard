@@ -54,7 +54,7 @@ export const Default: Story = {
         transactions: [
           {
             id: 3,
-            date: "2026-06-12",
+            date: "2026-06-25",
             description: "店舗 A",
             amount: 4500,
             accountName: "カード A",
@@ -102,8 +102,37 @@ export const Default: Story = {
     await expect(descriptions[0]).toHaveTextContent("店舗 B");
     await expect(descriptions[1]).toHaveTextContent("店舗 A");
 
+    const sortSelect = screen.getByRole("combobox", { name: "並び順" });
+    await expect(screen.queryByText("並び順")).toBeNull();
+    await expect(sortSelect).toHaveTextContent("金額順");
+
+    sortSelect.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(sortSelect).toHaveAttribute("aria-expanded", "true"));
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    await waitFor(() => expect(sortSelect).toHaveTextContent("日付順"));
+
+    const dateSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
+    await expect(dateSortedDescriptions[0]).toHaveTextContent("店舗 A");
+    await expect(dateSortedDescriptions[1]).toHaveTextContent("店舗 B");
+    await expect(sortSelect).toHaveTextContent("日付順");
+
+    sortSelect.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(sortSelect).toHaveAttribute("aria-expanded", "true"));
+    await userEvent.keyboard("{ArrowUp}{Enter}");
+    await waitFor(() => expect(sortSelect).toHaveTextContent("金額順"));
+
+    const amountSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
+    await expect(amountSortedDescriptions[0]).toHaveTextContent("店舗 B");
+    await expect(amountSortedDescriptions[1]).toHaveTextContent("店舗 A");
+
     await userEvent.click(screen.getByRole("button", { name: "明細を閉じる" }));
 
     await expect(screen.queryByText("2026年 食費の明細")).toBeNull();
+
+    await userEvent.click(canvas.getByRole("button", { name: /食費/ }));
+
+    await expect(screen.getByRole("combobox", { name: "並び順" })).toHaveTextContent("金額順");
   },
 };
