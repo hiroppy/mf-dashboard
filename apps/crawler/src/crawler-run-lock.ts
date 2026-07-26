@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { link, mkdir, open, readdir, rename, rm } from "node:fs/promises";
@@ -124,6 +125,22 @@ function getLinuxPidStartedAt(pid: number): string | null {
   }
 }
 
+function getPsPidStartedAt(pid: number): string | null {
+  try {
+    const startedAt = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return startedAt || null;
+  } catch {
+    return null;
+  }
+}
+
+function getPidStartedAt(pid: number): string | null {
+  return getLinuxPidStartedAt(pid) ?? getPsPidStartedAt(pid);
+}
+
 function getOptions(options: CrawlerRunLockOptions = {}) {
   return {
     afterLockMutationGuardAcquired: options.afterLockMutationGuardAcquired,
@@ -132,7 +149,7 @@ function getOptions(options: CrawlerRunLockOptions = {}) {
     afterStaleLockQuarantine: options.afterStaleLockQuarantine,
     beforeStaleLockCleanup: options.beforeStaleLockCleanup,
     beforeStaleLockRemoval: options.beforeStaleLockRemoval,
-    getPidStartedAt: options.getPidStartedAt ?? getLinuxPidStartedAt,
+    getPidStartedAt: options.getPidStartedAt ?? getPidStartedAt,
     lockPath: options.lockPath ?? DEFAULT_LOCK_PATH,
     pidExists: options.pidExists ?? defaultPidExists,
     staleMs: options.staleMs ?? getDefaultStaleMs(),
@@ -268,7 +285,7 @@ function isStaleLock(
     }
   }
 
-  return false;
+  return isExpired(record.startedAt, options.staleMs);
 }
 
 function isStaleSnapshot(

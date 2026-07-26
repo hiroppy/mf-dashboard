@@ -335,6 +335,7 @@ describe("crawler run lock", () => {
   test("reports running state while a lock is held and idle after release", async () => {
     const lock = await acquireCrawlerRunLock("manual", { lockPath });
 
+    expect(lock.record.pidStartedAt).not.toBeNull();
     const state = await getCrawlerRunState({ lockPath });
     expect(state.running).toBe(true);
     expect(state.pid).toBe(process.pid);
@@ -414,16 +415,15 @@ describe("crawler run lock", () => {
     await lock.release();
   });
 
-  test("keeps an old lock when its live process start time is unavailable", async () => {
-    const startedAt = new Date(Date.now() - 2_000).toISOString();
+  test("expires an old lock when its live PID identity is unavailable", async () => {
     await writeFile(
       lockPath,
       JSON.stringify({
-        id: "live-lock",
-        pid: process.pid,
+        id: "stale-lock",
+        pid: 123,
         pidStartedAt: null,
         source: "manual",
-        startedAt,
+        startedAt: new Date(Date.now() - 2_000).toISOString(),
       }),
     );
 
@@ -435,19 +435,15 @@ describe("crawler run lock", () => {
         staleMs: 1_000,
       }),
     ).resolves.toEqual({
-      running: true,
-      pid: process.pid,
-      source: "manual",
-      startedAt,
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
     });
-    await expect(
-      acquireCrawlerRunLock("scheduled", {
-        getPidStartedAt: () => null,
-        lockPath,
-        pidExists: () => true,
-        staleMs: 1_000,
-      }),
-    ).rejects.toBeInstanceOf(CrawlerAlreadyRunningError);
+
+    const lock = await acquireCrawlerRunLock("scheduled", { lockPath });
+    expect(lock.record.source).toBe("scheduled");
+    await lock.release();
   });
 
   test("keeps an old lock when its live process start time still matches", async () => {
