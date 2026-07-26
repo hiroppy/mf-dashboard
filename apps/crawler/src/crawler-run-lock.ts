@@ -268,7 +268,7 @@ function isStaleLock(
     }
   }
 
-  return isExpired(record.startedAt, options.staleMs);
+  return false;
 }
 
 function isStaleSnapshot(

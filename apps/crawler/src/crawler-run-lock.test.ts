@@ -414,29 +414,40 @@ describe("crawler run lock", () => {
     await lock.release();
   });
 
-  test("clears a stale lock even when its recorded process still exists", async () => {
+  test("keeps an old lock when its live process start time is unavailable", async () => {
+    const startedAt = new Date(Date.now() - 2_000).toISOString();
     await writeFile(
       lockPath,
       JSON.stringify({
-        id: "stale-lock",
+        id: "live-lock",
         pid: process.pid,
+        pidStartedAt: null,
         source: "manual",
-        startedAt: new Date(Date.now() - 2_000).toISOString(),
+        startedAt,
       }),
     );
 
     await expect(
-      getCrawlerRunState({ lockPath, pidExists: () => true, staleMs: 1_000 }),
+      getCrawlerRunState({
+        getPidStartedAt: () => null,
+        lockPath,
+        pidExists: () => true,
+        staleMs: 1_000,
+      }),
     ).resolves.toEqual({
-      running: false,
-      pid: null,
-      source: null,
-      startedAt: null,
+      running: true,
+      pid: process.pid,
+      source: "manual",
+      startedAt,
     });
-
-    const lock = await acquireCrawlerRunLock("scheduled", { lockPath });
-    expect(lock.record.source).toBe("scheduled");
-    await lock.release();
+    await expect(
+      acquireCrawlerRunLock("scheduled", {
+        getPidStartedAt: () => null,
+        lockPath,
+        pidExists: () => true,
+        staleMs: 1_000,
+      }),
+    ).rejects.toBeInstanceOf(CrawlerAlreadyRunningError);
   });
 
   test("keeps an old lock when its live process start time still matches", async () => {
@@ -524,11 +535,12 @@ describe("crawler run lock", () => {
       getPidStartedAt: () => "current-process-start",
       lockPath,
       pidExists: () => {
+        const replacementWasAlreadyInstalled = replaced;
         if (!replaced) {
           writeFileSync(lockPath, JSON.stringify(replacement));
           replaced = true;
         }
-        return true;
+        return replacementWasAlreadyInstalled;
       },
       staleMs: 60_000,
     });
