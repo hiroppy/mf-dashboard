@@ -1,8 +1,12 @@
 import { getTransactions } from "@mf-dashboard/db";
 import { PieChart as PieChartIcon } from "lucide-react";
 import { consolidateCategories } from "../../lib/aggregation";
-import { PieChart } from "../charts/pie-chart";
 import { EmptyState } from "../ui/empty-state";
+import {
+  type CategoryBreakdown,
+  type CategoryTransaction,
+  TransactionStatsClient,
+} from "./transaction-stats.client";
 
 interface TransactionStatsProps {
   year: string;
@@ -40,31 +44,70 @@ export async function TransactionStats({ year, groupId }: TransactionStatsProps)
     }
   }
 
-  const expenseByCategory = consolidateCategories(
-    Array.from(expenseCategoryMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value),
-  );
+  const expenseCategories = Array.from(expenseCategoryMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
-  const incomeBySubCategory = consolidateCategories(
-    Array.from(incomeSubCategoryMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value),
-  );
+  const incomeCategories = Array.from(incomeSubCategoryMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const createBreakdowns = (
+    categories: Array<{ name: string; value: number }>,
+    type: "income" | "expense",
+  ): CategoryBreakdown[] => {
+    const consolidated = consolidateCategories(categories);
+    const visibleNames = new Set(
+      consolidated
+        .filter((category) => category.name !== "その他")
+        .map((category) => category.name),
+    );
+
+    return consolidated.map((category) => {
+      const memberNames =
+        category.name === "その他"
+          ? categories
+              .filter((item) => item.name === "その他" || !visibleNames.has(item.name))
+              .map((item) => item.name)
+          : [category.name];
+      const memberNameSet = new Set(memberNames);
+      const matchingTransactions = validTransactions
+        .filter((transaction) => {
+          if (transaction.type !== type) return false;
+          const transactionCategory =
+            type === "income"
+              ? (transaction.subCategory ?? "その他")
+              : (transaction.category ?? "その他");
+          return memberNameSet.has(transactionCategory);
+        })
+        .map(
+          (transaction): CategoryTransaction => ({
+            id: transaction.id,
+            date: transaction.date,
+            description: transaction.description,
+            amount: transaction.amount,
+            accountName: transaction.accountName,
+            category:
+              type === "income"
+                ? (transaction.subCategory ?? "その他")
+                : (transaction.category ?? "その他"),
+          }),
+        )
+        .sort((a, b) => b.amount - a.amount);
+
+      return {
+        ...category,
+        categories: memberNames,
+        transactions: matchingTransactions,
+      };
+    });
+  };
 
   return (
-    <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-      {incomeBySubCategory.length > 0 && (
-        <PieChart
-          title="収入カテゴリ別内訳"
-          data={incomeBySubCategory}
-          height={280}
-          useCustomColors={false}
-        />
-      )}
-      {expenseByCategory.length > 0 && (
-        <PieChart title="支出カテゴリ別内訳" data={expenseByCategory} height={280} />
-      )}
-    </div>
+    <TransactionStatsClient
+      year={year}
+      income={createBreakdowns(incomeCategories, "income")}
+      expense={createBreakdowns(expenseCategories, "expense")}
+    />
   );
 }
