@@ -19,6 +19,10 @@ interface AssertionContext {
     expectedToolRoutes?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    databaseEvidence?: {
+      expectNoData?: boolean;
+      expectedValues?: Array<number | string>;
+    };
   };
 }
 
@@ -31,8 +35,14 @@ interface AssertionResult {
 const evaluationOutputSchema = z.object({
   text: z.string(),
   charts: z.array(financeChartSchema),
+  databaseQueries: z.array(z.object({ input: z.unknown(), output: z.unknown() })),
   toolRoutes: z.array(z.string()),
   textLinks: z.array(z.string()),
+});
+
+const databaseResultSchema = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())),
+  truncated: z.boolean(),
 });
 
 function fail(reason: string): AssertionResult {
@@ -63,13 +73,38 @@ function getMissingTextPairs(
       }, normalizedText.length);
       const segment = normalizedText.slice(valueStart, valueEnd);
       const hasExpectedValue = /^\d+$/.test(normalizedValue)
-        ? new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment)
+        ? getMonetaryClaims(segment).includes(Number(normalizedValue))
         : segment.includes(normalizedValue);
       if (hasExpectedValue) return false;
 
       labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
     }
     return true;
+  });
+}
+
+function getMonetaryClaims(segment: string): number[] {
+  const normalizedSegment = segment.replace(
+    /[¥￥](マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?/g,
+    "$1$2$3円",
+  );
+  const correctionPattern = /ではなく|でなく|ではない|ではありません|誤り|訂正|実際は|正しくは/g;
+  const corrections = [...normalizedSegment.matchAll(correctionPattern)];
+  const lastCorrection = corrections.at(-1);
+  const claims =
+    lastCorrection?.index === undefined
+      ? normalizedSegment
+      : normalizedSegment.slice(lastCorrection.index + lastCorrection[0].length);
+  const scales: Record<string, number> = {
+    千: 1_000,
+    万: 10_000,
+    億: 100_000_000,
+    兆: 1_000_000_000_000,
+  };
+
+  return [...claims.matchAll(/(マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?円/g)].map((match) => {
+    const sign = match[1] ? -1 : 1;
+    return sign * Number(match[2]) * (scales[match[3] ?? ""] ?? 1);
   });
 }
 
@@ -187,6 +222,38 @@ export default function assertFinanceChatOutput(
       ))
   ) {
     return fail("データのない回答に金額が含まれています。");
+  }
+
+  const databaseEvidence = config.databaseEvidence;
+  if (databaseEvidence) {
+    const databaseResults = actual.databaseQueries.flatMap((query) => {
+      const parsedResult = databaseResultSchema.safeParse(query.output);
+      return parsedResult.success && !parsedResult.data.truncated ? [parsedResult.data] : [];
+    });
+    if (databaseResults.length === 0) {
+      return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
+    }
+
+    const resultValues = databaseResults.flatMap((result) =>
+      result.rows.flatMap((row) => Object.values(row).map((value) => normalize(String(value)))),
+    );
+    const missingValues = (databaseEvidence.expectedValues ?? []).filter(
+      (value) => !resultValues.includes(normalize(String(value))),
+    );
+    if (missingValues.length > 0) {
+      return fail(`queryDatabase結果に期待する値がありません: ${missingValues.join(", ")}`);
+    }
+
+    const hasNoDataResult = databaseResults.some(
+      (result) =>
+        result.rows.length === 0 ||
+        result.rows.every((row) =>
+          Object.values(row).every((value) => value === 0 || value === null),
+        ),
+    );
+    if (databaseEvidence.expectNoData && !hasNoDataResult) {
+      return fail("queryDatabase結果がデータなしを裏付けていません。");
+    }
   }
 
   const expectedCharts = config.expectedCharts ?? [];

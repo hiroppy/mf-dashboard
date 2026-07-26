@@ -15,6 +15,8 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        databaseEvidence:
+          expectedValues: ["313235", "219894"]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: 食費の内訳を正しい円グラフで返す
@@ -39,6 +41,8 @@
               - { label: カフェ, values: [4790] }
         expectedToolRoutes: []
         expectedTextLinks: []
+        databaseEvidence:
+          expectedValues: ["24833", "12214", "4790"]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: 指定日の食費明細をMarkdown表で返す
@@ -55,6 +59,8 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        databaseEvidence:
+          expectedValues: ["2026-07-03", サンマルクカフェ, "761"]
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: 収支画面へのリンクがroute toolの結果と一致する
@@ -87,4 +93,6 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        databaseEvidence:
+          expectNoData: true
         forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]

@@ -43,13 +43,30 @@ describe("toEvaluationOutput", () => {
         text: "[収支を見る](/0/cf/2026-07)",
         steps: [
           {
-            toolResults: [
-              { toolName: "presentChart", output: chart },
+            toolCalls: [
               {
+                input: { sql: "SELECT amount FROM transactions" },
+                toolCallId: "query-1",
+                toolName: "queryDatabase",
+              },
+            ],
+            toolResults: [
+              {
+                toolCallId: "query-1",
+                toolName: "queryDatabase",
+                output: { rows: [{ amount: 100 }], truncated: false },
+              },
+              { toolCallId: "chart-1", toolName: "presentChart", output: chart },
+              {
+                toolCallId: "route-1",
                 toolName: "getFinanceDashboardRoute",
                 output: { href: "/0/cf/2026-07" },
               },
-              { toolName: "getFinanceDashboardRoute", output: { href: "https://example.com" } },
+              {
+                toolCallId: "route-2",
+                toolName: "getFinanceDashboardRoute",
+                output: { href: "https://example.com" },
+              },
             ],
           },
         ],
@@ -57,6 +74,12 @@ describe("toEvaluationOutput", () => {
     ).toEqual({
       text: "[収支を見る](/0/cf/2026-07)",
       charts: [chart],
+      databaseQueries: [
+        {
+          input: { sql: "SELECT amount FROM transactions" },
+          output: { rows: [{ amount: 100 }], truncated: false },
+        },
+      ],
       toolRoutes: ["/0/cf/2026-07"],
       textLinks: ["/0/cf/2026-07"],
     });

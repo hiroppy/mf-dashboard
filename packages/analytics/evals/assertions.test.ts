@@ -5,6 +5,7 @@ function output(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
     charts: [],
+    databaseQueries: [],
     toolRoutes: [],
     textLinks: [],
     ...overrides,
@@ -51,6 +52,18 @@ describe("assertFinanceChatOutput", () => {
           },
         },
       ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test.each([
+    "収入は-313,235円です。",
+    "収入は313,235万円です。",
+    "収入は313,235円ではなく、実際は0円です。",
+  ])("rejects a materially different monetary claim: %s", (text) => {
+    expect(
+      assertFinanceChatOutput(output({ text }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
     ).toMatchObject({ pass: false });
   });
 
@@ -193,5 +206,58 @@ describe("assertFinanceChatOutput", () => {
     expect(assertFinanceChatOutput(JSON.stringify({ text: "missing fields" }), {})).toMatchObject({
       pass: false,
     });
+  });
+
+  test("requires expected facts to be backed by database results", () => {
+    const context = {
+      config: { databaseEvidence: { expectedValues: ["313235"] } },
+    };
+    expect(assertFinanceChatOutput(output(), context)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("queryDatabase"),
+    });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT income FROM transactions" },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("requires an empty or zero database result for no-data claims", () => {
+    const context = { config: { databaseEvidence: { expectNoData: true } } };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions" },
+              output: { rows: [{ amount: 1 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions" },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: true });
   });
 });
