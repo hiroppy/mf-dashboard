@@ -121,6 +121,25 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("rejects an additional ungrounded monetary claim", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "予算は999,999円です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
   test("rejects a direct negation of the expected monetary claim", () => {
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円ではありません。" }), {

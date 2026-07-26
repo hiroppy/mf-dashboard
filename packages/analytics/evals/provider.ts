@@ -100,9 +100,7 @@ function getTextLinks(text: string): string[] {
   const markdownLinks = [...renderedText.matchAll(/(?<!!)\[[^\]]+]\(([^)\s]+)\)/g)].map(
     (match) => match[1]!,
   );
-  const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
-    (match) => match[1]!,
-  );
+  const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
   const rawUrls = [...renderedText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );

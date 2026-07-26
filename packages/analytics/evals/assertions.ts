@@ -53,6 +53,12 @@ const databaseResultSchema = z.object({
 });
 
 const databaseQueryInputSchema = z.object({ sql: z.string() });
+const monetaryScales: Record<string, number> = {
+  千: 1_000,
+  万: 10_000,
+  億: 100_000_000,
+  兆: 1_000_000_000_000,
+};
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
@@ -112,11 +118,12 @@ function hasDirectMonetaryNegation(segment: string): boolean {
   return /(?:円|[¥￥]\d[\d,.]*)(?:ではありません|ではない|じゃない|でない)/.test(segment);
 }
 
+function normalizeYenPrefix(segment: string): string {
+  return segment.replace(/[¥￥](マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?/g, "$1$2$3円");
+}
+
 function getMonetaryClaims(segment: string): number[] {
-  const normalizedSegment = segment.replace(
-    /[¥￥](マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?/g,
-    "$1$2$3円",
-  );
+  const normalizedSegment = normalizeYenPrefix(segment);
   const correctionPattern = /ではなく|でなく|ではない|ではありません|誤り|訂正|実際は|正しくは/g;
   const monetaryPattern = /(マイナス|[-−])?\d+(?:\.\d+)?(?:千|万|億|兆)?円/;
   const corrections = [...normalizedSegment.matchAll(correctionPattern)].filter((match) =>
@@ -127,16 +134,22 @@ function getMonetaryClaims(segment: string): number[] {
     lastCorrection?.index === undefined
       ? normalizedSegment
       : normalizedSegment.slice(lastCorrection.index + lastCorrection[0].length);
-  const scales: Record<string, number> = {
-    千: 1_000,
-    万: 10_000,
-    億: 100_000_000,
-    兆: 1_000_000_000_000,
-  };
-
   return [...claims.matchAll(/(マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?円/g)].map((match) => {
     const sign = match[1] ? -1 : 1;
-    return sign * Number(match[2]) * (scales[match[3] ?? ""] ?? 1);
+    return sign * Number(match[2]) * (monetaryScales[match[3] ?? ""] ?? 1);
+  });
+}
+
+function getAssertedMonetaryClaims(text: string): number[] {
+  const normalizedText = normalizeYenPrefix(text.normalize("NFKC")).replace(/,/g, "");
+  const monetaryPattern = /(マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?円/g;
+  return [...normalizedText.matchAll(monetaryPattern)].flatMap((match) => {
+    const suffix = normalizedText.slice(match.index! + match[0].length);
+    if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
+      return [];
+    }
+    const sign = match[1] ? -1 : 1;
+    return [sign * Number(match[2]) * (monetaryScales[match[3] ?? ""] ?? 1)];
   });
 }
 
@@ -465,6 +478,27 @@ export default function assertFinanceChatOutput(
     hasUngroundedAmountOutsideMarkdownTables(actual.text, config.expectedMarkdownRows ?? [])
   ) {
     return fail("Markdown表の外に検証できない金額があります。");
+  }
+
+  const groundedAmounts = new Set([
+    ...(config.expectedTextPairs ?? [])
+      .map(([, value]) => normalize(value))
+      .filter((value) => /^\d+$/.test(value))
+      .map(Number),
+    ...(config.expectedCharts ?? []).flatMap((chart) =>
+      chart.data.flatMap((datum) => datum.values),
+    ),
+    ...(config.expectedMarkdownRows ?? [])
+      .flat()
+      .map(normalize)
+      .filter((value) => /^\d+$/.test(value))
+      .map(Number),
+  ]);
+  const ungroundedAmounts = getAssertedMonetaryClaims(actual.text).filter(
+    (amount) => !groundedAmounts.has(amount),
+  );
+  if ((config.expectedTextPairs ?? []).length > 0 && ungroundedAmounts.length > 0) {
+    return fail(`本文に根拠のない金額があります: ${ungroundedAmounts.join(", ")}`);
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];

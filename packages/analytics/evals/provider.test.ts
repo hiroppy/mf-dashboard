@@ -111,6 +111,16 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("does not treat an angle-bracketed relative route as an autolink", () => {
+    const output = toEvaluationOutput({
+      text: "<../0/cf/2026-07>\n</0/cf/2026-07>",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
+  });
+
   test("collects text from every generation step", () => {
     expect(
       toEvaluationOutput({
