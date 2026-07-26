@@ -112,6 +112,14 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   const accountIdMap = await buildAccountIdMap(db);
   log(`  - accountIdMap: ${accountIdMap.size} entries`);
 
+  const currentAccountIdMap = new Map<string, number>();
+  for (const account of data.registeredAccounts.accounts) {
+    const accountId = accountIdMap.get(account.mfId);
+    if (accountId === undefined) continue;
+    currentAccountIdMap.set(account.mfId, accountId);
+    currentAccountIdMap.set(account.name, accountId);
+  }
+
   // 4. Group-account links (バルク処理)
   await clearGroupAccountLinks(db, groupId);
   const accountIds = data.registeredAccounts.accounts
@@ -163,7 +171,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 8. Save portfolio
   for (const item of data.portfolio.items) {
-    const accountId = resolveHoldingAccountId(accountIdMap, item, unknownAccountId);
+    const accountId = resolveHoldingAccountId(currentAccountIdMap, item, unknownAccountId);
     const categoryId = await getOrCreateCategory(db, item.type);
     const holdingId = await createHolding(db, accountId, item.name, "asset", {
       categoryId,
@@ -184,7 +192,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 9. Save liabilities
   for (const liability of data.liabilities.items) {
-    const accountId = resolveHoldingAccountId(accountIdMap, liability, unknownAccountId);
+    const accountId = resolveHoldingAccountId(currentAccountIdMap, liability, unknownAccountId);
     const holdingId = await createHolding(db, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });
