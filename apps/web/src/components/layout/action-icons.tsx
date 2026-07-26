@@ -24,19 +24,13 @@ interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
   lastScrapedAt?: string | null;
-  refreshWorkflowUrl?: string | null;
 }
 
 interface CrawlerRefreshButtonState extends CrawlerRefreshStatus {
   isPending: boolean;
 }
 
-export function ActionIcons({
-  variant,
-  notifications,
-  lastScrapedAt,
-  refreshWorkflowUrl,
-}: ActionIconsProps) {
+export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
 
   if (variant === "sidebar") {
@@ -49,9 +43,9 @@ export function ActionIcons({
 
   return (
     <div className="flex items-center gap-1">
-      <RefreshStatus lastScrapedAt={lastScrapedAt ?? null} workflowUrl={refreshWorkflowUrl} />
-      {notifications}
+      <LastUpdatedAt lastScrapedAt={lastScrapedAt ?? null} />
       <RefreshControl iconSize={iconSize} />
+      {notifications}
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
@@ -365,53 +359,25 @@ function formatStepMetadata(item: CrawlerRunStepDetails): string | null {
   }
 }
 
-interface RefreshStatusProps {
+interface LastUpdatedAtProps {
   lastScrapedAt: string | null;
-  workflowUrl?: string | null;
 }
 
-function RefreshStatus({
-  lastScrapedAt,
-  workflowUrl = getRefreshWorkflowUrl(),
-}: RefreshStatusProps) {
+function LastUpdatedAt({ lastScrapedAt }: LastUpdatedAtProps) {
   const formattedLastScrapedAt = lastScrapedAt ? formatDateTime(lastScrapedAt) : null;
 
-  if (!formattedLastScrapedAt && !workflowUrl) {
+  if (!formattedLastScrapedAt) {
     return null;
   }
 
-  const ariaLabel = formattedLastScrapedAt
-    ? `データ更新ワークフローを開く（最終更新 ${formattedLastScrapedAt}）`
-    : "データ更新ワークフローを開く";
-
   return (
     <div className="flex shrink-0 items-center gap-0.5 border-l pl-2">
-      {formattedLastScrapedAt && (
-        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-          <span className="hidden sm:inline">更新 </span>
-          <time dateTime={lastScrapedAt ?? undefined}>{formattedLastScrapedAt}</time>
-        </span>
-      )}
-      {workflowUrl && (
-        <IconButton
-          icon={<RefreshCw className="h-4.5 w-4.5" />}
-          href={workflowUrl}
-          ariaLabel={ariaLabel}
-          className="p-1.5"
-          isExternal
-        />
-      )}
+      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+        <span className="hidden sm:inline">更新 </span>
+        <time dateTime={lastScrapedAt ?? undefined}>{formattedLastScrapedAt}</time>
+      </span>
     </div>
   );
-}
-
-function getRefreshWorkflowUrl() {
-  const githubOrg = process.env.NEXT_PUBLIC_GITHUB_ORG;
-  const githubRepo = process.env.NEXT_PUBLIC_GITHUB_REPO;
-
-  return githubOrg && githubRepo
-    ? `https://github.com/${githubOrg}/${githubRepo}/actions/workflows/daily-update.yml`
-    : null;
 }
 
 function HelpButton({ iconSize, className }: { iconSize: string; className?: string }) {

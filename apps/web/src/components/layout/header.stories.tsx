@@ -8,7 +8,6 @@ const mockGroups = [
   { id: "1", name: "個人資産", isCurrent: true, lastScrapedAt: "2025-04-30T10:30:00" },
   { id: "2", name: "家族", isCurrent: false, lastScrapedAt: "2025-04-30T15:20:00" },
 ];
-const refreshWorkflowUrl = "https://github.com/example/example/actions/workflows/daily-update.yml";
 
 const meta = {
   title: "Layout/Header",
@@ -38,7 +37,6 @@ export const Default: Story = {
   args: {
     groups: mockGroups,
     defaultGroupId: "1",
-    refreshWorkflowUrl,
     notifications: (
       <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
     ),
@@ -49,7 +47,6 @@ export const SingleGroup: Story = {
   args: {
     groups: [mockGroups[0]],
     defaultGroupId: "1",
-    refreshWorkflowUrl,
     notifications: (
       <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
     ),
@@ -60,7 +57,6 @@ export const NoGroup: Story = {
   args: {
     groups: [],
     defaultGroupId: null,
-    refreshWorkflowUrl,
     notifications: (
       <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
     ),
@@ -71,7 +67,6 @@ export const WithNotifications: Story = {
   args: {
     groups: mockGroups,
     defaultGroupId: "1",
-    refreshWorkflowUrl,
     notifications: (
       <AccountNotificationsClient
         errorAccounts={[{ id: 1, mfId: "account-1", name: "User Aの銀行口座", status: "error" }]}

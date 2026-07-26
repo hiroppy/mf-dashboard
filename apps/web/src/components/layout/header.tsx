@@ -15,10 +15,9 @@ interface HeaderProps {
   groups: Group[];
   defaultGroupId: string | null;
   notifications?: ReactNode;
-  refreshWorkflowUrl?: string | null;
 }
 
-export function Header({ groups, defaultGroupId, notifications, refreshWorkflowUrl }: HeaderProps) {
+export function Header({ groups, defaultGroupId, notifications }: HeaderProps) {
   const { toggle } = useSidebar();
   const pathname = usePathname();
   const urlGroupId = extractGroupIdFromPath(pathname);
@@ -61,7 +60,6 @@ export function Header({ groups, defaultGroupId, notifications, refreshWorkflowU
           variant="header"
           notifications={notifications}
           lastScrapedAt={selectedGroup?.lastScrapedAt ?? null}
-          refreshWorkflowUrl={refreshWorkflowUrl}
         />
       </div>
     </header>
