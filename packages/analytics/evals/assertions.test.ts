@@ -859,6 +859,38 @@ describe("assertFinanceChatOutput", () => {
     });
   });
 
+  test("accepts expected associations split across relevant database queries", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT SUM(amount) AS income FROM transactions" },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+            {
+              input: { sql: "SELECT SUM(amount) AS expense FROM transactions" },
+              output: { rows: [{ expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("compares complete fixture and model result rows", () => {
     const context = {
       config: {
