@@ -10,11 +10,10 @@ import { AccountNotifications } from "../components/info/account-notifications";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
+import { withBasePath } from "../lib/base-path";
 import { parseChatSuggestedPrompts } from "../lib/chat-config";
 import { createMetadataBase } from "../lib/metadata";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
-
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export const metadata: Metadata = {
   metadataBase: createMetadataBase(),
@@ -23,9 +22,9 @@ export const metadata: Metadata = {
     default: "MoneyForward Me Dashboard",
   },
   description: "MoneyForward Me のデータを可視化するダッシュボード",
-  manifest: `${basePath}/manifest.webmanifest`,
+  manifest: withBasePath("/manifest.webmanifest"),
   icons: {
-    apple: `${basePath}/apple-touch-icon.png`,
+    apple: withBasePath("/apple-touch-icon.png"),
   },
   appleWebApp: {
     capable: true,
@@ -39,7 +38,7 @@ export const metadata: Metadata = {
     locale: "ja_JP",
     images: [
       {
-        url: "logo.png",
+        url: withBasePath("/logo.png"),
         width: 758,
         height: 708,
         alt: "MoneyForward Me Dashboard",
@@ -50,7 +49,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "MoneyForward Me Dashboard",
     description: "MoneyForward Me のデータを可視化するダッシュボード",
-    images: ["logo.png"],
+    images: [withBasePath("/logo.png")],
   },
 };
 

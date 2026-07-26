@@ -229,7 +229,7 @@ terraform -chdir=terraform output -raw tunnel_id
 - **ホストを再起動する**: Docker Desktopの自動起動後、`restart: unless-stopped`を設定した各コンテナも自動復帰する
 - **イメージを再ビルドする**: `docker compose build && docker compose up -d`
 - **crawlerをすぐに実行する**: `docker compose exec crawler pnpm --filter @mf-dashboard/crawler start`
-- **webの表示だけを更新する**: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer ${REFRESH_TOKEN}" http://web:8765/api/refresh/'`
+- **webの表示だけを更新する**: `docker compose exec crawler sh -c 'curl -fsS -X POST -H "Authorization: Bearer ${REFRESH_TOKEN}" "http://web:8765${NEXT_PUBLIC_BASE_PATH}/api/refresh/"'`
 
 ## 5. オプション設定
 
