@@ -12,6 +12,7 @@ interface ChartExpectation {
 interface AssertionContext {
   config?: {
     expectedCharts?: ChartExpectation[];
+    expectedMarkdownColumns?: string[];
     expectedMarkdownRows?: string[][];
     exactMarkdownRows?: boolean;
     expectedTextFacts?: string[];
@@ -172,10 +173,6 @@ function getMarkdownTables(text: string): MarkdownTable[] {
   return tables;
 }
 
-function getMarkdownRows(text: string): string[][] {
-  return getMarkdownTables(text).flatMap((table) => table.rows);
-}
-
 function hasTablePair(text: string, label: string, value: string): boolean {
   return getMarkdownTables(text).some((table) => {
     const columnIndex = table.header.indexOf(label);
@@ -183,11 +180,29 @@ function hasTablePair(text: string, label: string, value: string): boolean {
   });
 }
 
-function hasExpectedRow(actualRows: string[][], expectedRow: string[]): boolean {
+function hasExpectedRow(
+  tables: MarkdownTable[],
+  expectedRow: string[],
+  expectedColumns: string[],
+): boolean {
   const expectedCells = expectedRow.map((cell) => normalize(cell).replace(/円$/, ""));
-  return actualRows.some((row) =>
-    expectedCells.every((expectedCell) => row.includes(expectedCell)),
-  );
+  const normalizedColumns = expectedColumns.map((column) => normalize(column));
+  if (normalizedColumns.length === 0) {
+    return tables.some((table) =>
+      table.rows.some((row) => expectedCells.every((expectedCell) => row.includes(expectedCell))),
+    );
+  }
+  if (normalizedColumns.length !== expectedCells.length) return false;
+
+  return tables.some((table) => {
+    const columnIndices = normalizedColumns.map((column) => table.header.indexOf(column));
+    return (
+      columnIndices.every((index) => index !== -1) &&
+      table.rows.some((row) =>
+        expectedCells.every((expectedCell, index) => row[columnIndices[index]!] === expectedCell),
+      )
+    );
+  });
 }
 
 function sortChartData(data: FinanceChart["data"]): FinanceChart["data"] {
@@ -332,9 +347,10 @@ export default function assertFinanceChatOutput(
     return fail("chartの構造または値が期待と異なります。");
   }
 
-  const markdownRows = getMarkdownRows(actual.text);
+  const markdownTables = getMarkdownTables(actual.text);
+  const markdownRows = markdownTables.flatMap((table) => table.rows);
   const missingRows = (config.expectedMarkdownRows ?? []).filter(
-    (row) => !hasExpectedRow(markdownRows, row),
+    (row) => !hasExpectedRow(markdownTables, row, config.expectedMarkdownColumns ?? []),
   );
   if (missingRows.length > 0) {
     return fail(`Markdown表に期待する行がありません: ${missingRows.join(", ")}`);

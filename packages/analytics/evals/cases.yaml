@@ -112,6 +112,7 @@
       config:
         expectedMarkdownRows:
           - ["2026-07-03", サンマルクカフェ, "761"]
+        expectedMarkdownColumns: [日付, 内容, 金額]
         exactMarkdownRows: true
         expectedCharts: []
         expectedToolRoutes: []

@@ -227,6 +227,20 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("期待しない") });
+
+    const shuffledRow = [
+      "| 日付 | 内容 | 金額 |",
+      "| --- | --- | ---: |",
+      "| 761円 | 2026-07-03 | サンマルクカフェ |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text: shuffledRow }), {
+        config: {
+          expectedMarkdownColumns: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects links that were not returned by the route tool", () => {
