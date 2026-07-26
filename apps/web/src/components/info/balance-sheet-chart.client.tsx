@@ -3,12 +3,12 @@
 import { Scale } from "lucide-react";
 import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { getAssetCategoryStackOrder, sortAssetCategories } from "../../lib/asset-category-order";
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { sortBalanceSheetAssets } from "./balance-sheet-chart-utils";
 
 interface BalanceSheetChartProps {
   assets: Array<{ category: string; amount: number }>;
@@ -32,7 +32,7 @@ export function BalanceSheetChartClient({
 
   const totalAssets = assets.reduce((sum, a) => sum + a.amount, 0);
   const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
-  const orderedAssets = sortBalanceSheetAssets(assets);
+  const orderedAssets = sortAssetCategories(assets);
 
   // チャートデータ: 左=資産、右=負債+純資産
   const assetData: Record<string, string | number> = { name: "資産" };
@@ -48,6 +48,12 @@ export function BalanceSheetChartClient({
 
   const chartData = [assetData, liabilityData];
   const assetKeys = orderedAssets.map((a) => a.category);
+  const stackedAssetKeys = getAssetCategoryStackOrder(assetKeys);
+  const legendKeys = [...assetKeys, "負債", "純資産"];
+  const getLegendOrder = (name: string) => {
+    const index = legendKeys.indexOf(name);
+    return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+  };
 
   // カスタムツールチップ
   const CustomTooltip = ({
@@ -67,8 +73,9 @@ export function BalanceSheetChartClient({
     return (
       <ChartTooltipContent>
         <div className="font-bold mb-2">{label}</div>
-        {payload
+        {[...payload]
           .filter((p) => p.value > 0)
+          .sort((a, b) => getLegendOrder(a.name) - getLegendOrder(b.name))
           .map((p) => (
             <div key={p.name} className="flex justify-between gap-4">
               <span className="flex items-center gap-2">
@@ -116,6 +123,7 @@ export function BalanceSheetChartClient({
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend
+              itemSorter={(item) => getLegendOrder(String(item.value))}
               verticalAlign="bottom"
               iconType="square"
               iconSize={10}
@@ -126,7 +134,7 @@ export function BalanceSheetChartClient({
               }}
             />
             {/* 資産カテゴリ */}
-            {assetKeys.map((key) => (
+            {stackedAssetKeys.map((key) => (
               <Bar
                 key={key}
                 dataKey={key}

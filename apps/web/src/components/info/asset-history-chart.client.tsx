@@ -11,6 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { compareAssetCategories } from "../../lib/asset-category-order";
 import {
   CHART_INITIAL_DIMENSION,
   CHART_PERIOD_OPTIONS,
@@ -55,7 +56,9 @@ export function AssetHistoryTooltip({ active, label, payload, period }: AssetHis
   const formattedDate =
     period === "1m" ? `${year}/${Number(month)}/${Number(day)}` : `${year}/${Number(month)}`;
   const totalAssets = payload.find((item) => item.dataKey === "totalAssets")?.value;
-  const categories = payload.filter((item) => item.dataKey !== "totalAssets");
+  const categories = payload
+    .filter((item) => item.dataKey !== "totalAssets")
+    .sort((a, b) => compareAssetCategories(String(a.dataKey), String(b.dataKey)));
 
   return (
     <ChartTooltipContent>
@@ -106,7 +109,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
             color: semanticColors.totalAssets,
           },
           ...Object.entries(data[data.length - 1].categories)
-            .sort(([, a], [, b]) => b - a)
+            .sort(([a], [b]) => compareAssetCategories(a, b))
             .map(([name]) => ({
               dataKey: name,
               name,
