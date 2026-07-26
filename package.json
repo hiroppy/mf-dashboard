@@ -29,9 +29,9 @@
     "lefthook": "2.1.9",
     "oxfmt": "0.55.0",
     "oxlint": "1.70.0",
-    "oxlint-tsgolint": "0.23.0",
+    "oxlint-tsgolint": "7.0.2001",
     "tsx": "4.22.4",
     "turbo": "2.9.18"
   },
-  "packageManager": "pnpm@11.7.0"
+  "packageManager": "pnpm@11.17.0"
 }
