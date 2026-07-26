@@ -11,6 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { compareAssetCategories } from "../../lib/asset-category-order";
 import {
   CHART_INITIAL_DIMENSION,
   CHART_PERIOD_OPTIONS,
@@ -20,7 +21,7 @@ import {
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { formatCurrency } from "../../lib/format";
 import { cn } from "../../lib/utils";
-import { chartTooltipStyle } from "../charts/chart-tooltip";
+import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { PeriodToggle } from "../ui/period-toggle";
@@ -34,6 +35,58 @@ interface AssetHistoryPoint {
 interface AssetHistoryChartProps {
   data: AssetHistoryPoint[];
   height?: number;
+}
+
+interface AssetHistoryTooltipProps {
+  active?: boolean;
+  label?: string;
+  payload?: ReadonlyArray<{
+    color?: string;
+    dataKey?: string | number;
+    name?: string;
+    value?: number;
+  }>;
+  period: Period;
+}
+
+export function AssetHistoryTooltip({ active, label, payload, period }: AssetHistoryTooltipProps) {
+  if (!active || !label || !payload?.length) return null;
+
+  const [year, month, day] = label.split("-");
+  const formattedDate =
+    period === "1m" ? `${year}/${Number(month)}/${Number(day)}` : `${year}/${Number(month)}`;
+  const totalAssets = payload.find((item) => item.dataKey === "totalAssets")?.value;
+  const categories = payload
+    .filter((item) => item.dataKey !== "totalAssets")
+    .sort((a, b) => compareAssetCategories(String(a.dataKey), String(b.dataKey)));
+
+  return (
+    <ChartTooltipContent>
+      <div className="flex items-center justify-between gap-6">
+        <span className="text-muted-foreground">{formattedDate}</span>
+        {totalAssets !== undefined && (
+          <span className="font-semibold">{formatCurrency(totalAssets)}</span>
+        )}
+      </div>
+      {categories.length > 0 && (
+        <div className="mt-2 space-y-1 border-t pt-2">
+          {categories.map((item) => (
+            <div key={String(item.dataKey)} className="flex items-center justify-between gap-6">
+              <span className="flex items-center gap-2">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                  aria-hidden
+                />
+                {item.name}
+              </span>
+              <span>{formatCurrency(item.value ?? 0)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </ChartTooltipContent>
+  );
 }
 
 export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChartProps) {
@@ -56,7 +109,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
             color: semanticColors.totalAssets,
           },
           ...Object.entries(data[data.length - 1].categories)
-            .sort(([, a], [, b]) => b - a)
+            .sort(([a], [b]) => compareAssetCategories(a, b))
             .map(([name]) => ({
               dataKey: name,
               name,
@@ -188,16 +241,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
               axisLine={false}
               tickFormatter={(value) => `${(value / 10000).toFixed(0)}万`}
             />
-            <Tooltip
-              formatter={(value, name) => [formatCurrency(value as number), name as string]}
-              labelFormatter={(label) => {
-                const [year, month, day] = (label as string).split("-");
-                const m = Number(month);
-                const d = Number(day);
-                return period === "1m" ? `${year}/${m}/${d}` : `${year}/${m}`;
-              }}
-              contentStyle={chartTooltipStyle}
-            />
+            <Tooltip content={<AssetHistoryTooltip period={period} />} />
             {categoryLines
               .filter((line) => visibleLines.has(line.dataKey))
               .map((line) => (
