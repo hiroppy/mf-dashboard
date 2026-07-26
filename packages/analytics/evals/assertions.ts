@@ -572,15 +572,16 @@ export default function assertFinanceChatOutput(
     const expectedAssociations = databaseEvidence.expectedRowAssociations ?? [];
     const maximumExpectedRowCount = Math.max(expectedRows.length, expectedAssociations.length);
     const modelRows = databaseResults.flatMap((databaseResult) => databaseResult.rows);
-    const modelHasExpectedResult =
-      expectedRows.length === 0 ||
-      (modelRows.length <= maximumExpectedRowCount &&
+    const modelHasExpectedResult = expectedAssociations.length
+      ? modelRows.length <= maximumExpectedRowCount &&
         expectedAssociations.every((association) =>
           modelRows.some((row) => rowContainsAssociation(row, association)),
         ) &&
         modelRows.every((row) =>
           expectedAssociations.some((association) => rowContainsAssociation(row, association)),
-        ));
+        )
+      : expectedRows.length === 0 ||
+        JSON.stringify(normalizeRows(modelRows)) === JSON.stringify(expectedRows);
     if (!modelHasExpectedResult) {
       return fail("queryDatabase結果に期待しない行があるか、値の関連が不足しています。");
     }

@@ -891,6 +891,31 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("validates model evidence when only row associations are configured", () => {
+    const context = {
+      config: {
+        databaseEvidence: {
+          expectedRowAssociations: [["income", "313235"]],
+          requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+        },
+      },
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount AS income FROM transactions" },
+              output: { rows: [{ income: 1 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("値の関連") });
+  });
+
   test("compares complete fixture and model result rows", () => {
     const context = {
       config: {
