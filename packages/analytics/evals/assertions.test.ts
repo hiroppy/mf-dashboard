@@ -60,6 +60,26 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("binds expected amounts to the requested period", () => {
+    const config = {
+      expectedTextPairFacts: ["2026年7月"],
+      expectedTextPairs: [
+        ["収入", "313235"],
+        ["支出", "219894"],
+        ["収支", "93341"],
+      ] as Array<[string, string]>,
+    };
+    expect(assertFinanceChatOutput(output(), { config })).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月について確認しました。2026年6月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+  });
+
   test.each([
     "収入は-313,235円です。",
     "収入は313,235万円です。",
@@ -401,6 +421,27 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [{ ...chart, title: "2026年7月ではなく2025年7月の食費" }] }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                chartType: "pie",
+                titlePatterns: ["2026年7月", "食費"],
+                unit: "currency",
+                series: [{ name: "支出", amountType: "expense" }],
+                data: [
+                  { label: "食料品", values: [24_833] },
+                  { label: "外食", values: [12_214] },
+                ],
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -601,6 +642,54 @@ describe("assertFinanceChatOutput", () => {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "万が一リンクが開けない場合は再試行してください。" }),
+        {
+          config: { forbidAmounts: true },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("does not mistake the scale suffix of an Arabic amount for a kanji amount", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は31万円です。" }), {
+        config: { expectedTextPairs: [["収入", "310000"]] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("rejects qualified no-data wording", () => {
+    const config = {
+      expectedTextPatterns: [
+        "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
+      ],
+    };
+    expect(
+      assertFinanceChatOutput(output({ text: "2030年1月の食費データがないとは限りません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "2030年1月の食費データはありません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("does not satisfy rendered text patterns with code-only content", () => {
+    const config = {
+      expectedTextPatterns: ["\\[[^\\]]*2026年7月[^\\]]*収支[^\\]]*\\]\\(/0/cf/2026-07\\)"],
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "[こちら](/0/cf/2026-07) `[2026年7月の収支](/0/cf/2026-07)`",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects malformed provider output", () => {

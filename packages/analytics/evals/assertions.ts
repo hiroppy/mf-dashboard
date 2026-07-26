@@ -18,6 +18,7 @@ interface AssertionContext {
     expectedTextFacts?: string[];
     expectedTextLinks?: string[];
     expectedTextPairs?: Array<[string, string]>;
+    expectedTextPairFacts?: string[];
     expectedTextPatterns?: string[];
     expectedToolRoutes?: string[];
     forbiddenTextTerms?: string[];
@@ -70,6 +71,45 @@ function normalize(value: string): string {
 
 function getRenderedText(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, "").replace(/~~[\s\S]*?~~/g, "");
+}
+
+function removeCode(text: string): string {
+  return getRenderableLines(text)
+    .join("\n")
+    .replace(/`[^`\n]*`/g, "");
+}
+
+function hasScopedPair(text: string, label: string, value: string, facts: string[]): boolean {
+  if (facts.length === 0) return true;
+  const normalizedText = normalize(text);
+  const normalizedLabel = normalize(label);
+  const normalizedValue = normalize(value);
+  let labelIndex = normalizedText.indexOf(normalizedLabel);
+  while (labelIndex !== -1) {
+    const clauseStart =
+      Math.max(
+        normalizedText.lastIndexOf("。", labelIndex),
+        normalizedText.lastIndexOf("！", labelIndex),
+        normalizedText.lastIndexOf("？", labelIndex),
+        normalizedText.lastIndexOf("\n", labelIndex),
+      ) + 1;
+    const clauseEndCandidates = ["。", "！", "？", "\n"]
+      .map((delimiter) => normalizedText.indexOf(delimiter, labelIndex))
+      .filter((index) => index !== -1);
+    const clauseEnd =
+      clauseEndCandidates.length === 0 ? normalizedText.length : Math.min(...clauseEndCandidates);
+    const clause = normalizedText.slice(clauseStart, clauseEnd);
+    if (
+      clause.includes(normalizedValue) &&
+      facts.every(
+        (fact) => clause.includes(normalize(fact)) && !hasContradictedFact(clause, normalize(fact)),
+      )
+    ) {
+      return true;
+    }
+    labelIndex = normalizedText.indexOf(normalizedLabel, labelIndex + normalizedLabel.length);
+  }
+  return false;
 }
 
 function getMissingTextPairs(
@@ -283,7 +323,10 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation): boolea
   return (
     actual.chartType === expected.chartType &&
     actual.unit === expected.unit &&
-    (expected.titlePatterns ?? []).every((pattern) => new RegExp(pattern).test(actual.title)) &&
+    (expected.titlePatterns ?? []).every(
+      (pattern) =>
+        new RegExp(pattern).test(actual.title) && !hasContradictedFact(actual.title, pattern),
+    ) &&
     JSON.stringify(actual.series) === JSON.stringify(expected.series) &&
     JSON.stringify(sortChartData(actual.data)) === JSON.stringify(sortChartData(expected.data))
   );
@@ -444,14 +487,22 @@ export default function assertFinanceChatOutput(
     config.expectedTextPairs ?? [],
     chartTextPairs,
   );
-  if (missingPairs.length > 0) {
+  const unscopedPairs = (config.expectedTextPairs ?? []).filter(
+    ([label, value]) =>
+      !hasScopedPair(renderedText, label, value, config.expectedTextPairFacts ?? []),
+  );
+  if (missingPairs.length > 0 || unscopedPairs.length > 0) {
+    const invalidPairs = [...new Set([...missingPairs, ...unscopedPairs])];
     return fail(
-      `本文のラベルと値が一致しません: ${missingPairs.map((pair) => pair.join("=")).join(", ")}`,
+      `本文のラベル・値・対象期間が一致しません: ${invalidPairs
+        .map((pair) => pair.join("="))
+        .join(", ")}`,
     );
   }
 
+  const patternText = removeCode(renderedText);
   const missingPatterns = (config.expectedTextPatterns ?? []).filter(
-    (pattern) => !new RegExp(pattern, "s").test(renderedText),
+    (pattern) => !new RegExp(pattern, "s").test(patternText),
   );
   if (missingPatterns.length > 0) {
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
@@ -459,7 +510,7 @@ export default function assertFinanceChatOutput(
 
   if (
     config.forbidAmounts &&
-    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:\s*円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+\s*円)/.test(
+    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百壱弐参拾佰仟]+[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:\s*円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+\s*円|(?<![\d〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟])[千万億兆]\s*円)/.test(
       renderedText.normalize("NFKC"),
     ) ||
       /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
@@ -668,7 +719,7 @@ export default function assertFinanceChatOutput(
   }
   if (
     validatesRenderedAmounts &&
-    /[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+円/.test(
+    /[〇零一二三四五六七八九十百壱弐参拾佰仟]+[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+円|(?<![\d〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟])[千万億兆]円/.test(
       renderedText,
     )
   ) {

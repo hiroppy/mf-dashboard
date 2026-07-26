@@ -108,10 +108,12 @@ function getTextLinks(text: string): string[] {
       match[2]!,
     ]),
   );
-  const referenceLinks = [...renderedText.matchAll(/\[([^\]]+)]\[([^\]]+)]/g)].flatMap((match) => {
-    const destination = referenceDefinitions.get(match[2]!.toLocaleLowerCase());
-    return destination ? [destination] : [];
-  });
+  const referenceLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)]\[([^\]]+)]/g)].flatMap(
+    (match) => {
+      const destination = referenceDefinitions.get(match[2]!.toLocaleLowerCase());
+      return destination ? [destination] : [];
+    },
+  );
   const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
   const rawUrls = [...renderedText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),

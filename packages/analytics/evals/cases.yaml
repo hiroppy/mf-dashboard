@@ -16,6 +16,7 @@
       value: file://./assertions.ts
       config:
         expectedTextFacts: ["2026年7月"]
+        expectedTextPairFacts: ["2026年7月"]
         expectedTextPairs:
           - [収入, "313235"]
           - [支出, "219894"]
@@ -36,6 +37,8 @@
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\btype\\b",
               "\\b(?:sum|total)\\s*\\(",
+              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
           [
@@ -94,6 +97,9 @@
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
+              "\\btype\\b\\s*=\\s*['\"]expense['\"]",
+              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
           [
@@ -140,6 +146,9 @@
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
+              "\\btype\\b\\s*=\\s*['\"]expense['\"]",
+              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
           [
@@ -192,7 +201,7 @@
       value: file://./assertions.ts
       config:
         expectedTextPatterns:
-          - "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)(?!とは(?:言え|いえ)ません|わけでは(?:ありません|ない))"
+          - "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))"
         forbidAmounts: true
         expectedCharts: []
         expectedToolRoutes: []
@@ -206,6 +215,9 @@
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?:\\bamount\\b|\\bcount\\s*\\(\\s*\\*\\s*\\))(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b",
               "食費",
+              "\\btype\\b\\s*=\\s*['\"]expense['\"]",
+              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
           [

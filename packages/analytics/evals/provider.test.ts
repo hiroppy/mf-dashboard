@@ -139,6 +139,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("does not treat a reference-style image as a clickable link", () => {
+    const output = toEvaluationOutput({
+      text: "![2026年7月の収支][収支]\n\n[収支]: /0/cf/2026-07",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+  });
+
   test("excludes links in HTML comments and strikethrough", () => {
     const output = toEvaluationOutput({
       text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~",
