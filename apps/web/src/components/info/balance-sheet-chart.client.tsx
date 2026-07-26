@@ -8,6 +8,7 @@ import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { sortBalanceSheetAssets } from "./balance-sheet-chart-utils";
 
 interface BalanceSheetChartProps {
   assets: Array<{ category: string; amount: number }>;
@@ -31,10 +32,11 @@ export function BalanceSheetChartClient({
 
   const totalAssets = assets.reduce((sum, a) => sum + a.amount, 0);
   const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
+  const orderedAssets = sortBalanceSheetAssets(assets);
 
   // チャートデータ: 左=資産、右=負債+純資産
   const assetData: Record<string, string | number> = { name: "資産" };
-  assets.forEach((a) => {
+  orderedAssets.forEach((a) => {
     assetData[a.category] = a.amount;
   });
 
@@ -45,7 +47,7 @@ export function BalanceSheetChartClient({
   liabilityData["純資産"] = netAssets;
 
   const chartData = [assetData, liabilityData];
-  const assetKeys = assets.map((a) => a.category);
+  const assetKeys = orderedAssets.map((a) => a.category);
 
   // カスタムツールチップ
   const CustomTooltip = ({
