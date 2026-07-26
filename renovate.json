@@ -37,6 +37,12 @@
       "major": {
         "automerge": false
       }
+    },
+    {
+      "description": "Keep Playwright packages and official Docker images on the same version",
+      "groupName": "Playwright",
+      "matchPackageNames": ["@playwright/test", "playwright", "mcr.microsoft.com/playwright"],
+      "minimumGroupSize": 4
     }
   ],
   "ignoreDeps": []

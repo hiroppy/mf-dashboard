@@ -1,11 +1,11 @@
-FROM node:24.18.0-bookworm-slim
+FROM mcr.microsoft.com/playwright:v1.61.1-noble
 WORKDIR /app
 ENV PNPM_HOME=/pnpm \
     COREPACK_HOME=/pnpm/corepack \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PATH=/pnpm:$PATH \
-    HOME=/home/node
+    HOME=/home/pwuser
 
 RUN mkdir -p /pnpm \
     && corepack enable \
@@ -38,7 +38,6 @@ RUN package_manager=$(node -p "require('./package.json').packageManager") \
     && corepack prepare "$package_manager" --activate \
     && pnpm install --frozen-lockfile --prod --filter "@mf-dashboard/crawler..." --ignore-scripts \
     && pnpm rebuild --pending --filter "@mf-dashboard/crawler..." \
-    && pnpm --filter @mf-dashboard/crawler exec playwright install --with-deps chromium \
     && rm -rf /pnpm/store /var/lib/apt/lists/*
 
 COPY . .
@@ -46,6 +45,6 @@ COPY . .
 RUN mkdir -p /app/data /app/crawler-state \
     && chmod 1777 /app/crawler-state \
     && chmod 0755 /app/docker/crawler/entrypoint.sh
-USER node
+USER pwuser
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/crawler/entrypoint.sh"]
