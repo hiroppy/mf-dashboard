@@ -2,6 +2,7 @@ import { getAccountByMfId } from "@mf-dashboard/db";
 import { getLatestTotalAssets } from "@mf-dashboard/db";
 import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
 import { LucideIcon, PiggyBankIcon, LandmarkIcon } from "lucide-react";
+import { sortAssetCategories } from "../../lib/asset-category-order";
 import { Card, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
 import { HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
@@ -111,6 +112,7 @@ export async function HoldingsTable({
       total: items.reduce((sum, h) => sum + (h.amount || 0), 0),
     }))
     .sort((a, b) => b.total - a.total);
+  const orderedCategories = type === "asset" ? sortAssetCategories(categories) : categories;
 
   return (
     <Card>
@@ -118,14 +120,14 @@ export async function HoldingsTable({
         <div className="flex items-center justify-between">
           <CardTitle icon={Icon}>{config.title}</CardTitle>
           <HoldingsTableTotal
-            categories={categories}
+            categories={orderedCategories}
             total={total}
             enableSharedFilter={enableSharedFilter}
           />
         </div>
       </CardHeader>
       <HoldingsTableClient
-        categories={categories}
+        categories={orderedCategories}
         hideAccountName={!!mfId}
         enableSharedFilter={enableSharedFilter}
       />
