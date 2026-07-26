@@ -25,21 +25,11 @@ export function buildHoldingWhereCondition(
   accountIds: number[],
   additionalCondition?: ReturnType<typeof eq>,
 ) {
-  const baseCondition = eq(schema.holdingValues.snapshotId, snapshotId);
-
-  if (accountIds.length > 0) {
-    const conditions = [baseCondition, inArray(schema.holdings.accountId, accountIds)];
-    if (additionalCondition) {
-      conditions.push(additionalCondition);
-    }
-    return and(...conditions);
-  }
-
-  if (additionalCondition) {
-    return and(baseCondition, additionalCondition);
-  }
-
-  return baseCondition;
+  return and(
+    eq(schema.holdingValues.snapshotId, snapshotId),
+    inArray(schema.holdings.accountId, accountIds),
+    additionalCondition,
+  );
 }
 
 /**

@@ -29,6 +29,14 @@ function log(...args: unknown[]) {
   if (!isCI) console.log(...args);
 }
 
+function resolveHoldingAccountId(
+  accountIdMap: Map<string, number>,
+  item: { institution: string; name: string },
+  fallbackAccountId: number,
+): number {
+  return accountIdMap.get(item.institution) ?? accountIdMap.get(item.name) ?? fallbackAccountId;
+}
+
 /**
  * 「グループ選択なし」用: 全データを保存
  * - アカウント情報
@@ -148,7 +156,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 8. Save portfolio
   for (const item of data.portfolio.items) {
-    const accountId = accountIdMap.get(item.institution) || unknownAccountId;
+    const accountId = resolveHoldingAccountId(accountIdMap, item, unknownAccountId);
     const categoryId = await getOrCreateCategory(db, item.type);
     const holdingId = await createHolding(db, accountId, item.name, "asset", {
       categoryId,
@@ -169,7 +177,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 9. Save liabilities
   for (const liability of data.liabilities.items) {
-    const accountId = accountIdMap.get(liability.institution) || unknownAccountId;
+    const accountId = resolveHoldingAccountId(accountIdMap, liability, unknownAccountId);
     const holdingId = await createHolding(db, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import * as schema from "../schema/schema";
 import { closeTestDb, createTestDb, resetTestDb } from "../test-helpers";
@@ -103,6 +104,81 @@ describe("saveScrapedData", () => {
       unrealizedGain: 234500,
       unrealizedGainPct: 23.45,
     });
+  });
+
+  test("金融機関名がない手入力資産を同名の登録口座へ紐づける", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-account-a",
+      name: "Manual Account A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 500000,
+    });
+    data.portfolio.items.push({
+      name: "Manual Account A",
+      type: "保険",
+      institution: "",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const manualAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "manual-account-a"))
+      .get();
+    const manualHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Account A"))
+      .get();
+
+    expect(manualHolding?.accountId).toBe(manualAccount?.id);
+    await expect(
+      db
+        .select()
+        .from(schema.groupAccounts)
+        .where(eq(schema.groupAccounts.accountId, manualAccount!.id))
+        .get(),
+    ).resolves.toMatchObject({ groupId: "group-a" });
+  });
+
+  test("金融機関名がない手入力負債を同名の登録口座へ紐づける", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-liability-a",
+      name: "Manual Liability A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 0,
+    });
+    data.liabilities.items.push({
+      name: "Manual Liability A",
+      category: "ローン",
+      institution: "",
+      balance: 300000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const manualAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "manual-liability-a"))
+      .get();
+    const manualHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Liability A"))
+      .get();
+
+    expect(manualHolding?.accountId).toBe(manualAccount?.id);
   });
 
   test("保存途中に失敗した場合は公開対象をすべてrollbackする", async () => {

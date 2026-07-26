@@ -278,6 +278,26 @@ describe("getHoldingsWithLatestValues", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Holding A");
   });
+
+  it("アカウントがないグループでは別グループの保有資産を返さない", async () => {
+    const accountId = await createTestAccount("Manual Account A");
+    const snapshotId = await createSnapshot();
+    const holdingId = await createHolding({ accountId, name: "Manual Asset A" });
+    await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+
+    const now = new Date().toISOString();
+    await db.insert(schema.groups).values({
+      id: "empty-group",
+      name: "Empty Group",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await getHoldingsWithLatestValues("empty-group", db);
+
+    expect(result).toEqual([]);
+  });
 });
 
 describe("getHoldingsByAccountId", () => {
