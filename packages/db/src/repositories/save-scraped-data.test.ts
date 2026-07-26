@@ -214,6 +214,51 @@ describe("saveScrapedData", () => {
     expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
   });
 
+  test("同名の登録口座が複数ある場合は手入力資産をどちらにも紐づけない", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push(
+      {
+        mfId: "manual-account-a",
+        name: "Shared Account",
+        type: "手動",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 250000,
+      },
+      {
+        mfId: "manual-account-b",
+        name: "Shared Account",
+        type: "手動",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 250000,
+      },
+    );
+    data.portfolio.items.push({
+      name: "Shared Account",
+      type: "保険",
+      institution: "",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+    const unmatchedHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Shared Account"))
+      .get();
+
+    expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
+  });
+
   test("金融機関名がない手入力負債を同名の登録口座へ紐づける", async () => {
     const data = createScrapedData();
     data.registeredAccounts.accounts.push({
