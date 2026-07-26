@@ -1,4 +1,4 @@
-FROM node:22.23.1-bookworm-slim AS builder
+FROM node:24.18.0-bookworm-slim AS builder
 WORKDIR /app
 ENV PNPM_HOME=/pnpm \
     COREPACK_HOME=/pnpm/corepack \
@@ -63,7 +63,7 @@ COPY . .
 # Runtime dashboard pages wait for an incoming request before reading the mounted DB.
 RUN cd apps/web && ./node_modules/.bin/next build
 
-FROM node:22.23.1-bookworm-slim AS runner
+FROM node:24.18.0-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
