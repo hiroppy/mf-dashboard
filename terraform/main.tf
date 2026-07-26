@@ -89,6 +89,6 @@ data "cloudflare_zero_trust_tunnel_cloudflared_token" "this" {
 resource "local_sensitive_file" "cloudflared_token" {
   content              = data.cloudflare_zero_trust_tunnel_cloudflared_token.this.token
   filename             = "${path.module}/../secrets/cloudflared-token"
-  file_permission      = "0400"
+  file_permission      = "0444"
   directory_permission = "0700"
 }

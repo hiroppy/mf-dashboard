@@ -153,6 +153,25 @@ describe("ActionIcons", () => {
     expect(events?.close).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the configured base path for crawler requests", async () => {
+    process.env.NEXT_PUBLIC_BASE_PATH = "/dashboard";
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ available: true, running: true }, 202),
+    );
+
+    render(<ActionIcons variant="header" />);
+    expect(EventSourceMock.instances.at(-1)?.url).toBe("/dashboard/api/crawler/refresh/");
+    await emitStatus({ running: false });
+
+    fireEvent.click(await screen.findByRole("button", { name: "金融機関データを更新" }));
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith("/dashboard/api/crawler/refresh/", {
+        method: "POST",
+      }),
+    );
+  });
+
   it("starts a crawler refresh from the header refresh button", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({ available: true, running: true }, 202),

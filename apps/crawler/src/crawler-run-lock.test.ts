@@ -748,6 +748,13 @@ describe("crawler run lock", () => {
       source: null,
       startedAt: null,
     });
+
+    const lock = await acquireCrawlerRunLock("manual", {
+      lockPath,
+      pidExists: () => false,
+    });
+    expect(lock.record.source).toBe("manual");
+    await lock.release();
   });
 
   test("allows acquisition to wait for status to remove a stale lock", async () => {

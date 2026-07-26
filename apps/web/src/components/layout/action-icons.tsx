@@ -9,6 +9,7 @@ import type {
   CrawlerRunStepStatus,
   CrawlerRunTimelineItem,
 } from "../../../../crawler/src/crawler-run-state";
+import { withBasePath } from "../../lib/base-path";
 import {
   parseCrawlerRefreshStatus,
   unavailableCrawlerRefreshStatus,
@@ -82,7 +83,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
   );
 
   useEffect(() => {
-    const events = new EventSource("/api/crawler/refresh/");
+    const events = new EventSource(withBasePath("/api/crawler/refresh/"));
 
     function setUnavailable() {
       setState({ ...unavailableCrawlerRefreshStatus, isPending: false });
@@ -134,7 +135,7 @@ function RefreshControl({ iconSize }: { iconSize: string }) {
     }));
 
     try {
-      const res = await fetch("/api/crawler/refresh/", { method: "POST" });
+      const res = await fetch(withBasePath("/api/crawler/refresh/"), { method: "POST" });
       const body: unknown = await res.json().catch(() => null);
 
       if (!res.ok && res.status !== 409) {

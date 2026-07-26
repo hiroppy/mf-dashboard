@@ -630,6 +630,9 @@ export async function acquireCrawlerRunLock(
 
   if (lockExists) {
     const state = await getCrawlerRunState(options);
+    if (!state.running) {
+      return acquireCrawlerRunLock(source, options);
+    }
     throw new CrawlerAlreadyRunningError(state);
   }
 

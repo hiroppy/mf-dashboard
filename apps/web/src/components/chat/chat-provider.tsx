@@ -14,6 +14,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { withBasePath } from "../../lib/base-path";
 import { CHAT_REQUEST_MAX_MESSAGES } from "../../lib/chat-limits";
 import { extractGroupIdFromPath } from "../../lib/url";
 
@@ -109,6 +110,7 @@ function GroupChatProvider({
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
+        api: withBasePath("/api/chat"),
         prepareSendMessagesRequest: ({ body, id, messageId, messages, trigger }) => {
           const sanitizedMessages = prepareChatMessagesForRequest(messages);
 
