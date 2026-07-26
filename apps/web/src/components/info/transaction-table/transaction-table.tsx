@@ -12,9 +12,15 @@ interface TransactionTableProps {
   month?: string;
   mfId?: string;
   groupId?: string;
+  showYearSelector?: boolean;
 }
 
-export async function TransactionTable({ month, mfId, groupId }: TransactionTableProps) {
+export async function TransactionTable({
+  month,
+  mfId,
+  groupId,
+  showYearSelector,
+}: TransactionTableProps) {
   const account = mfId ? await getAccountByMfId(mfId, groupId) : null;
 
   const transactions = account
@@ -28,5 +34,11 @@ export async function TransactionTable({ month, mfId, groupId }: TransactionTabl
     return <EmptyState icon={ListOrdered} title="詳細一覧" />;
   }
 
-  return <TransactionTableClient transactions={transactions} isMonthView={!!month} />;
+  return (
+    <TransactionTableClient
+      transactions={transactions}
+      isMonthView={!!month}
+      showYearSelector={showYearSelector}
+    />
+  );
 }

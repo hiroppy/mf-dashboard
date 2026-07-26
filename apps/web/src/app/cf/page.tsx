@@ -92,7 +92,7 @@ export async function CFContent({ groupId }: { groupId?: string }) {
     </>
   );
 
-  const transactionsContent = <TransactionTable groupId={groupId} />;
+  const transactionsContent = <TransactionTable groupId={groupId} showYearSelector />;
 
   return (
     <Suspense>

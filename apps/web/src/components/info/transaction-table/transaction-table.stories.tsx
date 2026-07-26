@@ -66,6 +66,8 @@ const aprilTransactions = [
 ];
 
 const otherMonthTransactions = [
+  tx(22, "2024-12-31", "食費", "年末の買い物", 4200, "expense", "サンプル銀行B"),
+  tx(23, "2024-01-01", "収入", "年始の入金", 10000, "income", "サンプル銀行A"),
   tx(17, "2025-03-25", "収入", "3月分給与", 340000, "income", "サンプル銀行A"),
   tx(18, "2025-03-20", "住宅", "家賃3月分", 120000, "expense", "サンプル銀行A"),
   tx(19, "2025-03-15", "食費", "スーパー", 4200, "expense", "サンプル銀行B"),
@@ -76,6 +78,9 @@ const otherMonthTransactions = [
 const allTransactions = [...aprilTransactions, ...otherMonthTransactions];
 
 export const Default: Story = {
+  args: {
+    showYearSelector: true,
+  },
   beforeEach() {
     mocked(getTransactions).mockResolvedValue(allTransactions);
   },

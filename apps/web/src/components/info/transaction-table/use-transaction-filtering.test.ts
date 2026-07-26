@@ -90,6 +90,124 @@ describe("useTransactionFiltering", () => {
     });
   });
 
+  describe("年フィルタ", () => {
+    const transactions = [
+      createTransaction({ id: 1, date: "2026-01-01", category: "2026年カテゴリー" }),
+      createTransaction({ id: 2, date: "2025-12-31", category: "2025年カテゴリー" }),
+      createTransaction({ id: 3, date: "2025-01-01", category: "2025年カテゴリー" }),
+      createTransaction({ id: 4, date: "2024-12-31", category: "2024年カテゴリー" }),
+    ];
+
+    it("利用可能な年を降順で返し、最新年を初期選択する", () => {
+      const { result } = renderHook(() =>
+        useTransactionFiltering({
+          ...defaultOptions,
+          transactions,
+          yearFilterEnabled: true,
+        }),
+      );
+
+      expect(result.current.availableYears).toEqual(["2026", "2025", "2024"]);
+      expect(result.current.selectedYear).toBe("2026");
+      expect(result.current.categories).toEqual(["2026年カテゴリー"]);
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+    });
+
+    it("選択年の年初から年末までに絞り込み、ページを先頭に戻す", () => {
+      const { result } = renderHook(() =>
+        useTransactionFiltering({
+          ...defaultOptions,
+          transactions,
+          yearFilterEnabled: true,
+        }),
+      );
+
+      act(() => {
+        result.current.setCurrentPage(2);
+        result.current.handleYearChange("2025");
+      });
+
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.categories).toEqual(["2025年カテゴリー"]);
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
+    });
+
+    it("データ更新で選択年がなくなった場合は最新の利用可能年へ切り替える", () => {
+      const { result, rerender } = renderHook(
+        ({ currentTransactions }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions: currentTransactions,
+            yearFilterEnabled: true,
+          }),
+        { initialProps: { currentTransactions: transactions } },
+      );
+
+      expect(result.current.selectedYear).toBe("2026");
+
+      rerender({ currentTransactions: transactions.slice(1) });
+
+      expect(result.current.availableYears).toEqual(["2025", "2024"]);
+      expect(result.current.selectedYear).toBe("2025");
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
+    });
+
+    it("データ更新で別の年へ切り替わる場合はページを有効範囲に収める", () => {
+      const initialTransactions = [
+        createTransaction({ id: 1, date: "2026-03-01" }),
+        createTransaction({ id: 2, date: "2026-02-01" }),
+        createTransaction({ id: 3, date: "2026-01-01" }),
+        createTransaction({ id: 4, date: "2025-12-31" }),
+      ];
+      const { result, rerender } = renderHook(
+        ({ currentTransactions }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions: currentTransactions,
+            pageSize: 1,
+            yearFilterEnabled: true,
+          }),
+        { initialProps: { currentTransactions: initialTransactions } },
+      );
+
+      act(() => {
+        result.current.setCurrentPage(2);
+      });
+      expect(result.current.currentPage).toBe(2);
+
+      rerender({ currentTransactions: initialTransactions.slice(3) });
+
+      expect(result.current.selectedYear).toBe("2025");
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.paginatedTransactions.map(({ id }) => id)).toEqual([4]);
+    });
+
+    it("年フィルタの有効状態に合わせて選択年と表示対象を切り替える", () => {
+      const { result, rerender } = renderHook(
+        ({ yearFilterEnabled }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions,
+            yearFilterEnabled,
+          }),
+        { initialProps: { yearFilterEnabled: false } },
+      );
+
+      expect(result.current.selectedYear).toBeNull();
+      expect(result.current.filteredAndSortedTransactions).toHaveLength(4);
+
+      rerender({ yearFilterEnabled: true });
+
+      expect(result.current.selectedYear).toBe("2026");
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+
+      rerender({ yearFilterEnabled: false });
+
+      expect(result.current.selectedYear).toBeNull();
+      expect(result.current.filteredAndSortedTransactions).toHaveLength(4);
+    });
+  });
+
   describe("KPI計算", () => {
     it("収入と支出の合計を計算する", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
@@ -139,7 +257,9 @@ describe("useTransactionFiltering", () => {
 
   describe("検索フィルタ", () => {
     it("検索時にページがリセットされる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
+      const { result } = renderHook(() =>
+        useTransactionFiltering({ ...defaultOptions, pageSize: 1 }),
+      );
 
       act(() => {
         result.current.setCurrentPage(2);
