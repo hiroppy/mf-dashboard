@@ -278,6 +278,12 @@ function isStaleLock(
     return true;
   }
 
+  // Manual runs execute asynchronously inside the long-lived trigger server, so
+  // the server PID cannot prove that the individual crawler run is still alive.
+  if (record.source === "manual" && isExpired(record.startedAt, options.staleMs)) {
+    return true;
+  }
+
   if (!record.pidStartedAt) {
     return isExpired(record.startedAt, options.staleMs);
   }

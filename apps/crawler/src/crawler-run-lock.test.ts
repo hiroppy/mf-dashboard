@@ -476,6 +476,35 @@ describe("crawler run lock", () => {
     );
   });
 
+  test("clears an expired manual lock owned by the live trigger server", async () => {
+    const expiredManualLock = JSON.stringify({
+      id: "expired-manual-lock",
+      pid: process.pid,
+      pidStartedAt: "current-process-start",
+      source: "manual",
+      startedAt: new Date(Date.now() - 120_000).toISOString(),
+    });
+    const options = {
+      getPidStartedAt: () => "current-process-start",
+      lockPath,
+      pidExists: () => true,
+      staleMs: 1_000,
+    };
+
+    await writeFile(lockPath, expiredManualLock);
+    await expect(getCrawlerRunState(options)).resolves.toEqual({
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    });
+
+    await writeFile(lockPath, expiredManualLock);
+    const lock = await acquireCrawlerRunLock("scheduled", options);
+    expect(lock.record.source).toBe("scheduled");
+    await lock.release();
+  });
+
   test("keeps an old identified lock when its live process identity cannot be re-read", async () => {
     const startedAt = new Date(Date.now() - 120_000).toISOString();
     await writeFile(
