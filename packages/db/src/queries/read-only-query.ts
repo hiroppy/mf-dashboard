@@ -26,8 +26,17 @@ const QUOTED_EXPENSIVE_SQL_FUNCTIONS =
   /(?:["'`](?:group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob)["'`]|\[(?:group_concat|hex|json_group_array|json_group_object|printf|randomblob|zeroblob)\])\s*\(/i;
 const QUOTED_FILESYSTEM_SQL_FUNCTIONS =
   /(?:["'`](?:load_extension|readfile|writefile)["'`]|\[(?:load_extension|readfile|writefile)\])\s*\(/i;
-const SOURCE_CLAUSE_TERMINATOR =
-  /^(?:where|group|having|order|limit|union|except|intersect|window)$/;
+const SOURCE_CLAUSE_TERMINATORS = new Set([
+  "where",
+  "group",
+  "having",
+  "order",
+  "limit",
+  "union",
+  "except",
+  "intersect",
+  "window",
+]);
 
 const TABLE_NAMES = (Object.values(schema) as unknown[]).filter(isTable).map(getTableName);
 
@@ -245,15 +254,68 @@ function maskCommentsAndQuotedText(sql: string): string {
   return result;
 }
 
+function getSqlTokens(maskedSql: string): RegExpMatchArray[] {
+  return [...maskedSql.matchAll(/[a-z_][\w$]*|[(),]/gi)];
+}
+
+function isSourceClauseTerminator(tokens: RegExpMatchArray[], index: number): boolean {
+  const token = tokens[index]![0]!.toLowerCase();
+  if (!SOURCE_CLAUSE_TERMINATORS.has(token)) return false;
+
+  const previous = tokens[index - 1]?.[0]?.toLowerCase();
+  const next = tokens[index + 1]?.[0]?.toLowerCase();
+  const afterNext = tokens[index + 2]?.[0]?.toLowerCase();
+  if (
+    previous === "as" ||
+    next === "," ||
+    next === ")" ||
+    next === "join" ||
+    next === "on" ||
+    (next !== undefined && SOURCE_CLAUSE_TERMINATORS.has(next))
+  ) {
+    return false;
+  }
+
+  if (token === "group" || token === "order") return next === "by";
+  if (token === "union" || token === "except" || token === "intersect") {
+    return next === "select" || next === "with" || next === "all" || next === "distinct";
+  }
+  if (token === "window") return next === "as" || afterNext === "as";
+
+  return true;
+}
+
+function entersGroupedSource(
+  tokens: RegExpMatchArray[],
+  index: number,
+  sourceClauseDepths: Set<number>,
+  depth: number,
+): boolean {
+  if (!sourceClauseDepths.has(depth)) return false;
+
+  const previous = tokens[index - 1]?.[0]?.toLowerCase();
+  const next = tokens[index + 1]?.[0]?.toLowerCase();
+  return (
+    (previous === "from" || previous === "join" || previous === "," || previous === "(") &&
+    next !== "select" &&
+    next !== "with"
+  );
+}
+
 function countCommaSeparatedSources(maskedSql: string): number {
+  const tokens = getSqlTokens(maskedSql);
   const sourceClauseDepths = new Set<number>();
   let count = 0;
   let depth = 0;
 
-  for (const match of maskedSql.matchAll(/[a-z_][\w$]*|[(),]/gi)) {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const match = tokens[index]!;
     const token = match[0]!.toLowerCase();
 
     if (token === "(") {
+      if (entersGroupedSource(tokens, index, sourceClauseDepths, depth)) {
+        sourceClauseDepths.add(depth + 1);
+      }
       depth += 1;
       continue;
     }
@@ -266,7 +328,7 @@ function countCommaSeparatedSources(maskedSql: string): number {
       sourceClauseDepths.add(depth);
       continue;
     }
-    if (sourceClauseDepths.has(depth) && SOURCE_CLAUSE_TERMINATOR.test(token)) {
+    if (sourceClauseDepths.has(depth) && isSourceClauseTerminator(tokens, index)) {
       sourceClauseDepths.delete(depth);
       continue;
     }
@@ -615,6 +677,7 @@ function findCommonTableExpressions(
 function validateReferencedTables(sql: string): void {
   const masked = maskCommentsAndQuotedText(sql);
   const commentMasked = maskComments(sql);
+  const tokens = getSqlTokens(masked);
   const commonTableExpressions = findCommonTableExpressions(masked, commentMasked);
   const resolveCteInScope = (name: string, index: number) => {
     let resolved: CommonTableExpression | undefined;
@@ -635,7 +698,8 @@ function validateReferencedTables(sql: string): void {
   let depth = 0;
   let expectsSource = false;
 
-  for (const match of masked.matchAll(/[a-z_][\w$]*|[(),]/gi)) {
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+    const match = tokens[tokenIndex]!;
     const token = match[0]!.toLowerCase();
     const followingSql = commentMasked.slice(match.index! + match[0]!.length);
     const startsSource =
@@ -663,6 +727,9 @@ function validateReferencedTables(sql: string): void {
     }
 
     if (token === "(") {
+      if (entersGroupedSource(tokens, tokenIndex, sourceClauseDepths, depth)) {
+        sourceClauseDepths.add(depth + 1);
+      }
       depth += 1;
       continue;
     }
@@ -680,7 +747,7 @@ function validateReferencedTables(sql: string): void {
       expectsSource = !hasQuotedSource;
       continue;
     }
-    if (sourceClauseDepths.has(depth) && SOURCE_CLAUSE_TERMINATOR.test(token)) {
+    if (sourceClauseDepths.has(depth) && isSourceClauseTerminator(tokens, tokenIndex)) {
       sourceClauseDepths.delete(depth);
       expectsSource = false;
       continue;

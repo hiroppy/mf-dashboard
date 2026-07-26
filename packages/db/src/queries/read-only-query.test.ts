@@ -285,6 +285,17 @@ describe("executeReadOnlyQuery", () => {
     ).rejects.toThrow("データベースschemaを直接指定するSQLは実行できません。");
   });
 
+  it("parenthesized source list内の未許可tableを拒否する", async () => {
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        "SELECT 1 FROM (transactions AS window, sqlite_master)",
+        "group-a",
+        databasePath,
+      ),
+    ).rejects.toThrow("許可されていないテーブル sqlite_master は参照できません。");
+  });
+
   it("schema名と同じtable aliasを許可する", async () => {
     await expect(
       executeReadOnlyQuery(
@@ -1078,6 +1089,13 @@ describe("normalizeReadOnlySql", () => {
      JOIN transactions h ON 1 = 1
      JOIN transactions i ON 1 = 1
      JOIN transactions j ON 1 = 1`,
+    `SELECT COUNT(*)
+     FROM (transactions a, transactions b, transactions c, transactions d, transactions e,
+           transactions f, transactions g, transactions h, transactions i, transactions j)`,
+    `SELECT COUNT(*)
+     FROM transactions AS window, transactions b, transactions c, transactions d,
+          transactions e, transactions f, transactions g, transactions h, transactions i,
+          transactions j`,
   ])("explicit JOINとcomma-style sourceを合計8個までに制限する", (sql) => {
     expect(() => normalizeReadOnlySql(sql)).toThrow("JOINは8個以内で指定してください。");
   });
