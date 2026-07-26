@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { CrawlerAlreadyRunningError, type CrawlerRunState } from "./crawler-run-lock.js";
 import {
   createCrawlerTriggerServer,
@@ -24,8 +24,15 @@ const idleState: CrawlerRunState = {
 };
 
 let server: Server | null = null;
+const originalRefreshToken = process.env.REFRESH_TOKEN;
+
+beforeEach(() => {
+  process.env.REFRESH_TOKEN = "refresh-token";
+});
 
 afterEach(async () => {
+  if (originalRefreshToken === undefined) delete process.env.REFRESH_TOKEN;
+  else process.env.REFRESH_TOKEN = originalRefreshToken;
   if (!server) return;
 
   await new Promise<void>((resolve, reject) => {
@@ -158,7 +165,10 @@ describe("crawler trigger server", () => {
     const startRun = vi.fn<() => Promise<CrawlerRunState>>(async () => runningState);
     const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
 
-    const res = await fetch(`${baseUrl}/runs`, { method: "POST" });
+    const res = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { authorization: "Bearer refresh-token" },
+    });
 
     expect(res.status).toBe(202);
     await expect(res.json()).resolves.toEqual(runningState);
@@ -171,9 +181,23 @@ describe("crawler trigger server", () => {
     });
     const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
 
-    const res = await fetch(`${baseUrl}/runs`, { method: "POST" });
+    const res = await fetch(`${baseUrl}/runs`, {
+      method: "POST",
+      headers: { authorization: "Bearer refresh-token" },
+    });
 
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toEqual(runningState);
+  });
+
+  test("rejects a manual run without the shared token", async () => {
+    const startRun = vi.fn<() => Promise<CrawlerRunState>>(async () => runningState);
+    const baseUrl = await listen(createCrawlerTriggerServer({ startRun }));
+
+    const res = await fetch(`${baseUrl}/runs`, { method: "POST" });
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({ error: "unauthorized" });
+    expect(startRun).not.toHaveBeenCalled();
   });
 });

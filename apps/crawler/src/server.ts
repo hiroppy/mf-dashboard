@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -41,6 +42,17 @@ function json(response: ServerResponse, status: number, body: unknown): void {
 function methodNotAllowed(response: ServerResponse): void {
   response.writeHead(405, { allow: "GET, POST" });
   response.end();
+}
+
+function hasValidRefreshToken(request: IncomingMessage): boolean {
+  const expectedToken = process.env.REFRESH_TOKEN;
+  const authorization = request.headers.authorization;
+  if (!expectedToken || !authorization?.startsWith("Bearer ")) return false;
+
+  const suppliedToken = authorization.slice("Bearer ".length);
+  const expected = Buffer.from(expectedToken);
+  const supplied = Buffer.from(suppliedToken);
+  return expected.length === supplied.length && timingSafeEqual(expected, supplied);
 }
 
 async function watchCrawlerState(
@@ -235,6 +247,10 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
       if (url.pathname === "/runs") {
         if (request.method !== "POST") {
           methodNotAllowed(response);
+          return;
+        }
+        if (!hasValidRefreshToken(request)) {
+          json(response, 401, { error: "unauthorized" });
           return;
         }
 

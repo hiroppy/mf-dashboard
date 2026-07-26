@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hasValidCloudflareAccess } from "../../../../lib/cloudflare-access";
 import {
   parseCrawlerRefreshStatus,
   unavailableCrawlerRefreshStatus,
@@ -61,9 +62,12 @@ async function proxyCrawlerRequest(path: "/runs", init?: RequestInit) {
   }
 
   try {
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${process.env.REFRESH_TOKEN ?? ""}`);
     const res = await fetch(`${crawlerUrl}${path}`, {
       ...init,
       cache: "no-store",
+      headers,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const body: unknown = await res.json().catch(() => null);
@@ -121,6 +125,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!(await hasValidCloudflareAccess(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
   }

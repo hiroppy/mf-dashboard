@@ -17,3 +17,8 @@ output "google_identity_provider_id" {
   description = "Cloudflare Access Google identity provider ID"
   value       = cloudflare_zero_trust_access_identity_provider.google.id
 }
+
+output "access_application_aud" {
+  description = "Audience used to validate Cloudflare Access JWTs at the origin"
+  value       = cloudflare_zero_trust_access_application.this.aud
+}

@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unavailableCrawlerRefreshStatus } from "../../../../lib/crawler-refresh-status";
 import { GET, POST } from "./route";
 
+const mocks = vi.hoisted(() => ({
+  hasValidCloudflareAccess: vi.fn<(request: Request) => Promise<boolean>>(),
+}));
+
+vi.mock("../../../../lib/cloudflare-access", () => ({
+  hasValidCloudflareAccess: mocks.hasValidCloudflareAccess,
+}));
+
 const originalEnv = { ...process.env };
 const originalFetch = global.fetch;
 
@@ -45,8 +53,13 @@ function sameOriginGetRequest(headers: HeadersInit = {}): Request {
 
 describe("/api/crawler/refresh/", () => {
   beforeEach(() => {
-    process.env = { ...originalEnv, CRAWLER_URL: "http://crawler:8766" };
+    process.env = {
+      ...originalEnv,
+      CRAWLER_URL: "http://crawler:8766",
+      REFRESH_TOKEN: "refresh-token",
+    };
     global.fetch = vi.fn<typeof fetch>();
+    mocks.hasValidCloudflareAccess.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -104,11 +117,27 @@ describe("/api/crawler/refresh/", () => {
     expect(res.status).toBe(202);
     expect(global.fetch).toHaveBeenCalledWith(
       "http://crawler:8766/runs",
-      expect.objectContaining({ method: "POST", cache: "no-store" }),
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
+        headers: expect.any(Headers),
+      }),
     );
+    const requestInit = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    expect(new Headers(requestInit?.headers).get("authorization")).toBe("Bearer refresh-token");
     await expect(res.json()).resolves.toEqual(
       expect.objectContaining({ available: true, running: true, latestRun: null }),
     );
+  });
+
+  it("rejects an unauthenticated crawler run", async () => {
+    mocks.hasValidCloudflareAccess.mockResolvedValue(false);
+
+    const res = await POST(sameOriginPostRequest());
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({ error: "Unauthorized" });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("preserves conflict response when crawler is already running", async () => {

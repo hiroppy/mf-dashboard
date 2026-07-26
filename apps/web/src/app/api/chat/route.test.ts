@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   consumeStream: vi.fn<AnyMock>(),
   convertToModelMessages: vi.fn<AnyMock>(),
   createFinanceChatTools: vi.fn<AnyMock>(),
+  hasValidCloudflareAccess: vi.fn<AnyMock>(),
   acquireChatSlot: vi.fn<AnyMock>(),
   releaseChatSlot: vi.fn<AnyMock>(),
   getAllGroups: vi.fn<AnyMock>(),
@@ -28,6 +29,10 @@ vi.mock("@mf-dashboard/analytics/chat/tools", () => ({
 
 vi.mock("./chat-concurrency", () => ({
   acquireChatSlot: mocks.acquireChatSlot,
+}));
+
+vi.mock("../../../lib/cloudflare-access", () => ({
+  hasValidCloudflareAccess: mocks.hasValidCloudflareAccess,
 }));
 
 vi.mock("@mf-dashboard/analytics/config", () => ({
@@ -73,6 +78,7 @@ describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("AI_API_KEY", "test-api-key");
+    mocks.hasValidCloudflareAccess.mockResolvedValue(true);
     mocks.safeValidateUIMessages.mockResolvedValue({ success: true, data: messages });
     mocks.isLLMEnabled.mockReturnValue(true);
     mocks.isDatabaseAvailable.mockReturnValue(true);
@@ -96,6 +102,18 @@ describe("POST /api/chat", () => {
     mocks.streamText.mockReturnValue({
       toUIMessageStreamResponse: mocks.toUIMessageStreamResponse,
     });
+  });
+
+  it("rejects unauthenticated requests before reading finance data", async () => {
+    mocks.hasValidCloudflareAccess.mockResolvedValue(false);
+
+    const res = await POST(request({ messages }));
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({
+      error: { code: "UNAUTHORIZED", message: "認証が必要です。" },
+    });
+    expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

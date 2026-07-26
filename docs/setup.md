@@ -93,11 +93,13 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-`openssl`の出力を`.env`の`REFRESH_TOKEN`に設定する。このトークンはcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。
+`openssl`の出力を`.env`の`REFRESH_TOKEN`に設定する。このトークンはcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。Terraform適用後、`terraform -chdir=terraform output -raw access_application_aud`の出力を`CLOUDFLARE_ACCESS_AUD`へ、Zero TrustのTeam domainを`CLOUDFLARE_ACCESS_TEAM_DOMAIN`へ設定する。
 
 | `.env`のキー                                 | 必須 | 内容                                                                     |
 | -------------------------------------------- | ---- | ------------------------------------------------------------------------ |
-| `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する`/api/refresh/`用Bearerトークン                    |
+| `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する内部API用Bearerトークン                            |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`               |
+| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraformが作成したAccess ApplicationのAUD                               |
 | `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL           |
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                   |

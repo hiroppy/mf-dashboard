@@ -15,6 +15,7 @@ import {
   type UIMessage,
 } from "ai";
 import { CHAT_MAX_OUTPUT_TOKENS, CHAT_MESSAGE_MAX_LENGTH } from "../../../lib/chat-limits";
+import { hasValidCloudflareAccess } from "../../../lib/cloudflare-access";
 import { acquireChatSlot } from "./chat-concurrency";
 
 export const maxDuration = 60;
@@ -187,6 +188,10 @@ async function readRequestText(
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!(await hasValidCloudflareAccess(request))) {
+    return errorResponse(401, "UNAUTHORIZED", "認証が必要です。");
+  }
+
   let body: unknown;
   const requestSignal = AbortSignal.any([
     request.signal,
