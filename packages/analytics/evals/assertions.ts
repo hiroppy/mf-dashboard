@@ -24,7 +24,7 @@ interface AssertionContext {
     forbidAmounts?: boolean;
     databaseEvidence?: {
       expectNoData?: boolean;
-      expectedValues?: Array<number | string>;
+      expectedRows?: Array<Array<number | string>>;
       requiredSqlPatterns?: string[];
     };
   };
@@ -71,24 +71,32 @@ function getMissingTextPairs(
   return expectedPairs.filter(([, value], pairIndex) => {
     const normalizedLabel = labels[pairIndex]!;
     const normalizedValue = normalize(value);
-    if (hasTablePair(text, normalizedLabel, normalizedValue)) return false;
-    let labelIndex = normalizedText.indexOf(normalizedLabel);
-
-    while (labelIndex !== -1) {
-      const valueStart = labelIndex + normalizedLabel.length;
-      const valueEnd = labels.reduce((nearest, candidate) => {
-        const candidateIndex = normalizedText.indexOf(candidate, valueStart);
-        return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
-      }, normalizedText.length);
-      const segment = normalizedText.slice(valueStart, valueEnd);
-      const hasExpectedValue = /^\d+$/.test(normalizedValue)
-        ? getMonetaryClaims(segment).includes(Number(normalizedValue))
-        : segment.includes(normalizedValue);
-      if (hasExpectedValue) return false;
-
-      labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
+    const labelIndices: number[] = [];
+    let nextLabelIndex = normalizedText.indexOf(normalizedLabel);
+    while (nextLabelIndex !== -1) {
+      labelIndices.push(nextLabelIndex);
+      nextLabelIndex = normalizedText.indexOf(
+        normalizedLabel,
+        nextLabelIndex + normalizedLabel.length,
+      );
     }
-    return true;
+    const labelIndex = labelIndices.at(-1);
+    if (labelIndex === undefined) return true;
+
+    const valueStart = labelIndex + normalizedLabel.length;
+    const valueEnd = labels.reduce((nearest, candidate) => {
+      const candidateIndex = normalizedText.indexOf(candidate, valueStart);
+      return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
+    }, normalizedText.length);
+    const segment = normalizedText.slice(valueStart, valueEnd);
+    const monetaryClaims = getMonetaryClaims(segment);
+    const hasExpectedValue = /^\d+$/.test(normalizedValue)
+      ? monetaryClaims.length === 1 && monetaryClaims[0] === Number(normalizedValue)
+      : segment.includes(normalizedValue);
+    return (
+      !hasExpectedValue &&
+      !(labelIndices.length === 1 && hasTablePair(text, normalizedLabel, normalizedValue))
+    );
   });
 }
 
@@ -225,6 +233,61 @@ function sameValues(actual: string[], expected: string[]): boolean {
   return JSON.stringify(sortedActual) === JSON.stringify(sortedExpected);
 }
 
+function normalizeRows(rows: Array<Record<string, unknown>>): string[][] {
+  return rows
+    .map((row) =>
+      Object.values(row)
+        .map((value) => normalize(String(value)))
+        .sort(),
+    )
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+function hasSuspiciousProjectionLiteral(sql: string): boolean {
+  const projection = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1] ?? "";
+  return [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
+    (match) => !["0", "1"].includes(match[1]!),
+  );
+}
+
+function hasContradictedFact(text: string, fact: string): boolean {
+  const normalizedText = normalize(text);
+  const normalizedFact = normalize(fact);
+  const index = normalizedText.lastIndexOf(normalizedFact);
+  if (index === -1) return false;
+  const suffix = normalizedText.slice(
+    index + normalizedFact.length,
+    index + normalizedFact.length + 12,
+  );
+  return /^(?:ではなく|でなく|ではない|ではありません|じゃなく)/.test(suffix);
+}
+
+function hasAmountOutsideMarkdownTables(text: string): boolean {
+  const lines = getRenderableLines(text);
+  const tableLineIndices = new Set<number>();
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const header = getTableCells(lines[index]!);
+    const delimiter = getTableCells(lines[index + 1]!);
+    if (
+      !header ||
+      !delimiter ||
+      header.length !== delimiter.length ||
+      !delimiter.every((cell) => /^:?-{3,}:?$/.test(cell))
+    ) {
+      continue;
+    }
+    tableLineIndices.add(index);
+    tableLineIndices.add(index + 1);
+    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+      const row = getTableCells(lines[rowIndex]!);
+      if (!row || row.length !== header.length) break;
+      tableLineIndices.add(rowIndex);
+    }
+  }
+  const prose = lines.filter((_, index) => !tableLineIndices.has(index)).join("\n");
+  return /(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円)/.test(prose.normalize("NFKC"));
+}
+
 export default function assertFinanceChatOutput(
   output: string,
   context: AssertionContext,
@@ -250,7 +313,7 @@ export default function assertFinanceChatOutput(
   }
 
   const missingFacts = (config.expectedTextFacts ?? []).filter(
-    (fact) => !normalizedText.includes(normalize(fact)),
+    (fact) => !normalizedText.includes(normalize(fact)) || hasContradictedFact(actual.text, fact),
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
@@ -272,7 +335,7 @@ export default function assertFinanceChatOutput(
 
   if (
     config.forbidAmounts &&
-    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+\s*円)/.test(
+    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:\s*円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+\s*円)/.test(
       actual.text.normalize("NFKC"),
     ) ||
       /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
@@ -294,7 +357,9 @@ export default function assertFinanceChatOutput(
       const matchesRequiredSql = requiredSqlPatterns.every((pattern) =>
         pattern.test(parsedInput.data.sql),
       );
-      return matchesRequiredSql ? [parsedResult.data] : [];
+      return matchesRequiredSql && !hasSuspiciousProjectionLiteral(parsedInput.data.sql)
+        ? [parsedResult.data]
+        : [];
     });
     if (databaseResults.length === 0) {
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
@@ -304,22 +369,23 @@ export default function assertFinanceChatOutput(
     if (!fixtureResult.success || fixtureResult.data.truncated) {
       return fail("期待値を独立検証するfixture query結果がありません。");
     }
-    const fixtureValues = fixtureResult.data.rows.flatMap((row) =>
-      Object.values(row).map((value) => normalize(String(value))),
-    );
-    const modelValues = databaseResults.flatMap((result) =>
-      result.rows.flatMap((row) => Object.values(row).map((value) => normalize(String(value)))),
-    );
-    const expectedValues = (databaseEvidence.expectedValues ?? []).map((value) =>
-      normalize(String(value)),
-    );
-    const missingFixtureValues = expectedValues.filter((value) => !fixtureValues.includes(value));
-    if (missingFixtureValues.length > 0) {
-      return fail(`fixture query結果に期待する値がありません: ${missingFixtureValues.join(", ")}`);
+    const expectedRows = (databaseEvidence.expectedRows ?? [])
+      .map((row) => row.map((value) => normalize(String(value))).sort())
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    if (
+      expectedRows.length > 0 &&
+      JSON.stringify(normalizeRows(fixtureResult.data.rows)) !== JSON.stringify(expectedRows)
+    ) {
+      return fail("fixture query結果の行が期待値と完全一致しません。");
     }
-    const missingModelValues = expectedValues.filter((value) => !modelValues.includes(value));
-    if (missingModelValues.length > 0) {
-      return fail(`queryDatabase結果に期待する値がありません: ${missingModelValues.join(", ")}`);
+    if (
+      expectedRows.length > 0 &&
+      !databaseResults.some(
+        (databaseResult) =>
+          JSON.stringify(normalizeRows(databaseResult.rows)) === JSON.stringify(expectedRows),
+      )
+    ) {
+      return fail("queryDatabase結果の行が期待値と完全一致しません。");
     }
 
     const fixtureHasOnlyNoData =
@@ -360,6 +426,9 @@ export default function assertFinanceChatOutput(
     markdownRows.length !== (config.expectedMarkdownRows ?? []).length
   ) {
     return fail("Markdown表に期待しない明細行があります。");
+  }
+  if (config.exactMarkdownRows && hasAmountOutsideMarkdownTables(actual.text)) {
+    return fail("Markdown表の外に検証できない金額があります。");
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];

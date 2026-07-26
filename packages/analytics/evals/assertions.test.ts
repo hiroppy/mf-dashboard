@@ -81,6 +81,22 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("uses the final repeated label as the authoritative claim", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円です。訂正: 収入は0円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("rejects conflicting values within the authoritative label claim", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円または0円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   test("finds a value after a repeated heading label", () => {
     expect(
       assertFinanceChatOutput(
@@ -294,6 +310,12 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
     expect(
+      assertFinanceChatOutput(
+        output({ text: "2030年1月の食費データはありませんが、目安は一万くらいです。" }),
+        { config: { forbidAmounts: true } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、食費は1,000でした。" }), {
         config: { forbidAmounts: true },
       }),
@@ -316,7 +338,7 @@ describe("assertFinanceChatOutput", () => {
     const context = {
       config: {
         databaseEvidence: {
-          expectedValues: ["313235"],
+          expectedRows: [["313235"]],
           requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
         },
       },
@@ -370,7 +392,7 @@ describe("assertFinanceChatOutput", () => {
       ),
     ).toMatchObject({
       pass: false,
-      reason: expect.stringContaining("期待する値"),
+      reason: expect.stringContaining("queryDatabase"),
     });
     expect(
       assertFinanceChatOutput(
@@ -389,6 +411,81 @@ describe("assertFinanceChatOutput", () => {
       pass: false,
       reason: expect.stringContaining("queryDatabase"),
     });
+  });
+
+  test("compares complete fixture and model result rows", () => {
+    const context = {
+      config: {
+        databaseEvidence: {
+          expectedRows: [
+            ["食料品", "24833"],
+            ["外食", "12214"],
+          ],
+          requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+        },
+      },
+    };
+    const query = {
+      input: { sql: "SELECT sub_category, SUM(amount) FROM transactions GROUP BY sub_category" },
+      output: {
+        rows: [
+          { sub_category: "食料品", total: 24_833 },
+          { sub_category: "外食", total: 12_214 },
+        ],
+        truncated: false,
+      },
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: query.output,
+          databaseQueries: [query],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: {
+            rows: [...query.output.rows, { sub_category: "カフェ", total: 4_790 }],
+            truncated: false,
+          },
+          databaseQueries: [query],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("fixture") });
+  });
+
+  test("rejects a period fact that is immediately negated", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月ではなく2025年7月の収入は313,235円、支出は219,894円です。",
+        }),
+        { config: { expectedTextFacts: ["2026年7月"] } },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("rejects monetary claims outside an exact Markdown table", () => {
+    const text = [
+      "| 日付 | 内容 | 金額 |",
+      "| --- | --- | ---: |",
+      "| 2026-07-03 | サンマルクカフェ | 761円 |",
+      "",
+      "なお、架空店舗で9,999円の支出もありました。",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text }), {
+        config: {
+          exactMarkdownRows: true,
+          expectedMarkdownColumns: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("表の外") });
   });
 
   test("requires an empty or zero database result for no-data claims", () => {

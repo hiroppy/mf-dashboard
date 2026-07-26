@@ -204,9 +204,25 @@ describe("FinanceChatProvider", () => {
         prompt: {} as never,
         vars: { evaluationDate: "not-a-date" },
       }),
-    ).resolves.toMatchObject({ error: expect.stringContaining("有効な日時") });
+    ).resolves.toMatchObject({ error: expect.stringContaining("ISO 8601") });
     expect(deps.generate).not.toHaveBeenCalled();
   });
+
+  test.each(["2026-02-30T03:00:00.000Z", "2026-02-29T00:00:00.000Z"])(
+    "rejects a normalized invalid calendar date: %s",
+    async (evaluationDate) => {
+      const deps = dependencies();
+      const provider = new FinanceChatProvider({}, deps);
+
+      await expect(
+        provider.callApi("質問", {
+          prompt: {} as never,
+          vars: { evaluationDate },
+        }),
+      ).resolves.toMatchObject({ error: expect.stringContaining("有効な日時") });
+      expect(deps.generate).not.toHaveBeenCalled();
+    },
+  );
 
   test("returns the evaluation date error when context vars are missing", async () => {
     const deps = dependencies();

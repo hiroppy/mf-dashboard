@@ -21,16 +21,15 @@ catalogs:
     playwright:
       specifier: 1.61.1
       version: 1.61.1
+    playwright-core:
+      specifier: 1.61.1
+      version: 1.61.1
     typescript:
       specifier: 6.0.3
       version: 6.0.3
     vitest:
       specifier: 4.1.10
       version: 4.1.10
-
-overrides:
-  '@playwright/browser-chromium': 1.62.0
-  playwright-core: 1.62.0
 
 importers:
 
@@ -206,7 +205,7 @@ importers:
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.12.1
-        version: 4.12.1(playwright-core@1.62.0)
+        version: 4.12.1(playwright-core@1.61.1)
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
@@ -250,8 +249,8 @@ importers:
         specifier: 'catalog:'
         version: 1.61.1
       playwright-core:
-        specifier: 1.62.0
-        version: 1.62.0
+        specifier: 'catalog:'
+        version: 1.61.1
       storybook:
         specifier: 10.5.4
         version: 10.5.4(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -631,7 +630,7 @@ packages:
   '@axe-core/playwright@4.12.1':
     resolution: {integrity: sha512-rMd7xriptqKpP+w5265i4Hdkv2X5kbu6uiBi/B2I7uf3hieRBM3qDCfaKPtxfiYb2mKXfF+yLODJwIx+Jv1GDw==}
     peerDependencies:
-      playwright-core: 1.62.0
+      playwright-core: '>= 1.0.0'
 
   '@azure-rest/core-client@1.4.0':
     resolution: {integrity: sha512-ozTDPBVUDR5eOnMIwhggbnVmOrka4fXCs8n8mvUo4WLLc38kki6bAOByDoVZZPz/pZy2jMt2kwfpvy/UjALj6w==}
@@ -3421,9 +3420,9 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@playwright/browser-chromium@1.62.0':
-    resolution: {integrity: sha512-ei50lLPtDlIK+LCBQHurcO3MAh4e2XhAKQwH/qVWVHUrVIRQzloOeYKeatRArFNzC4i3K5+d+2POSUveDU2Q5g==}
-    engines: {node: '>=20'}
+  '@playwright/browser-chromium@1.61.1':
+    resolution: {integrity: sha512-t3/zE0i9gik5R/NpRs7G2Xo/6NPeABW6ReplGdtkeWeAkaV764CgFgoKjJo21D2xgjnvDvRYubqBUu4xl0VCqA==}
+    engines: {node: '>=18'}
 
   '@playwright/test@1.61.1':
     resolution: {integrity: sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig==}
@@ -7363,6 +7362,11 @@ packages:
   platform@1.3.6:
     resolution: {integrity: sha512-fnWVljUchTro6RiCFvCXBbNhJc2NijN7oIQxbwsyL0buWJPG85v81ehlHI9fXrJsMNgTofEoWIQeClKpgxFLrg==}
 
+  playwright-core@1.61.1:
+    resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   playwright-core@1.62.0:
     resolution: {integrity: sha512-nsNRyq0r2zsG8AcRHWknc9QRA5XCueC7gWMrs+Gx2tlZn9hcl8zudfh00lhJPY1DE7NmZ6bDsT9g2yey8mXljA==}
     engines: {node: '>=20'}
@@ -7373,7 +7377,7 @@ packages:
     engines: {node: '>=12'}
     peerDependencies:
       playwright: '*'
-      playwright-core: 1.62.0
+      playwright-core: '*'
     peerDependenciesMeta:
       playwright:
         optional: true
@@ -9068,10 +9072,10 @@ snapshots:
   '@aws/lambda-invoke-store@0.3.0':
     optional: true
 
-  '@axe-core/playwright@4.12.1(playwright-core@1.62.0)':
+  '@axe-core/playwright@4.12.1(playwright-core@1.61.1)':
     dependencies:
       axe-core: 4.12.1
-      playwright-core: 1.62.0
+      playwright-core: 1.61.1
 
   '@azure-rest/core-client@1.4.0(supports-color@10.2.2)':
     dependencies:
@@ -11289,9 +11293,9 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@playwright/browser-chromium@1.62.0':
+  '@playwright/browser-chromium@1.61.1':
     dependencies:
-      playwright-core: 1.62.0
+      playwright-core: 1.61.1
     optional: true
 
   '@playwright/test@1.61.1':
@@ -15703,7 +15707,10 @@ snapshots:
   platform@1.3.6:
     optional: true
 
-  playwright-core@1.62.0: {}
+  playwright-core@1.61.1: {}
+
+  playwright-core@1.62.0:
+    optional: true
 
   playwright-extra@4.3.6(playwright-core@1.62.0)(playwright@1.62.0)(supports-color@10.2.2):
     dependencies:
@@ -15717,7 +15724,7 @@ snapshots:
 
   playwright@1.61.1:
     dependencies:
-      playwright-core: 1.62.0
+      playwright-core: 1.61.1
     optionalDependencies:
       fsevents: 2.3.2
 
@@ -15896,7 +15903,7 @@ snapshots:
       '@openai/agents': 0.11.8(@aws-sdk/credential-provider-node@3.972.72)(@smithy/signature-v4@5.6.10)(supports-color@10.2.2)(ws@8.20.1)(zod@4.4.3)
       '@openai/codex-sdk': 0.144.6
       '@opencode-ai/sdk': 1.18.5
-      '@playwright/browser-chromium': 1.62.0
+      '@playwright/browser-chromium': 1.61.1
       '@rollup/rollup-linux-x64-gnu': 4.62.2
       '@slack/web-api': 7.17.0(debug@4.3.4(supports-color@10.2.2))(supports-color@10.2.2)
       '@smithy/node-http-handler': 4.9.11

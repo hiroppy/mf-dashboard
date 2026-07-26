@@ -167,11 +167,11 @@ export function toEvaluationOutput(
 }
 
 function getEvaluationDate(value: unknown): Date {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
     throw new Error("evaluationDate はISO 8601文字列で指定してください。");
   }
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  if (Number.isNaN(date.getTime()) || date.toISOString() !== value) {
     throw new Error("evaluationDate が有効な日時ではありません。");
   }
   return date;

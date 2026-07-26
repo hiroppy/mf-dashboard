@@ -49,10 +49,6 @@ minimumReleaseAgeExclude:
   - "@next/third-parties@16.2.12"
   - next@16.2.12
 
-overrides:
-  "@playwright/browser-chromium": 1.62.0
-  playwright-core: 1.62.0
-
 catalog:
   "@libsql/client": 0.17.4
   "@types/node": 25.9.5

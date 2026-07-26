@@ -24,7 +24,8 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseEvidence:
-          expectedValues: ["313235", "219894"]
+          expectedRows:
+            - ["313235", "219894"]
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
@@ -75,7 +76,10 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseEvidence:
-          expectedValues: ["24833", "12214", "4790"]
+          expectedRows:
+            - [食料品, "24833"]
+            - [外食, "12214"]
+            - [カフェ, "4790"]
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
@@ -118,7 +122,8 @@
         expectedToolRoutes: []
         expectedTextLinks: []
         databaseEvidence:
-          expectedValues: ["2026-07-03", サンマルクカフェ, "761"]
+          expectedRows:
+            - ["2026-07-03", サンマルクカフェ, "761"]
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
@@ -176,7 +181,7 @@
       value: file://./assertions.ts
       config:
         expectedTextPatterns:
-          - "(?:データ|明細).*(?:ありません|ない|見つかりません)"
+          - "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)"
         forbidAmounts: true
         expectedCharts: []
         expectedToolRoutes: []
