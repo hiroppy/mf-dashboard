@@ -37,10 +37,10 @@ export async function applyCategoryDecisions(
       if (result.ok) {
         appliedDecisions.push(item);
       } else {
-        warn(`Failed to update transaction category: ${item.transaction.mfId} (${result.status})`);
+        warn(`Failed to update transaction category (status: ${result.status}).`);
       }
-    } catch (err) {
-      warn(`Failed to update transaction category: ${item.transaction.mfId}`, err);
+    } catch {
+      warn("Failed to update transaction category (code: CATEGORY_UPDATE_REQUEST_FAILED).");
     }
   }
 

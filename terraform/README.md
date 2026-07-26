@@ -32,7 +32,7 @@ terraform -chdir=terraform apply
 
 ## Tunnel Token の受け渡し
 
-Terraform の `local_sensitive_file` が app 共有 data volume とは別の `secrets/cloudflared-token` を mode `444` で作成する。`compose.yml` はこのファイルを Compose secret として mount し、`cloudflared tunnel run --token-file` で使用する。mode `444` は `cloudflare/cloudflared` image の non-root UID が secret file を読めるようにするため。
+Terraform の `local_sensitive_file` が app 共有 data volume とは別の `secrets/cloudflared-token` を mode `400` で作成する。`compose.yml` はこのファイルを Compose secret として mount し、host側の所有者と同じ `HOST_UID` / `HOST_GID` で動く `cloudflared tunnel run --token-file` が読み取る。LinuxでUID/GIDが既定の`1000:1000`と異なる場合は`.env`へ実値を設定する。
 
 `terraform.tfvars`、Terraform state、`secrets/cloudflared-token` は Git 管理対象外。すべて秘密情報として扱う。
 

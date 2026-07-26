@@ -3,6 +3,7 @@ import type { CashFlowItem, CashFlowSummary } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { getCsrfToken } from "../hooks/helpers.js";
+import { warn } from "../logger.js";
 import { scrapeCashFlowMonth } from "../scrapers/cash-flow-history.js";
 import { scrapeCategoryCandidates } from "../scrapers/category-candidates.js";
 import { applyCategoryDecisions } from "./apply.js";
@@ -19,6 +20,11 @@ vi.mock("@mf-dashboard/db/repository/transactions", () => ({
 
 vi.mock("../hooks/helpers.js", () => ({
   getCsrfToken: vi.fn<() => Promise<string | null>>(),
+}));
+
+vi.mock("../logger.js", () => ({
+  info: vi.fn<(...args: unknown[]) => void>(),
+  warn: vi.fn<(...args: unknown[]) => void>(),
 }));
 
 vi.mock("../scrapers/cash-flow-history.js", () => ({
@@ -70,6 +76,7 @@ describe("categorizeCashFlowMonth", () => {
     vi.mocked(scrapeCategoryCandidates).mockReset();
     vi.mocked(getCsrfToken).mockReset();
     vi.mocked(applyCategoryDecisions).mockReset();
+    vi.mocked(warn).mockReset();
 
     vi.mocked(scrapeCategoryCandidates).mockResolvedValue([
       {
@@ -141,5 +148,9 @@ describe("categorizeCashFlowMonth", () => {
         subCategory: "食料品",
       },
     ]);
+    expect(warn).toHaveBeenCalledWith(
+      "Category decision failed for 2026-06; saving locally reflected categories (code: CATEGORY_DECISION_PIPELINE_FAILED).",
+    );
+    expect(JSON.stringify(vi.mocked(warn).mock.calls)).not.toContain("final scrape failed");
   });
 });

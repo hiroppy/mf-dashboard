@@ -137,8 +137,8 @@ export class CategoryDecisionEngine {
       }
 
       return this.#resolveLLMDecision(transaction, llmDecision);
-    } catch (err) {
-      this.#warn(`LLM category decision failed for transaction ${transaction.mfId}:`, err);
+    } catch {
+      this.#warn("LLM category decision failed (code: LLM_REQUEST_FAILED).");
       return null;
     }
   }

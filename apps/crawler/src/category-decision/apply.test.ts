@@ -95,6 +95,12 @@ describe("applyCategoryDecisions", () => {
 
     expect(result.appliedCount).toBe(0);
     expect(result.appliedDecisions).toEqual([]);
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls).toEqual([
+      ["Failed to update transaction category (status: 500)."],
+      ["Failed to update transaction category (code: CATEGORY_UPDATE_REQUEST_FAILED)."],
+    ]);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("tx-1");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("tx-2");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("network");
   });
 });

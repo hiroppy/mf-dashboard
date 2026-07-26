@@ -95,21 +95,21 @@ openssl rand -hex 32
 
 `openssl`の出力を`.env`の`REFRESH_TOKEN`に設定する。このトークンはcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。Terraform適用後、`terraform -chdir=terraform output -raw access_application_aud`の出力を`CLOUDFLARE_ACCESS_AUD`へ、Zero TrustのTeam domainを`CLOUDFLARE_ACCESS_TEAM_DOMAIN`へ設定する。
 
-| `.env`のキー                                 | 必須 | 内容                                                                     |
-| -------------------------------------------- | ---- | ------------------------------------------------------------------------ |
-| `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する内部API用Bearerトークン                            |
-| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`               |
-| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraformが作成したAccess ApplicationのAUD                               |
-| `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL           |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                      |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                   |
-| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須         |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                              |
-| `HOST_UID` / `HOST_GID`                      | 任意 | Linuxで`./data`へ書き込むユーザーのUIDとGID。既定値は`1000:1000`         |
-| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない |
+| `.env`のキー                                 | 必須 | 内容                                                                           |
+| -------------------------------------------- | ---- | ------------------------------------------------------------------------------ |
+| `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する内部API用Bearerトークン                                  |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                     |
+| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraformが作成したAccess ApplicationのAUD                                     |
+| `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                 |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                            |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                         |
+| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須               |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                      |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                                    |
+| `HOST_UID` / `HOST_GID`                      | 任意 | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000` |
+| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない       |
 
-Linuxで`./data`へ書き込めない場合は、`id -u`と`id -g`で値を確認し、`.env`の`HOST_UID`と`HOST_GID`へ設定する。
+Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
 
 #### 1PasswordのIDを確認する
 
@@ -178,7 +178,7 @@ terraform -chdir=terraform output
 ls -l secrets/cloudflared-token
 ```
 
-`tunnel_id`、`hostname`、`google_identity_provider_id`が出力され、`secrets/cloudflared-token`の権限が`-r--r--r--`（mode `444`）なら成功。
+`tunnel_id`、`hostname`、`google_identity_provider_id`が出力され、`secrets/cloudflared-token`の権限が`-r--------`（mode `400`）なら成功。
 
 ### 3.5 Docker Composeの起動
 

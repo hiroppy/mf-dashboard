@@ -247,6 +247,24 @@ describe("CategoryDecisionEngine", () => {
     expect(result).toEqual([]);
   });
 
+  test("LLM失敗ログへ取引IDやprovider errorを含めない", async () => {
+    const warn = vi.fn<(...args: unknown[]) => void>();
+    const llmDecider = vi
+      .fn<LLMCategoryDecider>()
+      .mockRejectedValue(new Error("provider response contains transaction details"));
+    const config: NormalizedCategoryDecisionConfig = {
+      llm: { enabled: true, maxPerRun: 5, minConfidence: 0.65 },
+      rules: [],
+    };
+    const engine = new CategoryDecisionEngine({ config, candidates, llmDecider, warn });
+
+    await expect(engine.decideMany([tx({ mfId: "private-transaction-id" })])).resolves.toEqual([]);
+
+    expect(warn).toHaveBeenCalledWith("LLM category decision failed (code: LLM_REQUEST_FAILED).");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("private-transaction-id");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("provider response");
+  });
+
   test("LLM推論件数はmaxPerRunで制限する", async () => {
     const llmDecider = vi.fn<LLMCategoryDecider>().mockResolvedValue({
       source: "llm",
