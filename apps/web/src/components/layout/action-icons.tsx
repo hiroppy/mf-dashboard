@@ -3,6 +3,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import { Home, RefreshCw, Code2, HelpCircle } from "lucide-react";
 import type { ReactNode } from "react";
+import { formatDateTime } from "../../lib/format";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
 
@@ -13,12 +14,6 @@ interface ActionIconsProps {
 
 export function ActionIcons({ variant, notifications }: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
-  const githubOrg = process.env.NEXT_PUBLIC_GITHUB_ORG;
-  const githubRepo = process.env.NEXT_PUBLIC_GITHUB_REPO;
-  const workflowUrl =
-    githubOrg && githubRepo
-      ? `https://github.com/${githubOrg}/${githubRepo}/actions/workflows/daily-update.yml`
-      : null;
 
   if (variant === "sidebar") {
     return (
@@ -31,13 +26,61 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 
   return (
     <div className="flex items-center gap-1">
-      <ReloadButton iconSize={iconSize} workflowUrl={workflowUrl} />
       {notifications}
       <HomeButton iconSize={iconSize} />
       <GitHubButton iconSize={iconSize} className="hidden lg:block" />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>
   );
+}
+
+interface RefreshStatusProps {
+  lastScrapedAt: string | null;
+  workflowUrl?: string | null;
+}
+
+export function RefreshStatus({
+  lastScrapedAt,
+  workflowUrl = getRefreshWorkflowUrl(),
+}: RefreshStatusProps) {
+  const formattedLastScrapedAt = lastScrapedAt ? formatDateTime(lastScrapedAt) : null;
+
+  if (!formattedLastScrapedAt && !workflowUrl) {
+    return null;
+  }
+
+  const ariaLabel = formattedLastScrapedAt
+    ? `データ更新ワークフローを開く（最終更新 ${formattedLastScrapedAt}）`
+    : "データ更新ワークフローを開く";
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 border-l pl-2">
+      {formattedLastScrapedAt && (
+        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+          <span className="hidden sm:inline">更新 </span>
+          <time dateTime={lastScrapedAt ?? undefined}>{formattedLastScrapedAt}</time>
+        </span>
+      )}
+      {workflowUrl && (
+        <IconButton
+          icon={<RefreshCw className="h-4.5 w-4.5" />}
+          href={workflowUrl}
+          ariaLabel={ariaLabel}
+          className="p-1.5"
+          isExternal
+        />
+      )}
+    </div>
+  );
+}
+
+function getRefreshWorkflowUrl() {
+  const githubOrg = process.env.NEXT_PUBLIC_GITHUB_ORG;
+  const githubRepo = process.env.NEXT_PUBLIC_GITHUB_REPO;
+
+  return githubOrg && githubRepo
+    ? `https://github.com/${githubOrg}/${githubRepo}/actions/workflows/daily-update.yml`
+    : null;
 }
 
 function HelpButton({ iconSize, className }: { iconSize: string; className?: string }) {
@@ -109,19 +152,6 @@ function GitHubButton({ iconSize, className }: { iconSize: string; className?: s
       href="https://github.com/hiroppy/mf-dashboard"
       ariaLabel="GitHub"
       className={className}
-      isExternal
-    />
-  );
-}
-
-function ReloadButton({ iconSize, workflowUrl }: { iconSize: string; workflowUrl: string | null }) {
-  if (!workflowUrl) return null;
-
-  return (
-    <IconButton
-      icon={<RefreshCw className={iconSize} />}
-      href={workflowUrl}
-      ariaLabel="ワークフローを実行"
       isExternal
     />
   );

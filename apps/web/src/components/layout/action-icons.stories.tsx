@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { AccountNotificationsClient } from "../info/account-notifications.client";
-import { ActionIcons } from "./action-icons";
+import { ActionIcons, RefreshStatus } from "./action-icons";
 
 const meta = {
   title: "Layout/ActionIcons",
@@ -36,6 +36,18 @@ export const HeaderWithNotifications: Story = {
       />
     ),
   },
+};
+
+export const UpdateStatus: Story = {
+  args: {
+    variant: "header",
+  },
+  render: () => (
+    <RefreshStatus
+      lastScrapedAt="2025-04-30T01:30:00.000Z"
+      workflowUrl="https://github.com/example/example/actions/workflows/daily-update.yml"
+    />
+  ),
 };
 
 export const Sidebar: Story = {
