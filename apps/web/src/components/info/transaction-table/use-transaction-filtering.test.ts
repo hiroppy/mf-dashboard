@@ -212,6 +212,33 @@ describe("useTransactionFiltering", () => {
     });
   });
 
+  describe("フィルタ配線", () => {
+    it("検索・タイプ・アカウントを組み合わせてフィルタする", () => {
+      const transactions = [
+        createTransaction({ id: 1, description: "ランチ", type: "expense", accountName: "銀行A" }),
+        createTransaction({
+          id: 2,
+          description: "ディナー",
+          type: "expense",
+          accountName: "銀行A",
+        }),
+        createTransaction({ id: 3, description: "ランチ", type: "income", accountName: "銀行A" }),
+        createTransaction({ id: 4, description: "ランチ", type: "expense", accountName: "銀行B" }),
+      ];
+      const { result } = renderHook(() =>
+        useTransactionFiltering({ ...defaultOptions, transactions }),
+      );
+
+      act(() => {
+        result.current.handleSearchChange("ランチ");
+        result.current.handleTypesChange(["expense"]);
+        result.current.handleAccountsChange(["銀行A"]);
+      });
+
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+    });
+  });
+
   describe("ソート", () => {
     it("同じカラムをクリックすると方向が反転する", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
