@@ -151,6 +151,31 @@ describe("useTransactionFiltering", () => {
       expect(result.current.selectedYear).toBe("2025");
       expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
     });
+
+    it("年フィルタの有効状態に合わせて選択年と表示対象を切り替える", () => {
+      const { result, rerender } = renderHook(
+        ({ yearFilterEnabled }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions,
+            yearFilterEnabled,
+          }),
+        { initialProps: { yearFilterEnabled: false } },
+      );
+
+      expect(result.current.selectedYear).toBeNull();
+      expect(result.current.filteredAndSortedTransactions).toHaveLength(4);
+
+      rerender({ yearFilterEnabled: true });
+
+      expect(result.current.selectedYear).toBe("2026");
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+
+      rerender({ yearFilterEnabled: false });
+
+      expect(result.current.selectedYear).toBeNull();
+      expect(result.current.filteredAndSortedTransactions).toHaveLength(4);
+    });
   });
 
   describe("KPI計算", () => {
