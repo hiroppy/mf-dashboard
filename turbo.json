@@ -22,6 +22,9 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "test:mutation": {
+      "dependsOn": ["^test:mutation"]
+    },
     "test:e2e": {
       "dependsOn": ["^build:demo"],
       "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH"]

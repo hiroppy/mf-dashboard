@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "concurrency": "50%",
+  "checkers": ["typescript"],
+  "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
+  "mutate": [
+    "src/app/accounts/account-list.client.tsx",
+    "src/app/api/crawler/refresh/route.ts",
+    "src/app/api/refresh/route.ts",
+    "src/app/cf/[[]month]/page-title.ts",
+    "src/components/charts/compound-simulator/calculate-compound.ts",
+    "src/components/charts/compound-simulator/compound-simulator-utils.ts",
+    "src/components/charts/compound-simulator/generate-summary.tsx",
+    "src/components/charts/compound-simulator/pension-utils.ts",
+    "src/components/charts/compound-simulator/timeline.tsx",
+    "src/components/info/category-breakdown/use-category-expansion.ts",
+    "src/components/info/sankey-diagram-utils.ts",
+    "src/components/info/transaction-table/use-transaction-filtering.ts",
+    "src/components/layout/action-icons.tsx",
+    "src/lib/{aggregation,asset-category-order,base-path,calendar,chart,colors,format,metadata,runtime-rendering,transaction-utils,url}.ts"
+  ],
+  "packageManager": "pnpm",
+  "plugins": ["@stryker-mutator/typescript-checker", "@stryker-mutator/vitest-runner"],
+  "reporters": ["clear-text", "progress", "html", "json"],
+  "testRunner": "vitest",
+  "thresholds": {
+    "high": 80,
+    "low": 55,
+    "break": 55
+  },
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts"
+  }
+}

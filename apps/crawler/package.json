@@ -19,6 +19,7 @@
     "serve": "tsx src/server.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run --project unit",
+    "test:mutation": "stryker run",
     "test:e2e": "vitest run --project e2e",
     "typecheck": "tsc --noEmit"
   },
@@ -34,6 +35,9 @@
     "tsx": "4.22.4"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/typescript-checker": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

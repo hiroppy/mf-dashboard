@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "concurrency": "50%",
+  "checkers": ["typescript"],
+  "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
+  "mutate": [
+    "src/auth/{credentials,state}.ts",
+    "src/category-decision/*.ts",
+    "src/scrapers/{cash-flow-history,category-candidates,institution-categories,monthly-summary,portfolio,refresh}.ts",
+    "!src/scrapers/{category-candidates,institution-categories,portfolio}.ts",
+    "src/{crawler-phases,crawler-run-lock,crawler-run-state,dashboard-url,data-builder,history-months,index,notification,parsers,server,slack,web-refresh}.ts",
+    "!src/**/*.test.ts",
+    "!src/index.ts"
+  ],
+  "packageManager": "pnpm",
+  "plugins": ["@stryker-mutator/typescript-checker", "@stryker-mutator/vitest-runner"],
+  "reporters": ["clear-text", "progress", "html", "json"],
+  "testRunner": "vitest",
+  "thresholds": {
+    "high": 80,
+    "low": 40,
+    "break": 40
+  },
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts"
+  }
+}
