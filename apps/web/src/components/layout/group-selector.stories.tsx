@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { GroupSelectorClient } from "./group-selector.client";
 
-const refreshWorkflowUrl = "https://github.com/example/example/actions/workflows/daily-update.yml";
-
 const meta = {
   title: "Layout/GroupSelector",
   component: GroupSelectorClient,
@@ -29,7 +27,6 @@ export const Default: Story = {
       { id: "3", name: "投資用", isCurrent: false, lastScrapedAt: "2025-04-29T09:00:00" },
     ],
     defaultGroupId: "1",
-    refreshWorkflowUrl,
   },
 };
 
@@ -40,7 +37,6 @@ export const TwoGroups: Story = {
       { id: "2", name: "サブ", isCurrent: false, lastScrapedAt: "2025-04-30T15:20:00" },
     ],
     defaultGroupId: "1",
-    refreshWorkflowUrl,
   },
 };
 
@@ -61,7 +57,6 @@ export const LongGroupNames: Story = {
       },
     ],
     defaultGroupId: "1",
-    refreshWorkflowUrl,
   },
 };
 
@@ -78,7 +73,6 @@ export const OnGroupPage: Story = {
       { id: "investment", name: "投資用", isCurrent: false, lastScrapedAt: "2025-04-29T09:00:00" },
     ],
     defaultGroupId: "default-group",
-    refreshWorkflowUrl,
   },
   parameters: {
     nextjs: {

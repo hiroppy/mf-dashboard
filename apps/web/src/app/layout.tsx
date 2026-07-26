@@ -1,9 +1,8 @@
-import { isDatabaseAvailable } from "@mf-dashboard/db";
+import { getAllGroups, getCurrentGroup, isDatabaseAvailable } from "@mf-dashboard/db";
 import { DatabaseZap } from "lucide-react";
 import "./globals.css";
 import type { Metadata } from "next";
 import { AccountNotifications } from "../components/info/account-notifications";
-import { GroupSelector } from "../components/layout/group-selector";
 import { Header } from "../components/layout/header";
 import { Sidebar } from "../components/layout/sidebar";
 import { SidebarProvider } from "../components/layout/sidebar-context";
@@ -44,7 +43,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
   if (!isDatabaseAvailable()) {
     return (
       <html lang="ja">
@@ -66,11 +65,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     );
   }
 
+  const groups = await getAllGroups();
+  const currentGroup = await getCurrentGroup();
+  const defaultGroupId = currentGroup?.id ?? groups[0]?.id ?? null;
+
   return (
     <html lang="ja">
       <body className="min-h-dvh bg-background antialiased overflow-x-hidden tabular-nums">
         <SidebarProvider>
-          <Header groupSelector={<GroupSelector />} notifications={<AccountNotifications />} />
+          <Header
+            groups={groups.map((group) => ({
+              id: group.id,
+              name: group.name,
+              isCurrent: group.isCurrent ?? false,
+              lastScrapedAt: group.lastScrapedAt,
+            }))}
+            defaultGroupId={defaultGroupId}
+            notifications={<AccountNotifications />}
+          />
           <div className="flex pt-14">
             <Sidebar />
             <main className="flex-1 lg:ml-60 overflow-x-hidden px-4 py-6 lg:px-8">

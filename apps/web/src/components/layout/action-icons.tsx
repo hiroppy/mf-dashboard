@@ -10,9 +10,16 @@ import { IconButton } from "../ui/icon-button";
 interface ActionIconsProps {
   variant: "header" | "sidebar";
   notifications?: ReactNode;
+  lastScrapedAt?: string | null;
+  refreshWorkflowUrl?: string | null;
 }
 
-export function ActionIcons({ variant, notifications }: ActionIconsProps) {
+export function ActionIcons({
+  variant,
+  notifications,
+  lastScrapedAt,
+  refreshWorkflowUrl,
+}: ActionIconsProps) {
   const iconSize = variant === "header" ? "h-4.5 w-4.5" : "h-5 w-5";
 
   if (variant === "sidebar") {
@@ -26,6 +33,7 @@ export function ActionIcons({ variant, notifications }: ActionIconsProps) {
 
   return (
     <div className="flex items-center gap-1">
+      <RefreshStatus lastScrapedAt={lastScrapedAt ?? null} workflowUrl={refreshWorkflowUrl} />
       {notifications}
       <HomeButton iconSize={iconSize} />
       <GitHubButton iconSize={iconSize} className="hidden lg:block" />

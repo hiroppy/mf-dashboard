@@ -17,6 +17,8 @@ type Story = StoryObj<typeof meta>;
 export const Header: Story = {
   args: {
     variant: "header",
+    lastScrapedAt: "2025-04-30T01:30:00.000Z",
+    refreshWorkflowUrl: "https://github.com/example/example/actions/workflows/daily-update.yml",
     notifications: (
       <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
     ),
@@ -26,6 +28,8 @@ export const Header: Story = {
 export const HeaderWithNotifications: Story = {
   args: {
     variant: "header",
+    lastScrapedAt: "2025-04-30T01:30:00.000Z",
+    refreshWorkflowUrl: "https://github.com/example/example/actions/workflows/daily-update.yml",
     notifications: (
       <AccountNotificationsClient
         errorAccounts={[{ id: 1, mfId: "account-1", name: "User Aの銀行口座", status: "error" }]}
