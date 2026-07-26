@@ -131,6 +131,21 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
       }),
     ).toMatchObject({ pass: false });
+
+    const separateTables = [
+      "| 日付 | 内容 | 金額 |",
+      "| --- | --- | ---: |",
+      "| 2026-07-03 | 別の店舗 | 999円 |",
+      "",
+      "| 日付 | 内容 | 金額 |",
+      "| --- | --- | ---: |",
+      "| 2026-07-04 | サンマルクカフェ | 761円 |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text: separateTables }), {
+        config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects links that were not returned by the route tool", () => {

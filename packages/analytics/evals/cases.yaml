@@ -70,6 +70,7 @@
         expectedCharts: []
         expectedToolRoutes: ["/0/cf/2026-07"]
         expectedTextLinks: ["/0/cf/2026-07"]
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
 
 - description: データのない期間で金額を推測しない
   vars:
@@ -86,3 +87,4 @@
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]

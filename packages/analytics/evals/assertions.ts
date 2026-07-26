@@ -97,11 +97,13 @@ function getMarkdownRows(text: string): string[][] {
       continue;
     }
 
-    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+    let rowIndex = index + 2;
+    for (; rowIndex < lines.length; rowIndex += 1) {
       const row = getTableCells(lines[rowIndex]!);
-      if (!row) break;
-      if (row.length === header.length) rows.push(row);
+      if (!row || row.length !== header.length) break;
+      rows.push(row);
     }
+    index = rowIndex - 1;
   }
   return rows;
 }

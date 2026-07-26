@@ -156,6 +156,16 @@ describe("FinanceChatProvider", () => {
     expect(deps.generate).not.toHaveBeenCalled();
   });
 
+  test("returns the evaluation date error when context vars are missing", async () => {
+    const deps = dependencies();
+    const provider = new FinanceChatProvider({}, deps);
+
+    await expect(provider.callApi("質問", { prompt: {} as never } as never)).resolves.toMatchObject(
+      { error: expect.stringContaining("ISO 8601文字列") },
+    );
+    expect(deps.generate).not.toHaveBeenCalled();
+  });
+
   test("closes the shared database during cleanup", () => {
     const deps = dependencies();
     new FinanceChatProvider({}, deps).cleanup();

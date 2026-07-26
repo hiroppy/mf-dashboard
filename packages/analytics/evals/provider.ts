@@ -184,7 +184,7 @@ export default class FinanceChatProvider implements ApiProvider {
           stepNumber === FINANCE_CHAT_MAX_GENERATION_STEPS - 1 ? { toolChoice: "none" } : undefined,
         prompt,
         stopWhen: stepCountIs(FINANCE_CHAT_MAX_GENERATION_STEPS),
-        system: getFinanceChatSystemPrompt(getEvaluationDate(context?.vars.evaluationDate)),
+        system: getFinanceChatSystemPrompt(getEvaluationDate(context?.vars?.evaluationDate)),
         tools: createFinanceChatTools(db, group.id),
       });
 
