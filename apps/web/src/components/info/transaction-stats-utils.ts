@@ -19,6 +19,14 @@ interface NamedValue {
 
 export type TransactionSort = "amount" | "date";
 
+export function isTransactionInCurrentMonth(
+  transactionDate: string,
+  currentDate = new Date(),
+): boolean {
+  const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+  return transactionDate.slice(0, 7) === currentMonth;
+}
+
 export function sortCategoryTransactions(
   transactions: readonly CategoryTransaction[],
   sortBy: TransactionSort,

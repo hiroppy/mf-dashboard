@@ -103,9 +103,11 @@ export const Default: Story = {
     await expect(descriptions[1]).toHaveTextContent("店舗 A");
 
     const sortSelect = screen.getByRole("combobox", { name: "並び順" });
+    await expect(screen.queryByText("並び順")).toBeNull();
     await expect(sortSelect).toHaveTextContent("金額順");
 
     await userEvent.click(sortSelect);
+    await waitFor(() => expect(screen.getByRole("option", { name: "日付順" })).toBeVisible());
     await userEvent.click(screen.getByRole("option", { name: "日付順" }));
 
     const dateSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
@@ -114,6 +116,7 @@ export const Default: Story = {
     await expect(sortSelect).toHaveTextContent("日付順");
 
     await userEvent.click(sortSelect);
+    await waitFor(() => expect(screen.getByRole("option", { name: "金額順" })).toBeVisible());
     await userEvent.click(screen.getByRole("option", { name: "金額順" }));
 
     const amountSortedDescriptions = screen.getAllByText(/店舗 [AB]/);

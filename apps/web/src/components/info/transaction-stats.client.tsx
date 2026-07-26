@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dia
 import { Select } from "../ui/select";
 import {
   calculateCompositionPercentage,
+  isTransactionInCurrentMonth,
   sortCategoryTransactions,
   type TransactionSort,
 } from "./transaction-stats-utils";
@@ -112,16 +113,24 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
                   {selectedBreakdown.name}カテゴリに含まれる年間取引の詳細
                 </DialogDescription>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0"
-                aria-label="明細を閉じる"
-                onClick={() => setSelection(null)}
-              >
-                <X aria-hidden="true" />
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Select
+                  aria-label="並び順"
+                  className="w-28"
+                  options={sortOptions}
+                  value={sortBy}
+                  onChange={(value) => setSortBy(value as TransactionSort)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="明細を閉じる"
+                  onClick={() => setSelection(null)}
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </div>
             </div>
 
             <div className="grid shrink-0 grid-cols-2 gap-4 border-b px-5 py-4 sm:grid-cols-3 sm:px-6">
@@ -150,17 +159,6 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
             </div>
 
             <div className="min-h-0 space-y-5 overflow-y-auto p-5 sm:p-6">
-              <div className="flex items-center justify-end gap-2">
-                <span className="text-sm text-muted-foreground">並び順</span>
-                <Select
-                  aria-label="並び順"
-                  className="w-28"
-                  options={sortOptions}
-                  value={sortBy}
-                  onChange={(value) => setSortBy(value as TransactionSort)}
-                />
-              </div>
-
               {(selectedBreakdown.categories.length > 1 ||
                 selectedBreakdown.categories[0] !== selectedBreakdown.name) && (
                 <div>
@@ -190,7 +188,15 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
                         {transaction.description || "内容なし"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(transaction.date)}
+                        <span
+                          className={
+                            isTransactionInCurrentMonth(transaction.date)
+                              ? "font-semibold"
+                              : undefined
+                          }
+                        >
+                          {formatDate(transaction.date)}
+                        </span>
                         {transaction.accountName ? ` / ${transaction.accountName}` : ""}
                         {selectedBreakdown.categories.length > 1 ||
                         selectedBreakdown.categories[0] !== selectedBreakdown.name

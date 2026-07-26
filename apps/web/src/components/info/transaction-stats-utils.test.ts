@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCompositionPercentage,
   createBreakdowns,
+  isTransactionInCurrentMonth,
   sortCategoryTransactions,
 } from "./transaction-stats-utils";
 
@@ -130,5 +131,19 @@ describe("sortCategoryTransactions", () => {
 
   it("sorts transactions by date descending and preserves the order of equal dates", () => {
     expect(sortCategoryTransactions(transactions, "date").map(({ id }) => id)).toEqual([1, 3, 2]);
+  });
+});
+
+describe("isTransactionInCurrentMonth", () => {
+  const currentDate = new Date(2026, 6, 27);
+
+  it("returns true for a transaction in the current month", () => {
+    expect(isTransactionInCurrentMonth("2026-07-01", currentDate)).toBe(true);
+    expect(isTransactionInCurrentMonth("2026-07-31", currentDate)).toBe(true);
+  });
+
+  it("returns false for a transaction outside the current month", () => {
+    expect(isTransactionInCurrentMonth("2026-06-30", currentDate)).toBe(false);
+    expect(isTransactionInCurrentMonth("2025-07-27", currentDate)).toBe(false);
   });
 });
