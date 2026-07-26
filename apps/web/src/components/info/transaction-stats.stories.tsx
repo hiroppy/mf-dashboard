@@ -54,7 +54,7 @@ export const Default: Story = {
         transactions: [
           {
             id: 3,
-            date: "2026-06-12",
+            date: "2026-06-25",
             description: "店舗 A",
             amount: 4500,
             accountName: "カード A",
@@ -102,8 +102,33 @@ export const Default: Story = {
     await expect(descriptions[0]).toHaveTextContent("店舗 B");
     await expect(descriptions[1]).toHaveTextContent("店舗 A");
 
+    const amountSort = screen.getByRole("button", { name: "金額順" });
+    const dateSort = screen.getByRole("button", { name: "日付順" });
+    await expect(amountSort).toHaveAttribute("aria-pressed", "true");
+    await expect(dateSort).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(dateSort);
+
+    const dateSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
+    await expect(dateSortedDescriptions[0]).toHaveTextContent("店舗 A");
+    await expect(dateSortedDescriptions[1]).toHaveTextContent("店舗 B");
+    await expect(dateSort).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(amountSort);
+
+    const amountSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
+    await expect(amountSortedDescriptions[0]).toHaveTextContent("店舗 B");
+    await expect(amountSortedDescriptions[1]).toHaveTextContent("店舗 A");
+
     await userEvent.click(screen.getByRole("button", { name: "明細を閉じる" }));
 
     await expect(screen.queryByText("2026年 食費の明細")).toBeNull();
+
+    await userEvent.click(canvas.getByRole("button", { name: /食費/ }));
+
+    await expect(screen.getByRole("button", { name: "金額順" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   },
 };

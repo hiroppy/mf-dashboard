@@ -17,6 +17,17 @@ interface NamedValue {
   value: number;
 }
 
+export type TransactionSort = "amount" | "date";
+
+export function sortCategoryTransactions(
+  transactions: readonly CategoryTransaction[],
+  sortBy: TransactionSort,
+): CategoryTransaction[] {
+  return [...transactions].sort((a, b) =>
+    sortBy === "amount" ? b.amount - a.amount : b.date.localeCompare(a.date),
+  );
+}
+
 export function createBreakdowns(
   categories: NamedValue[],
   type: "income" | "expense",

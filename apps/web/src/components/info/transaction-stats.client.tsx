@@ -9,7 +9,11 @@ import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
-import { calculateCompositionPercentage } from "./transaction-stats-utils";
+import {
+  calculateCompositionPercentage,
+  sortCategoryTransactions,
+  type TransactionSort,
+} from "./transaction-stats-utils";
 
 export interface CategoryTransaction {
   id: number;
@@ -37,6 +41,7 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
   const [selection, setSelection] = useState<{ type: "income" | "expense"; name: string } | null>(
     null,
   );
+  const [sortBy, setSortBy] = useState<TransactionSort>("amount");
 
   const selectedBreakdown = selection
     ? (selection.type === "income" ? income : expense).find(
@@ -50,10 +55,11 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
       )
     : 0;
   const selectedTransactions = selectedBreakdown
-    ? [...selectedBreakdown.transactions].sort((a, b) => b.amount - a.amount)
+    ? sortCategoryTransactions(selectedBreakdown.transactions, sortBy)
     : [];
 
   const select = (type: "income" | "expense", name: string) => {
+    setSortBy("amount");
     setSelection((current) =>
       current?.type === type && current.name === name ? null : { type, name },
     );
@@ -138,6 +144,33 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
             </div>
 
             <div className="min-h-0 space-y-5 overflow-y-auto p-5 sm:p-6">
+              <fieldset className="flex items-center justify-end gap-2">
+                <legend className="sr-only">並び順</legend>
+                <span aria-hidden="true" className="text-sm text-muted-foreground">
+                  並び順
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={sortBy === "amount" ? "default" : "outline"}
+                    aria-pressed={sortBy === "amount"}
+                    onClick={() => setSortBy("amount")}
+                  >
+                    金額順
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={sortBy === "date" ? "default" : "outline"}
+                    aria-pressed={sortBy === "date"}
+                    onClick={() => setSortBy("date")}
+                  >
+                    日付順
+                  </Button>
+                </div>
+              </fieldset>
+
               {(selectedBreakdown.categories.length > 1 ||
                 selectedBreakdown.categories[0] !== selectedBreakdown.name) && (
                 <div>

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculateCompositionPercentage, createBreakdowns } from "./transaction-stats-utils";
+import {
+  calculateCompositionPercentage,
+  createBreakdowns,
+  sortCategoryTransactions,
+} from "./transaction-stats-utils";
 
 const transaction = {
   date: "2026-01-01",
@@ -88,5 +92,43 @@ describe("calculateCompositionPercentage", () => {
 
   it("calculates a percentage for a positive total", () => {
     expect(calculateCompositionPercentage(25, 100)).toBe(25);
+  });
+});
+
+describe("sortCategoryTransactions", () => {
+  const transactions = [
+    {
+      id: 1,
+      date: "2026-06-25",
+      description: "店舗 A",
+      amount: 4500,
+      accountName: "カード A",
+      category: "食費",
+    },
+    {
+      id: 2,
+      date: "2026-06-20",
+      description: "店舗 B",
+      amount: 8000,
+      accountName: "カード A",
+      category: "食費",
+    },
+    {
+      id: 3,
+      date: "2026-06-25",
+      description: "店舗 C",
+      amount: 3000,
+      accountName: "カード A",
+      category: "食費",
+    },
+  ];
+
+  it("sorts transactions by amount descending without mutating the input", () => {
+    expect(sortCategoryTransactions(transactions, "amount").map(({ id }) => id)).toEqual([2, 1, 3]);
+    expect(transactions.map(({ id }) => id)).toEqual([1, 2, 3]);
+  });
+
+  it("sorts transactions by date descending and preserves the order of equal dates", () => {
+    expect(sortCategoryTransactions(transactions, "date").map(({ id }) => id)).toEqual([1, 3, 2]);
   });
 });
