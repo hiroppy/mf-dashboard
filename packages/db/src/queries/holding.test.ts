@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { GLOBAL_SNAPSHOT_GROUP_ID } from "../shared/group-filter";
 import {
   createTestDb,
   resetTestDb,
@@ -31,6 +32,14 @@ afterAll(() => {
 beforeEach(async () => {
   await resetTestDb(db);
   await createTestGroup(db);
+  const now = new Date().toISOString();
+  await db.insert(schema.groups).values({
+    id: GLOBAL_SNAPSHOT_GROUP_ID,
+    name: "All Accounts",
+    isCurrent: false,
+    createdAt: now,
+    updatedAt: now,
+  });
 });
 
 async function createTestAccount(name: string): Promise<number> {
@@ -60,12 +69,12 @@ async function createTestAccount(name: string): Promise<number> {
   return account.id;
 }
 
-async function createSnapshot(): Promise<number> {
+async function createSnapshot(groupId = GLOBAL_SNAPSHOT_GROUP_ID): Promise<number> {
   const now = new Date().toISOString();
   const snapshot = await db
     .insert(schema.dailySnapshots)
     .values({
-      groupId: TEST_GROUP_ID,
+      groupId,
       date: "2025-04-15",
       createdAt: now,
       updatedAt: now,
@@ -192,7 +201,7 @@ describe("getLatestSnapshot", () => {
     await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: TEST_GROUP_ID,
+        groupId: GLOBAL_SNAPSHOT_GROUP_ID,
         date: "2025-04-14",
         createdAt: now,
         updatedAt: now,
@@ -201,7 +210,7 @@ describe("getLatestSnapshot", () => {
     await db
       .insert(schema.dailySnapshots)
       .values({
-        groupId: TEST_GROUP_ID,
+        groupId: GLOBAL_SNAPSHOT_GROUP_ID,
         date: "2025-04-15",
         createdAt: now,
         updatedAt: now,
@@ -211,6 +220,43 @@ describe("getLatestSnapshot", () => {
     const result = await getLatestSnapshot(db);
 
     expect(result!.date).toBe("2025-04-15");
+  });
+
+  it("別グループの新しいスナップショットを除外する", async () => {
+    await createSnapshot();
+    const now = new Date().toISOString();
+    await db.insert(schema.dailySnapshots).values({
+      groupId: TEST_GROUP_ID,
+      date: "2025-04-16",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await getLatestSnapshot(db);
+
+    expect(result).toMatchObject({
+      groupId: GLOBAL_SNAPSHOT_GROUP_ID,
+      date: "2025-04-15",
+    });
+  });
+
+  it("更新未完了の新しいglobalスナップショットを除外する", async () => {
+    await createSnapshot();
+    const now = new Date().toISOString();
+    await db.insert(schema.dailySnapshots).values({
+      groupId: GLOBAL_SNAPSHOT_GROUP_ID,
+      date: "2025-04-16",
+      refreshCompleted: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await getLatestSnapshot(db);
+
+    expect(result).toMatchObject({
+      date: "2025-04-15",
+      refreshCompleted: true,
+    });
   });
 
   it("スナップショットがない場合はundefinedを返す", async () => {
@@ -283,6 +329,14 @@ describe("getHoldingsWithLatestValues", () => {
     const snapshotId = await createSnapshot();
     const categoryId = await createAssetCategory("保険");
     const now = new Date().toISOString();
+    const otherGroupId = "test_group_002";
+    await db.insert(schema.groups).values({
+      id: otherGroupId,
+      name: "Other Group",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
     const unknownAccount = await db
       .insert(schema.accounts)
       .values({
@@ -300,6 +354,17 @@ describe("getHoldingsWithLatestValues", () => {
       categoryId,
     });
     await createHoldingValue({ holdingId, snapshotId, amount: 100000 });
+    const externalHoldingId = await createHolding({
+      accountId: unknownAccount.id,
+      name: "External Insurance",
+      categoryId,
+    });
+    const externalSnapshotId = await createSnapshot(otherGroupId);
+    await createHoldingValue({
+      holdingId: externalHoldingId,
+      snapshotId: externalSnapshotId,
+      amount: 200000,
+    });
 
     const result = await getHoldingsWithLatestValues(undefined, db);
 

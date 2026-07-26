@@ -1,6 +1,10 @@
 import { desc, eq, and, isNotNull, inArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
-import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import {
+  GLOBAL_SNAPSHOT_GROUP_ID,
+  resolveGroupId,
+  getAccountIdsForGroup,
+} from "../shared/group-filter";
 
 const INVESTMENT_CATEGORIES = ["株式(現物)", "投資信託"];
 const UNKNOWN_ACCOUNT_MF_ID = "unknown";
@@ -21,14 +25,19 @@ async function getHoldingAccountIdsForGroup(db: Db, groupId: string): Promise<nu
 }
 
 /**
- * 最新のスナップショットを取得
- * スナップショットは全アカウント共通で1つ作成される
+ * 全アカウント共通で取得した、最新の更新完了スナップショットを取得
  */
 export async function getLatestSnapshot(db: Db = getDb()) {
   return await db
     .select()
     .from(schema.dailySnapshots)
-    .orderBy(desc(schema.dailySnapshots.id))
+    .where(
+      and(
+        eq(schema.dailySnapshots.groupId, GLOBAL_SNAPSHOT_GROUP_ID),
+        eq(schema.dailySnapshots.refreshCompleted, true),
+      ),
+    )
+    .orderBy(desc(schema.dailySnapshots.date), desc(schema.dailySnapshots.id))
     .limit(1)
     .get();
 }

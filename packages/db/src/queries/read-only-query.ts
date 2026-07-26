@@ -3,6 +3,7 @@ import { getTableColumns, getTableName, isTable } from "drizzle-orm";
 import { getDbPath } from "../db-path";
 import type { Db } from "../index";
 import * as schema from "../schema/schema";
+import { GLOBAL_SNAPSHOT_GROUP_ID } from "../shared/group-filter";
 
 export const READ_ONLY_QUERY_MAX_ROWS = 200;
 export const READ_ONLY_QUERY_MAX_BYTES = 64 * 1024;
@@ -14,8 +15,6 @@ export const READ_ONLY_QUERY_MAX_SQLITE_HEAP_BYTES = 64 * 1024 * 1024;
 const MAX_RESULT_COLUMNS = 32;
 const MAX_JOIN_COUNT = 8;
 const MAX_UNION_COUNT = 8;
-const GLOBAL_SNAPSHOT_GROUP_ID = "0";
-
 const WRITE_KEYWORDS =
   /\b(?:alter|analyze|attach|create|delete|detach|drop|insert|pragma|reindex|release|rollback|savepoint|update|vacuum)\b/i;
 const WRITE_REPLACE_STATEMENT = /\breplace\b(?!\s*\()/i;
@@ -399,8 +398,7 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
   const accountIds = `
     SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}
     UNION
-    SELECT id FROM source.accounts
-    WHERE mf_id = 'unknown' AND ${selectedGroup} = ${globalSnapshotGroup}
+    SELECT id FROM source.accounts WHERE mf_id = 'unknown'
   `;
   const groupHoldingIds = `SELECT id FROM source.holdings WHERE account_id IN (${accountIds})`;
   const latestHoldingSnapshotId = `
@@ -423,15 +421,14 @@ function createScopedDatabaseSql(databasePath: string, groupId: string): string 
       UNION ALL
       SELECT
         -1 AS id,
-        ${globalSnapshotGroup} AS group_id,
+        ${selectedGroup} AS group_id,
         id AS account_id,
         created_at,
         updated_at
       FROM source.accounts
       WHERE mf_id = 'unknown'
-        AND ${selectedGroup} = ${globalSnapshotGroup}
         AND id NOT IN (
-          SELECT account_id FROM source.group_accounts WHERE group_id = ${globalSnapshotGroup}
+          SELECT account_id FROM source.group_accounts WHERE group_id = ${selectedGroup}
         );
     CREATE TABLE institution_categories AS
       SELECT * FROM source.institution_categories;

@@ -652,6 +652,66 @@ describe("executeReadOnlyQuery", () => {
     });
   });
 
+  it("選択groupでもfallback accountの未照合holdingを保持する", async () => {
+    const now = new Date().toISOString();
+    const fallbackAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "unknown",
+        name: "-",
+        type: "manual",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const holding = await db
+      .insert(schema.holdings)
+      .values({
+        mfId: "unmatched-group-holding",
+        accountId: fallbackAccount.id,
+        name: "Unmatched Group Asset",
+        type: "asset",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const snapshot = await db
+      .insert(schema.dailySnapshots)
+      .values({
+        groupId: "0",
+        date: "2026-07-12",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await db.insert(schema.holdingValues).values({
+      holdingId: holding.id,
+      snapshotId: snapshot.id,
+      amount: 12_345,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      executeReadOnlyQuery(
+        db,
+        `SELECT h.name, hv.amount
+         FROM holdings h
+         JOIN holding_values hv ON hv.holding_id = h.id
+         JOIN group_accounts ga ON ga.account_id = h.account_id
+         WHERE ga.group_id = :groupId`,
+        "group-a",
+        databasePath,
+      ),
+    ).resolves.toMatchObject({
+      rows: [{ name: "Unmatched Group Asset", amount: 12_345 }],
+      rowCount: 1,
+    });
+  });
+
   it("refreshとのversionを保証できないanalytics reportをsandboxへ公開しない", async () => {
     const now = new Date().toISOString();
     await db.insert(schema.analyticsReports).values({

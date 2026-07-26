@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../index";
 import { schema } from "../index";
 
+export const GLOBAL_SNAPSHOT_GROUP_ID = "0";
+
 /** 現在のグループID（isCurrent=true）を取得 */
 export async function getDefaultGroupId(db: Db): Promise<string | null> {
   const currentGroup = await db

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import { schema } from "../index";
+import { GLOBAL_SNAPSHOT_GROUP_ID } from "../shared/group-filter";
 import {
   createTestDb,
   resetTestDb,
@@ -36,6 +37,14 @@ afterAll(() => {
 beforeEach(async () => {
   await resetTestDb(db);
   await createTestGroup(db);
+  const now = new Date().toISOString();
+  await db.insert(schema.groups).values({
+    id: GLOBAL_SNAPSHOT_GROUP_ID,
+    name: "All Accounts",
+    isCurrent: false,
+    createdAt: now,
+    updatedAt: now,
+  });
 });
 
 async function createAssetHistory(data: { date: string; totalAssets: number }): Promise<number> {
@@ -104,7 +113,7 @@ async function createSnapshot(): Promise<number> {
   const snapshot = await db
     .insert(schema.dailySnapshots)
     .values({
-      groupId: TEST_GROUP_ID,
+      groupId: GLOBAL_SNAPSHOT_GROUP_ID,
       date: "2025-04-15",
       createdAt: now,
       updatedAt: now,
