@@ -61,6 +61,15 @@ describe("toEvaluationOutput", () => {
       textLinks: ["/0/cf/2026-07"],
     });
   });
+
+  test("collects bare relative dashboard routes", () => {
+    expect(
+      toEvaluationOutput({
+        text: "詳細は /0/cf/2026-07",
+        steps: [],
+      }).textLinks,
+    ).toEqual(["/0/cf/2026-07"]);
+  });
 });
 
 describe("FinanceChatProvider", () => {

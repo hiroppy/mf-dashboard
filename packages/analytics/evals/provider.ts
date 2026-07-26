@@ -82,7 +82,12 @@ function getTextLinks(text: string): string[] {
   const rawUrls = [...text.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  return unique([...markdownLinks, ...autoLinks, ...rawUrls]);
+  const bareRoutes = [
+    ...text.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
+  ]
+    .map((match) => match[0])
+    .filter((route) => financeChatHrefSchema.safeParse(route).success);
+  return unique([...markdownLinks, ...autoLinks, ...rawUrls, ...bareRoutes]);
 }
 
 export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {

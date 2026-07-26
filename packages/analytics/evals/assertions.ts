@@ -52,33 +52,58 @@ function getMissingTextPairs(
 
   return expectedPairs.filter(([, value], pairIndex) => {
     const normalizedLabel = labels[pairIndex]!;
-    const labelIndex = normalizedText.indexOf(normalizedLabel);
-    if (labelIndex === -1) return true;
-
-    const valueStart = labelIndex + normalizedLabel.length;
-    const valueEnd = labels.reduce((nearest, candidate) => {
-      const candidateIndex = normalizedText.indexOf(candidate, valueStart);
-      return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
-    }, normalizedText.length);
-    const segment = normalizedText.slice(valueStart, valueEnd);
     const normalizedValue = normalize(value);
-    if (!/^\d+$/.test(normalizedValue)) return !segment.includes(normalizedValue);
+    let labelIndex = normalizedText.indexOf(normalizedLabel);
 
-    return !new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment);
+    while (labelIndex !== -1) {
+      const valueStart = labelIndex + normalizedLabel.length;
+      const valueEnd = labels.reduce((nearest, candidate) => {
+        const candidateIndex = normalizedText.indexOf(candidate, valueStart);
+        return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
+      }, normalizedText.length);
+      const segment = normalizedText.slice(valueStart, valueEnd);
+      const hasExpectedValue = /^\d+$/.test(normalizedValue)
+        ? new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment)
+        : segment.includes(normalizedValue);
+      if (hasExpectedValue) return false;
+
+      labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
+    }
+    return true;
   });
 }
 
+function getTableCells(line: string): string[] | undefined {
+  if (!line.includes("|")) return undefined;
+  return line
+    .replace(/^\s*\||\|\s*$/g, "")
+    .split("|")
+    .map((cell) => normalize(cell).replace(/円$/, ""));
+}
+
 function getMarkdownRows(text: string): string[][] {
-  return text
-    .split("\n")
-    .filter((line) => line.includes("|"))
-    .map((line) =>
-      line
-        .replace(/^\s*\||\|\s*$/g, "")
-        .split("|")
-        .map((cell) => normalize(cell).replace(/円$/, "")),
-    )
-    .filter((row) => !row.every((cell) => /^:?-{3,}:?$/.test(cell)));
+  const lines = text.split("\n");
+  const rows: string[][] = [];
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const header = getTableCells(lines[index]!);
+    const delimiter = getTableCells(lines[index + 1]!);
+    if (
+      !header ||
+      !delimiter ||
+      header.length !== delimiter.length ||
+      !delimiter.every((cell) => /^:?-{3,}:?$/.test(cell))
+    ) {
+      continue;
+    }
+
+    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+      const row = getTableCells(lines[rowIndex]!);
+      if (!row) break;
+      if (row.length === header.length) rows.push(row);
+    }
+  }
+  return rows;
 }
 
 function hasExpectedRow(actualRows: string[][], expectedRow: string[]): boolean {
@@ -152,7 +177,10 @@ export default function assertFinanceChatOutput(
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
   }
 
-  if (config.forbidAmounts && /(?:[¥￥]\s*\d|\d[\d,.]*\s*円)/.test(actual.text.normalize("NFKC"))) {
+  if (
+    config.forbidAmounts &&
+    /(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円)/.test(actual.text.normalize("NFKC"))
+  ) {
     return fail("データのない回答に金額が含まれています。");
   }
 

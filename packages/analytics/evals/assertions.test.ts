@@ -54,6 +54,30 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("finds a value after a repeated heading label", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "## 収入・支出・収支",
+            "- 収入: 313,235円",
+            "- 支出: 219,894円",
+            "- 収支: 93,341円",
+          ].join("\n"),
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("compares chart values by label without requiring data order", () => {
     const chart = {
       title: "2026年7月の食費",
@@ -102,6 +126,11 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "999"]] },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "2026-07-03 | サンマルクカフェ | 761円" }), {
+        config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects links that were not returned by the route tool", () => {
@@ -124,6 +153,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
     expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、1,000円です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は1万円です。" }), {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
