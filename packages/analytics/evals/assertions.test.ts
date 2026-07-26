@@ -109,6 +109,22 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("accepts comma-formatted yen-prefix amounts", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は￥313,235です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("treats financial triangle markers as negative signs", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "収支は▲93,341円です。" }), {
+        config: { expectedTextPairs: [["収支", "93341"]] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   test("accepts a zero count as no-data evidence", () => {
     expect(
       assertFinanceChatOutput(
@@ -127,11 +143,8 @@ describe("assertFinanceChatOutput", () => {
           config: {
             databaseEvidence: {
               expectNoData: true,
-              requiredSqlPatterns: [
-                "\\btransactions\\b",
-                "2030-01",
-                "\\bcount\\s*\\(\\s*\\*\\s*\\)",
-              ],
+              requiredSqlLiterals: ["2030-01"],
+              requiredSqlPatterns: ["\\btransactions\\b", "\\bcount\\s*\\(\\s*\\*\\s*\\)"],
             },
           },
         },
@@ -671,7 +684,7 @@ describe("assertFinanceChatOutput", () => {
   test("rejects qualified no-data wording", () => {
     const config = {
       expectedTextPatterns: [
-        "(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
+        "(?=[^。！？\\n]*2030年1月)(?=[^。！？\\n]*食費)[^。！？\\n]*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
       ],
     };
     expect(
@@ -689,6 +702,12 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2025年1月の食費データはありません。2030年1月について確認しました。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects visible routes when navigation was not requested", () => {
@@ -716,6 +735,14 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+  });
+
+  test("does not treat ordinary numbered prose as a unitless monetary claim", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "要点は3つです。収入は313,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   test("rejects malformed provider output", () => {
@@ -813,6 +840,34 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          fixtureResult: { rows: [{ total: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: `SELECT COUNT(*) AS total FROM transactions WHERE 0 AND '2030-01 category 食費 type = "expense" is_transfer = 0'`,
+              },
+              output: { rows: [{ total: 0 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectNoData: true,
+              requiredSqlLiterals: ["2030-01", "食費", "expense"],
+              requiredSqlPatterns: [
+                "\\btransactions\\b",
+                "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
+                "\\btype\\b\\s*=\\s*\\?",
+              ],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           fixtureResult: {
             rows: [{ date: "2026-07-03", description: "店舗 A", amount: 761 }],
             truncated: false,
@@ -865,6 +920,10 @@ describe("assertFinanceChatOutput", () => {
         output({
           fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
           databaseQueries: [
+            {
+              input: { sql: "SELECT SUM(amount) AS income FROM transactions" },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
             {
               input: { sql: "SELECT SUM(amount) AS income FROM transactions" },
               output: { rows: [{ income: 313_235 }], truncated: false },
@@ -1213,7 +1272,8 @@ describe("assertFinanceChatOutput", () => {
       config: {
         databaseEvidence: {
           expectNoData: true,
-          requiredSqlPatterns: ["\\btransactions\\b", "2030-01", derivedAmountSqlPattern],
+          requiredSqlLiterals: ["2030-01"],
+          requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
         },
       },
     };

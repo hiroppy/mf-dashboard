@@ -27,6 +27,7 @@ interface AssertionContext {
       expectNoData?: boolean;
       expectedRowAssociations?: Array<Array<number | string>>;
       expectedRows?: Array<Array<number | string>>;
+      requiredSqlLiterals?: string[];
       requiredSqlPatterns?: string[];
     };
   };
@@ -192,7 +193,13 @@ function hasDirectMonetaryNegation(segment: string): boolean {
 }
 
 function normalizeYenPrefix(segment: string): string {
-  return segment.replace(/[¥￥](マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?/g, "$1$2$3円");
+  return segment
+    .replace(/[▲△]/g, "-")
+    .replace(
+      /[¥￥](マイナス|[-−])?(\d[\d,]*(?:\.\d+)?)(千|万|億|兆)?/g,
+      (_, sign: string | undefined, digits: string, scale: string | undefined) =>
+        `${sign ?? ""}${digits.replace(/,/g, "")}${scale ?? ""}円`,
+    );
 }
 
 function getMonetaryClaims(segment: string): number[] {
@@ -356,6 +363,21 @@ function normalizeRows(rows: Array<Record<string, unknown>>): string[][] {
     .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 
+function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return [
+    ...new Map(
+      rows.map((row) => [
+        JSON.stringify(
+          Object.entries(row)
+            .map(([key, value]) => [normalize(key), normalize(String(value))])
+            .sort(([left], [right]) => left!.localeCompare(right!)),
+        ),
+        row,
+      ]),
+    ).values(),
+  ];
+}
+
 function hasSuspiciousProjectionLiteral(sql: string): boolean {
   const projection = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1] ?? "";
   return [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
@@ -365,6 +387,19 @@ function hasSuspiciousProjectionLiteral(sql: string): boolean {
 
 function removeSqlComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n\r]*/g, " ");
+}
+
+function analyzeSql(sql: string): { literals: string[]; patternText: string } {
+  const literals: string[] = [];
+  const patternText = removeSqlComments(sql).replace(
+    /'(?:''|[^'])*'|"(?:""|[^"])*"/g,
+    (literal) => {
+      const quote = literal[0]!;
+      literals.push(literal.slice(1, -1).replaceAll(quote + quote, quote));
+      return " ? ";
+    },
+  );
+  return { literals, patternText };
 }
 
 function hasContradictedFact(text: string, fact: string): boolean {
@@ -533,15 +568,22 @@ export default function assertFinanceChatOutput(
     const requiredSqlPatterns = (databaseEvidence.requiredSqlPatterns ?? []).map(
       (pattern) => new RegExp(pattern, "i"),
     );
+    const requiredSqlLiterals = databaseEvidence.requiredSqlLiterals ?? [];
     const databaseResults = actual.databaseQueries.flatMap((query) => {
       const parsedInput = databaseQueryInputSchema.safeParse(query.input);
       const parsedResult = databaseResultSchema.safeParse(query.output);
       if (!parsedInput.success || !parsedResult.success || parsedResult.data.truncated) return [];
       const executableSql = removeSqlComments(parsedInput.data.sql);
+      const sqlAnalysis = analyzeSql(parsedInput.data.sql);
       const matchesRequiredSql = requiredSqlPatterns.every((pattern) =>
-        pattern.test(executableSql),
+        pattern.test(sqlAnalysis.patternText),
       );
-      return matchesRequiredSql && !hasSuspiciousProjectionLiteral(executableSql)
+      const hasRequiredLiterals = requiredSqlLiterals.every((literal) =>
+        sqlAnalysis.literals.some((candidate) => candidate.replace(/[%_]/g, "") === literal),
+      );
+      return matchesRequiredSql &&
+        hasRequiredLiterals &&
+        !hasSuspiciousProjectionLiteral(executableSql)
         ? [parsedResult.data]
         : [];
     });
@@ -571,7 +613,7 @@ export default function assertFinanceChatOutput(
     }
     const expectedAssociations = databaseEvidence.expectedRowAssociations ?? [];
     const maximumExpectedRowCount = Math.max(expectedRows.length, expectedAssociations.length);
-    const modelRows = databaseResults.flatMap((databaseResult) => databaseResult.rows);
+    const modelRows = uniqueRows(databaseResults.flatMap((databaseResult) => databaseResult.rows));
     const modelHasExpectedResult = expectedAssociations.length
       ? modelRows.length <= maximumExpectedRowCount &&
         expectedAssociations.every((association) =>
@@ -707,11 +749,30 @@ export default function assertFinanceChatOutput(
       `本文に根拠のない金額があります: ${ungroundedAmounts.map((claim) => claim.amount).join(", ")}`,
     );
   }
+  const monetaryLabelPattern = [
+    ...new Set([
+      ...allowedTextPairs.map(([label]) => normalize(label)),
+      "収入",
+      "支出",
+      "収支",
+      "食費",
+      "金額",
+      "合計",
+      "総額",
+      "残高",
+      "予算",
+    ]),
+  ]
+    .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
   const unitlessMonetaryClaims = [
     ...renderedText
       .normalize("NFKC")
       .matchAll(
-        /(?:^|[。！？\n、])([^。！？\n、\d]{1,16}?)(?:は|が|も|:|：)\s*(-?\d[\d,]*)(?![\d,年月日件%円千万億兆])/g,
+        new RegExp(
+          `(?:^|[。！？\\n、])([^。！？\\n、\\d]{0,12}(?:${monetaryLabelPattern}))[^。！？\\n、\\d]{0,4}(?:は|が|も|:|：)\\s*(-?\\d[\\d,]*)(?![\\d,年月日件%円千万億兆])`,
+          "g",
+        ),
       ),
   ].filter((match) => {
     const label = normalize(match[1]!);
