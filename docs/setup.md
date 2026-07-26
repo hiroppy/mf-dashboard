@@ -110,21 +110,21 @@ DASHBOARD_URL=https://dashboard.example.com
 
 `REFRESH_TOKEN`はcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。`CLOUDFLARE_ACCESS_TEAM_DOMAIN`にはCloudflare Zero Trustで確認したTeam domainを指定する。`DASHBOARD_URL`には、このあとTerraformの`hostname`へ指定する公開URLを設定する。
 
-`CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.4で設定する。
+`CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.3で設定する。
 
-| `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                           |
-| -------------------------------------------- | ---- | -------------------- | ------------------------------------------------------------------------------ |
-| `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                  |
-| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                     |
-| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                     |
-| `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                 |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                            |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                         |
-| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須               |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                      |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                    |
-| `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000` |
-| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない       |
+| `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                             |
+| -------------------------------------------- | ---- | -------------------- | -------------------------------------------------------------------------------- |
+| `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                    |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                       |
+| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
+| `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                              |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                           |
+| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
+| `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000`   |
+| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない         |
 
 Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
 
@@ -162,29 +162,12 @@ allowed_emails = [
 
 `terraform/terraform.tfvars`、Terraform state、`secrets/cloudflared-token`はGit管理対象外。秘密情報を含むため、内容を表示したりコミットしたりしない。
 
-### 3.3 Terraform planの確認
+### 3.3 インフラの適用
 
-まずは適用せず、変更内容だけを確認する。
+Terraformを初期化し、インフラを適用する。
 
 ```sh
 terraform -chdir=terraform init
-terraform -chdir=terraform plan
-```
-
-planでは以下を確認する。
-
-- 意図しない変更や削除がない
-- 対象のゾーンとホスト名が正しい
-- Google IdP、Tunnel、Tunnel設定、DNS、Access Application、メールアドレスの許可ポリシーが作成対象になっている
-- `local_sensitive_file`が`secrets/cloudflared-token`を作成する
-
-既存リソースとの競合や意図しない変更がある場合は適用せず、設定またはインポート方針を見直す。
-
-### 3.4 インフラの適用
-
-planに問題がなければ適用する。
-
-```sh
 terraform -chdir=terraform apply
 ```
 
@@ -211,7 +194,7 @@ CLOUDFLARE_ACCESS_AUD=<上のコマンドで表示された値>
 
 `Output "access_application_aud" not found`と表示された場合、現在のTerraform stateにはoutputがまだ反映されていない。特に以前のバージョンから更新した環境では、最新コードで再度`terraform plan`を確認してから`terraform apply`し、outputをstateへ反映する。Access Applicationを新規作成した直後も、`apply`が最後まで成功していることを確認する。
 
-### 3.5 Docker Composeの起動
+### 3.4 Docker Composeの起動
 
 ビルド前にComposeの設定を検証する。
 
@@ -235,7 +218,7 @@ Terraformの適用が成功し、`secrets/cloudflared-token`が作成された�
 
 スケジュールを変更する場合は`docker/crawler/crontab`を編集し、`docker compose build crawler`でcrawlerを再ビルドする。
 
-### 3.6 TunnelとAccessの動作確認
+### 3.5 TunnelとAccessの動作確認
 
 ```sh
 docker compose ps
@@ -282,9 +265,9 @@ terraform -chdir=terraform output -raw tunnel_id
 1. 通知先チャンネルの「連携サービス」からIncoming Webhookを作成する
 2. `.env`の`DISCORD_WEBHOOK_URL`へ、発行された`https://discord.com/api/webhooks/...`形式のURLを設定する
 
-### 家計AIチャット
+### 財務インサイトと家計AIチャット
 
-家計AIチャットを利用する場合は、`.env`に次の3項目を設定する。いずれかが空の場合、チャットUIは表示されず、家計データや外部AI APIへ接続しない。
+財務インサイトと家計AIチャットを利用する場合は、`.env`に次の3項目を設定する。いずれかが空の場合、財務インサイトは生成されず、チャットUIも表示されない。
 
 ```dotenv
 AI_PROVIDER=openai
