@@ -9,7 +9,13 @@ import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
-import { calculateCompositionPercentage } from "./transaction-stats-utils";
+import { Select } from "../ui/select";
+import {
+  calculateCompositionPercentage,
+  isTransactionInCurrentMonth,
+  sortCategoryTransactions,
+  type TransactionSort,
+} from "./transaction-stats-utils";
 
 export interface CategoryTransaction {
   id: number;
@@ -33,10 +39,16 @@ interface TransactionStatsClientProps {
   expense: CategoryBreakdown[];
 }
 
+const sortOptions = [
+  { value: "amount", label: "金額順" },
+  { value: "date", label: "日付順" },
+];
+
 export function TransactionStatsClient({ year, income, expense }: TransactionStatsClientProps) {
   const [selection, setSelection] = useState<{ type: "income" | "expense"; name: string } | null>(
     null,
   );
+  const [sortBy, setSortBy] = useState<TransactionSort>("amount");
 
   const selectedBreakdown = selection
     ? (selection.type === "income" ? income : expense).find(
@@ -50,10 +62,11 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
       )
     : 0;
   const selectedTransactions = selectedBreakdown
-    ? [...selectedBreakdown.transactions].sort((a, b) => b.amount - a.amount)
+    ? sortCategoryTransactions(selectedBreakdown.transactions, sortBy)
     : [];
 
   const select = (type: "income" | "expense", name: string) => {
+    setSortBy("amount");
     setSelection((current) =>
       current?.type === type && current.name === name ? null : { type, name },
     );
@@ -100,16 +113,24 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
                   {selectedBreakdown.name}カテゴリに含まれる年間取引の詳細
                 </DialogDescription>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0"
-                aria-label="明細を閉じる"
-                onClick={() => setSelection(null)}
-              >
-                <X aria-hidden="true" />
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Select
+                  aria-label="並び順"
+                  className="w-28"
+                  options={sortOptions}
+                  value={sortBy}
+                  onChange={(value) => setSortBy(value as TransactionSort)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="明細を閉じる"
+                  onClick={() => setSelection(null)}
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </div>
             </div>
 
             <div className="grid shrink-0 grid-cols-2 gap-4 border-b px-5 py-4 sm:grid-cols-3 sm:px-6">
@@ -167,7 +188,15 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
                         {transaction.description || "内容なし"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDate(transaction.date)}
+                        <span
+                          className={
+                            isTransactionInCurrentMonth(transaction.date)
+                              ? "font-semibold"
+                              : undefined
+                          }
+                        >
+                          {formatDate(transaction.date)}
+                        </span>
                         {transaction.accountName ? ` / ${transaction.accountName}` : ""}
                         {selectedBreakdown.categories.length > 1 ||
                         selectedBreakdown.categories[0] !== selectedBreakdown.name
