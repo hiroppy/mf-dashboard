@@ -94,7 +94,10 @@ async function proxyCrawlerEvents(request: Request) {
   try {
     const response = await fetch(`${crawlerUrl}/events`, {
       cache: "no-store",
-      headers: { accept: "text/event-stream" },
+      headers: {
+        accept: "text/event-stream",
+        authorization: `Bearer ${process.env.REFRESH_TOKEN ?? ""}`,
+      },
       signal: controller.signal,
     });
     clearTimeout(handshakeTimeout);

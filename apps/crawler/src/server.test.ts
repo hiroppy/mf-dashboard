@@ -23,6 +23,8 @@ const idleState: CrawlerRunState = {
   startedAt: null,
 };
 
+const authorizationHeaders = { authorization: "Bearer refresh-token" };
+
 let server: Server | null = null;
 const originalRefreshToken = process.env.REFRESH_TOKEN;
 
@@ -71,10 +73,34 @@ describe("crawler trigger server", () => {
   test("returns crawler status", async () => {
     const baseUrl = await listen(createCrawlerTriggerServer({ getState: async () => idleState }));
 
-    const res = await fetch(`${baseUrl}/status`);
+    const res = await fetch(`${baseUrl}/status`, { headers: authorizationHeaders });
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual(idleState);
+  });
+
+  test.each(["/status", "/events"])("rejects unauthenticated reads from %s", async (path) => {
+    const getState = vi.fn<() => Promise<CrawlerRunState>>(async () => idleState);
+    const baseUrl = await listen(createCrawlerTriggerServer({ getState }));
+
+    const res = await fetch(`${baseUrl}${path}`);
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({ error: "unauthorized" });
+    expect(getState).not.toHaveBeenCalled();
+  });
+
+  test.each(["/status", "/events"])("rejects reads with an invalid token from %s", async (path) => {
+    const getState = vi.fn<() => Promise<CrawlerRunState>>(async () => idleState);
+    const baseUrl = await listen(createCrawlerTriggerServer({ getState }));
+
+    const res = await fetch(`${baseUrl}${path}`, {
+      headers: { authorization: "Bearer invalid-token" },
+    });
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toEqual({ error: "unauthorized" });
+    expect(getState).not.toHaveBeenCalled();
   });
 
   test("streams crawler state changes and releases the watcher on disconnect", async () => {
@@ -91,7 +117,7 @@ describe("crawler trigger server", () => {
       }),
     );
 
-    const res = await fetch(`${baseUrl}/events`);
+    const res = await fetch(`${baseUrl}/events`, { headers: authorizationHeaders });
     expect(res.headers.get("content-type")).toBe("text/event-stream");
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -131,7 +157,10 @@ describe("crawler trigger server", () => {
     );
     const controller = new AbortController();
 
-    const request = fetch(`${baseUrl}/events`, { signal: controller.signal });
+    const request = fetch(`${baseUrl}/events`, {
+      headers: authorizationHeaders,
+      signal: controller.signal,
+    });
     await setupStarted;
     controller.abort();
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
@@ -153,7 +182,7 @@ describe("crawler trigger server", () => {
       }),
     );
 
-    const res = await fetch(`${baseUrl}/events`);
+    const res = await fetch(`${baseUrl}/events`, { headers: authorizationHeaders });
     const reader = res.body!.getReader();
     await reader.read();
     reportWatcherError?.(new Error("watch failed"));
@@ -167,7 +196,7 @@ describe("crawler trigger server", () => {
 
     const res = await fetch(`${baseUrl}/runs`, {
       method: "POST",
-      headers: { authorization: "Bearer refresh-token" },
+      headers: authorizationHeaders,
     });
 
     expect(res.status).toBe(202);
@@ -183,7 +212,7 @@ describe("crawler trigger server", () => {
 
     const res = await fetch(`${baseUrl}/runs`, {
       method: "POST",
-      headers: { authorization: "Bearer refresh-token" },
+      headers: authorizationHeaders,
     });
 
     expect(res.status).toBe(409);

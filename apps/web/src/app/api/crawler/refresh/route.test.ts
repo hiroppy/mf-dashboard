@@ -91,7 +91,10 @@ describe("/api/crawler/refresh/", () => {
       "http://crawler:8766/events",
       expect.objectContaining({
         cache: "no-store",
-        headers: { accept: "text/event-stream" },
+        headers: {
+          accept: "text/event-stream",
+          authorization: "Bearer refresh-token",
+        },
       }),
     );
     await expect(res.text()).resolves.toBe(

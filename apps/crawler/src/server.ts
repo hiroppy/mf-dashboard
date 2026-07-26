@@ -229,6 +229,10 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
           methodNotAllowed(response);
           return;
         }
+        if (!hasValidRefreshToken(request)) {
+          json(response, 401, { error: "unauthorized" });
+          return;
+        }
 
         json(response, 200, await getState());
         return;
@@ -237,6 +241,10 @@ export function createCrawlerTriggerServer(options: CrawlerTriggerServerOptions 
       if (url.pathname === "/events") {
         if (request.method !== "GET") {
           methodNotAllowed(response);
+          return;
+        }
+        if (!hasValidRefreshToken(request)) {
+          json(response, 401, { error: "unauthorized" });
           return;
         }
 
