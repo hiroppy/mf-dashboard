@@ -20,6 +20,8 @@ describe("AssetHistoryTooltip", () => {
 
     expect(screen.getByText("2026/7/26")).toBeTruthy();
     expect(screen.getByText("1,000円")).toBeTruthy();
+    expect(screen.getByText("投資信託")).toBeTruthy();
+    expect(screen.getByText("400円")).toBeTruthy();
     expect(screen.queryByText("総資産")).toBeNull();
   });
 
@@ -34,6 +36,8 @@ describe("AssetHistoryTooltip", () => {
     );
 
     expect(screen.getByText("2026/7/26")).toBeTruthy();
+    expect(screen.getByText("投資信託")).toBeTruthy();
+    expect(screen.getByText("400円")).toBeTruthy();
     expect(screen.queryByText("1,000円")).toBeNull();
   });
 });
