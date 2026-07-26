@@ -57,6 +57,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "jsdom": "29.1.1",
     "playwright": "catalog:",
+    "playwright-core": "catalog:",
     "storybook": "10.5.4",
     "tailwindcss": "4.3.3",
     "typescript": "catalog:",

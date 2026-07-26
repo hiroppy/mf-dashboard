@@ -51,5 +51,6 @@ catalog:
   "@vitest/browser-playwright": 4.1.10
   drizzle-orm: 0.45.2
   playwright: 1.61.1
+  playwright-core: 1.61.1
   typescript: 6.0.3
   vitest: 4.1.10
