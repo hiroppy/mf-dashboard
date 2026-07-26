@@ -78,6 +78,14 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月について、2025年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
   });
 
   test.each([
@@ -663,7 +671,7 @@ describe("assertFinanceChatOutput", () => {
   test("rejects qualified no-data wording", () => {
     const config = {
       expectedTextPatterns: [
-        "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
+        "(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
       ],
     };
     expect(
@@ -676,6 +684,24 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "2030年1月に該当する食費の取引はありません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("rejects visible routes when navigation was not requested", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "詳細: /0/cf/2026-07",
+          textRoutes: ["/0/cf/2026-07"],
+          toolRoutes: ["/0/cf/2026-07"],
+        }),
+        { config: { expectedTextLinks: [], expectedToolRoutes: [] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期待しないroute") });
   });
 
   test("does not satisfy rendered text patterns with code-only content", () => {
@@ -1179,7 +1205,7 @@ describe("assertFinanceChatOutput", () => {
         }),
         context,
       ),
-    ).toMatchObject({ pass: true });
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -1198,6 +1224,24 @@ describe("assertFinanceChatOutput", () => {
         context,
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
+              output: { rows: [], truncated: false },
+            },
+            {
+              input: { sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01%'" },
+              output: { rows: [{ amount: 1_000 }], truncated: false },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
     expect(
       assertFinanceChatOutput(
         output({

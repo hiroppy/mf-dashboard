@@ -201,7 +201,7 @@
       value: file://./assertions.ts
       config:
         expectedTextPatterns:
-          - "(?:データ|明細)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))"
+          - "(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))"
         forbidAmounts: true
         expectedCharts: []
         expectedToolRoutes: []

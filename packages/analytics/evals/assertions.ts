@@ -99,11 +99,19 @@ function hasScopedPair(text: string, label: string, value: string, facts: string
     const clauseEnd =
       clauseEndCandidates.length === 0 ? normalizedText.length : Math.min(...clauseEndCandidates);
     const clause = normalizedText.slice(clauseStart, clauseEnd);
+    const labelPrefix = normalizedText.slice(clauseStart, labelIndex);
     if (
       clause.includes(normalizedValue) &&
-      facts.every(
-        (fact) => clause.includes(normalize(fact)) && !hasContradictedFact(clause, normalize(fact)),
-      )
+      facts.every((fact) => {
+        const normalizedFact = normalize(fact);
+        const periods = [...labelPrefix.matchAll(/\d{4}年\d{1,2}月/g)];
+        const nearestPeriod = periods.at(-1)?.[0];
+        return (
+          clause.includes(normalizedFact) &&
+          !hasContradictedFact(clause, normalizedFact) &&
+          (nearestPeriod === undefined || nearestPeriod === normalizedFact)
+        );
+      })
     ) {
       return true;
     }
@@ -584,7 +592,7 @@ export default function assertFinanceChatOutput(
       fixtureResult.data.rows.every((row) =>
         Object.values(row).every((value) => value === 0 || value === null),
       );
-    const modelHasOnlyNoData = databaseResults.some(
+    const modelHasOnlyNoData = databaseResults.every(
       (result) =>
         result.rows.length === 0 ||
         result.rows.every((row) =>
@@ -731,6 +739,11 @@ export default function assertFinanceChatOutput(
     return fail("route tool結果が期待と異なります。");
   }
   const expectedLinks = config.expectedTextLinks ?? [];
+  const allowedRenderedRoutes = new Set([...expectedRoutes, ...expectedLinks]);
+  const unexpectedRoutes = actual.textRoutes.filter((route) => !allowedRenderedRoutes.has(route));
+  if (unexpectedRoutes.length > 0) {
+    return fail(`本文に期待しないrouteがあります: ${unexpectedRoutes.join(", ")}`);
+  }
   if (!sameValues(actual.textLinks, expectedLinks)) {
     return fail("本文linkが期待と異なります。");
   }
