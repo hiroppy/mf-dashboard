@@ -30,6 +30,21 @@ terraform -chdir=terraform plan
 terraform -chdir=terraform apply
 ```
 
+適用後、Access ApplicationのAUDを取得し、リポジトリルートの`.env`へ設定する:
+
+```sh
+terraform -chdir=terraform output -raw access_application_aud
+```
+
+```dotenv
+CLOUDFLARE_ACCESS_TEAM_DOMAIN=<team-name>.cloudflareaccess.com
+CLOUDFLARE_ACCESS_AUD=<上のコマンドで表示された値>
+```
+
+Team domainはCloudflare Zero Trustで確認できる`cloudflareaccess.com`で終わる値であり、公開先の独自ドメインとは異なる。`CLOUDFLARE_ACCESS_AUD`を含むComposeの必須値を設定したら、リポジトリルートで`docker compose config --quiet`を実行して設定を検証する。
+
+`Output "access_application_aud" not found`と表示された場合は、最新コードで`terraform plan`を確認してから`terraform apply`し、outputをTerraform stateへ反映する。
+
 ## Tunnel Token の受け渡し
 
 Terraform の `local_sensitive_file` が app 共有 data volume とは別の `secrets/cloudflared-token` を mode `400` で作成する。`compose.yml` はこのファイルを Compose secret として mount し、host側の所有者と同じ `HOST_UID` / `HOST_GID` で動く `cloudflared tunnel run --token-file` が読み取る。LinuxでUID/GIDが既定の`1000:1000`と異なる場合は`.env`へ実値を設定する。

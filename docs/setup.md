@@ -35,12 +35,15 @@ cd mf-dashboard
 - Money Forward MEでワンタイムパスワードを設定する（[設定方法](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95)）
 - 1PasswordでService Accountを発行する（[設定方法](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account)）
   - Private、Personal、Familyなど、最初から用意されている保管庫へService Accountはアクセスできない。Money Forward MEのアカウントを自分で作成した保管庫へ移し、Service Accountへアクセス権を付与する。
+  - Money Forward MEのログイン項目に、標準の`username`と`password`フィールド、およびワンタイムパスワードのフィールドを用意する。crawlerはこれらのフィールドを1Password SDKから読み取る。
 
 ## 2. Cloudflare Zero Trustの準備
 
 ### 2.1 Zero Trustの有効化とTeam domainの確認
 
 CloudflareダッシュボードからZero Trustを有効化し、Team domain（`<team-name>.cloudflareaccess.com`）を控えておく。
+
+Team domainは、独自に公開する`dashboard.example.com`のようなホスト名とは別の値である。Cloudflare Zero Trustの設定画面に表示される`cloudflareaccess.com`で終わるドメインを、`https://`や末尾の`/`を付けずに使用する。この値はGoogle OAuth clientの設定と、後述する`.env`の`CLOUDFLARE_ACCESS_TEAM_DOMAIN`で共通して使う。
 
 ### 2.2 Google OAuth clientの準備
 
@@ -52,7 +55,7 @@ Googleログイン用のWeb Application clientを作成する。
    - 承認済みの JavaScript 生成元: `https://<your-team-name>.cloudflareaccess.com`
    - 承認済みのリダイレクト URI: `https://<your-team-name>.cloudflareaccess.com/cdn-cgi/access/callback`
 2. `Client ID`と`Client Secret`を控える
-3. `terraform/terraform.tfvars`の`google_oauth_client_id`と`google_oauth_client_secret`に設定する
+3. 手順3.2で作成する`terraform/terraform.tfvars`の`google_oauth_client_id`と`google_oauth_client_secret`に設定する
 
 TerraformがGoogle IdPをCloudflare Zero Trustへ登録し、Access ApplicationではこのIdPだけを許可する。
 
@@ -68,7 +71,7 @@ Terraform用のAPI Tokenを発行する。必要な最小権限は次のとお�
 | Zone     | `Zone:Read`                                                  |
 | Zone     | `DNS:Edit`（対象ゾーンを含む）                               |
 
-発行したトークンをパスワードマネージャーなどへ保管し、実値をGit管理対象外の`terraform/terraform.tfvars`にある`cloudflare_api_token`へ設定する。Terraformは`.env`や1Passwordからインフラ設定を読み取らない。
+発行したトークンをパスワードマネージャーなどへ保管し、手順3.2で作成するGit管理対象外の`terraform/terraform.tfvars`にある`cloudflare_api_token`へ設定する。Terraformは`.env`や1Passwordからインフラ設定を読み取らない。
 
 `terraform.tfvars`とTerraform stateには秘密情報が含まれる。どちらもGitへ追加せず、ローカルディスクの暗号化とファイル権限`600`を維持する。
 
@@ -86,28 +89,42 @@ Terraform用のAPI Tokenを発行する。必要な最小権限は次のとお�
 
 ### 3.1 アプリ設定
 
-`.env`を作成し、Money Forward MEと1Passwordの必須値を設定する。
+`.env`を作成する。
 
 ```sh
 cp .env.example .env
 openssl rand -hex 32
 ```
 
-`openssl`の出力を`.env`の`REFRESH_TOKEN`に設定する。このトークンはcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。Terraform適用後、`terraform -chdir=terraform output -raw access_application_aud`の出力を`CLOUDFLARE_ACCESS_AUD`へ、Zero TrustのTeam domainを`CLOUDFLARE_ACCESS_TEAM_DOMAIN`へ設定する。
+この時点では、次の値を`.env`へ設定する。
 
-| `.env`のキー                                 | 必須 | 内容                                                                           |
-| -------------------------------------------- | ---- | ------------------------------------------------------------------------------ |
-| `REFRESH_TOKEN`                              | 必須 | crawlerとwebが共有する内部API用Bearerトークン                                  |
-| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                     |
-| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraformが作成したAccess ApplicationのAUD                                     |
-| `DASHBOARD_URL`                              | 必須 | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                 |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | 1Password Service Accountのトークン                                            |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                         |
-| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須               |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | Slack通知                                                                      |
-| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | Discord通知                                                                    |
-| `HOST_UID` / `HOST_GID`                      | 任意 | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000` |
-| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない       |
+```dotenv
+OP_SERVICE_ACCOUNT_TOKEN=<1Password Service Accountのトークン>
+OP_VAULT=<保管庫名またはUUID>
+OP_ITEM=<項目名またはUUID>
+OP_TOTP_FIELD=<TOTPフィールド名またはID>
+REFRESH_TOKEN=<openssl rand -hex 32の出力>
+CLOUDFLARE_ACCESS_TEAM_DOMAIN=<team-name>.cloudflareaccess.com
+DASHBOARD_URL=https://dashboard.example.com
+```
+
+`REFRESH_TOKEN`はcrawlerとwebが共有するアプリ用の認証情報であり、Terraformでは管理しない。`CLOUDFLARE_ACCESS_TEAM_DOMAIN`にはCloudflare Zero Trustで確認したTeam domainを指定する。`DASHBOARD_URL`には、このあとTerraformの`hostname`へ指定する公開URLを設定する。
+
+`CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.4で設定する。
+
+| `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                           |
+| -------------------------------------------- | ---- | -------------------- | ------------------------------------------------------------------------------ |
+| `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                  |
+| `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                     |
+| `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                     |
+| `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                 |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                            |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                         |
+| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 家計AIチャットとLLMカテゴリ推論。利用する機能では3項目すべて必須               |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                      |
+| `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                    |
+| `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000` |
+| `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない       |
 
 Linuxでは`id -u`と`id -g`で値を確認し、`1000:1000`と異なる場合は`.env`の`HOST_UID`と`HOST_GID`へ設定する。web、crawler、cloudflaredが同じUID/GIDで動作し、`./data`とowner-read-onlyのTunnel tokenへ必要な範囲だけアクセスする。
 
@@ -178,16 +195,35 @@ terraform -chdir=terraform output
 ls -l secrets/cloudflared-token
 ```
 
-`tunnel_id`、`hostname`、`google_identity_provider_id`が出力され、`secrets/cloudflared-token`の権限が`-r--------`（mode `400`）なら成功。
+`tunnel_id`、`tunnel_cname_target`、`hostname`、`google_identity_provider_id`、`access_application_aud`が出力され、`secrets/cloudflared-token`の権限が`-r--------`（mode `400`）なら成功。
+
+Access ApplicationのAUDを取得する。
+
+```sh
+terraform -chdir=terraform output -raw access_application_aud
+```
+
+表示された値を`.env`の`CLOUDFLARE_ACCESS_AUD`へ設定する。前後に引用符や空白は付けない。
+
+```dotenv
+CLOUDFLARE_ACCESS_AUD=<上のコマンドで表示された値>
+```
+
+`Output "access_application_aud" not found`と表示された場合、現在のTerraform stateにはoutputがまだ反映されていない。特に以前のバージョンから更新した環境では、最新コードで再度`terraform plan`を確認してから`terraform apply`し、outputをstateへ反映する。Access Applicationを新規作成した直後も、`apply`が最後まで成功していることを確認する。
 
 ### 3.5 Docker Composeの起動
 
+ビルド前にComposeの設定を検証する。
+
 ```sh
+docker compose config --quiet
 docker compose build
 docker compose up -d
 ```
 
-Terraformの適用が成功し、`secrets/cloudflared-token`が作成されたことを確認してからDocker Composeを起動する。
+`docker compose config --quiet`が何も表示せず終了すれば、Composeが必要とする環境変数は設定済みである。`required variable ... is missing a value`と表示された場合は、メッセージに示されたキーが`.env`に存在し、`=`の右側が空でないことを確認する。
+
+Terraformの適用が成功し、`secrets/cloudflared-token`が作成されたことを確認してからDocker Composeを起動する。`dc`などのシェルエイリアスは環境によって存在しないため、このガイドでは正式な`docker compose`コマンドを使用する。
 
 以降はcrawlerコンテナ内のsupercronicが`crontab`のスケジュールで自動更新する。
 
