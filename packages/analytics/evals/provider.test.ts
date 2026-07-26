@@ -87,16 +87,18 @@ describe("toEvaluationOutput", () => {
       fixtureResult: null,
       toolRoutes: ["/0/cf/2026-07"],
       textLinks: ["/0/cf/2026-07"],
+      textRoutes: ["/0/cf/2026-07"],
     });
   });
 
   test("collects bare relative dashboard routes", () => {
-    expect(
-      toEvaluationOutput({
-        text: "詳細は /0/cf/2026-07",
-        steps: [],
-      }).textLinks,
-    ).toEqual(["/0/cf/2026-07"]);
+    const output = toEvaluationOutput({
+      text: "詳細は `/0/cf/2026-07`",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
   test("collects text from every generation step", () => {

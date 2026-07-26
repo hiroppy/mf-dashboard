@@ -12,6 +12,7 @@ function output(overrides: Record<string, unknown> = {}): string {
     fixtureResult: null,
     toolRoutes: [],
     textLinks: [],
+    textRoutes: [],
     ...overrides,
   });
 }
@@ -71,6 +72,15 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("does not treat a non-monetary contrast as an amount correction", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は313,235円です。これは予算ではなく実績です。" }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("finds a value after a repeated heading label", () => {
     expect(
       assertFinanceChatOutput(
@@ -92,6 +102,26 @@ describe("assertFinanceChatOutput", () => {
           },
         },
       ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("finds label/value pairs in Markdown table columns", () => {
+    const text = [
+      "| 収入 | 支出 | 収支 |",
+      "| ---: | ---: | ---: |",
+      "| 313,235円 | 219,894円 | 93,341円 |",
+    ].join("\n");
+
+    expect(
+      assertFinanceChatOutput(output({ text }), {
+        config: {
+          expectedTextPairs: [
+            ["収入", "313235"],
+            ["支出", "219894"],
+            ["収支", "93341"],
+          ],
+        },
+      }),
     ).toMatchObject({ pass: true });
   });
 
@@ -167,6 +197,11 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: `\`\`\`markdown\n${text}\n\`\`\`` }), {
+        config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
+      }),
+    ).toMatchObject({ pass: false });
 
     const separateTables = [
       "| 日付 | 内容 | 金額 |",
@@ -182,6 +217,16 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
       }),
     ).toMatchObject({ pass: false });
+
+    const extraRow = `${text}\n| 2026-07-03 | 架空店舗 | 9,999円 |`;
+    expect(
+      assertFinanceChatOutput(output({ text: extraRow }), {
+        config: {
+          exactMarkdownRows: true,
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期待しない") });
   });
 
   test("rejects links that were not returned by the route tool", () => {
@@ -190,6 +235,7 @@ describe("assertFinanceChatOutput", () => {
         output({
           text: "[収支を見る](/0/cf/2026-07)",
           textLinks: ["/0/cf/2026-07"],
+          textRoutes: ["/0/cf/2026-07"],
         }),
         { config: { expectedTextLinks: ["/0/cf/2026-07"] } },
       ),
@@ -216,6 +262,12 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は1万円です。" }), {
         config: { forbidAmounts: true },
       }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2030年1月の食費データはありませんが、目安は1万くらいです。" }),
+        { config: { forbidAmounts: true } },
+      ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
     expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は一万円です。" }), {

@@ -53,6 +53,7 @@ export interface EvaluationOutput {
   fixtureResult: unknown;
   toolRoutes: string[];
   textLinks: string[];
+  textRoutes: string[];
 }
 
 export interface ProviderDependencies {
@@ -87,22 +88,33 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function removeCode(text: string): string {
+  return text.replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "").replace(/`[^`\n]*`/g, "");
+}
+
 function getTextLinks(text: string): string[] {
-  const markdownLinks = [...text.matchAll(/(?<!!)\[[^\]]+]\(([^)\s]+)\)/g)].map(
+  const renderedText = removeCode(text);
+  const markdownLinks = [...renderedText.matchAll(/(?<!!)\[[^\]]+]\(([^)\s]+)\)/g)].map(
     (match) => match[1]!,
   );
-  const autoLinks = [...text.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
+  const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
     (match) => match[1]!,
   );
-  const rawUrls = [...text.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
+  const rawUrls = [...renderedText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
+  return unique([...markdownLinks, ...autoLinks, ...rawUrls]);
+}
+
+function getTextRoutes(text: string): string[] {
   const bareRoutes = [
     ...text.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ]
     .map((match) => match[0])
     .filter((route) => financeChatHrefSchema.safeParse(route).success);
-  return unique([...markdownLinks, ...autoLinks, ...rawUrls, ...bareRoutes]);
+  return unique([...getTextLinks(text), ...bareRoutes]).filter(
+    (route) => financeChatHrefSchema.safeParse(route).success,
+  );
 }
 
 export function toEvaluationOutput(
@@ -150,6 +162,7 @@ export function toEvaluationOutput(
     fixtureResult,
     toolRoutes: unique(toolRoutes),
     textLinks: getTextLinks(text),
+    textRoutes: getTextRoutes(text),
   };
 }
 

@@ -13,6 +13,7 @@ interface AssertionContext {
   config?: {
     expectedCharts?: ChartExpectation[];
     expectedMarkdownRows?: string[][];
+    exactMarkdownRows?: boolean;
     expectedTextFacts?: string[];
     expectedTextLinks?: string[];
     expectedTextPairs?: Array<[string, string]>;
@@ -41,6 +42,7 @@ const evaluationOutputSchema = z.object({
   fixtureResult: z.unknown(),
   toolRoutes: z.array(z.string()),
   textLinks: z.array(z.string()),
+  textRoutes: z.array(z.string()),
 });
 
 const databaseResultSchema = z.object({
@@ -68,6 +70,7 @@ function getMissingTextPairs(
   return expectedPairs.filter(([, value], pairIndex) => {
     const normalizedLabel = labels[pairIndex]!;
     const normalizedValue = normalize(value);
+    if (hasTablePair(text, normalizedLabel, normalizedValue)) return false;
     let labelIndex = normalizedText.indexOf(normalizedLabel);
 
     while (labelIndex !== -1) {
@@ -94,7 +97,10 @@ function getMonetaryClaims(segment: string): number[] {
     "$1$2$3円",
   );
   const correctionPattern = /ではなく|でなく|ではない|ではありません|誤り|訂正|実際は|正しくは/g;
-  const corrections = [...normalizedSegment.matchAll(correctionPattern)];
+  const monetaryPattern = /(マイナス|[-−])?\d+(?:\.\d+)?(?:千|万|億|兆)?円/;
+  const corrections = [...normalizedSegment.matchAll(correctionPattern)].filter((match) =>
+    monetaryPattern.test(normalizedSegment.slice(match.index! + match[0].length)),
+  );
   const lastCorrection = corrections.at(-1);
   const claims =
     lastCorrection?.index === undefined
@@ -121,9 +127,25 @@ function getTableCells(line: string): string[] | undefined {
     .map((cell) => normalize(cell).replace(/円$/, ""));
 }
 
-function getMarkdownRows(text: string): string[][] {
-  const lines = text.split("\n");
-  const rows: string[][] = [];
+interface MarkdownTable {
+  header: string[];
+  rows: string[][];
+}
+
+function getRenderableLines(text: string): string[] {
+  let inFence = false;
+  return text.split("\n").map((line) => {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inFence = !inFence;
+      return "";
+    }
+    return inFence || /^(?: {4}|\t)/.test(line) ? "" : line;
+  });
+}
+
+function getMarkdownTables(text: string): MarkdownTable[] {
+  const lines = getRenderableLines(text);
+  const tables: MarkdownTable[] = [];
 
   for (let index = 0; index < lines.length - 1; index += 1) {
     const header = getTableCells(lines[index]!);
@@ -138,14 +160,27 @@ function getMarkdownRows(text: string): string[][] {
     }
 
     let rowIndex = index + 2;
+    const rows: string[][] = [];
     for (; rowIndex < lines.length; rowIndex += 1) {
       const row = getTableCells(lines[rowIndex]!);
       if (!row || row.length !== header.length) break;
       rows.push(row);
     }
+    tables.push({ header, rows });
     index = rowIndex - 1;
   }
-  return rows;
+  return tables;
+}
+
+function getMarkdownRows(text: string): string[][] {
+  return getMarkdownTables(text).flatMap((table) => table.rows);
+}
+
+function hasTablePair(text: string, label: string, value: string): boolean {
+  return getMarkdownTables(text).some((table) => {
+    const columnIndex = table.header.indexOf(label);
+    return columnIndex !== -1 && table.rows.some((row) => row[columnIndex] === value);
+  });
 }
 
 function hasExpectedRow(actualRows: string[][], expectedRow: string[]): boolean {
@@ -222,7 +257,7 @@ export default function assertFinanceChatOutput(
 
   if (
     config.forbidAmounts &&
-    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+\s*円)/.test(
+    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+\s*円)/.test(
       actual.text.normalize("NFKC"),
     ) ||
       /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
@@ -289,6 +324,12 @@ export default function assertFinanceChatOutput(
   if (missingRows.length > 0) {
     return fail(`Markdown表に期待する行がありません: ${missingRows.join(", ")}`);
   }
+  if (
+    config.exactMarkdownRows &&
+    markdownRows.length !== (config.expectedMarkdownRows ?? []).length
+  ) {
+    return fail("Markdown表に期待しない明細行があります。");
+  }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];
   if (!sameValues(actual.toolRoutes, expectedRoutes)) {
@@ -299,7 +340,7 @@ export default function assertFinanceChatOutput(
     return fail("本文linkが期待と異なります。");
   }
   const routeSet = new Set(actual.toolRoutes);
-  const unprovenLinks = actual.textLinks.filter((link) => !routeSet.has(link));
+  const unprovenLinks = actual.textRoutes.filter((link) => !routeSet.has(link));
   if (unprovenLinks.length > 0) {
     return fail(`route toolに由来しない本文linkがあります: ${unprovenLinks.join(", ")}`);
   }
