@@ -1,4 +1,5 @@
 import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
+import { getDashboardUrl } from "./dashboard-url.js";
 import { log, info, error } from "./logger.js";
 import type { ScrapedData } from "./types.js";
 
@@ -149,7 +150,7 @@ function buildSummaryContent(data: ScrapedData): string {
     lines.push(...issueLines);
   }
 
-  const dashboardUrl = process.env.DASHBOARD_URL;
+  const dashboardUrl = getDashboardUrl();
   if (dashboardUrl) {
     lines.push(
       "",

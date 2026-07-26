@@ -1,6 +1,7 @@
 import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { KnownBlock } from "@slack/web-api";
 import { WebClient } from "@slack/web-api";
+import { getDashboardUrl } from "./dashboard-url.js";
 import { log, info, error } from "./logger.js";
 import type { ScrapedData } from "./types.js";
 
@@ -164,7 +165,7 @@ export function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
     });
   }
 
-  const dashboardUrl = process.env.DASHBOARD_URL;
+  const dashboardUrl = getDashboardUrl();
   const contextText = dashboardUrl
     ? `更新日時: ${updatedAt}  |  <${dashboardUrl}|📈 ダッシュボードを開く>`
     : `更新日時: ${updatedAt}`;
