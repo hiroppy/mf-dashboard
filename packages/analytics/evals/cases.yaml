@@ -1,0 +1,88 @@
+- description: 月次収支が収入・支出・収支の正しい値を返す
+  vars:
+    question: 2026年7月の収入・支出・収支を教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextFacts: ["2026年7月"]
+        expectedTextPairs:
+          - [収入, "313235"]
+          - [支出, "219894"]
+          - [収支, "93341"]
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+
+- description: 食費の内訳を正しい円グラフで返す
+  vars:
+    question: 2026年7月の食費合計と内訳を円グラフで見せて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextPairs:
+          - [食費, "41837"]
+        expectedCharts:
+          - chartType: pie
+            unit: currency
+            series:
+              - { name: 支出, amountType: expense }
+            data:
+              - { label: 食料品, values: [24833] }
+              - { label: 外食, values: [12214] }
+              - { label: カフェ, values: [4790] }
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+
+- description: 指定日の食費明細をMarkdown表で返す
+  vars:
+    question: 2026年7月3日の食費明細をMarkdown表で教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedMarkdownRows:
+          - ["2026-07-03", サンマルクカフェ, "761"]
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+
+- description: 収支画面へのリンクがroute toolの結果と一致する
+  vars:
+    question: 2026年7月の収支画面を開くリンクを教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextFacts: ["2026年7月"]
+        expectedCharts: []
+        expectedToolRoutes: ["/0/cf/2026-07"]
+        expectedTextLinks: ["/0/cf/2026-07"]
+
+- description: データのない期間で金額を推測しない
+  vars:
+    question: 2030年1月の食費はいくら？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextPatterns:
+          - "(?:データ|明細).*(?:ありません|ない|見つかりません)"
+        forbidAmounts: true
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
