@@ -142,9 +142,10 @@ export function useTransactionFiltering({
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedTransactions.length / pageSize);
+  const displayedPage = Math.min(currentPage, Math.max(totalPages - 1, 0));
   const paginatedTransactions = filteredAndSortedTransactions.slice(
-    currentPage * pageSize,
-    (currentPage + 1) * pageSize,
+    displayedPage * pageSize,
+    (displayedPage + 1) * pageSize,
   );
 
   const resetPage = () => {
@@ -216,7 +217,7 @@ export function useTransactionFiltering({
     selectedTypes,
     selectedAccounts,
     selectedYear,
-    currentPage,
+    currentPage: displayedPage,
     sortColumn,
     sortDirection,
     // Computed

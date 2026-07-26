@@ -152,6 +152,36 @@ describe("useTransactionFiltering", () => {
       expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
     });
 
+    it("データ更新で別の年へ切り替わる場合はページを有効範囲に収める", () => {
+      const initialTransactions = [
+        createTransaction({ id: 1, date: "2026-03-01" }),
+        createTransaction({ id: 2, date: "2026-02-01" }),
+        createTransaction({ id: 3, date: "2026-01-01" }),
+        createTransaction({ id: 4, date: "2025-12-31" }),
+      ];
+      const { result, rerender } = renderHook(
+        ({ currentTransactions }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions: currentTransactions,
+            pageSize: 1,
+            yearFilterEnabled: true,
+          }),
+        { initialProps: { currentTransactions: initialTransactions } },
+      );
+
+      act(() => {
+        result.current.setCurrentPage(2);
+      });
+      expect(result.current.currentPage).toBe(2);
+
+      rerender({ currentTransactions: initialTransactions.slice(3) });
+
+      expect(result.current.selectedYear).toBe("2025");
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.paginatedTransactions.map(({ id }) => id)).toEqual([4]);
+    });
+
     it("年フィルタの有効状態に合わせて選択年と表示対象を切り替える", () => {
       const { result, rerender } = renderHook(
         ({ yearFilterEnabled }) =>
@@ -227,7 +257,9 @@ describe("useTransactionFiltering", () => {
 
   describe("検索フィルタ", () => {
     it("検索時にページがリセットされる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
+      const { result } = renderHook(() =>
+        useTransactionFiltering({ ...defaultOptions, pageSize: 1 }),
+      );
 
       act(() => {
         result.current.setCurrentPage(2);
