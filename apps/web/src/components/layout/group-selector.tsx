@@ -8,14 +8,18 @@ export async function GroupSelector() {
   const currentGroup = await getCurrentGroup();
 
   if (groups.length <= 1) {
-    return currentGroup ? (
+    if (!currentGroup) {
+      return <RefreshStatus lastScrapedAt={null} />;
+    }
+
+    return (
       <div className="flex min-w-0 items-center">
         <div className={groupSelectorContainerClassName}>
           <GroupSelectorDisplay name={currentGroup.name} />
         </div>
         <RefreshStatus lastScrapedAt={currentGroup.lastScrapedAt} />
       </div>
-    ) : null;
+    );
   }
 
   const defaultGroupId = currentGroup?.id ?? groups[0].id;
