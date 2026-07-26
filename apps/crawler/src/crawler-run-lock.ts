@@ -263,8 +263,8 @@ function isStaleLock(
 
   if (record.pidStartedAt) {
     const currentPidStartedAt = options.getPidStartedAt(record.pid);
-    if (currentPidStartedAt && currentPidStartedAt !== record.pidStartedAt) {
-      return true;
+    if (currentPidStartedAt) {
+      return currentPidStartedAt !== record.pidStartedAt;
     }
   }
 

@@ -439,7 +439,7 @@ describe("crawler run lock", () => {
     await lock.release();
   });
 
-  test("expires an old lock when its live process start time still matches", async () => {
+  test("keeps an old lock when its live process start time still matches", async () => {
     const startedAt = new Date(Date.now() - 120_000).toISOString();
     await writeFile(
       lockPath,
@@ -459,14 +459,14 @@ describe("crawler run lock", () => {
     };
 
     await expect(getCrawlerRunState(options)).resolves.toEqual({
-      running: false,
-      pid: null,
-      source: null,
-      startedAt: null,
+      running: true,
+      pid: process.pid,
+      source: "scheduled",
+      startedAt,
     });
-    const lock = await acquireCrawlerRunLock("manual", options);
-    expect(lock.record.source).toBe("manual");
-    await lock.release();
+    await expect(acquireCrawlerRunLock("manual", options)).rejects.toBeInstanceOf(
+      CrawlerAlreadyRunningError,
+    );
   });
 
   test("clears a lock when the recorded PID was reused by a restarted process", async () => {
