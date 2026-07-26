@@ -24,6 +24,7 @@ interface AssertionContext {
     forbidAmounts?: boolean;
     databaseEvidence?: {
       expectNoData?: boolean;
+      expectedRowAssociations?: Array<Array<number | string>>;
       expectedRows?: Array<Array<number | string>>;
       requiredSqlPatterns?: string[];
     };
@@ -80,24 +81,35 @@ function getMissingTextPairs(
         nextLabelIndex + normalizedLabel.length,
       );
     }
-    const labelIndex = labelIndices.at(-1);
-    if (labelIndex === undefined) return true;
-
-    const valueStart = labelIndex + normalizedLabel.length;
-    const valueEnd = labels.reduce((nearest, candidate) => {
-      const candidateIndex = normalizedText.indexOf(candidate, valueStart);
-      return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
-    }, normalizedText.length);
-    const segment = normalizedText.slice(valueStart, valueEnd);
+    const segments = labelIndices.map((labelIndex) => {
+      const valueStart = labelIndex + normalizedLabel.length;
+      const valueEnd = labels.reduce((nearest, candidate) => {
+        const candidateIndex = normalizedText.indexOf(candidate, valueStart);
+        return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
+      }, normalizedText.length);
+      return normalizedText.slice(valueStart, valueEnd);
+    });
+    const segment = /^\d+$/.test(normalizedValue)
+      ? segments.findLast((candidate) => getMonetaryClaims(candidate).length > 0)
+      : segments.findLast((candidate) => candidate.includes(normalizedValue));
+    if (segment === undefined) {
+      return !(labelIndices.length === 1 && hasTablePair(text, normalizedLabel, normalizedValue));
+    }
     const monetaryClaims = getMonetaryClaims(segment);
     const hasExpectedValue = /^\d+$/.test(normalizedValue)
-      ? monetaryClaims.length === 1 && monetaryClaims[0] === Number(normalizedValue)
+      ? monetaryClaims.length === 1 &&
+        monetaryClaims[0] === Number(normalizedValue) &&
+        !hasDirectMonetaryNegation(segment)
       : segment.includes(normalizedValue);
     return (
       !hasExpectedValue &&
       !(labelIndices.length === 1 && hasTablePair(text, normalizedLabel, normalizedValue))
     );
   });
+}
+
+function hasDirectMonetaryNegation(segment: string): boolean {
+  return /(?:円|[¥￥]\d[\d,.]*)(?:ではありません|ではない|じゃない|でない)/.test(segment);
 }
 
 function getMonetaryClaims(segment: string): number[] {
@@ -257,12 +269,12 @@ function hasContradictedFact(text: string, fact: string): boolean {
   if (index === -1) return false;
   const suffix = normalizedText.slice(
     index + normalizedFact.length,
-    index + normalizedFact.length + 12,
+    index + normalizedFact.length + 24,
   );
-  return /^(?:ではなく|でなく|ではない|ではありません|じゃなく)/.test(suffix);
+  return /^[^。！？\n]{0,16}(?:ではなく|でなく|ではない|ではありません|じゃなく)/.test(suffix);
 }
 
-function hasAmountOutsideMarkdownTables(text: string): boolean {
+function hasUngroundedAmountOutsideMarkdownTables(text: string, expectedRows: string[][]): boolean {
   const lines = getRenderableLines(text);
   const tableLineIndices = new Set<number>();
   for (let index = 0; index < lines.length - 1; index += 1) {
@@ -285,7 +297,27 @@ function hasAmountOutsideMarkdownTables(text: string): boolean {
     }
   }
   const prose = lines.filter((_, index) => !tableLineIndices.has(index)).join("\n");
-  return /(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円)/.test(prose.normalize("NFKC"));
+  const expectedAmounts = expectedRows
+    .flat()
+    .map(normalize)
+    .filter((cell) => /^\d+$/.test(cell))
+    .map(Number);
+  const groundedAmounts = new Set([
+    ...expectedAmounts,
+    expectedAmounts.reduce((sum, value) => sum + value, 0),
+  ]);
+  return getMonetaryClaims(prose.normalize("NFKC")).some((claim) => !groundedAmounts.has(claim));
+}
+
+function rowContainsAssociation(
+  row: Record<string, unknown>,
+  association: Array<number | string>,
+): boolean {
+  const rowTerms = [
+    ...Object.keys(row).map(normalize),
+    ...Object.values(row).map((value) => normalize(String(value))),
+  ];
+  return association.every((term) => rowTerms.includes(normalize(String(term))));
 }
 
 export default function assertFinanceChatOutput(
@@ -380,12 +412,13 @@ export default function assertFinanceChatOutput(
     }
     if (
       expectedRows.length > 0 &&
-      !databaseResults.some(
-        (databaseResult) =>
-          JSON.stringify(normalizeRows(databaseResult.rows)) === JSON.stringify(expectedRows),
+      (databaseEvidence.expectedRowAssociations ?? []).some((association) =>
+        databaseResults.every((databaseResult) =>
+          databaseResult.rows.every((row) => !rowContainsAssociation(row, association)),
+        ),
       )
     ) {
-      return fail("queryDatabase結果の行が期待値と完全一致しません。");
+      return fail("queryDatabase結果に期待する値の関連を保った行がありません。");
     }
 
     const fixtureHasOnlyNoData =
@@ -427,7 +460,10 @@ export default function assertFinanceChatOutput(
   ) {
     return fail("Markdown表に期待しない明細行があります。");
   }
-  if (config.exactMarkdownRows && hasAmountOutsideMarkdownTables(actual.text)) {
+  if (
+    config.exactMarkdownRows &&
+    hasUngroundedAmountOutsideMarkdownTables(actual.text, config.expectedMarkdownRows ?? [])
+  ) {
     return fail("Markdown表の外に検証できない金額があります。");
   }
 

@@ -101,6 +101,16 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("does not treat an indented code block as a clickable link", () => {
+    const output = toEvaluationOutput({
+      text: "    [収支を見る](/0/cf/2026-07)",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
+  });
+
   test("collects text from every generation step", () => {
     expect(
       toEvaluationOutput({

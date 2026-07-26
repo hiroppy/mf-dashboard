@@ -89,7 +89,10 @@ function unique(values: string[]): string[] {
 }
 
 function removeCode(text: string): string {
-  return text.replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "").replace(/`[^`\n]*`/g, "");
+  return text
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
+    .replace(/^(?: {4}|\t).+$/gm, "")
+    .replace(/`[^`\n]*`/g, "");
 }
 
 function getTextLinks(text: string): string[] {
