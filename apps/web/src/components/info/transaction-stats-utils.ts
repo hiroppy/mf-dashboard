@@ -1,3 +1,4 @@
+import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { consolidateCategories } from "../../lib/aggregation";
 import type { CategoryBreakdown, CategoryTransaction } from "./transaction-stats.client";
 
@@ -15,6 +16,24 @@ interface BreakdownTransaction {
 interface NamedValue {
   name: string;
   value: number;
+}
+
+export type TransactionSort = "amount" | "date";
+
+export function isTransactionInCurrentMonth(
+  transactionDate: string,
+  currentDate = new Date(),
+): boolean {
+  return transactionDate.slice(0, 7) === getJstYearMonthKey(currentDate);
+}
+
+export function sortCategoryTransactions(
+  transactions: readonly CategoryTransaction[],
+  sortBy: TransactionSort,
+): CategoryTransaction[] {
+  return [...transactions].sort((a, b) =>
+    sortBy === "amount" ? b.amount - a.amount : b.date.localeCompare(a.date),
+  );
 }
 
 export function createBreakdowns(
