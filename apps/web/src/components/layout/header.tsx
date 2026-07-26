@@ -27,14 +27,16 @@ export function Header({ groups, defaultGroupId, notifications, refreshWorkflowU
     groups.find((group) => group.id === defaultGroupId) ??
     null;
 
-  const groupSelector =
-    groups.length > 1 && defaultGroupId ? (
-      <GroupSelectorClient groups={groups} defaultGroupId={defaultGroupId} />
-    ) : selectedGroup ? (
+  let groupSelector: ReactNode = null;
+  if (groups.length > 1 && defaultGroupId) {
+    groupSelector = <GroupSelectorClient groups={groups} defaultGroupId={defaultGroupId} />;
+  } else if (selectedGroup) {
+    groupSelector = (
       <div className={groupSelectorContainerClassName}>
         <GroupSelectorDisplay name={selectedGroup.name} />
       </div>
-    ) : null;
+    );
+  }
 
   return (
     <header className="fixed top-0 z-50 w-full border-b bg-card text-foreground shadow-sm">
