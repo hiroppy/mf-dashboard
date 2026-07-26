@@ -179,7 +179,10 @@ export default function assertFinanceChatOutput(
 
   if (
     config.forbidAmounts &&
-    /(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円)/.test(actual.text.normalize("NFKC"))
+    (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)?\s*円)/.test(actual.text.normalize("NFKC")) ||
+      /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
+        actual.text.normalize("NFKC"),
+      ))
   ) {
     return fail("データのない回答に金額が含まれています。");
   }

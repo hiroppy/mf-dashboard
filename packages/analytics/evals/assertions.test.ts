@@ -161,6 +161,16 @@ describe("assertFinanceChatOutput", () => {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、食費は1,000でした。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "2030年1月の食費データはありません。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   test("rejects malformed provider output", () => {
