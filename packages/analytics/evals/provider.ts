@@ -24,6 +24,7 @@ import {
   getRenderableMarkdownLines,
   isEscapedMarkdownMarker,
   normalizeReferenceLabel,
+  removeInlineCodeSpans,
   removeMarkdownImages,
 } from "./markdown";
 
@@ -101,13 +102,11 @@ function unique(values: string[]): string[] {
 function removeNonRenderedText(text: string): string {
   return removeMarkdownImages(text)
     .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
-    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "");
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
 }
 
 function removeCode(text: string): string {
-  return getRenderableMarkdownLines(removeNonRenderedText(text))
-    .join("\n")
-    .replace(/`[^`\n]*`/g, "");
+  return removeInlineCodeSpans(getRenderableMarkdownLines(removeNonRenderedText(text)).join("\n"));
 }
 
 function normalizeMarkdownDestination(destination: string): string {

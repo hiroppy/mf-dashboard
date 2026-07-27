@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
-import { getRenderableMarkdownLines, removeMarkdownImages } from "./markdown";
+import {
+  getRenderableMarkdownLines,
+  removeInlineCodeSpans,
+  removeMarkdownImages,
+} from "./markdown";
 
 interface ChartExpectation {
   chartType: FinanceChart["chartType"];
@@ -163,43 +167,17 @@ function getRenderedText(text: string): string {
     .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
-    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "")
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
   return decodeCharacterReferences(visibleText);
 }
 
-function removeInlineCodeSpans(text: string): string {
-  let visibleText = "";
-  let cursor = 0;
-  while (cursor < text.length) {
-    const openerIndex = text.indexOf("`", cursor);
-    if (openerIndex === -1) return visibleText + text.slice(cursor);
-    visibleText += text.slice(cursor, openerIndex);
-    const opener = text.slice(openerIndex).match(/^`+/)![0];
-    let candidateIndex = openerIndex + opener.length;
-    let closerIndex = -1;
-    while (candidateIndex < text.length) {
-      const runIndex = text.indexOf("`", candidateIndex);
-      if (runIndex === -1) break;
-      const run = text.slice(runIndex).match(/^`+/)![0];
-      if (run.length === opener.length) {
-        closerIndex = runIndex;
-        break;
-      }
-      candidateIndex = runIndex + run.length;
-    }
-    if (closerIndex === -1) {
-      visibleText += opener;
-      cursor = openerIndex + opener.length;
-    } else {
-      cursor = closerIndex + opener.length;
-    }
-  }
-  return visibleText;
-}
-
 function removeCode(text: string): string {
   return removeInlineCodeSpans(getRenderableMarkdownLines(text).join("\n"));
+}
+
+function removeFencedCode(text: string): string {
+  return getRenderableMarkdownLines(text).join("\n");
 }
 
 function inheritMarkdownHeadingScope(text: string): string {
@@ -343,26 +321,6 @@ function normalizeYenPrefix(segment: string): string {
     );
 }
 
-function getMonetaryClaims(segment: string): number[] {
-  const normalizedSegment = normalizeYenPrefix(segment);
-  const correctionPattern = /ではなく|でなく|ではない|ではありません|誤り|訂正|実際は|正しくは/g;
-  const monetaryPattern = new RegExp(`(?:マイナス|[-−])?${monetaryNumberSource}円`);
-  const corrections = [...normalizedSegment.matchAll(correctionPattern)].filter((match) =>
-    monetaryPattern.test(normalizedSegment.slice(match.index! + match[0].length)),
-  );
-  const lastCorrection = corrections.at(-1);
-  const claims =
-    lastCorrection?.index === undefined
-      ? normalizedSegment
-      : normalizedSegment.slice(lastCorrection.index + lastCorrection[0].length);
-  return [...claims.matchAll(new RegExp(`(マイナス|[-−])?${monetaryNumberSource}円`, "g"))].map(
-    (match) => {
-      const sign = match[1] ? -1 : 1;
-      return sign * parseMonetaryNumber(match[2]!);
-    },
-  );
-}
-
 interface MonetaryClaim {
   amount: number;
   index: number;
@@ -396,8 +354,8 @@ interface QuantitativeClaim {
 
 function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
   const normalizedText = text.normalize("NFKC").replace(/,/g, "");
-  const arabicClaims = [...normalizedText.matchAll(/(-?\d+(?:\.\d+)?)\s*(件|%)/g)].flatMap(
-    (match) => {
+  const arabicClaims = [
+    ...[...normalizedText.matchAll(/(-?\d+(?:\.\d+)?)\s*(件|%)/g)].flatMap((match) => {
       const suffix = normalizedText.slice(match.index! + match[0].length);
       if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
         return [];
@@ -409,8 +367,17 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
           value: Number(match[1]),
         },
       ];
-    },
-  );
+    }),
+    ...[
+      ...normalizedText.matchAll(
+        /(\d+(?:\.\d+)?)\s*割(?:\s*(\d+(?:\.\d+)?)\s*分)?(?:\s*(\d+(?:\.\d+)?)\s*厘)?/g,
+      ),
+    ].map((match) => ({
+      index: match.index!,
+      unit: "percent" as const,
+      value: Number(match[1]) * 10 + Number(match[2] ?? 0) + Number(match[3] ?? 0) / 10,
+    })),
+  ];
   const japaneseClaims = [
     ...normalizedText.matchAll(/([〇零一二三四五六七八九十百千壱弐参拾佰仟]+)(件|割)/g),
   ].map((match) => ({
@@ -459,21 +426,52 @@ function parseJapaneseInteger(value: string): number {
   return total + (digit ?? 0);
 }
 
-function getGroundedQuantities(
+type GroundedQuantityPairs = Record<QuantitativeClaim["unit"], Array<[string, number]>>;
+
+function getQuantityLabels(key: string, sql: string, unit: QuantitativeClaim["unit"]): string[] {
+  const normalizedKey = key.normalize("NFKC").toLocaleLowerCase();
+  const metric = normalizedKey
+    .replace(/(?:^|_)(?:count|件数|percent|percentage|割合|比率)(?:$|_)/g, "")
+    .replace(/^_+|_+$/g, "");
+  const primaryTable = sql.match(/\bfrom\s+["`]?([a-z_][\w]*)["`]?/i)?.[1]?.toLocaleLowerCase();
+  const source = metric || primaryTable || "";
+  const aliases: Record<string, string[]> = {
+    account: ["account", "口座"],
+    accounts: ["accounts", "account", "口座"],
+    transaction: ["transaction", "取引", "明細", "履歴", "データ"],
+    transactions: ["transactions", "transaction", "取引", "明細", "履歴", "データ"],
+  };
+  return aliases[source] ?? (source ? [source] : [unit === "count" ? "件数" : "割合"]);
+}
+
+function getGroundedQuantityPairs(
   databaseQueries: Array<{ input: unknown; output: unknown }>,
-): Record<QuantitativeClaim["unit"], Set<number>> {
-  const grounded = { count: new Set<number>(), percent: new Set<number>() };
+): GroundedQuantityPairs {
+  const grounded: GroundedQuantityPairs = { count: [], percent: [] };
   for (const query of databaseQueries) {
+    const input = databaseQueryInputSchema.safeParse(query.input);
     const result = databaseResultSchema.safeParse(query.output);
-    if (!result.success || result.data.truncated) continue;
+    if (!input.success || !result.success || result.data.truncated) continue;
     for (const row of result.data.rows) {
       for (const [key, value] of Object.entries(row)) {
         if (typeof value !== "number") continue;
         const normalizedKey = normalize(key).toLocaleLowerCase();
         if (/^(?:count|件数)$|(?:^|_)count(?:$|_)/i.test(key.normalize("NFKC"))) {
-          grounded.count.add(value);
+          grounded.count.push(
+            ...getQuantityLabels(key, input.data.sql, "count").map((label): [string, number] => [
+              label,
+              value,
+            ]),
+          );
         }
-        if (/(?:percent|percentage|割合|比率)/.test(normalizedKey)) grounded.percent.add(value);
+        if (/(?:percent|percentage|割合|比率)/.test(normalizedKey)) {
+          grounded.percent.push(
+            ...getQuantityLabels(key, input.data.sql, "percent").map((label): [string, number] => [
+              label,
+              value,
+            ]),
+          );
+        }
       }
     }
   }
@@ -536,6 +534,17 @@ function getMarkdownTables(text: string): MarkdownTable[] {
     index = rowIndex - 1;
   }
   return tables;
+}
+
+function getTextOutsideMarkdownTables(text: string): string {
+  const lines = getRenderableLines(text);
+  const tableLineIndices = new Set<number>();
+  for (const table of getMarkdownTables(text)) {
+    for (let index = table.startLine; index < table.startLine + table.rows.length + 2; index += 1) {
+      tableLineIndices.add(index);
+    }
+  }
+  return lines.filter((_, index) => !tableLineIndices.has(index)).join("\n");
 }
 
 function hasTablePair(text: string, label: string, value: string): boolean {
@@ -721,38 +730,25 @@ function hasContradictedFact(text: string, fact: string): boolean {
 }
 
 function hasUngroundedAmountOutsideMarkdownTables(text: string, expectedRows: string[][]): boolean {
-  const lines = getRenderableLines(text);
-  const tableLineIndices = new Set<number>();
-  for (let index = 0; index < lines.length - 1; index += 1) {
-    const header = getTableCells(lines[index]!);
-    const delimiter = getTableCells(lines[index + 1]!);
-    if (
-      !header ||
-      !delimiter ||
-      header.length !== delimiter.length ||
-      !delimiter.every((cell) => /^:?-{3,}:?$/.test(cell))
-    ) {
-      continue;
-    }
-    tableLineIndices.add(index);
-    tableLineIndices.add(index + 1);
-    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
-      const row = getTableCells(lines[rowIndex]!);
-      if (!row || row.length !== header.length) break;
-      tableLineIndices.add(rowIndex);
-    }
-  }
-  const prose = lines.filter((_, index) => !tableLineIndices.has(index)).join("\n");
+  const prose = getTextOutsideMarkdownTables(text);
   const expectedAmounts = expectedRows
     .flat()
     .map(normalize)
     .filter((cell) => /^\d+$/.test(cell))
     .map(Number);
-  const groundedAmounts = new Set([
-    ...expectedAmounts,
-    expectedAmounts.reduce((sum, value) => sum + value, 0),
-  ]);
-  return getMonetaryClaims(prose.normalize("NFKC")).some((claim) => !groundedAmounts.has(claim));
+  const expectedTotal = expectedAmounts.reduce((sum, value) => sum + value, 0);
+  const normalizedProse = normalizeYenPrefix(prose.normalize("NFKC")).replace(/,/g, "");
+  return getAssertedMonetaryClaims(prose).some((claim) => {
+    const clauseStart =
+      Math.max(
+        normalizedProse.lastIndexOf("。", claim.index),
+        normalizedProse.lastIndexOf("！", claim.index),
+        normalizedProse.lastIndexOf("？", claim.index),
+        normalizedProse.lastIndexOf("\n", claim.index),
+      ) + 1;
+    const prefix = normalize(normalizedProse.slice(clauseStart, claim.index));
+    return claim.amount !== expectedTotal || !/(?:合計|総額)/.test(prefix);
+  });
 }
 
 function rowContainsAssociation(
@@ -829,7 +825,7 @@ export default function assertFinanceChatOutput(
   const actual = result.data;
   const config = context.config ?? {};
   const renderedText = getRenderedText(actual.text);
-  const renderedClaimText = removeCode(renderedText);
+  const renderedClaimText = removeFencedCode(renderedText);
   const visibleText = [renderedClaimText, ...actual.charts.map((chart) => chart.title)].join("\n");
   const normalizedText = normalize(visibleText);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
@@ -897,9 +893,9 @@ export default function assertFinanceChatOutput(
     return fail("データのない回答に金額が含まれています。");
   }
 
-  let groundedQuantities: Record<QuantitativeClaim["unit"], Set<number>> = {
-    count: new Set(),
-    percent: new Set(),
+  let groundedQuantityPairs: GroundedQuantityPairs = {
+    count: [],
+    percent: [],
   };
   const databaseEvidence = config.databaseEvidence;
   if (databaseEvidence) {
@@ -950,12 +946,12 @@ export default function assertFinanceChatOutput(
     if (databaseResults.length === 0) {
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
     }
-    groundedQuantities = getGroundedQuantities(qualifyingDatabaseQueries.map(({ query }) => query));
+    groundedQuantityPairs = getGroundedQuantityPairs(
+      qualifyingDatabaseQueries.map(({ query }) => query),
+    );
     if (databaseEvidence.expectNoData) {
-      groundedQuantities.count = new Set(
-        [...groundedQuantities.count].filter((value) => value === 0),
-      );
-      groundedQuantities.percent.clear();
+      groundedQuantityPairs.count = groundedQuantityPairs.count.filter(([, value]) => value === 0);
+      groundedQuantityPairs.percent = [];
     }
 
     const fixtureResult = databaseResultSchema.safeParse(actual.fixtureResult);
@@ -1108,9 +1104,10 @@ export default function assertFinanceChatOutput(
         .join(", ")}`,
     );
   }
-  const claimText = [removeCode(renderedText), ...actual.charts.map((chart) => chart.title)].join(
-    "\n",
-  );
+  const claimText = [
+    getTextOutsideMarkdownTables(renderedText),
+    ...actual.charts.map((chart) => chart.title),
+  ].join("\n");
   if (
     !config.exactMarkdownRows &&
     (config.expectedMarkdownRows ?? []).length === 0 &&
@@ -1127,7 +1124,6 @@ export default function assertFinanceChatOutput(
         normalizedClaimText.lastIndexOf("？", claim.index),
         normalizedClaimText.lastIndexOf("\n", claim.index),
       ) + 1;
-    const clausePrefix = normalizedClaimText.slice(clauseStart, claim.index);
     const bindingStart =
       Math.max(
         clauseStart - 1,
@@ -1148,17 +1144,11 @@ export default function assertFinanceChatOutput(
       bindingPrefix,
     );
     const hasUnsupportedCoLabel = monetaryLabelTermPattern.test(unsupportedLabelText);
-    const isExpectedTableAmount =
-      clausePrefix.includes("|") && groundedAmounts.has(claim.amount) && markdownTables.length > 0;
     const isExpectedTableSummary =
       /(?:合計|総額)/.test(bindingPrefix) &&
       groundedAmounts.has(claim.amount) &&
       expectedMarkdownAmounts.length > 0;
-    return (
-      !isExpectedTableAmount &&
-      !isExpectedTableSummary &&
-      (hasUnsupportedCoLabel || !hasLabelBinding)
-    );
+    return !isExpectedTableSummary && (hasUnsupportedCoLabel || !hasLabelBinding);
   });
   const validatesRenderedAmounts =
     (config.expectedTextPairs ?? []).length > 0 ||
@@ -1196,7 +1186,6 @@ export default function assertFinanceChatOutput(
   }
   const normalizedQuantitativeText = claimText.normalize("NFKC").replace(/,/g, "");
   const ungroundedQuantities = getAssertedQuantitativeClaims(claimText).filter((claim) => {
-    if (groundedQuantities[claim.unit].has(claim.value)) return false;
     const clauseStart =
       Math.max(
         normalizedQuantitativeText.lastIndexOf("。", claim.index),
@@ -1205,6 +1194,13 @@ export default function assertFinanceChatOutput(
         normalizedQuantitativeText.lastIndexOf("\n", claim.index),
       ) + 1;
     const prefix = normalize(normalizedQuantitativeText.slice(clauseStart, claim.index));
+    if (
+      groundedQuantityPairs[claim.unit].some(
+        ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
+      )
+    ) {
+      return false;
+    }
     if (
       claim.unit === "percent" &&
       groundedChartPercentPairs.some(

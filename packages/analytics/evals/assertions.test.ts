@@ -326,14 +326,25 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
-  test.each(["<!-- 2026年7月の収入は313,235円です。 -->", "~~2026年7月の収入は313,235円です。~~"])(
-    "rejects a non-rendered expected claim: %s",
-    (text) => {
+  test("rejects an expected claim hidden in an HTML comment", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "<!-- 2026年7月の収入は313,235円です。 -->" }), {
+        config: {
+          expectedTextFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  test.each(["`transactions.type`", "~~予算は999,999円です~~"])(
+    "grades visible inline Markdown content: %s",
+    (claim) => {
       expect(
-        assertFinanceChatOutput(output({ text }), {
+        assertFinanceChatOutput(output({ text: `2026年7月の収入は313,235円です。${claim}` }), {
           config: {
-            expectedTextFacts: ["2026年7月"],
             expectedTextPairs: [["収入", "313235"]],
+            forbiddenTextTerms: ["transactions"],
           },
         }),
       ).toMatchObject({ pass: false });
@@ -1729,6 +1740,20 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: text.replace("なお、架空店舗で9,999円の支出もありました。", "借入残高 | 761円"),
+        }),
+        {
+          config: {
+            exactMarkdownRows: true,
+            expectedMarkdownColumns: ["日付", "内容", "金額"],
+            expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("表の外") });
   });
 
   test("rejects unverified columns in an exact Markdown table", () => {
@@ -2457,6 +2482,11 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedCharts: [chart] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    expect(
+      assertFinanceChatOutput(output({ text: "カフェは5割2分3厘です。", charts: [chart] }), {
+        config: { expectedCharts: [chart] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
   test("grounds counts from ordinary qualifying queries", () => {
@@ -2483,6 +2513,29 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "口座は3件です。",
+          fixtureResult: { rows: [{ count: 3 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT COUNT(*) AS count FROM transactions" },
+              output: { rows: [{ count: 3 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["3"]],
+              expectedRowAssociations: [["count", "3"]],
+              requiredSqlPatterns: ["\\btransactions\\b", "\\bcount\\s*\\("],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
   test("does not treat account identifiers as count aliases", () => {

@@ -25,6 +25,36 @@ export function isEscapedMarkdownMarker(text: string, index: number): boolean {
   return backslashes % 2 === 1;
 }
 
+export function removeInlineCodeSpans(text: string): string {
+  let visibleText = "";
+  let cursor = 0;
+  while (cursor < text.length) {
+    const openerIndex = text.indexOf("`", cursor);
+    if (openerIndex === -1) return visibleText + text.slice(cursor);
+    visibleText += text.slice(cursor, openerIndex);
+    const opener = text.slice(openerIndex).match(/^`+/)![0];
+    let candidateIndex = openerIndex + opener.length;
+    let closerIndex = -1;
+    while (candidateIndex < text.length) {
+      const runIndex = text.indexOf("`", candidateIndex);
+      if (runIndex === -1) break;
+      const run = text.slice(runIndex).match(/^`+/)![0];
+      if (run.length === opener.length) {
+        closerIndex = runIndex;
+        break;
+      }
+      candidateIndex = runIndex + run.length;
+    }
+    if (closerIndex === -1) {
+      visibleText += opener;
+      cursor = openerIndex + opener.length;
+    } else {
+      cursor = closerIndex + opener.length;
+    }
+  }
+  return visibleText;
+}
+
 export function getRenderableMarkdownLines(text: string): string[] {
   let fence: { marker: "`" | "~"; length: number } | undefined;
   return text.split("\n").map((line) => {

@@ -235,14 +235,24 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual([]);
   });
 
-  test("excludes links in HTML comments and strikethrough", () => {
+  test("excludes links in HTML comments but keeps visible strikethrough links", () => {
     const output = toEvaluationOutput({
       text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~\n<!-- /0/cf/2026-07 -->",
       steps: [],
     });
 
+    expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
+    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
+  });
+
+  test("excludes links inside matching multi-backtick code spans", () => {
+    const output = toEvaluationOutput({
+      text: "``[収支](/0/cf/2026-07)``",
+      steps: [],
+    });
+
     expect(output.textLinks).toEqual([]);
-    expect(output.textRoutes).toEqual([]);
+    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
   test("collects text from every generation step", () => {
