@@ -168,9 +168,17 @@ export function getMarkdownReferenceDefinitions(text: string): Map<string, strin
 }
 
 export function removeMarkdownReferenceDefinitions(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => !parseMarkdownReferenceDefinition(line))
+  const lines = text.split("\n");
+  return lines
+    .filter((line, index) => {
+      if (parseMarkdownReferenceDefinition(line)) return false;
+      const previous = lines[index - 1];
+      return !(
+        previous &&
+        parseMarkdownReferenceDefinition(previous) &&
+        /^\s{1,3}(?:"[^"]*"|'[^']*'|\([^)]*\))\s*$/.test(line)
+      );
+    })
     .join("\n");
 }
 

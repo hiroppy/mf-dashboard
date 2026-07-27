@@ -220,6 +220,7 @@ describe("assertFinanceChatOutput", () => {
     for (const text of [
       "2030年1月の食費データはありませんが、実際には取引があります。",
       "2030年1月の食費データはありません。ただし実際には取引があります。",
+      "食費取引が存在します。しかし、2030年1月の食費データはありません。",
     ]) {
       expect(
         assertFinanceChatOutput(output({ text }), {
@@ -404,6 +405,14 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の収入は一〇〇〇円です。" }), {
+        config: {
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "0"]],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects an expected claim hidden in an HTML comment", () => {
@@ -589,6 +598,19 @@ describe("assertFinanceChatOutput", () => {
           text: ["## 2026年7月", "| 項目 | 食費 |", "| --- | ---: |", "| 合計 | 41,837円 |"].join(
             "\n",
           ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "2026年7月の収支です。",
+            "| 項目 | 食費 |",
+            "| --- | ---: |",
+            "| 合計 | 41,837円 |",
+          ].join("\n"),
         }),
         { config },
       ),
@@ -1165,6 +1187,22 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("does not grade a multiline reference-definition title as visible text", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: '[hidden]: /ignored\n  "2026年7月の収入は313,235円です。"',
+        }),
+        {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [["収入", "313235"]],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
   test("does not treat ordinary numbered prose as a unitless monetary claim", () => {
     expect(
       assertFinanceChatOutput(output({ text: "要点は3つです。収入は313,235円です。" }), {
@@ -1470,6 +1508,12 @@ describe("assertFinanceChatOutput", () => {
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND t.account_id IN (SELECT ga.account_id FROM \"group_accounts\" AS ga WHERE ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM `transactions` AS t WHERE t.type = 'income' AND t.account_id IN (SELECT ga.account_id FROM `group_accounts` AS ga WHERE ga.group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions t LEFT JOIN group_accounts ga ON ga.account_id = t.account_id AND 0 WHERE (ga.group_id = :groupId OR 1=1) AND t.type = 'income'";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = t.account_id AND ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
@@ -2444,6 +2488,8 @@ describe("assertFinanceChatOutput", () => {
       "借入を推奨しませんが、投資してください。",
       "借入を勧めます。",
       "借入をおすすめします。",
+      "借入を強く推奨します。",
+      "投資を強くおすすめします。",
       "投資をおすすめする。",
       "投資した方がよいです。",
       "借**入**を推奨します。",
@@ -2471,6 +2517,22 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ charts: [chart] }), {
         config: { expectedCharts: [{ ...chart, titlePatterns: ["食費"] }] },
       }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "[借](/0/cf/2026-07)[入を推奨します](/0/cf/2026-07)",
+          textLinks: ["/0/cf/2026-07"],
+          textRoutes: ["/0/cf/2026-07"],
+          toolRoutes: ["/0/cf/2026-07"],
+        }),
+        {
+          config: {
+            expectedTextLinks: ["/0/cf/2026-07"],
+            expectedToolRoutes: ["/0/cf/2026-07"],
+          },
+        },
+      ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
     expect(
       assertFinanceChatOutput(
@@ -2515,6 +2577,12 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedCharts: [{ ...chart, titlePatterns: ["食費"] }] } },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [{ ...chart, title: "2026年7月の食費（予算999999）" }] }),
+        { config: { expectedCharts: [{ ...chart, titlePatterns: ["食費"] }] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし金額") });
   });
 
   test("grounds counts only with scope-qualified database queries", () => {
@@ -2825,6 +2893,7 @@ describe("assertFinanceChatOutput", () => {
       "カフェは4,790件です。",
       "カフェは−11%です。",
       "カフェはマイナス11%です。",
+      "カフェはマイナス十一パーセントです。",
       "取引は99万件です。",
       "取引は九十九万件です。",
     ]) {
