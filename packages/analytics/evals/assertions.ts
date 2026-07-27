@@ -154,7 +154,7 @@ function decodeCharacterReferences(text: string): string {
 
 function getRenderedText(text: string): string {
   const visibleText = removeMarkdownImages(removeHiddenHtmlElements(text))
-    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
     .replace(/~~[\s\S]*?~~/g, "")

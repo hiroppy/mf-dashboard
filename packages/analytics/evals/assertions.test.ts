@@ -2152,6 +2152,26 @@ describe("assertFinanceChatOutput", () => {
     }
   });
 
+  test("does not grade unterminated HTML comments as rendered evidence", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "<!-- 2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
   test("decodes visible character references before checking monetary claims", () => {
     expect(
       assertFinanceChatOutput(
