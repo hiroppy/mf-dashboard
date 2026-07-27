@@ -734,7 +734,7 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("route tool") });
   });
 
-  test("ignores unused route tool calls when the rendered link is proven", () => {
+  test("rejects unexpected route tool calls when the rendered link is proven", () => {
     expect(
       assertFinanceChatOutput(
         output({
@@ -750,7 +750,15 @@ describe("assertFinanceChatOutput", () => {
           },
         },
       ),
-    ).toMatchObject({ pass: true });
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("route tool") });
+  });
+
+  test("rejects an unexpected route tool call in a route-free answer", () => {
+    expect(
+      assertFinanceChatOutput(output({ toolRoutes: ["/0/cf/2026-07"] }), {
+        config: { expectedToolRoutes: [] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("route tool") });
   });
 
   test("requires concrete link text for the dashboard route", () => {
@@ -764,7 +772,13 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({ ...routeOutput, text: "2026年7月です。[こちら](/0/cf/2026-07)" }),
-        { config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] } },
+        {
+          config: {
+            expectedTextLinks: ["/0/cf/2026-07"],
+            expectedTextPatterns: [pattern],
+            expectedToolRoutes: ["/0/cf/2026-07"],
+          },
+        },
       ),
     ).toMatchObject({ pass: false });
     expect(
@@ -773,7 +787,13 @@ describe("assertFinanceChatOutput", () => {
           ...routeOutput,
           text: "[2026年7月の収支を確認](/0/cf/2026-07)",
         }),
-        { config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] } },
+        {
+          config: {
+            expectedTextLinks: ["/0/cf/2026-07"],
+            expectedTextPatterns: [pattern],
+            expectedToolRoutes: ["/0/cf/2026-07"],
+          },
+        },
       ),
     ).toMatchObject({ pass: true });
     for (const text of [
@@ -782,7 +802,11 @@ describe("assertFinanceChatOutput", () => {
     ]) {
       expect(
         assertFinanceChatOutput(output({ ...routeOutput, text }), {
-          config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] },
+          config: {
+            expectedTextLinks: ["/0/cf/2026-07"],
+            expectedTextPatterns: [pattern],
+            expectedToolRoutes: ["/0/cf/2026-07"],
+          },
         }),
       ).toMatchObject({ pass: true });
     }
@@ -977,7 +1001,7 @@ describe("assertFinanceChatOutput", () => {
         }),
         { config: { expectedTextLinks: [], expectedToolRoutes: [] } },
       ),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("期待しないroute") });
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("route tool") });
   });
 
   test("does not satisfy rendered text patterns with code-only content", () => {

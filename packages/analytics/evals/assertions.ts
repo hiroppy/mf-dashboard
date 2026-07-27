@@ -1116,7 +1116,7 @@ export default function assertFinanceChatOutput(
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];
-  if (expectedRoutes.some((route) => !actual.toolRoutes.includes(route))) {
+  if (!sameValues(actual.toolRoutes, expectedRoutes)) {
     return fail("route tool結果が期待と異なります。");
   }
   const expectedLinks = config.expectedTextLinks ?? [];
