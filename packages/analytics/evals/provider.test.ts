@@ -134,11 +134,11 @@ describe("toEvaluationOutput", () => {
 
   test("decodes character references before collecting routes", () => {
     const output = toEvaluationOutput({
-      text: "&#47;0&#47;bs",
+      text: "&#47;0&#47;bs &sol;0&sol;cf",
       steps: [],
     });
 
-    expect(output.textRoutes).toEqual(["/0/bs"]);
+    expect(output.textRoutes).toEqual(["/0/bs", "/0/cf"]);
   });
 
   test("does not treat an indented code block as a clickable link", () => {

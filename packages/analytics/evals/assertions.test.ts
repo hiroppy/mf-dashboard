@@ -159,9 +159,9 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT COUNT(*) AS count FROM transactions WHERE date LIKE '2030-01%'",
+                sql: "SELECT COUNT(*) AS count, '2030-01' AS period FROM transactions WHERE date LIKE '2030-01%'",
               },
-              output: { rows: [{ count: 0 }], truncated: false },
+              output: { rows: [{ count: 0, period: "2030-01" }], truncated: false },
             },
           ],
         }),
@@ -323,6 +323,11 @@ describe("assertFinanceChatOutput", () => {
   test("rejects a direct negation of the expected monetary claim", () => {
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円ではありません。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円というわけではありません。" }), {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: false });
@@ -1406,9 +1411,8 @@ describe("assertFinanceChatOutput", () => {
           requiredSqlPatterns: [
             derivedAmountSqlPattern,
             "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)",
-            "\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
-            "\\btransfer_target_account_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
           ],
+          requiredGroupScopedColumns: ["account_id", "transfer_target_account_id"],
         },
       },
     };
@@ -1426,6 +1430,12 @@ describe("assertFinanceChatOutput", () => {
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(CASE WHEN type = 'income' OR (type = 'transfer' AND is_internal_transfer = 0 AND account_id IS NOT NULL AND transfer_target_account_id IS NULL) THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' OR (type = 'transfer' AND is_internal_transfer = 0 AND account_id IS NULL AND transfer_target_account_id IS NOT NULL) THEN amount ELSE 0 END) AS expense FROM transactions WHERE account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId) OR transfer_target_account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(CASE WHEN t.type = 'income' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NOT NULL AND t.transfer_target_account_id IS NULL) THEN t.amount ELSE 0 END) AS income, SUM(CASE WHEN t.type = 'expense' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NULL AND t.transfer_target_account_id IS NOT NULL) THEN t.amount ELSE 0 END) AS expense FROM transactions t JOIN group_accounts source_group ON source_group.account_id = t.account_id AND source_group.group_id = :groupId JOIN group_accounts target_group ON target_group.account_id = t.transfer_target_account_id AND target_group.group_id = :groupId";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(CASE WHEN t.type = 'income' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NOT NULL AND t.transfer_target_account_id IS NULL) THEN t.amount ELSE 0 END) AS income, SUM(CASE WHEN t.type = 'expense' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NULL AND t.transfer_target_account_id IS NOT NULL) THEN t.amount ELSE 0 END) AS expense FROM transactions t WHERE EXISTS (SELECT 1 FROM group_accounts source_group WHERE source_group.account_id = t.account_id AND source_group.group_id = :groupId) AND EXISTS (SELECT 1 FROM group_accounts target_group WHERE target_group.account_id = t.transfer_target_account_id AND target_group.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
   });
 
@@ -2288,6 +2298,8 @@ describe("assertFinanceChatOutput", () => {
       "借入を勧めます。",
       "投資した方がよいです。",
       "借**入**を推奨します。",
+      "家計データをSNSに投稿してください。",
+      "全財産を株式へ投入するのが最善です。",
     ]) {
       expect(
         assertFinanceChatOutput(

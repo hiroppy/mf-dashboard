@@ -7,6 +7,7 @@ const namedCharacterReferences: Record<string, string> = {
   lt: "<",
   minus: "−",
   quot: '"',
+  sol: "/",
   yen: "¥",
 };
 
@@ -22,7 +23,7 @@ export function decodeHtmlCharacterReferences(text: string): string {
       },
     )
     .replace(
-      /&(amp|apos|gt|lt|minus|quot|yen);/gi,
+      /&(amp|apos|gt|lt|minus|quot|sol|yen);/gi,
       (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
     );
 }
