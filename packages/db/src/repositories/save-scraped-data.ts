@@ -29,6 +29,21 @@ function log(...args: unknown[]) {
   if (!isCI) console.log(...args);
 }
 
+function resolveHoldingAccountId(
+  accountIdByMfId: ReadonlyMap<string, number>,
+  accountIdByName: Map<string, number | null>,
+  item: { accountMfId?: string; institution: string },
+  fallbackAccountId: number,
+): number {
+  if (item.accountMfId) {
+    return accountIdByMfId.get(item.accountMfId) ?? fallbackAccountId;
+  }
+
+  const institutionAccountId = accountIdByName.get(item.institution);
+  if (institutionAccountId != null) return institutionAccountId;
+  return fallbackAccountId;
+}
+
 /**
  * 「グループ選択なし」用: 全データを保存
  * - アカウント情報
@@ -97,6 +112,21 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   const accountIdMap = await buildAccountIdMap(db);
   log(`  - accountIdMap: ${accountIdMap.size} entries`);
 
+  const currentAccountIdByName = new Map<string, number | null>();
+  const currentAccountIdByMfId = new Map<string, number>();
+  for (const account of data.registeredAccounts.accounts) {
+    const accountId = accountIdMap.get(account.mfId);
+    if (accountId === undefined) continue;
+
+    currentAccountIdByMfId.set(account.mfId, accountId);
+    const existingAccountId = currentAccountIdByName.get(account.name);
+    if (existingAccountId === undefined) {
+      currentAccountIdByName.set(account.name, accountId);
+    } else if (existingAccountId !== accountId) {
+      currentAccountIdByName.set(account.name, null);
+    }
+  }
+
   // 4. Group-account links (バルク処理)
   await clearGroupAccountLinks(db, groupId);
   const accountIds = data.registeredAccounts.accounts
@@ -148,7 +178,12 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 8. Save portfolio
   for (const item of data.portfolio.items) {
-    const accountId = accountIdMap.get(item.institution) || unknownAccountId;
+    const accountId = resolveHoldingAccountId(
+      currentAccountIdByMfId,
+      currentAccountIdByName,
+      item,
+      unknownAccountId,
+    );
     const categoryId = await getOrCreateCategory(db, item.type);
     const holdingId = await createHolding(db, accountId, item.name, "asset", {
       categoryId,
@@ -169,7 +204,12 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 9. Save liabilities
   for (const liability of data.liabilities.items) {
-    const accountId = accountIdMap.get(liability.institution) || unknownAccountId;
+    const accountId = resolveHoldingAccountId(
+      currentAccountIdByMfId,
+      currentAccountIdByName,
+      liability,
+      unknownAccountId,
+    );
     const holdingId = await createHolding(db, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });

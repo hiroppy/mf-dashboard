@@ -1,5 +1,7 @@
 import { describe, test, expect } from "vitest";
 import {
+  createPensionRowFingerprint,
+  haveSamePensionRowMultiset,
   identifyTableTypeFromTitle,
   isPointCategory,
   parseDepositPortfolioItem,
@@ -9,6 +11,29 @@ import {
   parseStockPortfolioItem,
   resolveDepositTableCategory,
 } from "./portfolio.js";
+
+describe("pension row completeness", () => {
+  test("主要6列だけを正規化してfingerprintにする", () => {
+    expect(
+      createPensionRowFingerprint([
+        " Pension A ",
+        "1,000",
+        "3,000",
+        "200",
+        "10%",
+        "2026-07-01",
+        "変更",
+        "削除",
+      ]),
+    ).toBe('["Pension A","1,000","3,000","200","10%","2026-07-01"]');
+  });
+
+  test("順序に依存せず重複数を含めてmultisetを比較する", () => {
+    expect(haveSamePensionRowMultiset(["row-a", "row-b"], ["row-b", "row-a"])).toBe(true);
+    expect(haveSamePensionRowMultiset(["row-a", "row-a"], ["row-a"])).toBe(false);
+    expect(haveSamePensionRowMultiset(["row-a", "row-a"], ["row-a", "row-b"])).toBe(false);
+  });
+});
 
 describe("identifyTableTypeFromTitle", () => {
   test("「ポイント・マイル」はそのまま返す", () => {

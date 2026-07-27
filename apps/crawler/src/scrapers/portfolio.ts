@@ -1,9 +1,10 @@
-import type { Portfolio, PortfolioItem } from "@mf-dashboard/db/types";
+import type { Portfolio, PortfolioItem, RegisteredAccounts } from "@mf-dashboard/db/types";
 import { ASSET_CATEGORIES } from "@mf-dashboard/meta/categories";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
-import { debug } from "../logger.js";
+import { debug, warn } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
+import { createManualHoldingKey, type ManualHoldingAccountMap } from "./manual-holding-accounts.js";
 
 const LEGACY_DEPOSIT_CATEGORY = "預金・現金・暗号資産";
 const DEPOSIT_TABLE_CATEGORIES = new Set([
@@ -14,6 +15,9 @@ const DEPOSIT_TABLE_CATEGORIES = new Set([
 ]);
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
+const PENSION_CATEGORY = "年金";
+const PENSION_CORE_COLUMN_COUNT = 6;
+const LINKED_ACCOUNT_PATH_PATTERN = /^\/accounts\/show\/([^/]+)$/;
 
 // Column indices for each table type
 const CELL_TIMEOUT = 1000;
@@ -239,6 +243,127 @@ export function parsePnsPortfolioItem(
   };
 }
 
+export interface LinkedAccountPensionSource {
+  complete: boolean;
+  fingerprints: string[];
+  items: PortfolioItem[];
+}
+
+function normalizePensionCellText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+export function createPensionRowFingerprint(cellTexts: readonly string[]): string {
+  return JSON.stringify(
+    cellTexts.slice(0, PENSION_CORE_COLUMN_COUNT).map(normalizePensionCellText),
+  );
+}
+
+export function haveSamePensionRowMultiset(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) return false;
+
+  const counts = new Map<string, number>();
+  for (const fingerprint of left) {
+    counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1);
+  }
+  for (const fingerprint of right) {
+    const count = counts.get(fingerprint);
+    if (!count) return false;
+    if (count === 1) {
+      counts.delete(fingerprint);
+    } else {
+      counts.set(fingerprint, count - 1);
+    }
+  }
+  return counts.size === 0;
+}
+
+function extractLinkedAccountMfId(href: string): string | null {
+  try {
+    const pathname = new URL(href, mfUrls.home).pathname;
+    const match = pathname.match(LINKED_ACCOUNT_PATH_PATTERN);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getRowCellTexts(row: Locator): Promise<string[]> {
+  const cells = row.locator("td");
+  const cellCount = await cells.count();
+  return Promise.all(Array.from({ length: cellCount }, (_, index) => getCellText(cells, index)));
+}
+
+/**
+ * 通常の自動連携口座詳細を年金項目の権威ソースとして取得する。
+ * 口座との対応は表示名や金額ではなく、検証済みの詳細ページURLで確定する。
+ */
+export async function getLinkedAccountPensionSource(
+  page: Page,
+  registeredAccounts: RegisteredAccounts,
+): Promise<LinkedAccountPensionSource> {
+  const linkedAccounts = registeredAccounts.accounts.filter(
+    (account) =>
+      account.type === "自動連携" && extractLinkedAccountMfId(account.url) === account.mfId,
+  );
+  const items: PortfolioItem[] = [];
+  const fingerprints: string[] = [];
+  let failedPageCount = 0;
+
+  for (const account of linkedAccounts) {
+    const expectedPath = `/accounts/show/${encodeURIComponent(account.mfId)}`;
+    try {
+      const response = await page.goto(mfUrls.accountDetail(account.mfId), {
+        waitUntil: "domcontentloaded",
+      });
+      if (!response?.ok() || new URL(page.url()).pathname !== expectedPath) {
+        failedPageCount++;
+        continue;
+      }
+
+      const tables = page.locator("table.table-pns");
+      for (let tableIndex = 0; tableIndex < (await tables.count()); tableIndex++) {
+        const table = tables.nth(tableIndex);
+        if (
+          identifyTableTypeFromTitle(await getPrecedingSectionTitle(table)) !== PENSION_CATEGORY
+        ) {
+          continue;
+        }
+
+        const rows = table.locator("tbody tr");
+        for (let rowIndex = 0; rowIndex < (await rows.count()); rowIndex++) {
+          const cellTexts = await getRowCellTexts(rows.nth(rowIndex));
+          if (cellTexts.length < PENSION_CORE_COLUMN_COUNT) {
+            failedPageCount++;
+            continue;
+          }
+          const item = parsePnsPortfolioItem(PENSION_CATEGORY, cellTexts);
+          if (!item) {
+            failedPageCount++;
+            continue;
+          }
+          items.push({ ...item, accountMfId: account.mfId });
+          fingerprints.push(createPensionRowFingerprint(cellTexts));
+        }
+      }
+    } catch {
+      failedPageCount++;
+    }
+  }
+
+  debug(
+    `Linked account pension source: ${items.length} items from ${linkedAccounts.length} current accounts`,
+  );
+  if (failedPageCount > 0) {
+    warn(`Linked account pension source incomplete: ${failedPageCount} failures`);
+  }
+
+  return { complete: failedPageCount === 0, fingerprints, items };
+}
+
 // Parse stocks from .table-eq
 async function parseStocks(page: Page): Promise<PortfolioItem[]> {
   const rows = page.locator("table.table-eq tbody tr");
@@ -346,8 +471,15 @@ export function identifyTableTypeFromTitle(titleText: string): string {
 }
 
 // Parse insurance, pension, and points from .table-pns
-async function parseInsuranceAndPoints(page: Page): Promise<PortfolioItem[]> {
+export async function parseInsuranceAndPoints(
+  page: Page,
+  manualHoldingAccountMap: ManualHoldingAccountMap = new Map(),
+  linkedAccountPensionSource?: LinkedAccountPensionSource,
+): Promise<PortfolioItem[]> {
   const items: PortfolioItem[] = [];
+  const globalPensionItems: PortfolioItem[] = [];
+  const globalPensionFingerprints: string[] = [];
+  let pensionInsertionIndex: number | null = null;
   const tables = page.locator("table.table-pns");
   const tableCount = await tables.count();
 
@@ -362,19 +494,68 @@ async function parseInsuranceAndPoints(page: Page): Promise<PortfolioItem[]> {
     const rowCount = await rows.count();
 
     for (let i = 0; i < rowCount; i++) {
-      const cells = rows.nth(i).locator("td");
-      const cellCount = await cells.count();
-      const cellTexts = await Promise.all(
-        Array.from({ length: cellCount }, (_, index) => getCellText(cells, index)),
-      );
+      const row = rows.nth(i);
+      const [cellTexts, holdingMfId, subAccountMfId] = await Promise.all([
+        getRowCellTexts(row),
+        row
+          .locator('input[name="user_asset_det[id]"]')
+          .first()
+          .inputValue({ timeout: CELL_TIMEOUT })
+          .then((value) => value.trim())
+          .catch(() => ""),
+        row
+          .locator('input[name="user_asset_det[sub_account_id_hash]"]')
+          .first()
+          .inputValue({ timeout: CELL_TIMEOUT })
+          .then((value) => value.trim())
+          .catch(() => ""),
+      ]);
       const item = parsePnsPortfolioItem(category, cellTexts);
-      if (item) items.push(item);
+      if (!item) continue;
+
+      if (holdingMfId && subAccountMfId) {
+        item.mfId = holdingMfId;
+        item.subAccountMfId = subAccountMfId;
+        const accountMfId = manualHoldingAccountMap.get(
+          createManualHoldingKey(holdingMfId, subAccountMfId),
+        );
+        if (accountMfId) item.accountMfId = accountMfId;
+      }
+      if (category === PENSION_CATEGORY) {
+        pensionInsertionIndex ??= items.length;
+        globalPensionItems.push(item);
+        globalPensionFingerprints.push(createPensionRowFingerprint(cellTexts));
+      } else {
+        items.push(item);
+      }
+    }
+  }
+
+  const useLinkedAccountPensions =
+    linkedAccountPensionSource?.complete === true &&
+    haveSamePensionRowMultiset(globalPensionFingerprints, linkedAccountPensionSource.fingerprints);
+
+  if (useLinkedAccountPensions) {
+    items.splice(pensionInsertionIndex ?? items.length, 0, ...linkedAccountPensionSource.items);
+    debug(
+      `Linked account pension source applied: ${linkedAccountPensionSource.items.length} items`,
+    );
+  } else {
+    items.splice(pensionInsertionIndex ?? items.length, 0, ...globalPensionItems);
+    if (linkedAccountPensionSource) {
+      warn(
+        `Linked account pension source not applied: global=${globalPensionItems.length}, detail=${linkedAccountPensionSource.items.length}, complete=${linkedAccountPensionSource.complete}`,
+      );
     }
   }
   return items;
 }
 
-export async function getPortfolio(page: Page): Promise<Portfolio> {
+export async function getPortfolio(
+  page: Page,
+  manualHoldingAccountMap: ManualHoldingAccountMap = new Map(),
+  linkedAccountPensionSource?: LinkedAccountPensionSource,
+): Promise<Portfolio> {
   debug("Getting portfolio from /bs/portfolio page...");
 
   // Get official totalAssets from bs/history (more accurate than summing items)
@@ -402,7 +583,7 @@ export async function getPortfolio(page: Page): Promise<Portfolio> {
     parseDeposits(page),
     parseStocks(page),
     parseFunds(page),
-    parseInsuranceAndPoints(page),
+    parseInsuranceAndPoints(page, manualHoldingAccountMap, linkedAccountPensionSource),
   ]);
 
   debug(`  .table-depo rows: ${deposits.length}`);
