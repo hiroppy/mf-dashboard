@@ -276,6 +276,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual([]);
   });
 
+  test("collects a visible raw URL inside a fenced block for safety validation", () => {
+    const output = toEvaluationOutput({
+      text: "```\nhttps://evil.example\n```",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["https://evil.example"]);
+  });
+
   test("preserves routes in invalid reference definitions", () => {
     const output = toEvaluationOutput({
       text: "[/0/bs]: <not a url>",

@@ -151,7 +151,9 @@ function getTextLinks(text: string): string[] {
     },
   );
   const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
-  const textWithoutReferenceDefinitions = removeMarkdownReferenceDefinitions(renderedText);
+  const textWithoutReferenceDefinitions = removeMarkdownReferenceDefinitions(
+    removeNonRenderedText(text),
+  );
   const rawUrls = [...textWithoutReferenceDefinitions.matchAll(/https?:\/\/[^\s<>)]+/g)].map(
     (match) => match[0].replace(/[.,。、!?！？]+$/, ""),
   );

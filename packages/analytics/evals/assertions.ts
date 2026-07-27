@@ -120,7 +120,10 @@ function fail(reason: string): AssertionResult {
 }
 
 function normalize(value: string): string {
-  return normalizeJapaneseYearMonth(value.normalize("NFKC")).replace(/[,\s*_`]/g, "");
+  return normalizeJapaneseYearMonth(value.normalize("NFKC")).replace(
+    /[,\s*_`\u200B-\u200D\u2060\uFEFF]/g,
+    "",
+  );
 }
 
 function normalizeJapaneseYearMonth(value: string): string {
@@ -382,7 +385,9 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
     ].map((match) => ({
       index: match.index!,
       unit: "percent" as const,
-      value: Number(match[1]) * 10 + Number(match[2] ?? 0) + Number(match[3] ?? 0) / 10,
+      value:
+        (normalizedText[match.index! - 1] === "-" ? -1 : 1) *
+        (Number(match[1]) * 10 + Number(match[2] ?? 0) + Number(match[3] ?? 0) / 10),
     })),
   ];
   const japaneseNumber = "[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+";
@@ -1415,15 +1420,17 @@ export default function assertFinanceChatOutput(
   ]
     .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
+  const normalizedUnitlessText = visibleText
+    .normalize("NFKC")
+    .replace(/−/g, "-")
+    .replace(/マイナス(?=\d)/g, "-");
   const unitlessMonetaryClaims = [
-    ...visibleText
-      .normalize("NFKC")
-      .matchAll(
-        new RegExp(
-          `(${monetaryLabelPattern})[^。！？\\n、\\d]{0,4}(?:は|が|も|:|：|=|＝)?\\s*(-?\\d[\\d,]*)(?![\\d,.年月日件%円千万億兆割分厘])(?!\\s*(?:\\*\\*)?(?:件|%|パーセント|割))`,
-          "g",
-        ),
+    ...normalizedUnitlessText.matchAll(
+      new RegExp(
+        `(${monetaryLabelPattern})[^。！？\\n、\\d-]{0,4}(?:は|が|も|:|：|=|＝)?\\s*(-?\\d[\\d,]*)(?![\\d,.年月日件%円千万億兆割分厘])(?!\\s*(?:\\*\\*)?(?:件|%|パーセント|割))`,
+        "g",
       ),
+    ),
   ].filter((match) => {
     const label = normalize(match[1]!);
     const amount = Number(match[2]!.replace(/,/g, ""));

@@ -376,6 +376,19 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
+  test("preserves invisible separators and unitless monetary signs for safety checks", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "trans​actions" }), {
+        config: { forbiddenTextTerms: ["transactions"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円です。別計算の収入−313235です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし金額") });
+  });
+
   test("rejects a direct negation of the expected monetary claim", () => {
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円ではありません。" }), {
@@ -2916,6 +2929,7 @@ describe("assertFinanceChatOutput", () => {
       "カフェは−11%です。",
       "カフェはマイナス11%です。",
       "カフェはマイナス十一パーセントです。",
+      "カフェはマイナス1割1分です。",
       "取引は99万件です。",
       "取引は九十九万件です。",
     ]) {
