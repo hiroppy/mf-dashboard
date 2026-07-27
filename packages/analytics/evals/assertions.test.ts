@@ -1389,6 +1389,9 @@ describe("assertFinanceChatOutput", () => {
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.group_id = :groupId AND ga.account_id = t.account_id)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND t.account_id IN (SELECT account_id FROM group_accounts) AND (SELECT group_id FROM group_accounts WHERE group_id = :groupId LIMIT 1) IS NOT NULL";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
+    evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = ga.account_id AND ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
     evidence.databaseQueries[0]!.input.sql =
@@ -2621,6 +2624,18 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedCharts: [chart] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    for (const text of [
+      "カフェは99**%**です。",
+      "取引は99**件**です。",
+      "カフェは99&percnt;です。",
+      "カフェは4,790件です。",
+    ]) {
+      expect(
+        assertFinanceChatOutput(output({ text, charts: [chart] }), {
+          config: { expectedCharts: [chart] },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    }
   });
 
   test("grounds counts from ordinary qualifying queries", () => {
@@ -2699,30 +2714,33 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test("rejects numeric string constants in SQL projections", () => {
-    expect(
-      assertFinanceChatOutput(
-        output({
-          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
-          databaseQueries: [
-            {
-              input: {
-                sql: "SELECT CAST('313235' AS INTEGER) + SUM(amount * 0) AS income FROM transactions",
+    for (const sql of [
+      "SELECT CAST('313235' AS INTEGER) + SUM(amount * 0) AS income FROM transactions",
+      "SELECT SUM(amount) * 0 + json_extract('[313235]', '$[0]') AS income FROM transactions",
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+            databaseQueries: [
+              {
+                input: { sql },
+                output: { rows: [{ income: 313_235 }], truncated: false },
               },
-              output: { rows: [{ income: 313_235 }], truncated: false },
-            },
-          ],
-        }),
-        {
-          config: {
-            databaseEvidence: {
-              expectedRows: [["313235"]],
-              expectedRowAssociations: [["income", "313235"]],
-              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            ],
+          }),
+          {
+            config: {
+              databaseEvidence: {
+                expectedRows: [["313235"]],
+                expectedRowAssociations: [["income", "313235"]],
+                requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+              },
             },
           },
-        },
-      ),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+        ),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    }
   });
 
   test("grades visible angle-bracket text that is not an HTML tag", () => {

@@ -668,6 +668,9 @@ function hasSuspiciousNumericExpression(expression: string): boolean {
   return (
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
+    [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
+      (literal) => Number(literal[1]) > 100,
+    ) ||
     /'\d+(?:\.\d+)?'\s*(?:\|\||[+*/-])/.test(expression) ||
     /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(expressionWithoutStrings) ||
     [
@@ -720,7 +723,7 @@ function hasValidCorrelatedGroupExists(sql: string): boolean {
 function hasGroupMembershipScope(sql: string): boolean {
   const normalizedSql = removeSqlComments(sql);
   const inSubquery =
-    /\baccount_id\b\s+in\s*\(\s*select\s+(?:\w+\.)?\baccount_id\b\s+from\s+\bgroup_accounts\b[\s\S]*?\bgroup_id\b\s*=\s*:groupId/i.test(
+    /\baccount_id\b\s+in\s*\(\s*select\s+(?:\w+\.)?\baccount_id\b\s+from\s+\bgroup_accounts\b[^)]*?\bgroup_id\b\s*=\s*:groupId/i.test(
       normalizedSql,
     );
   const joinClause = normalizedSql.match(
@@ -745,7 +748,7 @@ function hasGroupMembershipScopeForColumn(sql: string, column: string): boolean 
   const normalizedSql = removeSqlComments(sql);
   const escapedColumn = column.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const inSubquery = new RegExp(
-    `\\b(?:\\w+\\.)?${escapedColumn}\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?account_id\\s+from\\s+group_accounts\\b[\\s\\S]*?\\bgroup_id\\b\\s*=\\s*:groupId`,
+    `\\b(?:\\w+\\.)?${escapedColumn}\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?account_id\\s+from\\s+group_accounts\\b[^)]*?\\bgroup_id\\b\\s*=\\s*:groupId`,
     "i",
   ).test(normalizedSql);
   if (inSubquery) return true;
@@ -1300,8 +1303,8 @@ export default function assertFinanceChatOutput(
     renderedClaimText,
     ...actual.charts.map((chart) => chart.title),
   ].join("\n");
-  const normalizedQuantitativeText = quantitativeClaimText.normalize("NFKC").replace(/,/g, "");
-  const ungroundedQuantities = getAssertedQuantitativeClaims(quantitativeClaimText).filter(
+  const normalizedQuantitativeText = normalize(quantitativeClaimText);
+  const ungroundedQuantities = getAssertedQuantitativeClaims(normalizedQuantitativeText).filter(
     (claim) => {
       const clauseStart =
         Math.max(
@@ -1326,9 +1329,7 @@ export default function assertFinanceChatOutput(
       ) {
         return false;
       }
-      return !allowedTextPairs.some(
-        ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
-      );
+      return true;
     },
   );
   if (ungroundedQuantities.length > 0) {
