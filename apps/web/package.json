@@ -13,7 +13,7 @@
     "test:storybook": "vitest run --project storybook",
     "test:watch": "vitest",
     "pretest:e2e": "playwright install chromium webkit",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --project chromium && playwright test --project mobile-chrome && playwright test --project mobile-safari --workers 1",
     "test:e2e:ui": "pnpm pretest:e2e && playwright test --ui",
     "typecheck": "next typegen && tsc --noEmit",
     "storybook": "storybook dev -p 6006",
