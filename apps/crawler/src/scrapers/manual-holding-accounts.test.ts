@@ -2,7 +2,35 @@ import { describe, expect, test } from "vitest";
 import {
   buildUniqueManualHoldingAccountMap,
   createManualHoldingKey,
+  createManualHoldingReference,
 } from "./manual-holding-accounts.js";
+
+describe("createManualHoldingReference", () => {
+  test("ページ口座IDと2つの明示キーが揃う場合だけ参照を作る", () => {
+    expect(
+      createManualHoldingReference(["manual-account-a"], "manual-account-a", "holding-a", "sub-a"),
+    ).toEqual({
+      holdingMfId: "holding-a",
+      subAccountMfId: "sub-a",
+      accountMfId: "manual-account-a",
+    });
+  });
+
+  test.each([
+    ["ページ口座ID不一致", ["manual-account-b"], "holding-a", "sub-a"],
+    ["保有IDなし", ["manual-account-a"], "", "sub-a"],
+    ["sub-account IDなし", ["manual-account-a"], "holding-a", ""],
+  ] as const)("%sでは参照を作らない", (_label, pageAccountMfIds, holdingMfId, subAccountMfId) => {
+    expect(
+      createManualHoldingReference(
+        pageAccountMfIds,
+        "manual-account-a",
+        holdingMfId,
+        subAccountMfId,
+      ),
+    ).toBeNull();
+  });
+});
 
 describe("buildUniqueManualHoldingAccountMap", () => {
   test("一意な明示キーを口座へ対応付ける", () => {

@@ -18,6 +18,18 @@ export function createManualHoldingKey(holdingMfId: string, subAccountMfId: stri
   return JSON.stringify([holdingMfId, subAccountMfId]);
 }
 
+export function createManualHoldingReference(
+  pageAccountMfIds: readonly string[],
+  expectedAccountMfId: string,
+  holdingMfId: string,
+  subAccountMfId: string,
+): ManualHoldingReference | null {
+  if (!pageAccountMfIds.includes(expectedAccountMfId) || !holdingMfId || !subAccountMfId) {
+    return null;
+  }
+  return { holdingMfId, subAccountMfId, accountMfId: expectedAccountMfId };
+}
+
 async function getInputValue(row: Locator, name: string): Promise<string> {
   return row
     .locator(`input[name="${name}"]`)
@@ -37,7 +49,6 @@ async function extractManualHoldingReferences(
   const pageAccountIds = await pageAccountIdInputs.evaluateAll((inputs) =>
     inputs.map((input) => (input as HTMLInputElement).value),
   );
-  if (!pageAccountIds.includes(expectedAccountMfId)) return [];
 
   const rows = page.locator("table.table-pns tbody tr");
   const rowCount = await rows.count();
@@ -50,8 +61,13 @@ async function extractManualHoldingReferences(
       getInputValue(row, "user_asset_det[sub_account_id_hash]"),
     ]);
 
-    if (!holdingMfId || !subAccountMfId) continue;
-    references.push({ holdingMfId, subAccountMfId, accountMfId: expectedAccountMfId });
+    const reference = createManualHoldingReference(
+      pageAccountIds,
+      expectedAccountMfId,
+      holdingMfId,
+      subAccountMfId,
+    );
+    if (reference) references.push(reference);
   }
 
   return references;

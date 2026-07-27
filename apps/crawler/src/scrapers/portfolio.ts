@@ -253,6 +253,10 @@ export function createPensionRowFingerprint(cellTexts: readonly string[]): strin
   );
 }
 
+export function hasRequiredPensionColumns(cellTexts: readonly string[]): boolean {
+  return cellTexts.length >= PENSION_CORE_COLUMN_COUNT;
+}
+
 export function haveSamePensionRowMultiset(
   left: readonly string[],
   right: readonly string[],
@@ -351,7 +355,7 @@ export async function getLinkedAccountPensionSource(
         const rows = table.locator("tbody tr");
         for (let rowIndex = 0; rowIndex < (await rows.count()); rowIndex++) {
           const cellTexts = await getRowCellTexts(rows.nth(rowIndex));
-          if (cellTexts.length < PENSION_CORE_COLUMN_COUNT) {
+          if (!hasRequiredPensionColumns(cellTexts)) {
             failedPageCount++;
             continue;
           }

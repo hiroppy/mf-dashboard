@@ -3,6 +3,7 @@ import { createManualHoldingKey } from "./manual-holding-accounts.js";
 import {
   attachManualHoldingReference,
   createPensionRowFingerprint,
+  hasRequiredPensionColumns,
   haveSamePensionRowMultiset,
   identifyTableTypeFromTitle,
   isPointCategory,
@@ -16,6 +17,12 @@ import {
 } from "./portfolio.js";
 
 describe("pension row completeness", () => {
+  test("主要列が5列なら不完全、6列以上なら完全と判定する", () => {
+    expect(hasRequiredPensionColumns(["1", "2", "3", "4", "5"])).toBe(false);
+    expect(hasRequiredPensionColumns(["1", "2", "3", "4", "5", "6"])).toBe(true);
+    expect(hasRequiredPensionColumns(["1", "2", "3", "4", "5", "6", "7"])).toBe(true);
+  });
+
   test("主要6列だけを正規化してfingerprintにする", () => {
     expect(
       createPensionRowFingerprint([
