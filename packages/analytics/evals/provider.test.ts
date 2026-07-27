@@ -159,11 +159,12 @@ describe("toEvaluationOutput", () => {
 
   test("excludes links in HTML comments and strikethrough", () => {
     const output = toEvaluationOutput({
-      text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~",
+      text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~\n<!-- /0/cf/2026-07 -->",
       steps: [],
     });
 
     expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual([]);
   });
 
   test("collects text from every generation step", () => {

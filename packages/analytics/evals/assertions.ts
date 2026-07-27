@@ -27,6 +27,7 @@ interface AssertionContext {
       expectNoData?: boolean;
       expectedRowAssociations?: Array<Array<number | string>>;
       expectedRows?: Array<Array<number | string>>;
+      requiredSqlLiteralBindings?: Array<[string, string]>;
       requiredSqlLiterals?: string[];
       requiredSqlPatterns?: string[];
     };
@@ -100,17 +101,21 @@ function hasScopedPair(text: string, label: string, value: string, facts: string
     const clauseEnd =
       clauseEndCandidates.length === 0 ? normalizedText.length : Math.min(...clauseEndCandidates);
     const clause = normalizedText.slice(clauseStart, clauseEnd);
-    const labelPrefix = normalizedText.slice(clauseStart, labelIndex);
+    const valueIndex = clause.indexOf(
+      normalizedValue,
+      labelIndex - clauseStart + normalizedLabel.length,
+    );
     if (
-      clause.includes(normalizedValue) &&
+      valueIndex !== -1 &&
       facts.every((fact) => {
         const normalizedFact = normalize(fact);
-        const periods = [...labelPrefix.matchAll(/\d{4}年\d{1,2}月/g)];
+        const claimPrefix = clause.slice(0, valueIndex);
+        const periods = [...claimPrefix.matchAll(/\d{4}年\d{1,2}月/g)];
         const nearestPeriod = periods.at(-1)?.[0];
         return (
           clause.includes(normalizedFact) &&
           !hasContradictedFact(clause, normalizedFact) &&
-          (nearestPeriod === undefined || nearestPeriod === normalizedFact)
+          nearestPeriod === normalizedFact
         );
       })
     ) {
@@ -165,7 +170,7 @@ function getMissingTextPairs(
     const hasInvalidQualifier =
       expectedClaim !== undefined &&
       (/(?:約|およそ|概ね|だいたい)$/.test(expectedClaimPrefix) ||
-        /^(?:未満|以下|超|以上|程度|前後|約|およそ|くらい)/.test(
+        /^(?:未満|以下|超|以上|程度|前後|約|およそ|くらい|とは限りません|かもしれません|可能性があります|(?:とは?)?断定できません)/.test(
           expectedClaim.suffix.replace(/^[\s、,]*/, ""),
         ));
     const hasUngroundedAdditionalClaim = monetaryClaims.some((claim) => {
@@ -292,7 +297,16 @@ function getTableCells(line: string): string[] | undefined {
   return line
     .replace(/^\s*\||\|\s*$/g, "")
     .split("|")
-    .map((cell) => normalize(cell).replace(/円$/, ""));
+    .map(normalizeTableCell);
+}
+
+function normalizeTableCell(cell: string): string {
+  const normalized = normalize(cell).replace(/円$/, "");
+  return normalized.replace(
+    /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+    (_, year: string, month: string, day: string) =>
+      `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
+  );
 }
 
 interface MarkdownTable {
@@ -352,7 +366,7 @@ function hasExpectedRow(
   expectedRow: string[],
   expectedColumns: string[],
 ): boolean {
-  const expectedCells = expectedRow.map((cell) => normalize(cell).replace(/円$/, ""));
+  const expectedCells = expectedRow.map(normalizeTableCell);
   const normalizedColumns = expectedColumns.map((column) => normalize(column));
   if (normalizedColumns.length === 0) {
     return tables.some((table) =>
@@ -444,6 +458,17 @@ function analyzeSql(sql: string): { literals: string[]; patternText: string } {
   return { literals, patternText };
 }
 
+function maskSqlForLiteralBinding(sql: string, requiredLiteral: string): string {
+  return removeSqlComments(sql).replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, (literal) => {
+    const quote = literal[0]!;
+    const value = literal
+      .slice(1, -1)
+      .replaceAll(quote + quote, quote)
+      .replace(/[%_]/g, "");
+    return value === requiredLiteral ? " __required_literal__ " : " ? ";
+  });
+}
+
 function hasContradictedFact(text: string, fact: string): boolean {
   const normalizedText = normalize(text);
   const normalizedFact = normalize(fact);
@@ -515,7 +540,7 @@ function hasUngroundedTableAmount(
   return tables.some((table) =>
     table.rows.some((row) =>
       row.some((cell, columnIndex) => {
-        if (!/^\d+$/.test(cell)) return false;
+        if (!/^-?\d+$/.test(cell)) return false;
         const amount = Number(cell);
         const hasColumnBinding = allowedPairs.some(
           ([label, expectedAmount]) =>
@@ -613,6 +638,9 @@ export default function assertFinanceChatOutput(
     const requiredSqlPatterns = (databaseEvidence.requiredSqlPatterns ?? []).map(
       (pattern) => new RegExp(pattern, "i"),
     );
+    const requiredSqlLiteralBindings = (databaseEvidence.requiredSqlLiteralBindings ?? []).map(
+      ([literal, pattern]) => [literal, new RegExp(pattern, "i")] as const,
+    );
     const requiredSqlLiterals = databaseEvidence.requiredSqlLiterals ?? [];
     const databaseResults = actual.databaseQueries.flatMap((query) => {
       const parsedInput = databaseQueryInputSchema.safeParse(query.input);
@@ -626,8 +654,12 @@ export default function assertFinanceChatOutput(
       const hasRequiredLiterals = requiredSqlLiterals.every((literal) =>
         sqlAnalysis.literals.some((candidate) => candidate.replace(/[%_]/g, "") === literal),
       );
+      const hasRequiredLiteralBindings = requiredSqlLiteralBindings.every(([literal, pattern]) =>
+        pattern.test(maskSqlForLiteralBinding(parsedInput.data.sql, literal)),
+      );
       return matchesRequiredSql &&
         hasRequiredLiterals &&
+        hasRequiredLiteralBindings &&
         !hasSuspiciousProjectionLiteral(executableSql)
         ? [parsedResult.data]
         : [];
@@ -795,13 +827,24 @@ export default function assertFinanceChatOutput(
     const hasLabelBinding = allowedTextPairs.some(
       ([label, amount]) => amount === claim.amount && bindingPrefix.includes(normalize(label)),
     );
+    const hasUnsupportedCoLabel =
+      /(?:予算|目標|見込|予測)/.test(bindingPrefix) &&
+      !allowedTextPairs.some(
+        ([label, amount]) =>
+          amount === claim.amount &&
+          /(?:予算|目標|見込|予測)/.test(normalize(label)) &&
+          bindingPrefix.includes(normalize(label)),
+      );
     const isExpectedTableAmount =
       clausePrefix.includes("|") && groundedAmounts.has(claim.amount) && markdownTables.length > 0;
     const isExpectedTableSummary =
       /(?:合計|総額)/.test(bindingPrefix) &&
       groundedAmounts.has(claim.amount) &&
       expectedMarkdownAmounts.length > 0;
-    return !hasLabelBinding && !isExpectedTableAmount && !isExpectedTableSummary;
+    return (
+      hasUnsupportedCoLabel ||
+      (!hasLabelBinding && !isExpectedTableAmount && !isExpectedTableSummary)
+    );
   });
   const validatesRenderedAmounts =
     (config.expectedTextPairs ?? []).length > 0 ||

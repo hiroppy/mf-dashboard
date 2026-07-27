@@ -26,6 +26,11 @@
         expectedTextLinks: []
         databaseEvidence:
           requiredSqlLiterals: ["2026-07"]
+          requiredSqlLiteralBindings:
+            - [
+                "2026-07",
+                "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like)\\s*__required_literal__",
+              ]
           expectedRows:
             - ["313235", "219894"]
           expectedRowAssociations:
@@ -84,6 +89,13 @@
         expectedTextLinks: []
         databaseEvidence:
           requiredSqlLiterals: ["2026-07", expense, 食費]
+          requiredSqlLiteralBindings:
+            - [
+                "2026-07",
+                "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like)\\s*__required_literal__",
+              ]
+            - [expense, "\\btype\\b\\s*=\\s*__required_literal__"]
+            - [食費, "\\b(?:category|sub_category)\\b\\s*=\\s*__required_literal__"]
           expectedRows:
             - [食料品, "24833"]
             - [外食, "12214"]
@@ -137,6 +149,10 @@
         expectedTextLinks: []
         databaseEvidence:
           requiredSqlLiterals: ["2026-07-03", expense, 食費]
+          requiredSqlLiteralBindings:
+            - ["2026-07-03", "\\bdate\\b\\s*=\\s*__required_literal__"]
+            - [expense, "\\btype\\b\\s*=\\s*__required_literal__"]
+            - [食費, "\\b(?:category|sub_category)\\b\\s*=\\s*__required_literal__"]
           expectedRows:
             - ["2026-07-03", サンマルクカフェ, "761"]
           expectedRowAssociations:
@@ -210,6 +226,13 @@
         databaseEvidence:
           expectNoData: true
           requiredSqlLiterals: ["2030-01", expense, 食費]
+          requiredSqlLiteralBindings:
+            - [
+                "2030-01",
+                "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like)\\s*__required_literal__",
+              ]
+            - [expense, "\\btype\\b\\s*=\\s*__required_literal__"]
+            - [食費, "\\b(?:category|sub_category)\\b\\s*=\\s*__required_literal__"]
           requiredSqlPatterns:
             [
               "\\btransactions\\b",

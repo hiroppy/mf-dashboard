@@ -86,12 +86,23 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月について、収入は2025年7月の313,235円、支出は2025年7月の219,894円、収支は2025年7月の93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
   });
 
   test.each([
     "収入は-313,235円です。",
     "収入は313,235万円です。",
     "収入は313,235円ではなく、実際は0円です。",
+    "収入は313,235円とは限りません。",
+    "収入は313,235円かもしれません。",
+    "収入は313,235円とは断定できません。",
   ])("rejects a materially different monetary claim: %s", (text) => {
     expect(
       assertFinanceChatOutput(output({ text }), {
@@ -145,6 +156,9 @@ describe("assertFinanceChatOutput", () => {
             databaseEvidence: {
               expectNoData: true,
               requiredSqlLiterals: ["2030-01"],
+              requiredSqlLiteralBindings: [
+                ["2030-01", "\\bdate\\b\\s*(?:=|like)\\s*__required_literal__"],
+              ] as Array<[string, string]>,
               requiredSqlPatterns: ["\\btransactions\\b", "\\bcount\\s*\\(\\s*\\*\\s*\\)"],
             },
           },
@@ -228,6 +242,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円、予算も313,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入と予算は313,235円です。" }), {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
@@ -394,6 +413,25 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
 
+    const signedBudgetTable = [
+      text,
+      "",
+      "| 項目 | 金額 |",
+      "| --- | ---: |",
+      "| 予算 | -999,999 |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text: signedBudgetTable }), {
+        config: {
+          expectedTextPairs: [
+            ["収入", "313235"],
+            ["支出", "219894"],
+            ["収支", "93341"],
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
+
     const conflictingHeaderTable = [
       "| カテゴリ | 予算 |",
       "| --- | ---: |",
@@ -530,6 +568,15 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(output({ text }), {
         config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: text.replace("2026-07-03", "2026年7月3日") }), {
+        config: {
+          exactMarkdownRows: true,
+          expectedMarkdownColumns: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
       }),
     ).toMatchObject({ pass: true });
     expect(
@@ -963,6 +1010,49 @@ describe("assertFinanceChatOutput", () => {
               requiredSqlPatterns: [
                 "\\btransactions\\b",
                 "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
+                "\\btype\\b\\s*=\\s*\\?",
+              ],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ total: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: `SELECT COUNT(*) AS count
+                      FROM transactions
+                      WHERE substr(date, 1, 7) = '1900-01'
+                        AND category = 'other'
+                        AND type = 'income'
+                        AND '2030-01' = '2030-01'
+                        AND '食費' = '食費'
+                        AND 'expense' = 'expense'`,
+              },
+              output: { rows: [{ count: 0 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectNoData: true,
+              requiredSqlLiterals: ["2030-01", "食費", "expense"],
+              requiredSqlLiteralBindings: [
+                [
+                  "2030-01",
+                  "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like)\\s*__required_literal__",
+                ],
+                ["食費", "\\bcategory\\b\\s*=\\s*__required_literal__"],
+                ["expense", "\\btype\\b\\s*=\\s*__required_literal__"],
+              ] as Array<[string, string]>,
+              requiredSqlPatterns: [
+                "\\btransactions\\b",
+                "\\bcategory\\b\\s*=\\s*\\?",
                 "\\btype\\b\\s*=\\s*\\?",
               ],
             },

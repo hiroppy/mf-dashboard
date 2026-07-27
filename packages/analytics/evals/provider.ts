@@ -88,10 +88,12 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function removeNonRenderedText(text: string): string {
+  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/~~[\s\S]*?~~/g, "");
+}
+
 function removeCode(text: string): string {
-  return text
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/~~[\s\S]*?~~/g, "")
+  return removeNonRenderedText(text)
     .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/`[^`\n]*`/g, "");
@@ -123,8 +125,9 @@ function getTextLinks(text: string): string[] {
 }
 
 function getTextRoutes(text: string): string[] {
+  const renderedText = removeNonRenderedText(text);
   const bareRoutes = [
-    ...text.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
+    ...renderedText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ]
     .map((match) => match[0])
     .filter((route) => financeChatHrefSchema.safeParse(route).success);
