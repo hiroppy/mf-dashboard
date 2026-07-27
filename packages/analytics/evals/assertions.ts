@@ -698,10 +698,13 @@ function hasSuspiciousProjectionLiteral(sql: string): boolean {
 }
 
 function hasValidCorrelatedGroupExists(sql: string): boolean {
-  if (!/\bexists\s*\(/i.test(sql)) return true;
-  return [...sql.matchAll(/\b(\w+)\.account_id\s*=\s*(\w+)\.account_id\b/gi)].some(
-    (match) => match[1]!.toLocaleLowerCase() !== match[2]!.toLocaleLowerCase(),
-  );
+  return [...sql.matchAll(/\bexists\s*\(([\s\S]*?)\)/gi)].every((exists) => {
+    const body = exists[1]!;
+    if (!/\bfrom\s+group_accounts\b/i.test(body)) return true;
+    return [...body.matchAll(/\b(\w+)\.account_id\s*=\s*(\w+)\.account_id\b/gi)].some(
+      (equality) => equality[1]!.toLocaleLowerCase() !== equality[2]!.toLocaleLowerCase(),
+    );
+  });
 }
 
 function hasGroupMembershipScope(sql: string): boolean {
