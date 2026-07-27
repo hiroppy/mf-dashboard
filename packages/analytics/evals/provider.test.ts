@@ -256,6 +256,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual([]);
   });
 
+  test("preserves routes in invalid reference definitions", () => {
+    const output = toEvaluationOutput({
+      text: "[/0/bs]: <not a url>",
+      steps: [],
+    });
+
+    expect(output.textRoutes).toEqual(["/0/bs"]);
+  });
+
   test("normalizes angle-bracketed Markdown destinations", () => {
     const output = toEvaluationOutput({
       text: "[2026年7月の収支を確認](</0/cf/2026-07>)",

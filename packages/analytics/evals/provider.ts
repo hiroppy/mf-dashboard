@@ -28,6 +28,7 @@ import {
   removeHiddenHtmlElements,
   removeInlineCodeSpans,
   removeMarkdownImages,
+  removeMarkdownReferenceDefinitions,
 } from "./markdown";
 
 interface GeneratedResponse {
@@ -155,7 +156,7 @@ function getTextLinks(text: string): string[] {
 }
 
 function getTextRoutes(text: string): string[] {
-  const renderedText = removeNonRenderedText(text).replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
+  const renderedText = removeMarkdownReferenceDefinitions(removeNonRenderedText(text));
   const bareRoutes = [
     ...renderedText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ]

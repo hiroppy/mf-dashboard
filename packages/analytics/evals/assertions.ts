@@ -120,7 +120,9 @@ function normalize(value: string): string {
 }
 
 function normalizeJapaneseYearMonth(value: string): string {
-  return value.replace(/(\d{4})年0+(\d{1,2})月/g, "$1年$2月");
+  return value
+    .replace(/(\d{4})[/-](0?[1-9]|1[0-2])(?!\d|[/-]\d)/g, "$1年$2月")
+    .replace(/(\d{4})年0+(\d{1,2})月/g, "$1年$2月");
 }
 
 function parseMonetaryNumber(value: string): number {
@@ -188,11 +190,18 @@ function hasScopedPair(text: string, label: string, value: string, facts: string
       normalizedValue,
       labelIndex - clauseStart + normalizedLabel.length,
     );
+    const labelEnd = labelIndex - clauseStart + normalizedLabel.length;
+    const claimIndex =
+      valueIndex !== -1
+        ? valueIndex
+        : normalizedValue === "0" && /^(?:は|が)?(?:ありません|ない)/.test(clause.slice(labelEnd))
+          ? labelEnd
+          : -1;
     if (
-      valueIndex !== -1 &&
+      claimIndex !== -1 &&
       facts.every((fact) => {
         const normalizedFact = normalize(fact);
-        const claimPrefix = clause.slice(0, valueIndex);
+        const claimPrefix = clause.slice(0, claimIndex);
         const periods = [...claimPrefix.matchAll(/\d{4}年\d{1,2}月/g)];
         const nearestPeriod = periods.at(-1)?.[0];
         return (
@@ -238,7 +247,11 @@ function getMissingTextPairs(
       return normalizedText.slice(valueStart, valueEnd);
     });
     const segment = /^\d+$/.test(normalizedValue)
-      ? segments.findLast((candidate) => getAssertedMonetaryClaims(candidate).length > 0)
+      ? segments.findLast(
+          (candidate) =>
+            getAssertedMonetaryClaims(candidate).length > 0 ||
+            (normalizedValue === "0" && /^(?:は|が)?(?:ありません|ない)/.test(candidate)),
+        )
       : segments.findLast((candidate) => candidate.includes(normalizedValue));
     if (segment === undefined) {
       return !(labelIndices.length === 1 && hasTablePair(text, normalizedLabel, normalizedValue));
@@ -266,12 +279,14 @@ function getMissingTextPairs(
         ([label, amount]) => amount === claim.amount && prefix.includes(normalize(label)),
       );
     });
+    const hasZeroAbsence = expectedAmount === 0 && /^(?:は|が)?(?:ありません|ない)/.test(segment);
     const hasExpectedValue = /^\d+$/.test(normalizedValue)
-      ? expectedClaim !== undefined &&
-        !hasInvalidQualifier &&
-        !hasExcludedLabel &&
-        !hasUngroundedAdditionalClaim &&
-        !hasDirectMonetaryNegation(segment)
+      ? hasZeroAbsence ||
+        (expectedClaim !== undefined &&
+          !hasInvalidQualifier &&
+          !hasExcludedLabel &&
+          !hasUngroundedAdditionalClaim &&
+          !hasDirectMonetaryNegation(segment))
       : segment.includes(normalizedValue);
     return (
       !hasExpectedValue &&
@@ -328,9 +343,15 @@ interface QuantitativeClaim {
 }
 
 function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
-  const normalizedText = text.normalize("NFKC").replace(/,/g, "");
+  const normalizedText = text
+    .normalize("NFKC")
+    .replace(/,/g, "")
+    .replace(/−/g, "-")
+    .replace(/マイナス(?=\d)/g, "-");
   const arabicClaims = [
-    ...[...normalizedText.matchAll(/(-?\d+(?:\.\d+)?)\s*(件|%|パーセント)/g)].flatMap((match) => {
+    ...[
+      ...normalizedText.matchAll(/(-?\d+(?:\.\d+)?(?:千|万|億|兆)?)\s*(件|%|パーセント)/g),
+    ].flatMap((match) => {
       const suffix = normalizedText.slice(match.index! + match[0].length);
       if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
         return [];
@@ -339,7 +360,8 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
         {
           index: match.index!,
           unit: match[2] === "件" ? ("count" as const) : ("percent" as const),
-          value: Number(match[1]),
+          value:
+            (match[1]!.startsWith("-") ? -1 : 1) * parseMonetaryNumber(match[1]!.replace(/^-/, "")),
         },
       ];
     }),
@@ -353,9 +375,16 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
       value: Number(match[1]) * 10 + Number(match[2] ?? 0) + Number(match[3] ?? 0) / 10,
     })),
   ];
-  const japaneseNumber = "[〇零一二三四五六七八九十百千壱弐参拾佰仟]+";
+  const japaneseNumber = "[〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+";
   const japaneseClaims: QuantitativeClaim[] = [
-    ...[...normalizedText.matchAll(new RegExp(`(${japaneseNumber})件`, "g"))].map((match) => ({
+    ...[
+      ...normalizedText.matchAll(
+        new RegExp(
+          `(?<![0-9〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟])(${japaneseNumber})件`,
+          "g",
+        ),
+      ),
+    ].map((match) => ({
       index: match.index!,
       unit: "count" as const,
       value: parseJapaneseInteger(match[1]!),
@@ -1121,13 +1150,16 @@ export default function assertFinanceChatOutput(
       databaseResults.flatMap((databaseResult) => databaseResult.rows),
     );
     const modelHasExpectedResult = expectedAssociations.length
-      ? databaseResults.some(({ rows }) => {
+      ? rowsMatchAssociations(combinedModelRows, expectedAssociations) &&
+        databaseResults.every(({ rows }) => {
           const resultRows = uniqueRows(rows);
           return (
             resultRows.length <= maximumExpectedRowCount &&
-            rowsMatchAssociations(resultRows, expectedAssociations)
+            resultRows.every((row) =>
+              expectedAssociations.some((association) => rowContainsAssociation(row, association)),
+            )
           );
-        }) || rowsMatchAssociations(combinedModelRows, expectedAssociations)
+        })
       : expectedRows.length === 0 ||
         databaseResults.some(
           ({ rows }) => JSON.stringify(normalizeRows(rows)) === JSON.stringify(expectedRows),

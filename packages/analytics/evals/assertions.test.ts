@@ -358,6 +358,17 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("accepts scoped no-income wording for an expected zero", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の収入はありません。" }), {
+        config: {
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "0"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   test("rejects an expected claim hidden in an HTML comment", () => {
     expect(
       assertFinanceChatOutput(output({ text: "<!-- 2026年7月の収入は313,235円です。 -->" }), {
@@ -1517,6 +1528,35 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT SUM(amount) AS income FROM transactions" },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+            {
+              input: { sql: "SELECT SUM(amount) AS income FROM transactions" },
+              output: { rows: [{ income: 1, expense: 2 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b"],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("accepts equivalent and expression aggregate aliases", () => {
@@ -2529,6 +2569,17 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+    for (const period of ["2026/7", "2026-07"]) {
+      expect(
+        assertFinanceChatOutput(output({ text: `${period}の収入は313,235円です。` }), {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairFacts: ["2026年7月"],
+            expectedTextPairs: [["収入", "313235"]],
+          },
+        }),
+      ).toMatchObject({ pass: true });
+    }
   });
 
   test("does not use fenced code as expected prose evidence", () => {
@@ -2670,6 +2721,10 @@ describe("assertFinanceChatOutput", () => {
       "カフェは99&percnt;です。",
       "カフェは九十九パーセントです。",
       "カフェは4,790件です。",
+      "カフェは−11%です。",
+      "カフェはマイナス11%です。",
+      "取引は99万件です。",
+      "取引は九十九万件です。",
     ]) {
       expect(
         assertFinanceChatOutput(output({ text, charts: [chart] }), {
