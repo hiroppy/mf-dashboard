@@ -100,7 +100,7 @@ function unique(values: string[]): string[] {
 function removeNonRenderedText(text: string): string {
   return removeMarkdownImages(text)
     .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
-    .replace(/~~[\s\S]*?~~/g, "");
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "");
 }
 
 function removeCode(text: string): string {

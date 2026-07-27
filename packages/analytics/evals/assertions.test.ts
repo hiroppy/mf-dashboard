@@ -2359,6 +2359,28 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
+  test("grades invalid inline image destinations as visible text", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![借入残高は999,999円](not a url) 2026年7月の収入は313,235円です。",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
+  test("grades whitespace-invalid GFM strikethrough as visible text", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "~~ 借入残高は999,999円 ~~ 2026年7月の収入は313,235円です。",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
   test.each(["資産は999,999です。", "資産 999,999", "資産＝999,999"])(
     "rejects unitless claims for every monetary label: %s",
     (claim) => {
@@ -2407,6 +2429,32 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "食料品は全体の約59.4%です。", charts: [chart] }), {
         config: { expectedCharts: [chart] },
       }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("grounds counts from ordinary qualifying queries", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "取引は3件です。",
+          fixtureResult: { rows: [{ count: 3 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT COUNT(*) AS count FROM transactions" },
+              output: { rows: [{ count: 3 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["3"]],
+              expectedRowAssociations: [["count", "3"]],
+              requiredSqlPatterns: ["\\btransactions\\b", "\\bcount\\s*\\("],
+            },
+          },
+        },
+      ),
     ).toMatchObject({ pass: true });
   });
 

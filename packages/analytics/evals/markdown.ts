@@ -76,7 +76,15 @@ export function removeMarkdownImages(text: string): string {
         result += text.slice(imageStart, destinationStart);
         cursor = destinationStart;
       } else {
-        cursor = destinationEnd + 1;
+        const destination = text.slice(destinationStart + 1, destinationEnd);
+        const isValidDestination =
+          /^(?:<[^<>\s]+>|[^\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/.test(destination);
+        if (isValidDestination) {
+          cursor = destinationEnd + 1;
+        } else {
+          result += text.slice(imageStart, destinationStart);
+          cursor = destinationStart;
+        }
       }
       continue;
     }

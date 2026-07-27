@@ -162,7 +162,7 @@ function getRenderedText(text: string): string {
     .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
-    .replace(/~~[\s\S]*?~~/g, "")
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
   return decodeCharacterReferences(visibleText);
 }
@@ -905,10 +905,8 @@ export default function assertFinanceChatOutput(
     if (databaseResults.length === 0) {
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
     }
+    groundedQuantities = getGroundedQuantities(qualifyingDatabaseQueries.map(({ query }) => query));
     if (databaseEvidence.expectNoData) {
-      groundedQuantities = getGroundedQuantities(
-        qualifyingDatabaseQueries.map(({ query }) => query),
-      );
       groundedQuantities.count = new Set(
         [...groundedQuantities.count].filter((value) => value === 0),
       );
