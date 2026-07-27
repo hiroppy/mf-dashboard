@@ -1,6 +1,9 @@
 import path from "node:path";
 import { getDb, schema } from "@mf-dashboard/db";
-import { saveScrapedData } from "@mf-dashboard/db/repository/save-scraped-data";
+import {
+  normalizePortfolioCategories,
+  saveScrapedData,
+} from "@mf-dashboard/db/repository/save-scraped-data";
 import type { ScrapedData } from "@mf-dashboard/db/types";
 import { eq } from "drizzle-orm";
 import type { Browser, BrowserContext } from "playwright";
@@ -23,6 +26,7 @@ const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-moneyforward.db");
 let browser: Browser;
 let context: BrowserContext;
 let scrapedData: ScrapedData;
+let normalizedPortfolio: ScrapedData["portfolio"];
 
 beforeAll(async () => {
   // テスト用 DB パスを環境変数で設定
@@ -38,6 +42,11 @@ beforeAll(async () => {
       scrape(page, { skipRefresh: true }),
     );
     const institutionCategories = await runInstitutionCategoryPhase(page);
+    normalizedPortfolio = normalizePortfolioCategories(
+      scrapedData.portfolio,
+      scrapedData.registeredAccounts,
+      institutionCategories,
+    );
     await saveScrapedData(getDb(), scrapedData, institutionCategories);
   });
 });
@@ -90,7 +99,7 @@ describe("DB保存", () => {
       .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id))
       .all();
 
-    const expected = scrapedData.portfolio.items
+    const expected = normalizedPortfolio.items
       .map((item) => ({
         name: item.name,
         category: item.type,
