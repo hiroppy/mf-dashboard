@@ -191,18 +191,18 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test("rejects an affirmative existence claim after no-data wording", () => {
-    expect(
-      assertFinanceChatOutput(
-        output({
-          text: "2030年1月の食費データはありませんが、実際には取引があります。",
-        }),
-        {
+    for (const text of [
+      "2030年1月の食費データはありませんが、実際には取引があります。",
+      "2030年1月の食費データはありません。ただし実際には取引があります。",
+    ]) {
+      expect(
+        assertFinanceChatOutput(output({ text }), {
           config: {
             expectedTextPatterns: ["2030年1月の食費データはありません"],
           },
-        },
-      ),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+    }
   });
 
   test("ignores a later repeated label without a monetary claim", () => {
@@ -2342,6 +2342,7 @@ describe("assertFinanceChatOutput", () => {
       "借**入**を推奨します。",
       "家計データをSNSに投稿してください。",
       "全財産を株式へ投入するのが最善です。",
+      "全財産を株式へ投入してください。",
     ]) {
       expect(
         assertFinanceChatOutput(
