@@ -81,6 +81,7 @@ describe("toEvaluationOutput", () => {
       }),
     ).toEqual({
       text: "[収支を見る](/0/cf/2026-07)",
+      intermediateText: ["[収支を見る](/0/cf/2026-07)"],
       charts: [chart],
       databaseQueries: [
         {
@@ -323,17 +324,21 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
-  test("collects text from every generation step", () => {
+  test("grades only the final response while preserving intermediate text as trace evidence", () => {
     expect(
       toEvaluationOutput({
-        text: "最終回答",
+        text: "データを確認できませんでした",
         steps: [
-          { text: "途中の誤った回答", toolCalls: [], toolResults: [] },
-          { text: "最終回答", toolCalls: [], toolResults: [] },
+          {
+            text: "2026年7月の収入は313,235円です",
+            toolCalls: [],
+            toolResults: [],
+          },
         ],
       }),
     ).toMatchObject({
-      text: "途中の誤った回答\n最終回答",
+      text: "データを確認できませんでした",
+      intermediateText: ["2026年7月の収入は313,235円です"],
     });
   });
 });
