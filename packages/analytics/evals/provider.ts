@@ -286,8 +286,11 @@ export default class FinanceChatProvider implements ApiProvider {
 
       const db = this.dependencies.getDb();
       const requestedGroupId = context?.vars?.groupId;
-      if (requestedGroupId !== undefined && typeof requestedGroupId !== "string") {
-        return { error: "評価用groupIdは文字列で指定してください。" };
+      if (
+        requestedGroupId !== undefined &&
+        (typeof requestedGroupId !== "string" || requestedGroupId.trim().length === 0)
+      ) {
+        return { error: "評価用groupIdは空でない文字列で指定してください。" };
       }
       const currentGroup = requestedGroupId
         ? { id: requestedGroupId }

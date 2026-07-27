@@ -454,6 +454,23 @@ describe("FinanceChatProvider", () => {
     );
   });
 
+  test("rejects an explicitly empty group ID", async () => {
+    const deps = dependencies();
+    const provider = new FinanceChatProvider({}, deps);
+
+    await expect(
+      provider.callApi("質問", {
+        prompt: {} as never,
+        vars: {
+          evaluationDate: "2026-07-31T03:00:00.000Z",
+          groupId: "",
+        },
+      }),
+    ).resolves.toMatchObject({ error: expect.stringContaining("空でない文字列") });
+    expect(deps.getCurrentGroup).not.toHaveBeenCalled();
+    expect(deps.generate).not.toHaveBeenCalled();
+  });
+
   test("rejects an explicit group that has no demo accounts", async () => {
     const deps = dependencies({
       getAccountIdsForGroup: vi
