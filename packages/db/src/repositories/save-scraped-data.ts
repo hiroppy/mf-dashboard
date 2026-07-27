@@ -120,8 +120,16 @@ function resolveHoldingAccountId(
  * - assetHistory, spendingTargets
  * - group_accountsへのリンク
  */
-export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
-  await saveScrapedDataBatch(db, { fullData: data, groupOnlyData: [] });
+export async function saveScrapedData(
+  db: Db,
+  data: ScrapedData,
+  institutionCategories: ReadonlyMap<string, string> = new Map(),
+): Promise<void> {
+  await saveScrapedDataBatch(db, {
+    fullData: data,
+    groupOnlyData: [],
+    institutionCategories,
+  });
 }
 
 export async function saveScrapedDataBatch(

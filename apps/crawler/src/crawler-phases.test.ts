@@ -14,6 +14,7 @@ import {
   getDebugScreenshotPath,
   loadCrawlerConfig,
   runCashFlowHistoryPhase,
+  runInstitutionCategoryPhase,
   runSavePhase,
   type CategoryDecisionRuntime,
 } from "./crawler-phases.js";
@@ -22,6 +23,7 @@ import { buildGroupOnlyScrapedData, buildScrapedData } from "./data-builder.js";
 import type { ScrapeResult } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { switchGroup } from "./scrapers/group.js";
+import { scrapeInstitutionCategories } from "./scrapers/institution-categories.js";
 
 vi.mock("./category-decision/categorize-cash-flow.js", () => ({
   categorizeCashFlowMonth: vi.fn<() => Promise<CashFlowSummary>>(),
@@ -54,6 +56,10 @@ vi.mock("./scrapers/group.js", () => ({
   NO_GROUP_ID: "0",
   isNoGroup: (groupId: string) => groupId === "0",
   switchGroup: vi.fn<() => Promise<void>>(),
+}));
+
+vi.mock("./scrapers/institution-categories.js", () => ({
+  scrapeInstitutionCategories: vi.fn<() => Promise<Map<string, string>>>(),
 }));
 
 function cashFlow(month: string, description: string): CashFlowSummary {
@@ -143,7 +149,25 @@ beforeEach(() => {
   vi.mocked(saveTransactionsForMonths).mockReset();
   vi.mocked(saveTransactionsForMonths).mockResolvedValue([]);
   vi.mocked(scrapeCashFlowHistory).mockReset();
+  vi.mocked(scrapeInstitutionCategories).mockReset();
   vi.mocked(switchGroup).mockReset();
+});
+
+describe("runInstitutionCategoryPhase", () => {
+  test("全口座の公式カテゴリを取得するためグループ未選択へ切り替える", async () => {
+    const page = {};
+    const categoryMap = new Map([["account-a", "銀行"]]);
+    vi.mocked(scrapeInstitutionCategories).mockResolvedValue(categoryMap);
+
+    await expect(
+      runInstitutionCategoryPhase(page as Parameters<typeof runInstitutionCategoryPhase>[0]),
+    ).resolves.toBe(categoryMap);
+
+    expect(switchGroup).toHaveBeenCalledWith(page, "0");
+    expect(vi.mocked(switchGroup).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(scrapeInstitutionCategories).mock.invocationCallOrder[0]!,
+    );
+  });
 });
 
 describe("loadCrawlerConfig", () => {

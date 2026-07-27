@@ -5,6 +5,7 @@ import type { ScrapedData } from "@mf-dashboard/db/types";
 import { eq } from "drizzle-orm";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { runInstitutionCategoryPhase } from "../../src/crawler-phases.js";
 import { scrape } from "../../src/scraper.js";
 import {
   gotoHome,
@@ -36,7 +37,8 @@ beforeAll(async () => {
     scrapedData = await withErrorScreenshot(page, "db-save-test-error.png", () =>
       scrape(page, { skipRefresh: true }),
     );
-    await saveScrapedData(getDb(), scrapedData);
+    const institutionCategories = await runInstitutionCategoryPhase(page);
+    await saveScrapedData(getDb(), scrapedData, institutionCategories);
   });
 });
 

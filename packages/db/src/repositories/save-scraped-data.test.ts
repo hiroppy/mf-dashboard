@@ -269,11 +269,7 @@ describe("saveScrapedData", () => {
       type: "預金・現金",
     };
 
-    await saveScrapedDataBatch(db, {
-      fullData: data,
-      groupOnlyData: [],
-      institutionCategories: new Map([["account-a", "暗号資産・FX・貴金属"]]),
-    });
+    await saveScrapedData(db, data, new Map([["account-a", "暗号資産・FX・貴金属"]]));
 
     const savedHolding = await db
       .select({
