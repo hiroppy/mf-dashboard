@@ -63,6 +63,8 @@ const monetaryScales: Record<string, number> = {
   億: 100_000_000,
   兆: 1_000_000_000_000,
 };
+const hiddenHtmlElementPattern =
+  /<([a-z][\w-]*)\b(?=[^>]*(?:\shidden(?:\s|=|>)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*')))[^>]*>[\s\S]*?<\/\1\s*>/gi;
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
@@ -72,8 +74,18 @@ function normalize(value: string): string {
   return value.normalize("NFKC").replace(/[,\s*_`]/g, "");
 }
 
+function removeHiddenHtmlElements(text: string): string {
+  let renderedText = text.replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+  let previousText: string;
+  do {
+    previousText = renderedText;
+    renderedText = renderedText.replace(hiddenHtmlElementPattern, "");
+  } while (renderedText !== previousText);
+  return renderedText;
+}
+
 function getRenderedText(text: string): string {
-  return text
+  return removeHiddenHtmlElements(text)
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/~~[\s\S]*?~~/g, "")
     .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]|!\[[^\]]*]/g, "")
@@ -465,7 +477,7 @@ function hasSuspiciousProjectionLiteral(sql: string): boolean {
   return [...sql.matchAll(/\bselect\b([\s\S]*?)\bfrom\b/gi)].some(
     (select) =>
       /0x[0-9a-f]+/i.test(select[1]!) ||
-      [...select[1]!.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
+      [...select[1]!.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi)].some(
         (literal) => Number(literal[1]) > 100,
       ),
   );

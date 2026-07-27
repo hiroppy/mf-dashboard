@@ -1742,6 +1742,36 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
   });
 
+  test("rejects scientific-notation constants in SQL projections", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) * 0 + 3.13235e5 AS income, 2.19894e5 AS expense FROM transactions",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
   test("preserves double-quoted SQL identifiers while masking string literals", () => {
     expect(
       assertFinanceChatOutput(
@@ -1806,6 +1836,26 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+  });
+
+  test("does not grade hidden HTML as rendered evidence", () => {
+    const config = {
+      expectedTextFacts: ["2026年7月"],
+      expectedTextPairs: [
+        ["収入", "313235"],
+        ["支出", "219894"],
+        ["収支", "93341"],
+      ] as Array<[string, string]>,
+    };
+    const hiddenEvidence = "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。";
+    for (const text of [
+      `<span hidden>${hiddenEvidence}</span>`,
+      `<div aria-hidden="true">${hiddenEvidence}</div>`,
+      `<p style="display: none">${hiddenEvidence}</p>`,
+      `<template>${hiddenEvidence}</template>`,
+    ]) {
+      expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: false });
+    }
   });
 
   test("grounds counts only with scope-qualified database queries", () => {
