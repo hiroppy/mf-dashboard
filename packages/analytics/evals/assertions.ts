@@ -168,10 +168,38 @@ function getRenderedText(text: string): string {
   return decodeCharacterReferences(visibleText);
 }
 
+function removeInlineCodeSpans(text: string): string {
+  let visibleText = "";
+  let cursor = 0;
+  while (cursor < text.length) {
+    const openerIndex = text.indexOf("`", cursor);
+    if (openerIndex === -1) return visibleText + text.slice(cursor);
+    visibleText += text.slice(cursor, openerIndex);
+    const opener = text.slice(openerIndex).match(/^`+/)![0];
+    let candidateIndex = openerIndex + opener.length;
+    let closerIndex = -1;
+    while (candidateIndex < text.length) {
+      const runIndex = text.indexOf("`", candidateIndex);
+      if (runIndex === -1) break;
+      const run = text.slice(runIndex).match(/^`+/)![0];
+      if (run.length === opener.length) {
+        closerIndex = runIndex;
+        break;
+      }
+      candidateIndex = runIndex + run.length;
+    }
+    if (closerIndex === -1) {
+      visibleText += opener;
+      cursor = openerIndex + opener.length;
+    } else {
+      cursor = closerIndex + opener.length;
+    }
+  }
+  return visibleText;
+}
+
 function removeCode(text: string): string {
-  return getRenderableMarkdownLines(text)
-    .join("\n")
-    .replace(/`[^`\n]*`/g, "");
+  return removeInlineCodeSpans(getRenderableMarkdownLines(text).join("\n"));
 }
 
 function inheritMarkdownHeadingScope(text: string): string {
@@ -996,15 +1024,19 @@ export default function assertFinanceChatOutput(
   ) {
     return fail("chartの構造または値が期待と異なります。");
   }
+  const groundedChartPercentPairs: Array<[string, number]> = [];
   for (const chart of expectedCharts) {
     for (let seriesIndex = 0; seriesIndex < chart.series.length; seriesIndex += 1) {
       const values = chart.data.map((datum) => datum.values[seriesIndex] ?? 0);
       const total = values.reduce((sum, value) => sum + value, 0);
       if (total === 0) continue;
-      for (const value of values) {
+      for (const [datumIndex, value] of values.entries()) {
         const percentage = (value / total) * 100;
         for (const precision of [0, 1, 2]) {
-          groundedQuantities.percent.add(Number(percentage.toFixed(precision)));
+          groundedChartPercentPairs.push([
+            chart.data[datumIndex]!.label,
+            Number(percentage.toFixed(precision)),
+          ]);
         }
       }
     }
@@ -1173,6 +1205,14 @@ export default function assertFinanceChatOutput(
         normalizedQuantitativeText.lastIndexOf("\n", claim.index),
       ) + 1;
     const prefix = normalize(normalizedQuantitativeText.slice(clauseStart, claim.index));
+    if (
+      claim.unit === "percent" &&
+      groundedChartPercentPairs.some(
+        ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
+      )
+    ) {
+      return false;
+    }
     return !allowedTextPairs.some(
       ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
     );

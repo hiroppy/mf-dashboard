@@ -137,10 +137,12 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test("accepts a zero count as no-data evidence", () => {
+    const noDataPattern =
+      "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません|0件(?:です|でした)?)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性|かもしれ|でしょう|ようです|と思|[？?]))";
     expect(
       assertFinanceChatOutput(
         output({
-          text: "該当する取引は0件です。",
+          text: "2030年1月の食費に該当する取引は0件です。",
           fixtureResult: { rows: [{ amount: null }], truncated: false },
           databaseQueries: [
             {
@@ -153,6 +155,7 @@ describe("assertFinanceChatOutput", () => {
         }),
         {
           config: {
+            expectedTextPatterns: [noDataPattern],
             databaseEvidence: {
               expectNoData: true,
               requiredSqlLiterals: ["2030-01"],
@@ -905,7 +908,7 @@ describe("assertFinanceChatOutput", () => {
   test("rejects qualified no-data wording", () => {
     const config = {
       expectedTextPatterns: [
-        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性|かもしれ|でしょう|ようです|と思|[？?]))",
+        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません|0件(?:です|でした)?)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性|かもしれ|でしょう|ようです|と思|[？?]))",
       ],
     };
     expect(
@@ -1015,6 +1018,14 @@ describe("assertFinanceChatOutput", () => {
         }),
         { config },
       ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("keeps text visible when inline code delimiters have different run lengths", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円です。`借入残高は999,999円``" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
     ).toMatchObject({ pass: false });
   });
 
@@ -2441,6 +2452,11 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedCharts: [chart] },
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "カフェは全体の約59.4%です。", charts: [chart] }), {
+        config: { expectedCharts: [chart] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
   test("grounds counts from ordinary qualifying queries", () => {
