@@ -182,13 +182,19 @@ function removeFencedCode(text: string): string {
 
 function inheritMarkdownHeadingScope(text: string): string {
   let activeHeading = "";
-  return getRenderableMarkdownLines(text)
-    .map((line) => {
+  const lines = getRenderableMarkdownLines(text);
+  return lines
+    .map((line, index) => {
       const heading = line.match(/^#{1,6}\s+(.+)$/);
       if (heading) {
         activeHeading = heading[1]!;
         return line;
       }
+      if (line.trim() && !line.includes("|") && /^\s*(?:=+|-+)\s*$/.test(lines[index + 1] ?? "")) {
+        activeHeading = line.trim();
+        return line;
+      }
+      if (/^\s*(?:=+|-+)\s*$/.test(line) && activeHeading) return "";
       return activeHeading && line.trim() ? `${activeHeading} ${line}` : line;
     })
     .join("\n");
@@ -580,8 +586,9 @@ function getGroundedQuantityPairs(
 }
 
 function getTableCells(line: string): string[] | undefined {
-  if (!line.includes("|")) return undefined;
-  return line
+  const containerContent = line.replace(/^(?: {0,3}>[ \t]?)+/, "");
+  if (!containerContent.includes("|")) return undefined;
+  return containerContent
     .replace(/^\s*\||\|\s*$/g, "")
     .split("|")
     .map(normalizeTableCell);
@@ -761,6 +768,7 @@ function hasSuspiciousNumericExpression(expression: string): boolean {
   return (
     /\b(?:char|printf)\s*\([^)]*\d[^)]*\)/i.test(expressionWithoutStrings) ||
     /\bconcat\s*\([^)]*'\d+'[^)]*'\d+'[^)]*\)/i.test(expression) ||
+    /\breplace\s*\([^)]*'[^']*\d[^']*'[^)]*\)/i.test(expression) ||
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
@@ -943,6 +951,14 @@ function hasIneffectiveGroupPredicate(sql: string): boolean {
   return (
     /\bjoin\s+group_accounts\b[\s\S]*?\bon\b[^;]*?\band\s+0\b/i.test(normalizedSql) ||
     /\bgroup_id\b\s*=\s*:groupId[^;]*?\bor\s+1\s*=\s*1\b/i.test(normalizedSql)
+  );
+}
+
+function hasUnsafeNoDataDerivation(sql: string): boolean {
+  const normalizedSql = normalizeSqlIdentifiers(removeSqlComments(sql));
+  return (
+    /\bwhere\b[\s\S]*\bor\s+(?:1\s*=\s*1|true)\b/i.test(normalizedSql) ||
+    /\b(?:sum|count|avg|min|max)\s*\([^)]*(?:\*\s*0|0\s*\*)[^)]*\)/i.test(normalizedSql)
   );
 }
 
@@ -1256,9 +1272,10 @@ export default function assertFinanceChatOutput(
         hasRequiredLiteralBindingGroup &&
         hasRequiredGroupScopes &&
         !hasIneffectiveGroupPredicate(executableSql) &&
+        (!databaseEvidence.expectNoData || !hasUnsafeNoDataDerivation(executableSql)) &&
         !hasSuspiciousProjectionLiteral(executableSql) &&
         hasValidCorrelatedGroupExists(executableSql)
-        ? [{ query, result: parsedResult.data }]
+        ? [{ query, result: parsedResult.data, sql: parsedInput.data.sql }]
         : [];
     });
     const databaseResults = qualifyingDatabaseQueries.map(({ result }) => result);
@@ -1318,17 +1335,16 @@ export default function assertFinanceChatOutput(
       return fail("queryDatabase結果に期待しない行があるか、値の関連が不足しています。");
     }
 
-    const isNoDataRow = (row: Record<string, unknown>) => {
-      const values = Object.values(row);
-      return (
-        values.some((value) => value === 0 || value === null) &&
-        values.every((value) => typeof value !== "number" || value === 0)
-      );
-    };
+    const isNoDataAggregateRow = (row: Record<string, unknown>, sql?: string) =>
+      Object.keys(row).length === 1 &&
+      Object.values(row).every((value) => value === 0 || value === null) &&
+      (sql === undefined || /\b(?:sum|count|avg|min|max)\s*\(/i.test(sql));
     const fixtureHasOnlyNoData =
-      fixtureResult.data.rows.length === 0 || fixtureResult.data.rows.every(isNoDataRow);
-    const modelHasOnlyNoData = databaseResults.every(
-      (result) => result.rows.length === 0 || result.rows.every(isNoDataRow),
+      fixtureResult.data.rows.length === 0 ||
+      fixtureResult.data.rows.every((row) => isNoDataAggregateRow(row));
+    const modelHasOnlyNoData = qualifyingDatabaseQueries.every(
+      ({ result, sql }) =>
+        result.rows.length === 0 || result.rows.every((row) => isNoDataAggregateRow(row, sql)),
     );
     if (databaseEvidence.expectNoData && (!fixtureHasOnlyNoData || !modelHasOnlyNoData)) {
       return fail("queryDatabase結果がデータなしを裏付けていません。");

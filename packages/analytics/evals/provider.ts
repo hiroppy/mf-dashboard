@@ -180,7 +180,7 @@ function getTextLinks(text: string): string[] {
 }
 
 function getTextRoutes(text: string): string[] {
-  const renderedText = removeMarkdownReferenceDefinitions(removeNonRenderedText(text));
+  const renderedText = removeMarkdownReferenceDefinitions(removeCode(text));
   const bareRoutes = [
     ...renderedText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ]

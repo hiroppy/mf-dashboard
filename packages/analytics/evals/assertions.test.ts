@@ -113,6 +113,18 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: [
+            "2026年7月",
+            "=========",
+            "収入は313,235円、支出は219,894円、収支は93,341円です。",
+          ].join("\n"),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: "2026年7月について確認しました。2026年6月の収入は313,235円、支出は219,894円、収支は93,341円です。",
         }),
         { config },
@@ -200,9 +212,9 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT COUNT(*) AS 取引件数, '2030-01' AS period FROM transactions WHERE date LIKE '2030-01%'",
+                sql: "SELECT COUNT(*) AS 取引件数 FROM transactions WHERE date LIKE '2030-01%'",
               },
-              output: { rows: [{ period: "2030-01", 取引件数: 0 }], truncated: false },
+              output: { rows: [{ 取引件数: 0 }], truncated: false },
             },
           ],
         }),
@@ -817,6 +829,19 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text }), {
         config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
       }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: text
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n"),
+        }),
+        {
+          config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
+        },
+      ),
     ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(output({ text: text.replace("2026-07-03", "2026年7月3日") }), {
@@ -2226,6 +2251,44 @@ describe("assertFinanceChatOutput", () => {
         context,
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT date, description, amount FROM transactions WHERE date LIKE '2030-01%'",
+              },
+              output: {
+                rows: [{ date: "2030-01-05", description: "実データ", amount: null }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        context,
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    for (const sql of [
+      "SELECT SUM(amount * 0) AS amount FROM transactions WHERE date LIKE '2030-01%'",
+      "SELECT SUM(amount) AS amount FROM transactions WHERE date LIKE '2030-01%' OR 1=1",
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            fixtureResult: { rows: [{ amount: null }], truncated: false },
+            databaseQueries: [
+              {
+                input: { sql },
+                output: { rows: [{ amount: 0 }], truncated: false },
+              },
+            ],
+          }),
+          context,
+        ),
+      ).toMatchObject({ pass: false });
+    }
   });
 
   test("rejects hexadecimal and concat constants in SQL projections", () => {
@@ -2265,6 +2328,30 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT SUM(amount) * 0 + CAST(concat('31', '32', '35') AS INTEGER) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) * 0 + CAST(replace('313x235', 'x', '') AS INTEGER) AS income FROM transactions",
               },
               output: { rows: [{ income: 313_235 }], truncated: false },
             },

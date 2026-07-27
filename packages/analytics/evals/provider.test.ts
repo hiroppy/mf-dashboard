@@ -129,7 +129,7 @@ describe("toEvaluationOutput", () => {
 
   test("collects bare relative dashboard routes", () => {
     const output = toEvaluationOutput({
-      text: "詳細は `/0/cf/2026-07`",
+      text: "詳細は /0/cf/2026-07",
       steps: [],
     });
 
@@ -180,7 +180,7 @@ describe("toEvaluationOutput", () => {
     });
 
     expect(output.textLinks).toEqual([]);
-    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
+    expect(output.textRoutes).toEqual([]);
   });
 
   test("does not treat an angle-bracketed relative route as an autolink", () => {
@@ -360,7 +360,15 @@ describe("toEvaluationOutput", () => {
     });
 
     expect(output.textLinks).toEqual([]);
-    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
+    expect(output.textRoutes).toEqual([]);
+  });
+
+  test("excludes bare routes inside inline and fenced code", () => {
+    for (const text of ["`/0/cf/2026-07`", "```\n/0/cf/2026-07\n```"]) {
+      const output = toEvaluationOutput({ text, steps: [] });
+
+      expect(output.textRoutes).toEqual([]);
+    }
   });
 
   test("keeps user-visible step text and the final response as separate evidence", () => {
