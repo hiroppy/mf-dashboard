@@ -80,6 +80,8 @@ const namedCharacterReferences: Record<string, string> = {
   quot: '"',
   yen: "¥",
 };
+const monetaryLabelTermPattern =
+  /(?:収入|支出|収支|食費|金額|合計|総額|残高|予算|目標|見込|予測|借入|借金|ローン|資産|負債|評価額|元本|債務|貯蓄)/;
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
@@ -253,7 +255,7 @@ function normalizeYenPrefix(segment: string): string {
   return segment
     .replace(/[▲△]/g, "-")
     .replace(
-      /[¥￥](マイナス|[-−])?(\d[\d,]*(?:\.\d+)?)(千|万|億|兆)?/g,
+      /[¥￥]\s*(マイナス|[-−])?\s*(\d[\d,]*(?:\.\d+)?)(千|万|億|兆)?/g,
       (_, sign: string | undefined, digits: string, scale: string | undefined) =>
         `${sign ?? ""}${digits.replace(/,/g, "")}${scale ?? ""}円`,
     );
@@ -509,18 +511,25 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
   ];
 }
 
+function hasSuspiciousNumericExpression(expression: string): boolean {
+  return (
+    /0x[0-9a-f]+/i.test(expression) ||
+    /'\d+(?:\.\d+)?'\s*(?:\|\||[+*/-])/.test(expression) ||
+    /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(expression) ||
+    [...expression.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi)].some(
+      (literal) => Number(literal[1]) > 100,
+    )
+  );
+}
+
 function hasSuspiciousProjectionLiteral(sql: string): boolean {
-  return [...sql.matchAll(/\bselect\b([\s\S]*?)\bfrom\b/gi)].some((select) => {
-    const projection = select[1]!;
-    return (
-      /0x[0-9a-f]+/i.test(projection) ||
-      /'\d+(?:\.\d+)?'\s*(?:\|\||[+*/-])/.test(projection) ||
-      /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(projection) ||
-      [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi)].some(
-        (literal) => Number(literal[1]) > 100,
-      )
-    );
-  });
+  const projections = [...sql.matchAll(/\bselect\b([\s\S]*?)\bfrom\b/gi)].map(
+    (select) => select[1]!,
+  );
+  const valueConstructors = [...sql.matchAll(/\bvalues\s*(\([^;]*\))/gi)].map(
+    (values) => values[1]!,
+  );
+  return [...projections, ...valueConstructors].some(hasSuspiciousNumericExpression);
 }
 
 function removeSqlComments(sql: string): string {
@@ -962,13 +971,14 @@ export default function assertFinanceChatOutput(
     const hasLabelBinding = allowedTextPairs.some(
       ([label, amount]) => amount === claim.amount && bindingPrefix.includes(normalize(label)),
     );
-    const hasUnsupportedCoLabel =
-      /(?:予算|目標|見込|予測)/.test(bindingPrefix) &&
-      !allowedTextPairs.some(
-        ([label, amount]) =>
-          amount === claim.amount &&
-          /(?:予算|目標|見込|予測)/.test(normalize(label)) &&
-          bindingPrefix.includes(normalize(label)),
+    const hasUnsupportedCoLabel = bindingPrefix
+      .split(/(?:と|および|及び|ならびに|並びに|・|\/)/)
+      .some(
+        (labelSegment) =>
+          monetaryLabelTermPattern.test(labelSegment) &&
+          !allowedTextPairs.some(
+            ([label, amount]) => amount === claim.amount && labelSegment.includes(normalize(label)),
+          ),
       );
     const isExpectedTableAmount =
       clausePrefix.includes("|") && groundedAmounts.has(claim.amount) && markdownTables.length > 0;
@@ -977,8 +987,9 @@ export default function assertFinanceChatOutput(
       groundedAmounts.has(claim.amount) &&
       expectedMarkdownAmounts.length > 0;
     return (
-      hasUnsupportedCoLabel ||
-      (!hasLabelBinding && !isExpectedTableAmount && !isExpectedTableSummary)
+      !isExpectedTableAmount &&
+      !isExpectedTableSummary &&
+      (hasUnsupportedCoLabel || !hasLabelBinding)
     );
   });
   const validatesRenderedAmounts =

@@ -14,6 +14,11 @@ function findBalancedEnd(text: string, start: number, open: "[" | "(", close: "]
 }
 
 export function removeMarkdownImages(text: string): string {
+  const referenceDefinitions = new Set(
+    [...text.matchAll(/^\s*\[([^\]]+)]:\s*\S+.*$/gm)].map((match) =>
+      match[1]!.trim().toLocaleLowerCase(),
+    ),
+  );
   let result = "";
   let cursor = 0;
   while (cursor < text.length) {
@@ -24,16 +29,38 @@ export function removeMarkdownImages(text: string): string {
     if (labelEnd === -1) return result + text.slice(imageStart);
     const destinationStart = labelEnd + 1;
     const destinationOpen = text[destinationStart];
-    if (destinationOpen === "(" || destinationOpen === "[") {
-      const destinationEnd = findBalancedEnd(
-        text,
-        destinationStart,
-        destinationOpen,
-        destinationOpen === "(" ? ")" : "]",
-      );
-      cursor = destinationEnd === -1 ? destinationStart : destinationEnd + 1;
+    if (destinationOpen === "(") {
+      const destinationEnd = findBalancedEnd(text, destinationStart, "(", ")");
+      if (destinationEnd === -1) {
+        result += text.slice(imageStart, destinationStart);
+        cursor = destinationStart;
+      } else {
+        cursor = destinationEnd + 1;
+      }
       continue;
     }
+    if (destinationOpen === "[") {
+      const destinationEnd = findBalancedEnd(text, destinationStart, "[", "]");
+      if (destinationEnd !== -1) {
+        const referenceLabel =
+          text.slice(destinationStart + 1, destinationEnd).trim() ||
+          text.slice(imageStart + 2, labelEnd).trim();
+        if (referenceDefinitions.has(referenceLabel.toLocaleLowerCase())) {
+          cursor = destinationEnd + 1;
+          continue;
+        }
+      }
+    } else {
+      const shortcutLabel = text
+        .slice(imageStart + 2, labelEnd)
+        .trim()
+        .toLocaleLowerCase();
+      if (referenceDefinitions.has(shortcutLabel)) {
+        cursor = destinationStart;
+        continue;
+      }
+    }
+    result += text.slice(imageStart, destinationStart);
     cursor = destinationStart;
   }
   return result;

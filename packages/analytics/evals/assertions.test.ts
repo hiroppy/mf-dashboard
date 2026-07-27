@@ -251,6 +251,27 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
     expect(
+      assertFinanceChatOutput(output({ text: "収入と借入残高は313,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "予算は¥ 999,999です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
       assertFinanceChatOutput(
         output({
           text: "予算は999,999です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
@@ -1936,6 +1957,36 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
   });
 
+  test("rejects fabricated constants in SQL VALUES constructors", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "WITH scoped AS (SELECT amount FROM transactions), fake(income, expense) AS (VALUES (313235, 219894)) SELECT * FROM fake",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
   test("preserves double-quoted SQL identifiers while masking string literals", () => {
     expect(
       assertFinanceChatOutput(
@@ -2017,6 +2068,25 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+  });
+
+  test("keeps unresolved image-reference text visible for grading", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![借入残高は999,999円] 2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
   test("does not grade hidden HTML as rendered evidence", () => {
