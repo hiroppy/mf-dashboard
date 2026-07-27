@@ -86,14 +86,7 @@ export interface AnalyticsReport {
 // 定数
 // ============================================================================
 
-const LIQUID_ASSET_CATEGORIES = new Set([
-  // Legacy Money Forward label used before deposits and crypto were split.
-  "預金・現金・暗号資産",
-  // Current Money Forward labels.
-  "預金・現金",
-  "暗号資産",
-  "電子マネー・プリペイド",
-]);
+const LIQUID_ASSET_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
 
 export function isLiquidAssetCategory(category: string): boolean {
   return LIQUID_ASSET_CATEGORIES.has(category.trim());

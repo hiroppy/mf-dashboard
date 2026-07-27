@@ -7,6 +7,7 @@ import { saveScrapedData, saveGroupOnlyData } from "@mf-dashboard/db/repository/
 import { eq } from "drizzle-orm";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { runInstitutionCategoryPhase } from "../../src/crawler-phases.js";
 import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "../../src/data-builder.js";
 import type { ScrapeResult } from "../../src/scraper.js";
@@ -52,12 +53,13 @@ beforeAll(async () => {
 
       // 保存処理（index.ts と同じフロー）
       const db = getDb();
+      const institutionCategories = await runInstitutionCategoryPhase(page);
 
       // 「グループ選択なし」のデータを保存
       const noGroupData = result.groupDataList.find((gd) => isNoGroup(gd.group.id));
       if (noGroupData) {
         const scrapedData = buildScrapedData(result.globalData, noGroupData);
-        await saveScrapedData(db, scrapedData);
+        await saveScrapedData(db, scrapedData, institutionCategories);
       }
 
       // 各グループはグループ固有データのみ保存

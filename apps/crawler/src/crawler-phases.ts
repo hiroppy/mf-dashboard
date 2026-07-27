@@ -243,6 +243,7 @@ export async function runSavePhase(
 
 export async function runInstitutionCategoryPhase(page: Page): Promise<Map<string, string>> {
   phase("Institution Categories");
+  await switchGroup(page, NO_GROUP_ID);
   log("Scraping institution categories");
   const categoryMap = await scrapeInstitutionCategories(page);
   info(`Scraped ${categoryMap.size} account categories`);

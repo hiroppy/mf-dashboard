@@ -20,7 +20,8 @@ import {
   NO_GROUP_ID,
 } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
-import { getPortfolio } from "./scrapers/portfolio.js";
+import { getManualHoldingAccountMap } from "./scrapers/manual-holding-accounts.js";
+import { getLinkedAccountPnsSource, getPortfolio } from "./scrapers/portfolio.js";
 import { clickRefreshButton, getMaxWaitMinutes } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
@@ -136,7 +137,11 @@ async function scrapeGlobalData(
   const portfolio = await runCrawlerStep(
     progress,
     CRAWLER_STEPS.portfolio,
-    () => getPortfolio(page),
+    async () => {
+      const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
+      const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
+      return getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
+    },
     { failureCode: "portfolio_failed" },
   );
   log(`Portfolio: ${portfolio.items.length} items`);
@@ -316,10 +321,12 @@ export async function scrape(page: Page, options: ScrapeOptions = {}): Promise<S
   const summary = await getAssetSummary(page);
   const items = await getAssetItems(page);
   const cashFlow = await getCashFlow(page);
-  const portfolio = await getPortfolio(page);
   const liabilities = await getLiabilities(page);
   const assetHistory = await getAssetHistory(page);
   const registeredAccounts = await getRegisteredAccounts(page);
+  const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
+  const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
+  const portfolio = await getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
   const spendingTargets = await getSpendingTargets(page).catch(() => null);
 
   const updatedAt = formatJstDateTimeForDisplay();

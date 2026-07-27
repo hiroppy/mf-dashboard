@@ -28,7 +28,7 @@ const generateMockData = () => {
       date: date.toISOString().split("T")[0],
       totalAssets: deposit + stock + fund + pension + point,
       categories: {
-        "預金・現金・暗号資産": Math.round(deposit),
+        "預金・現金": Math.round(deposit),
         "株式(現物)": Math.round(stock),
         投資信託: Math.round(fund),
         年金: Math.round(pension),

@@ -2,7 +2,13 @@ import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type { CashFlowItem, ScrapedData } from "../types";
+import type {
+  CashFlowItem,
+  Portfolio,
+  PortfolioItem,
+  RegisteredAccounts,
+  ScrapedData,
+} from "../types";
 import { now } from "../utils";
 import {
   upsertAccounts,
@@ -25,8 +31,86 @@ import { saveAssetHistory } from "./summaries";
 import { replaceTransactionsForMonth, saveTransaction } from "./transactions";
 
 const isCI = process.env.CI === "true";
+const DEPOSIT_ASSET_CATEGORY = "預金・現金";
+const CRYPTO_ASSET_CATEGORY = "暗号資産";
+const CRYPTO_INSTITUTION_CATEGORY = "暗号資産・FX・貴金属";
+
 function log(...args: unknown[]) {
   if (!isCI) console.log(...args);
+}
+
+function buildCurrentAccountMfIdByName(
+  registeredAccounts: RegisteredAccounts,
+): ReadonlyMap<string, string | null> {
+  const accountMfIdByName = new Map<string, string | null>();
+
+  for (const account of registeredAccounts.accounts) {
+    const existingMfId = accountMfIdByName.get(account.name);
+    if (existingMfId === undefined) {
+      accountMfIdByName.set(account.name, account.mfId);
+    } else if (existingMfId !== account.mfId) {
+      accountMfIdByName.set(account.name, null);
+    }
+  }
+
+  return accountMfIdByName;
+}
+
+function resolvePortfolioAccountMfId(
+  item: PortfolioItem,
+  currentAccountMfIds: ReadonlySet<string>,
+  accountMfIdByName: ReadonlyMap<string, string | null>,
+): string | null {
+  if (item.accountMfId) {
+    return currentAccountMfIds.has(item.accountMfId) ? item.accountMfId : null;
+  }
+
+  return accountMfIdByName.get(item.institution) ?? null;
+}
+
+export function normalizePortfolioCategories(
+  portfolio: Portfolio,
+  registeredAccounts: RegisteredAccounts,
+  institutionCategories: ReadonlyMap<string, string> = new Map(),
+): Portfolio {
+  const currentAccountMfIds = new Set(registeredAccounts.accounts.map((account) => account.mfId));
+  const accountMfIdByName = buildCurrentAccountMfIdByName(registeredAccounts);
+
+  return {
+    ...portfolio,
+    items: portfolio.items.map((item) => {
+      if (item.type !== DEPOSIT_ASSET_CATEGORY) return item;
+
+      const accountMfId = resolvePortfolioAccountMfId(item, currentAccountMfIds, accountMfIdByName);
+      const institutionCategory = accountMfId ? institutionCategories.get(accountMfId) : undefined;
+      if (!institutionCategory) {
+        throw new Error("Cannot classify a deposit without a unique current account category");
+      }
+
+      return {
+        ...item,
+        type:
+          institutionCategory === CRYPTO_INSTITUTION_CATEGORY
+            ? CRYPTO_ASSET_CATEGORY
+            : DEPOSIT_ASSET_CATEGORY,
+      };
+    }),
+  };
+}
+
+function resolveHoldingAccountId(
+  accountIdByMfId: ReadonlyMap<string, number>,
+  accountIdByName: Map<string, number | null>,
+  item: { accountMfId?: string; institution: string },
+  fallbackAccountId: number,
+): number {
+  if (item.accountMfId) {
+    return accountIdByMfId.get(item.accountMfId) ?? fallbackAccountId;
+  }
+
+  const institutionAccountId = accountIdByName.get(item.institution);
+  if (institutionAccountId != null) return institutionAccountId;
+  return fallbackAccountId;
 }
 
 /**
@@ -36,8 +120,16 @@ function log(...args: unknown[]) {
  * - assetHistory, spendingTargets
  * - group_accountsへのリンク
  */
-export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
-  await saveScrapedDataBatch(db, { fullData: data, groupOnlyData: [] });
+export async function saveScrapedData(
+  db: Db,
+  data: ScrapedData,
+  institutionCategories: ReadonlyMap<string, string> = new Map(),
+): Promise<void> {
+  await saveScrapedDataBatch(db, {
+    fullData: data,
+    groupOnlyData: [],
+    institutionCategories,
+  });
 }
 
 export async function saveScrapedDataBatch(
@@ -50,8 +142,19 @@ export async function saveScrapedDataBatch(
     institutionCategories?: ReadonlyMap<string, string>;
   },
 ): Promise<number[]> {
+  const fullData = data.fullData
+    ? {
+        ...data.fullData,
+        portfolio: normalizePortfolioCategories(
+          data.fullData.portfolio,
+          data.fullData.registeredAccounts,
+          data.institutionCategories,
+        ),
+      }
+    : undefined;
+
   return db.transaction(async (transaction) => {
-    if (data.fullData) await saveScrapedDataAtomically(transaction, data.fullData);
+    if (fullData) await saveScrapedDataAtomically(transaction, fullData);
     for (const groupData of data.groupOnlyData) {
       await saveGroupOnlyDataAtomically(transaction, groupData);
     }
@@ -96,6 +199,21 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   // 3. Build accountIdMap from DB
   const accountIdMap = await buildAccountIdMap(db);
   log(`  - accountIdMap: ${accountIdMap.size} entries`);
+
+  const currentAccountIdByName = new Map<string, number | null>();
+  const currentAccountIdByMfId = new Map<string, number>();
+  for (const account of data.registeredAccounts.accounts) {
+    const accountId = accountIdMap.get(account.mfId);
+    if (accountId === undefined) continue;
+
+    currentAccountIdByMfId.set(account.mfId, accountId);
+    const existingAccountId = currentAccountIdByName.get(account.name);
+    if (existingAccountId === undefined) {
+      currentAccountIdByName.set(account.name, accountId);
+    } else if (existingAccountId !== accountId) {
+      currentAccountIdByName.set(account.name, null);
+    }
+  }
 
   // 4. Group-account links (バルク処理)
   await clearGroupAccountLinks(db, groupId);
@@ -148,7 +266,12 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 8. Save portfolio
   for (const item of data.portfolio.items) {
-    const accountId = accountIdMap.get(item.institution) || unknownAccountId;
+    const accountId = resolveHoldingAccountId(
+      currentAccountIdByMfId,
+      currentAccountIdByName,
+      item,
+      unknownAccountId,
+    );
     const categoryId = await getOrCreateCategory(db, item.type);
     const holdingId = await createHolding(db, accountId, item.name, "asset", {
       categoryId,
@@ -169,7 +292,12 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
 
   // 9. Save liabilities
   for (const liability of data.liabilities.items) {
-    const accountId = accountIdMap.get(liability.institution) || unknownAccountId;
+    const accountId = resolveHoldingAccountId(
+      currentAccountIdByMfId,
+      currentAccountIdByName,
+      liability,
+      unknownAccountId,
+    );
     const holdingId = await createHolding(db, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });

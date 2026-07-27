@@ -89,22 +89,42 @@ function SelectedFilter() {
 }
 
 describe("filterCategories", () => {
-  it("全件選択では元のカテゴリを返す", () => {
-    expect(filterCategories(categories, "__all__")).toBe(categories);
+  it("全件選択でもカテゴリと項目を金額降順にする", () => {
+    const result = filterCategories(categories, "__all__");
+
+    expect(result.map(({ category }) => category)).toEqual(["株式(現物)", "投資信託"]);
+    expect(result[0].items.map(({ name }) => name)).toEqual(["銘柄 B", "銘柄 A"]);
   });
 
   it("金融機関を選ぶと、その金融機関の保有資産と合計だけを返す", () => {
     expect(filterCategories(categories, "金融機関 A")).toEqual([
       {
-        ...categories[0],
-        items: [categories[0].items[0]],
-        total: 100,
-      },
-      {
         ...categories[1],
         items: [categories[1].items[0]],
         total: 200,
       },
+      {
+        ...categories[0],
+        items: [categories[0].items[0]],
+        total: 100,
+      },
+    ]);
+  });
+
+  it("絞り込み後の合計が同額ならカテゴリ名順で安定して並べる", () => {
+    expect(filterCategories(categories, "金融機関 A").map(({ category }) => category)).toEqual([
+      "投資信託",
+      "株式(現物)",
+    ]);
+
+    const tiedCategories = categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => ({ ...item, amount: 100 })),
+    }));
+
+    expect(filterCategories(tiedCategories, "金融機関 A").map(({ category }) => category)).toEqual([
+      "株式(現物)",
+      "投資信託",
     ]);
   });
 
@@ -153,12 +173,13 @@ describe("HoldingsTableClient", () => {
       ...categories[0].items[1],
       id: 100,
       name: "絞り込み後の銘柄",
+      amount: 50,
     };
     const paginatedCategories = [
       {
         category: "株式(現物)",
         items: [...institutionAItems, institutionBItem],
-        total: 1_600,
+        total: 1_150,
       },
     ];
 
