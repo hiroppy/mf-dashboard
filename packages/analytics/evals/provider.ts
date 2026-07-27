@@ -105,11 +105,29 @@ function removeCode(text: string): string {
     .replace(/`[^`\n]*`/g, "");
 }
 
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function normalizeMarkdownDestination(destination: string): string {
+  return destination.startsWith("<") && destination.endsWith(">")
+    ? destination.slice(1, -1)
+    : destination;
+}
+
 function getTextLinks(text: string): string[] {
   const renderedText = removeCode(text);
   const markdownLinks = [
-    ...renderedText.matchAll(/(?<!!)\[[^\]]+]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g),
-  ].map((match) => match[1]!);
+    ...renderedText.matchAll(
+      /(?<!!)\[[^\]]+]\((<[^>\s]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g,
+    ),
+  ]
+    .filter((match) => !isEscaped(renderedText, match.index!))
+    .map((match) => normalizeMarkdownDestination(match[1]!));
   const referenceDefinitions = new Map(
     [...renderedText.matchAll(/^\s*\[([^\]]+)]:\s*(\S+)/gm)].map((match) => [
       match[1]!.toLocaleLowerCase(),
@@ -118,16 +136,18 @@ function getTextLinks(text: string): string[] {
   );
   const referenceLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)]\[([^\]]*)]/g)].flatMap(
     (match) => {
+      if (isEscaped(renderedText, match.index!)) return [];
       const identifier = match[2] || match[1]!;
       const destination = referenceDefinitions.get(identifier.toLocaleLowerCase());
-      return destination ? [destination] : [];
+      return destination ? [normalizeMarkdownDestination(destination)] : [];
     },
   );
   const shortcutLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)](?![[(])/g)].flatMap(
     (match) => {
+      if (isEscaped(renderedText, match.index!)) return [];
       if (/^\s*:/.test(renderedText.slice(match.index! + match[0].length))) return [];
       const destination = referenceDefinitions.get(match[1]!.toLocaleLowerCase());
-      return destination ? [destination] : [];
+      return destination ? [normalizeMarkdownDestination(destination)] : [];
     },
   );
   const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);

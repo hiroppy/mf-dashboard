@@ -14,8 +14,19 @@ function findBalancedEnd(text: string, start: number, open: "[" | "(", close: "]
 }
 
 export function removeMarkdownImages(text: string): string {
+  let inFence = false;
+  const renderableText = text
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(?:```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return "";
+      }
+      return inFence || /^(?: {4}|\t)/.test(line) ? "" : line;
+    })
+    .join("\n");
   const referenceDefinitions = new Set(
-    [...text.matchAll(/^\s*\[([^\]]+)]:\s*\S+.*$/gm)].map((match) =>
+    [...renderableText.matchAll(/^\s*\[([^\]]+)]:\s*\S+.*$/gm)].map((match) =>
       match[1]!.trim().toLocaleLowerCase(),
     ),
   );

@@ -122,7 +122,7 @@ function getRenderedText(text: string): string {
   const visibleText = removeMarkdownImages(removeHiddenHtmlElements(text))
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
+    .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
     .replace(/~~[\s\S]*?~~/g, "")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
   return decodeCharacterReferences(visibleText);
@@ -412,7 +412,11 @@ function getMarkdownTables(text: string): MarkdownTable[] {
 function hasTablePair(text: string, label: string, value: string): boolean {
   return getMarkdownTables(text).some((table) => {
     const columnIndex = table.header.indexOf(label);
-    return columnIndex !== -1 && table.rows.some((row) => row[columnIndex] === value);
+    return table.rows.some(
+      (row) =>
+        (columnIndex !== -1 && row[columnIndex] === value) ||
+        (row.includes(label) && row.includes(value)),
+    );
   });
 }
 
@@ -512,13 +516,14 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
 }
 
 function hasSuspiciousNumericExpression(expression: string): boolean {
+  const expressionWithoutStrings = expression.replace(/'(?:''|[^'])*'/g, " ");
   return (
     /0x[0-9a-f]+/i.test(expression) ||
     /'\d+(?:\.\d+)?'\s*(?:\|\||[+*/-])/.test(expression) ||
-    /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(expression) ||
-    [...expression.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi)].some(
-      (literal) => Number(literal[1]) > 100,
-    )
+    /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(expressionWithoutStrings) ||
+    [
+      ...expressionWithoutStrings.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi),
+    ].some((literal) => Number(literal[1]) > 100)
   );
 }
 
@@ -738,7 +743,7 @@ export default function assertFinanceChatOutput(
     (/(?:[¥￥]\s*\d|\d[\d,.]*\s*(?:千|万|億|兆)(?:\s*円)?|\d[\d,.]*\s*円|[〇零一二三四五六七八九十百壱弐参拾佰仟]+[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:\s*円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+\s*円|(?<![\d〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟])[千万億兆]\s*円)/.test(
       renderedText.normalize("NFKC"),
     ) ||
-      /(?:食費|収入|支出|収支|金額|合計|総額|残高)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
+      /(?:収入|支出|収支|食費|金額|合計|総額|残高|予算|目標|見込|予測|借入|借金|ローン|資産|負債|評価額|元本|債務|貯蓄)[^。！？\n\d]{0,12}(?<!\d)-?\d[\d,.]*(?![\d年月日件%])/.test(
         renderedText.normalize("NFKC"),
       ))
   ) {
@@ -880,7 +885,7 @@ export default function assertFinanceChatOutput(
   if (
     config.exactMarkdownRows &&
     (markdownTables.length !== 1 ||
-      JSON.stringify(markdownTables[0]?.header) !== JSON.stringify(expectedMarkdownColumns))
+      !sameValues(markdownTables[0]?.header ?? [], expectedMarkdownColumns))
   ) {
     return fail("Markdown表の列が期待する完全な構造と異なります。");
   }
@@ -971,15 +976,15 @@ export default function assertFinanceChatOutput(
     const hasLabelBinding = allowedTextPairs.some(
       ([label, amount]) => amount === claim.amount && bindingPrefix.includes(normalize(label)),
     );
-    const hasUnsupportedCoLabel = bindingPrefix
-      .split(/(?:と|および|及び|ならびに|並びに|・|\/)/)
-      .some(
-        (labelSegment) =>
-          monetaryLabelTermPattern.test(labelSegment) &&
-          !allowedTextPairs.some(
-            ([label, amount]) => amount === claim.amount && labelSegment.includes(normalize(label)),
-          ),
-      );
+    const allowedLabels = allowedTextPairs
+      .filter(([, amount]) => amount === claim.amount)
+      .map(([label]) => normalize(label))
+      .sort((left, right) => right.length - left.length);
+    const unsupportedLabelText = allowedLabels.reduce(
+      (text, label) => text.replaceAll(label, ""),
+      bindingPrefix,
+    );
+    const hasUnsupportedCoLabel = monetaryLabelTermPattern.test(unsupportedLabelText);
     const isExpectedTableAmount =
       clausePrefix.includes("|") && groundedAmounts.has(claim.amount) && markdownTables.length > 0;
     const isExpectedTableSummary =

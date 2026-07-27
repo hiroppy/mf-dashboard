@@ -198,6 +198,25 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual([]);
   });
 
+  test("normalizes angle-bracketed Markdown destinations", () => {
+    const output = toEvaluationOutput({
+      text: "[2026年7月の収支を確認](</0/cf/2026-07>)",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
+    expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
+  });
+
+  test("does not collect escaped Markdown links", () => {
+    const output = toEvaluationOutput({
+      text: "\\[2026年7月の収支を確認](/0/cf/2026-07)",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+  });
+
   test("excludes links in HTML comments and strikethrough", () => {
     const output = toEvaluationOutput({
       text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~\n<!-- /0/cf/2026-07 -->",

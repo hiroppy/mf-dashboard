@@ -2229,4 +2229,110 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
   });
+
+  test("grades visible angle-bracket text that is not an HTML tag", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。<借入残高は999,999円>",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("does not resolve image references defined inside fenced code", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![借入残高は999,999円]\n```\n[借入残高は999,999円]: hidden.png\n```\n2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
+  test("rejects unsupported monetary labels nested with a grounded label", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の収入（借入残高）は313,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
+  test("accepts exact detail columns in any order", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "| 内容 | 日付 | 金額 |\n| --- | --- | ---: |\n| サンマルクカフェ | 2026-07-03 | 761円 |",
+        }),
+        {
+          config: {
+            exactMarkdownRows: true,
+            expectedMarkdownColumns: ["日付", "内容", "金額"],
+            expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("accepts a currency unit declared in a row-table header", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "| 項目 | 金額（円） |\n| --- | ---: |\n| 食費 | 41,837 |" }),
+        { config: { expectedTextPairs: [["食費", "41837"]] } },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("rejects unitless budget claims in no-data answers", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "該当データはありません。予算は999,999です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+  });
+
+  test("ignores date strings when checking SQL projection constants", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(CASE WHEN date >= '2026-07-01' AND date < '2026-08-01' THEN amount ELSE 0 END) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
 });
