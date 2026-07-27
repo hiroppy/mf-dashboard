@@ -5,6 +5,7 @@ import {
   removeHiddenHtmlElements,
   removeInlineCodeSpans,
   removeMarkdownImages,
+  removeMarkdownReferenceDefinitions,
 } from "./markdown";
 
 interface ChartExpectation {
@@ -153,12 +154,13 @@ function decodeCharacterReferences(text: string): string {
 }
 
 function getRenderedText(text: string): string {
-  const visibleText = removeMarkdownImages(removeHiddenHtmlElements(text))
+  const visibleText = removeMarkdownReferenceDefinitions(
+    removeMarkdownImages(removeHiddenHtmlElements(text)),
+  )
     .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
-    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1")
-    .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
   return decodeCharacterReferences(visibleText);
 }
 
@@ -894,7 +896,7 @@ export default function assertFinanceChatOutput(
   if (forbiddenTerms.length > 0) {
     return fail(`本文に禁止用語があります: ${forbiddenTerms.join(", ")}`);
   }
-  const policyText = renderedClaimText.replace(
+  const policyText = normalize(renderedClaimText).replace(
     /(?:推奨するものではありません|推奨しません|おすすめするものではありません)/g,
     "",
   );

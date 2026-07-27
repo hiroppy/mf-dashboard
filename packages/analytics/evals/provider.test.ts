@@ -95,6 +95,33 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  test("collects visible routes from chart titles", () => {
+    const output = toEvaluationOutput({
+      text: "回答",
+      steps: [
+        {
+          text: "",
+          toolCalls: [],
+          toolResults: [
+            {
+              toolCallId: "chart-1",
+              toolName: "presentChart",
+              output: {
+                title: "食費 /0/bs",
+                chartType: "pie",
+                unit: "currency",
+                series: [{ name: "支出", amountType: "expense" }],
+                data: [{ label: "食料品", values: [100] }],
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(output.textRoutes).toEqual(["/0/bs"]);
+  });
+
   test("collects bare relative dashboard routes", () => {
     const output = toEvaluationOutput({
       text: "詳細は `/0/cf/2026-07`",

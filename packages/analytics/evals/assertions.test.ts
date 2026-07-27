@@ -1054,6 +1054,23 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextPairs: [["収入", "313235"]] } },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "- 収入は313,235円です。\n\n    借入残高は999,999円です。" }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("keeps malformed reference definitions visible", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円です。\n[借入残高は999,999円]: <not a url>",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("does not treat ordinary numbered prose as a unitless monetary claim", () => {
@@ -2262,6 +2279,7 @@ describe("assertFinanceChatOutput", () => {
       "借入を推奨しませんが、投資してください。",
       "借入を勧めます。",
       "投資した方がよいです。",
+      "借**入**を推奨します。",
     ]) {
       expect(
         assertFinanceChatOutput(

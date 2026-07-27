@@ -71,6 +71,7 @@ export function removeInlineCodeSpans(text: string): string {
 export function getRenderableMarkdownLines(text: string): string[] {
   let fence: { marker: "`" | "~"; length: number } | undefined;
   let inIndentedCode = false;
+  let listContentIndent: number | undefined;
   let previousLineWasBlank = true;
   return text.split("\n").map((line) => {
     const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
@@ -89,7 +90,19 @@ export function getRenderableMarkdownLines(text: string): string[] {
       fence = { marker: fenceMatch[1]![0] as "`" | "~", length: fenceMatch[1]!.length };
       return "";
     }
+    const listMarker = line.match(/^(\s*)(?:[-+*]|\d+[.)])(\s+)/);
+    if (listMarker) {
+      listContentIndent = listMarker[0].length;
+      inIndentedCode = false;
+      previousLineWasBlank = false;
+      return line;
+    }
     if (/^(?: {4}|\t)/.test(line)) {
+      const indentation = line.match(/^(?: +|\t)/)![0].replace("\t", "    ").length;
+      if (listContentIndent !== undefined && indentation >= listContentIndent) {
+        previousLineWasBlank = false;
+        return line;
+      }
       if (inIndentedCode || previousLineWasBlank) {
         inIndentedCode = true;
         return "";
@@ -102,22 +115,34 @@ export function getRenderableMarkdownLines(text: string): string[] {
       return line;
     }
     inIndentedCode = false;
+    listContentIndent = undefined;
     previousLineWasBlank = false;
     return line;
   });
 }
 
+function parseMarkdownReferenceDefinition(line: string): [string, string] | undefined {
+  const definition = line.match(
+    /^\s*\[([^\]]+)]:\s*(<[^<>\s]+>|[^\s<>]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/,
+  );
+  return definition ? [normalizeReferenceLabel(definition[1]!), definition[2]!] : undefined;
+}
+
 export function getMarkdownReferenceDefinitions(text: string): Map<string, string> {
   const definitions = new Map<string, string>();
   for (const line of getRenderableMarkdownLines(text)) {
-    const definition = line.match(
-      /^\s*\[([^\]]+)]:\s*(<[^<>\s]+>|[^\s<>]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/,
-    );
+    const definition = parseMarkdownReferenceDefinition(line);
     if (!definition) continue;
-    const label = normalizeReferenceLabel(definition[1]!);
-    if (!definitions.has(label)) definitions.set(label, definition[2]!);
+    if (!definitions.has(definition[0])) definitions.set(definition[0], definition[1]);
   }
   return definitions;
+}
+
+export function removeMarkdownReferenceDefinitions(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !parseMarkdownReferenceDefinition(line))
+    .join("\n");
 }
 
 export function removeMarkdownImages(text: string): string {

@@ -208,7 +208,7 @@ export function toEvaluationOutput(
     fixtureResult,
     toolRoutes: unique(toolRoutes),
     textLinks: getTextLinks(text),
-    textRoutes: getTextRoutes(text),
+    textRoutes: getTextRoutes([text, ...charts.map((chart) => chart.title)].join("\n")),
   };
 }
 
