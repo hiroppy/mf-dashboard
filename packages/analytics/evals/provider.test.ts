@@ -256,6 +256,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual([]);
   });
 
+  test("does not collect an unused reference definition as a raw URL", () => {
+    const output = toEvaluationOutput({
+      text: "[docs]: https://example.com/",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+  });
+
   test("preserves routes in invalid reference definitions", () => {
     const output = toEvaluationOutput({
       text: "[/0/bs]: <not a url>",

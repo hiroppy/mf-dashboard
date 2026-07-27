@@ -356,6 +356,17 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: false });
+    for (const text of [
+      "収入は313,235円を超えます。",
+      "収入は313,235円を上回ります。",
+      "収入は313,235円より多いです。",
+    ]) {
+      expect(
+        assertFinanceChatOutput(output({ text }), {
+          config: { expectedTextPairs: [["収入", "313235"]] },
+        }),
+      ).toMatchObject({ pass: false });
+    }
   });
 
   test("accepts scoped no-income wording for an expected zero", () => {
@@ -2582,6 +2593,20 @@ describe("assertFinanceChatOutput", () => {
     }
   });
 
+  test("rejects monthly claims with range-broadening period qualifiers", () => {
+    for (const qualifier of ["まで", "以前", "以降"]) {
+      expect(
+        assertFinanceChatOutput(output({ text: `2026年7月${qualifier}の収入は313,235円です。` }), {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairFacts: ["2026年7月"],
+            expectedTextPairs: [["収入", "313235"]],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    }
+  });
+
   test("does not use fenced code as expected prose evidence", () => {
     for (const text of [
       "```\n2026年7月の収入は313,235円です。\n```",
@@ -2712,6 +2737,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
     expect(
       assertFinanceChatOutput(output({ text: "カフェは99パーセントです。", charts: [chart] }), {
+        config: { expectedCharts: [chart] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    expect(
+      assertFinanceChatOutput(output({ text: "カフェは11%、食料品も11%です。", charts: [chart] }), {
         config: { expectedCharts: [chart] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });

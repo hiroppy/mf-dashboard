@@ -203,11 +203,17 @@ function hasScopedPair(text: string, label: string, value: string, facts: string
         const normalizedFact = normalize(fact);
         const claimPrefix = clause.slice(0, claimIndex);
         const periods = [...claimPrefix.matchAll(/\d{4}年\d{1,2}月/g)];
-        const nearestPeriod = periods.at(-1)?.[0];
+        const nearestPeriodMatch = periods.at(-1);
+        const nearestPeriod = nearestPeriodMatch?.[0];
+        const periodSuffix =
+          nearestPeriodMatch === undefined
+            ? ""
+            : claimPrefix.slice(nearestPeriodMatch.index! + nearestPeriodMatch[0].length);
         return (
           clause.includes(normalizedFact) &&
           !hasContradictedFact(clause, normalizedFact) &&
-          nearestPeriod === normalizedFact
+          nearestPeriod === normalizedFact &&
+          !/^(?:まで|以前|以降|より前|より後)/.test(periodSuffix)
         );
       })
     ) {
@@ -268,7 +274,7 @@ function getMissingTextPairs(
       (/(?:約|およそ|概ね|だいたい|少なくとも|最低でも|最大でも|多くとも|高くても|低くても)$/.test(
         expectedClaimPrefix,
       ) ||
-        /^(?:未満|以下|超|以上|程度|前後|約|およそ|くらい|とは限りません|かもしれません|可能性があります|(?:とは?)?断定できません)/.test(
+        /^(?:未満|以下|超|以上|を(?:超え|上回)|より(?:多|少な)|程度|前後|約|およそ|くらい|とは限りません|かもしれません|可能性があります|(?:とは?)?断定できません)/.test(
           expectedClaim.suffix.replace(/^[\s、,]*/, ""),
         ));
     const hasExcludedLabel = /^(?:以外|を除(?:く|いて)|除外)/.test(segment);
@@ -1372,17 +1378,18 @@ export default function assertFinanceChatOutput(
           normalizedQuantitativeText.lastIndexOf("\n", claim.index),
         ) + 1;
       const prefix = normalize(normalizedQuantitativeText.slice(clauseStart, claim.index));
+      const groundedPairs = [
+        ...groundedQuantityPairs[claim.unit],
+        ...(claim.unit === "percent" ? groundedChartPercentPairs : []),
+      ] as Array<[string, number]>;
+      const closestLabelIndex = Math.max(
+        ...groundedPairs.map(([label]) => prefix.lastIndexOf(normalize(label))),
+      );
       if (
-        groundedQuantityPairs[claim.unit].some(
-          ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
-        )
-      ) {
-        return false;
-      }
-      if (
-        claim.unit === "percent" &&
-        groundedChartPercentPairs.some(
-          ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
+        closestLabelIndex >= 0 &&
+        groundedPairs.some(
+          ([label, value]) =>
+            value === claim.value && prefix.lastIndexOf(normalize(label)) === closestLabelIndex,
         )
       ) {
         return false;

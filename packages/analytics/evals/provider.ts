@@ -149,8 +149,9 @@ function getTextLinks(text: string): string[] {
     },
   );
   const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
-  const rawUrls = [...renderedText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
-    match[0].replace(/[.,。、!?！？]+$/, ""),
+  const textWithoutReferenceDefinitions = removeMarkdownReferenceDefinitions(renderedText);
+  const rawUrls = [...textWithoutReferenceDefinitions.matchAll(/https?:\/\/[^\s<>)]+/g)].map(
+    (match) => match[0].replace(/[.,。、!?！？]+$/, ""),
   );
   return unique([...markdownLinks, ...referenceLinks, ...shortcutLinks, ...autoLinks, ...rawUrls]);
 }
