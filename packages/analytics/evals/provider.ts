@@ -19,7 +19,7 @@ import {
 } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
-import { normalizeReferenceLabel, removeMarkdownImages } from "./markdown";
+import { isEscapedMarkdownMarker, normalizeReferenceLabel, removeMarkdownImages } from "./markdown";
 
 interface GeneratedResponse {
   text: string;
@@ -105,14 +105,6 @@ function removeCode(text: string): string {
     .replace(/`[^`\n]*`/g, "");
 }
 
-function isEscaped(text: string, index: number): boolean {
-  let backslashes = 0;
-  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
-    backslashes += 1;
-  }
-  return backslashes % 2 === 1;
-}
-
 function normalizeMarkdownDestination(destination: string): string {
   return destination.startsWith("<") && destination.endsWith(">")
     ? destination.slice(1, -1)
@@ -126,7 +118,7 @@ function getTextLinks(text: string): string[] {
       /(?<!!)\[[^\]]+]\((<[^>\s]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g,
     ),
   ]
-    .filter((match) => !isEscaped(renderedText, match.index!))
+    .filter((match) => !isEscapedMarkdownMarker(renderedText, match.index!))
     .map((match) => normalizeMarkdownDestination(match[1]!));
   const referenceDefinitions = new Map(
     [...renderedText.matchAll(/^\s*\[([^\]]+)]:\s*(\S+)/gm)].map((match) => [
@@ -136,7 +128,7 @@ function getTextLinks(text: string): string[] {
   );
   const referenceLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)]\[([^\]]*)]/g)].flatMap(
     (match) => {
-      if (isEscaped(renderedText, match.index!)) return [];
+      if (isEscapedMarkdownMarker(renderedText, match.index!)) return [];
       const identifier = match[2] || match[1]!;
       const destination = referenceDefinitions.get(normalizeReferenceLabel(identifier));
       return destination ? [normalizeMarkdownDestination(destination)] : [];
@@ -144,7 +136,7 @@ function getTextLinks(text: string): string[] {
   );
   const shortcutLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)](?![[(])/g)].flatMap(
     (match) => {
-      if (isEscaped(renderedText, match.index!)) return [];
+      if (isEscapedMarkdownMarker(renderedText, match.index!)) return [];
       if (/^\s*:/.test(renderedText.slice(match.index! + match[0].length))) return [];
       const destination = referenceDefinitions.get(normalizeReferenceLabel(match[1]!));
       return destination ? [normalizeMarkdownDestination(destination)] : [];

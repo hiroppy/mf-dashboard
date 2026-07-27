@@ -2260,6 +2260,83 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("does not use fenced code as expected prose evidence", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "```\n2026年7月の収入は313,235円です。\n```" }), {
+        config: {
+          expectedTextFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("grades escaped image syntax as visible text", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "\\![借入残高は999,999円](https://example.com) 2026年7月の収入は313,235円です。",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
+  test("rejects unitless claims for every monetary label", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2026年7月の収入は313,235円です。資産は999,999です。" }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし金額") });
+  });
+
+  test("accepts rounded percentages derived from verified chart values", () => {
+    const chart = {
+      title: "2026年7月の食費",
+      chartType: "pie" as const,
+      unit: "currency" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+      data: [
+        { label: "食料品", values: [24_833] },
+        { label: "外食", values: [12_214] },
+        { label: "カフェ", values: [4_790] },
+      ],
+    };
+    expect(
+      assertFinanceChatOutput(output({ text: "食料品は全体の約59.4%です。", charts: [chart] }), {
+        config: { expectedCharts: [chart] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("rejects numeric string constants in SQL projections", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT CAST('313235' AS INTEGER) + SUM(amount * 0) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
   test("grades visible angle-bracket text that is not an HTML tag", () => {
     expect(
       assertFinanceChatOutput(

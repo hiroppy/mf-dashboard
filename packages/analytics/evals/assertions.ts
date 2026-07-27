@@ -80,8 +80,30 @@ const namedCharacterReferences: Record<string, string> = {
   quot: '"',
   yen: "¥",
 };
-const monetaryLabelTermPattern =
-  /(?:収入|支出|収支|食費|金額|合計|総額|残高|予算|目標|見込|予測|借入|借金|ローン|資産|負債|評価額|元本|債務|貯蓄)/;
+const monetaryLabelTerms = [
+  "収入",
+  "支出",
+  "収支",
+  "食費",
+  "金額",
+  "合計",
+  "総額",
+  "残高",
+  "予算",
+  "目標",
+  "見込",
+  "予測",
+  "借入",
+  "借金",
+  "ローン",
+  "資産",
+  "負債",
+  "評価額",
+  "元本",
+  "債務",
+  "貯蓄",
+];
+const monetaryLabelTermPattern = new RegExp(`(?:${monetaryLabelTerms.join("|")})`);
 const monetaryNumberSource = String.raw`((?:\d+(?:\.\d+)?(?:千|万|億|兆))+\d*(?:\.\d+)?|\d+(?:\.\d+)?(?:千|万|億|兆)?)`;
 
 function fail(reason: string): AssertionResult {
@@ -534,6 +556,7 @@ function hasSuspiciousNumericExpression(expression: string): boolean {
   const expressionWithoutStrings = expression.replace(/'(?:''|[^'])*'/g, " ");
   return (
     /0x[0-9a-f]+/i.test(expression) ||
+    [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     /'\d+(?:\.\d+)?'\s*(?:\|\||[+*/-])/.test(expression) ||
     /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(expressionWithoutStrings) ||
     [
@@ -706,7 +729,8 @@ export default function assertFinanceChatOutput(
   const actual = result.data;
   const config = context.config ?? {};
   const renderedText = getRenderedText(actual.text);
-  const visibleText = [renderedText, ...actual.charts.map((chart) => chart.title)].join("\n");
+  const renderedClaimText = removeCode(renderedText);
+  const visibleText = [renderedClaimText, ...actual.charts.map((chart) => chart.title)].join("\n");
   const normalizedText = normalize(visibleText);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
     normalizedText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
@@ -716,7 +740,8 @@ export default function assertFinanceChatOutput(
   }
 
   const missingFacts = (config.expectedTextFacts ?? []).filter(
-    (fact) => !normalizedText.includes(normalize(fact)) || hasContradictedFact(renderedText, fact),
+    (fact) =>
+      !normalizedText.includes(normalize(fact)) || hasContradictedFact(renderedClaimText, fact),
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
@@ -728,13 +753,13 @@ export default function assertFinanceChatOutput(
     ),
   );
   const missingPairs = getMissingTextPairs(
-    renderedText,
+    renderedClaimText,
     config.expectedTextPairs ?? [],
     chartTextPairs,
   );
   const unscopedPairs = (config.expectedTextPairs ?? []).filter(
     ([label, value]) =>
-      !hasScopedPair(renderedText, label, value, config.expectedTextPairFacts ?? []),
+      !hasScopedPair(renderedClaimText, label, value, config.expectedTextPairFacts ?? []),
   );
   if (missingPairs.length > 0 || unscopedPairs.length > 0) {
     const invalidPairs = [...new Set([...missingPairs, ...unscopedPairs])];
@@ -893,6 +918,19 @@ export default function assertFinanceChatOutput(
   ) {
     return fail("chartの構造または値が期待と異なります。");
   }
+  for (const chart of expectedCharts) {
+    for (let seriesIndex = 0; seriesIndex < chart.series.length; seriesIndex += 1) {
+      const values = chart.data.map((datum) => datum.values[seriesIndex] ?? 0);
+      const total = values.reduce((sum, value) => sum + value, 0);
+      if (total === 0) continue;
+      for (const value of values) {
+        const percentage = (value / total) * 100;
+        for (const precision of [0, 1, 2]) {
+          groundedQuantities.percent.add(Number(percentage.toFixed(precision)));
+        }
+      }
+    }
+  }
 
   const markdownTables = getMarkdownTables(renderedText);
   const markdownRows = markdownTables.flatMap((table) => table.rows);
@@ -1022,18 +1060,7 @@ export default function assertFinanceChatOutput(
     );
   }
   const monetaryLabelPattern = [
-    ...new Set([
-      ...allowedTextPairs.map(([label]) => normalize(label)),
-      "収入",
-      "支出",
-      "収支",
-      "食費",
-      "金額",
-      "合計",
-      "総額",
-      "残高",
-      "予算",
-    ]),
+    ...new Set([...allowedTextPairs.map(([label]) => normalize(label)), ...monetaryLabelTerms]),
   ]
     .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");

@@ -17,6 +17,14 @@ export function normalizeReferenceLabel(label: string): string {
   return label.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
+export function isEscapedMarkdownMarker(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
 export function removeMarkdownImages(text: string): string {
   let inFence = false;
   const renderableText = text
@@ -39,6 +47,11 @@ export function removeMarkdownImages(text: string): string {
   while (cursor < text.length) {
     const imageStart = text.indexOf("![", cursor);
     if (imageStart === -1) return result + text.slice(cursor);
+    if (isEscapedMarkdownMarker(text, imageStart)) {
+      result += text.slice(cursor, imageStart + 2);
+      cursor = imageStart + 2;
+      continue;
+    }
     result += text.slice(cursor, imageStart);
     const labelEnd = findBalancedEnd(text, imageStart + 1, "[", "]");
     if (labelEnd === -1) return result + text.slice(imageStart);
