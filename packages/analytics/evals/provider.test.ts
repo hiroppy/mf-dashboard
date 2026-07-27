@@ -132,6 +132,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("decodes character references before collecting routes", () => {
+    const output = toEvaluationOutput({
+      text: "&#47;0&#47;bs",
+      steps: [],
+    });
+
+    expect(output.textRoutes).toEqual(["/0/bs"]);
+  });
+
   test("does not treat an indented code block as a clickable link", () => {
     const output = toEvaluationOutput({
       text: "    [収支を見る](/0/cf/2026-07)",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
 import {
+  decodeHtmlCharacterReferences,
   getRenderableMarkdownLines,
   removeHiddenHtmlElements,
   removeInlineCodeSpans,
@@ -76,15 +77,6 @@ const associationLabelAliases: Record<string, string[]> = {
   income: ["income", "収入"],
   total: ["total", "合計"],
 };
-const namedCharacterReferences: Record<string, string> = {
-  amp: "&",
-  apos: "'",
-  gt: ">",
-  lt: "<",
-  minus: "−",
-  quot: '"',
-  yen: "¥",
-};
 const monetaryLabelTerms = [
   "収入",
   "支出",
@@ -136,23 +128,6 @@ function parseMonetaryNumber(value: string): number {
   );
 }
 
-function decodeCharacterReferences(text: string): string {
-  return text
-    .replace(
-      /&#(?:x([0-9a-f]+)|(\d+));/gi,
-      (reference, hex: string | undefined, decimal: string | undefined) => {
-        const codePoint = Number.parseInt(hex ?? decimal!, hex ? 16 : 10);
-        return codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
-          ? String.fromCodePoint(codePoint)
-          : reference;
-      },
-    )
-    .replace(
-      /&(amp|apos|gt|lt|minus|quot|yen);/gi,
-      (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
-    );
-}
-
 function getRenderedText(text: string): string {
   const visibleText = removeMarkdownReferenceDefinitions(
     removeMarkdownImages(removeHiddenHtmlElements(text)),
@@ -161,7 +136,7 @@ function getRenderedText(text: string): string {
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
     .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
-  return decodeCharacterReferences(visibleText);
+  return normalizeKanjiMonetaryAmounts(decodeHtmlCharacterReferences(visibleText));
 }
 
 function removeCode(text: string): string {
@@ -304,7 +279,9 @@ function getMissingTextPairs(
 }
 
 function hasDirectMonetaryNegation(segment: string): boolean {
-  return /(?:円|[¥￥]\d[\d,.]*)(?:ではありません|ではない|じゃない|でない)/.test(segment);
+  return /(?:円|[¥￥]\d[\d,.]*)(?:の)?(?:黒字|赤字|プラス|マイナス)?(?:ではありません|ではない|じゃない|でない)/.test(
+    segment,
+  );
 }
 
 function normalizeYenPrefix(segment: string): string {
@@ -425,17 +402,35 @@ function parseJapaneseInteger(value: string): number {
     千: 1000,
     仟: 1000,
   };
+  const largeUnits: Record<string, number> = {
+    万: 10_000,
+    億: 100_000_000,
+    兆: 1_000_000_000_000,
+  };
   let total = 0;
+  let section = 0;
   let digit: number | undefined;
   for (const character of value) {
     if (character in digits) {
       digit = digits[character];
+    } else if (character in largeUnits) {
+      section += digit ?? 0;
+      total += (section || 1) * largeUnits[character]!;
+      section = 0;
+      digit = undefined;
     } else {
-      total += (digit ?? 1) * units[character]!;
+      section += (digit ?? 1) * units[character]!;
       digit = undefined;
     }
   }
-  return total + (digit ?? 0);
+  return total + section + (digit ?? 0);
+}
+
+function normalizeKanjiMonetaryAmounts(text: string): string {
+  return text.replace(
+    /(?<![0-9０-９])([〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]+)円/g,
+    (_, amount: string) => `${parseJapaneseInteger(amount)}円`,
+  );
 }
 
 type GroundedQuantityPairs = Record<QuantitativeClaim["unit"], Array<[string, number]>>;
@@ -719,14 +714,12 @@ function hasGroupMembershipScope(sql: string): boolean {
       normalizedSql,
     );
   const joinClause = normalizedSql.match(
-    /\bjoin\s+group_accounts\b([\s\S]*?)(?:\bwhere\b|$)/i,
+    /\bjoin\s+(group_accounts(?:\s+(?:as\s+)?(?!on\b)\w+)?\s+on\b[\s\S]*?)(?:\bwhere\b|$)/i,
   )?.[1];
   const join =
     joinClause !== undefined &&
     /\bgroup_id\b\s*=\s*:groupId/i.test(joinClause) &&
-    [...joinClause.matchAll(/\b(\w+)\.account_id\s*=\s*(\w+)\.account_id\b/gi)].some(
-      (match) => match[1]!.toLocaleLowerCase() !== match[2]!.toLocaleLowerCase(),
-    );
+    hasCorrelatedGroupAccount(`FROM ${joinClause}`);
   const exists = [...normalizedSql.matchAll(/\bexists\s*\(([\s\S]*?)\)/gi)].some((match) => {
     const clause = match[1]!;
     return (
@@ -896,7 +889,7 @@ export default function assertFinanceChatOutput(
   if (forbiddenTerms.length > 0) {
     return fail(`本文に禁止用語があります: ${forbiddenTerms.join(", ")}`);
   }
-  const policyText = normalize(renderedClaimText).replace(
+  const policyText = normalizedText.replace(
     /(?:推奨するものではありません|推奨しません|おすすめするものではありません)/g,
     "",
   );
@@ -1292,15 +1285,6 @@ export default function assertFinanceChatOutput(
         .join(", ")}`,
     );
   }
-  if (
-    validatesRenderedAmounts &&
-    /[〇零一二三四五六七八九十百壱弐参拾佰仟]+[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+円|(?<![\d〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟])[千万億兆]円/.test(
-      claimText,
-    )
-  ) {
-    return fail("本文に根拠のない漢数字金額があります。");
-  }
-
   const expectedRoutes = config.expectedToolRoutes ?? [];
   if (!sameValues(actual.toolRoutes, expectedRoutes)) {
     return fail("route tool結果が期待と異なります。");

@@ -141,6 +141,11 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収支", "93341"]] },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "収支は93,341円の黒字ではありません。" }), {
+        config: { expectedTextPairs: [["収支", "93341"]] },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("accepts a zero count as no-data evidence", () => {
@@ -312,7 +317,7 @@ describe("assertFinanceChatOutput", () => {
           },
         },
       ),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("漢数字") });
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
   test("rejects a direct negation of the expected monetary claim", () => {
@@ -1367,6 +1372,9 @@ describe("assertFinanceChatOutput", () => {
       "SELECT SUM(t.amount) AS income FROM transactions t JOIN group_accounts ga ON ga.group_id = :groupId AND ga.account_id = t.account_id WHERE t.type = 'income'";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions t JOIN accounts x ON x.account_id = t.account_id JOIN group_accounts ga ON ga.group_id = :groupId AND t.account_id = x.account_id WHERE t.type = 'income'";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
+    evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND t.account_id IN (SELECT ga.account_id FROM group_accounts AS ga WHERE ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
@@ -2290,6 +2298,18 @@ describe("assertFinanceChatOutput", () => {
         ),
       ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
     }
+    const chart = {
+      title: "2026年7月の食費：借入を推奨します",
+      chartType: "pie" as const,
+      unit: "currency" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+      data: [{ label: "食料品", values: [100] }],
+    };
+    expect(
+      assertFinanceChatOutput(output({ charts: [chart] }), {
+        config: { expectedCharts: [{ ...chart, titlePatterns: ["食費"] }] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -2434,6 +2454,11 @@ describe("assertFinanceChatOutput", () => {
   test("accepts compound Japanese monetary notation", () => {
     expect(
       assertFinanceChatOutput(output({ text: "2026年7月の収入は31万3,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の収入は三十一万三千二百三十五円です。" }), {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
     ).toMatchObject({ pass: true });

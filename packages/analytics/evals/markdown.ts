@@ -1,5 +1,31 @@
 const hiddenHtmlElementPattern =
   /<([a-z][\w-]*)\b(?=[^>]*(?:\shidden(?:\s|=|>)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*'|[^\s"'<>]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^\s"'<>]*)))[^>]*>[\s\S]*?<\/\1\s*>/gi;
+const namedCharacterReferences: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  minus: "−",
+  quot: '"',
+  yen: "¥",
+};
+
+export function decodeHtmlCharacterReferences(text: string): string {
+  return text
+    .replace(
+      /&#(?:x([0-9a-f]+)|(\d+));/gi,
+      (reference, hex: string | undefined, decimal: string | undefined) => {
+        const codePoint = Number.parseInt(hex ?? decimal!, hex ? 16 : 10);
+        return codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+          ? String.fromCodePoint(codePoint)
+          : reference;
+      },
+    )
+    .replace(
+      /&(amp|apos|gt|lt|minus|quot|yen);/gi,
+      (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
+    );
+}
 
 export function removeHiddenHtmlElements(text: string): string {
   let renderedText = text.replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
