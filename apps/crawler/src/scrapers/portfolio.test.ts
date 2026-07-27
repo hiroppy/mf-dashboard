@@ -102,6 +102,25 @@ describe("linked insurance and pension completeness", () => {
       }),
     ).toEqual([manualItem, linkedItem]);
   });
+
+  test("同一fingerprintが複数口座に属する場合は口座を推測せず未解決のままにする", () => {
+    const globalItems = [
+      { name: "Pension A", type: "年金", institution: "", balance: 1000 },
+      { name: "Pension A", type: "年金", institution: "", balance: 1000 },
+    ];
+    const detailItems = [
+      { ...globalItems[0]!, accountMfId: "linked-account-a" },
+      { ...globalItems[1]!, accountMfId: "linked-account-b" },
+    ];
+
+    expect(
+      selectLinkedPnsPortfolioItems(globalItems, ["duplicate-row", "duplicate-row"], {
+        complete: true,
+        fingerprints: ["duplicate-row", "duplicate-row"],
+        items: detailItems,
+      }),
+    ).toEqual(globalItems);
+  });
 });
 
 describe("linked insurance and pension candidates", () => {

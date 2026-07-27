@@ -339,6 +339,12 @@ export function selectLinkedPnsPortfolioItems(
     items.push(item);
     detailItemsByFingerprint.set(fingerprint, items);
   });
+  for (const [fingerprint, items] of detailItemsByFingerprint) {
+    const accountMfIds = new Set(items.map(({ accountMfId }) => accountMfId));
+    if (accountMfIds.size !== 1 || accountMfIds.has(undefined)) {
+      detailItemsByFingerprint.delete(fingerprint);
+    }
+  }
 
   return globalItems.map((item, index) => {
     if (item.accountMfId) return item;
