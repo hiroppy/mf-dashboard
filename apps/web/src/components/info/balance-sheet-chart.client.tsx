@@ -16,6 +16,36 @@ interface BalanceSheetChartProps {
   netAssets: number;
 }
 
+export function getBalanceSheetChartOrder(
+  assets: BalanceSheetChartProps["assets"],
+  totalLiabilities: number,
+  netAssets: number,
+) {
+  const orderedAssets = sortByAmountDescending(
+    assets,
+    (asset) => asset.amount,
+    (asset) => asset.category,
+  );
+  const orderedBalanceItems = sortByAmountDescending(
+    [
+      ...orderedAssets.map(({ category, amount }) => ({ key: category, amount })),
+      { key: "負債", amount: totalLiabilities },
+      { key: "純資産", amount: netAssets },
+    ],
+    (item) => item.amount,
+    (item) => item.key,
+  );
+
+  return {
+    orderedAssets,
+    stackedAssetKeys: orderedAssets.map((asset) => asset.category).reverse(),
+    legendKeys: orderedBalanceItems.map((item) => item.key),
+    stackedBalanceKeys: orderedBalanceItems
+      .filter((item) => item.key === "負債" || item.key === "純資産")
+      .reverse(),
+  };
+}
+
 export function BalanceSheetChartClient({
   assets,
   liabilities,
@@ -32,11 +62,8 @@ export function BalanceSheetChartClient({
 
   const totalAssets = assets.reduce((sum, a) => sum + a.amount, 0);
   const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
-  const orderedAssets = sortByAmountDescending(
-    assets,
-    (asset) => asset.amount,
-    (asset) => asset.category,
-  );
+  const { orderedAssets, stackedAssetKeys, legendKeys, stackedBalanceKeys } =
+    getBalanceSheetChartOrder(assets, totalLiabilities, netAssets);
 
   // チャートデータ: 左=資産、右=負債+純資産
   const assetData: Record<string, string | number> = { name: "資産" };
@@ -51,21 +78,6 @@ export function BalanceSheetChartClient({
   liabilityData["純資産"] = netAssets;
 
   const chartData = [assetData, liabilityData];
-  const assetKeys = orderedAssets.map((a) => a.category);
-  const stackedAssetKeys = [...assetKeys].reverse();
-  const orderedBalanceItems = sortByAmountDescending(
-    [
-      ...orderedAssets.map(({ category, amount }) => ({ key: category, amount })),
-      { key: "負債", amount: totalLiabilities },
-      { key: "純資産", amount: netAssets },
-    ],
-    (item) => item.amount,
-    (item) => item.key,
-  );
-  const legendKeys = orderedBalanceItems.map((item) => item.key);
-  const stackedBalanceKeys = [...orderedBalanceItems]
-    .filter((item) => item.key === "負債" || item.key === "純資産")
-    .reverse();
   const getLegendOrder = (name: string) => {
     const index = legendKeys.indexOf(name);
     return index === -1 ? Number.MAX_SAFE_INTEGER : index;

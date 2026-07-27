@@ -37,6 +37,30 @@ interface AssetHistoryChartProps {
   height?: number;
 }
 
+export function getAssetHistoryCategoryLines(data: AssetHistoryPoint[]) {
+  const categoryLines = [
+    {
+      dataKey: "totalAssets",
+      name: "総資産",
+      color: semanticColors.totalAssets,
+    },
+  ];
+  if (data.length === 0) return categoryLines;
+
+  return [
+    ...categoryLines,
+    ...sortByAmountDescending(
+      Object.entries(data[data.length - 1]!.categories),
+      ([, amount]) => amount,
+      ([name]) => name,
+    ).map(([name]) => ({
+      dataKey: name,
+      name,
+      color: getAssetCategoryColor(name),
+    })),
+  ];
+}
+
 interface AssetHistoryTooltipProps {
   active?: boolean;
   label?: string;
@@ -96,31 +120,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
   const [period, setPeriod] = useState<Period>("6m");
   const [visibleLines, setVisibleLines] = useState<Set<string>>(() => new Set(["totalAssets"]));
 
-  const categoryLines =
-    data.length === 0
-      ? [
-          {
-            dataKey: "totalAssets",
-            name: "総資産",
-            color: semanticColors.totalAssets,
-          },
-        ]
-      : [
-          {
-            dataKey: "totalAssets",
-            name: "総資産",
-            color: semanticColors.totalAssets,
-          },
-          ...sortByAmountDescending(
-            Object.entries(data[data.length - 1].categories),
-            ([, amount]) => amount,
-            ([name]) => name,
-          ).map(([name]) => ({
-            dataKey: name,
-            name,
-            color: getAssetCategoryColor(name),
-          })),
-        ];
+  const categoryLines = getAssetHistoryCategoryLines(data);
 
   // When data changes, update visible lines to show all categories
   useEffect(() => {
