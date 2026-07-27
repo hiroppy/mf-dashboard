@@ -283,10 +283,13 @@ function getMissingTextPairs(
         : segment.slice(Math.max(0, expectedClaim.index - 12), expectedClaim.index);
     const hasInvalidQualifier =
       expectedClaim !== undefined &&
-      (/(?:約|およそ|概ね|だいたい)$/.test(expectedClaimPrefix) ||
+      (/(?:約|およそ|概ね|だいたい|少なくとも|最低でも|最大でも|多くとも|高くても|低くても)$/.test(
+        expectedClaimPrefix,
+      ) ||
         /^(?:未満|以下|超|以上|程度|前後|約|およそ|くらい|とは限りません|かもしれません|可能性があります|(?:とは?)?断定できません)/.test(
           expectedClaim.suffix.replace(/^[\s、,]*/, ""),
         ));
+    const hasExcludedLabel = /^(?:以外|を除(?:く|いて)|除外)/.test(segment);
     const hasUngroundedAdditionalClaim = monetaryClaims.some((claim) => {
       if (claim.amount === expectedAmount) return false;
       const prefix = segment.slice(0, claim.index);
@@ -297,6 +300,7 @@ function getMissingTextPairs(
     const hasExpectedValue = /^\d+$/.test(normalizedValue)
       ? expectedClaim !== undefined &&
         !hasInvalidQualifier &&
+        !hasExcludedLabel &&
         !hasUngroundedAdditionalClaim &&
         !hasDirectMonetaryNegation(segment)
       : segment.includes(normalizedValue);
@@ -335,7 +339,7 @@ function getAssertedMonetaryClaims(text: string): MonetaryClaim[] {
     if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
       return [];
     }
-    const sign = match[1] ? -1 : 1;
+    const sign = match[1] ? -1 : /^\s*(?:の)?(?:赤字|マイナス)/.test(suffix) ? -1 : 1;
     return [
       {
         amount: sign * parseMonetaryNumber(match[2]!),
@@ -378,13 +382,29 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
       value: Number(match[1]) * 10 + Number(match[2] ?? 0) + Number(match[3] ?? 0) / 10,
     })),
   ];
-  const japaneseClaims = [
-    ...normalizedText.matchAll(/([〇零一二三四五六七八九十百千壱弐参拾佰仟]+)(件|割)/g),
-  ].map((match) => ({
-    index: match.index!,
-    unit: match[2] === "件" ? ("count" as const) : ("percent" as const),
-    value: parseJapaneseInteger(match[1]!) * (match[2] === "割" ? 10 : 1),
-  }));
+  const japaneseNumber = "[〇零一二三四五六七八九十百千壱弐参拾佰仟]+";
+  const japaneseClaims: QuantitativeClaim[] = [
+    ...[...normalizedText.matchAll(new RegExp(`(${japaneseNumber})件`, "g"))].map((match) => ({
+      index: match.index!,
+      unit: "count" as const,
+      value: parseJapaneseInteger(match[1]!),
+    })),
+    ...[
+      ...normalizedText.matchAll(
+        new RegExp(
+          `(${japaneseNumber})割(?:(${japaneseNumber})分)?(?:(${japaneseNumber})厘)?`,
+          "g",
+        ),
+      ),
+    ].map((match) => ({
+      index: match.index!,
+      unit: "percent" as const,
+      value:
+        parseJapaneseInteger(match[1]!) * 10 +
+        (match[2] ? parseJapaneseInteger(match[2]) : 0) +
+        (match[3] ? parseJapaneseInteger(match[3]) / 10 : 0),
+    })),
+  ];
   return [...arabicClaims, ...japaneseClaims];
 }
 
@@ -1220,35 +1240,41 @@ export default function assertFinanceChatOutput(
   if (validatesRenderedAmounts && unitlessMonetaryClaims.length > 0) {
     return fail("本文に根拠のない単位なし金額があります。");
   }
-  const normalizedQuantitativeText = claimText.normalize("NFKC").replace(/,/g, "");
-  const ungroundedQuantities = getAssertedQuantitativeClaims(claimText).filter((claim) => {
-    const clauseStart =
-      Math.max(
-        normalizedQuantitativeText.lastIndexOf("。", claim.index),
-        normalizedQuantitativeText.lastIndexOf("！", claim.index),
-        normalizedQuantitativeText.lastIndexOf("？", claim.index),
-        normalizedQuantitativeText.lastIndexOf("\n", claim.index),
-      ) + 1;
-    const prefix = normalize(normalizedQuantitativeText.slice(clauseStart, claim.index));
-    if (
-      groundedQuantityPairs[claim.unit].some(
+  const quantitativeClaimText = [
+    renderedClaimText,
+    ...actual.charts.map((chart) => chart.title),
+  ].join("\n");
+  const normalizedQuantitativeText = quantitativeClaimText.normalize("NFKC").replace(/,/g, "");
+  const ungroundedQuantities = getAssertedQuantitativeClaims(quantitativeClaimText).filter(
+    (claim) => {
+      const clauseStart =
+        Math.max(
+          normalizedQuantitativeText.lastIndexOf("。", claim.index),
+          normalizedQuantitativeText.lastIndexOf("！", claim.index),
+          normalizedQuantitativeText.lastIndexOf("？", claim.index),
+          normalizedQuantitativeText.lastIndexOf("\n", claim.index),
+        ) + 1;
+      const prefix = normalize(normalizedQuantitativeText.slice(clauseStart, claim.index));
+      if (
+        groundedQuantityPairs[claim.unit].some(
+          ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
+        )
+      ) {
+        return false;
+      }
+      if (
+        claim.unit === "percent" &&
+        groundedChartPercentPairs.some(
+          ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
+        )
+      ) {
+        return false;
+      }
+      return !allowedTextPairs.some(
         ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
-      )
-    ) {
-      return false;
-    }
-    if (
-      claim.unit === "percent" &&
-      groundedChartPercentPairs.some(
-        ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
-      )
-    ) {
-      return false;
-    }
-    return !allowedTextPairs.some(
-      ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
-    );
-  });
+      );
+    },
+  );
   if (ungroundedQuantities.length > 0) {
     return fail(
       `本文またはchart titleに根拠のない件数・割合があります: ${ungroundedQuantities

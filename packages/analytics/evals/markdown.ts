@@ -57,6 +57,8 @@ export function removeInlineCodeSpans(text: string): string {
 
 export function getRenderableMarkdownLines(text: string): string[] {
   let fence: { marker: "`" | "~"; length: number } | undefined;
+  let inIndentedCode = false;
+  let previousLineWasBlank = true;
   return text.split("\n").map((line) => {
     const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
     if (fence) {
@@ -74,7 +76,21 @@ export function getRenderableMarkdownLines(text: string): string[] {
       fence = { marker: fenceMatch[1]![0] as "`" | "~", length: fenceMatch[1]!.length };
       return "";
     }
-    return /^(?: {4}|\t)/.test(line) ? "" : line;
+    if (/^(?: {4}|\t)/.test(line)) {
+      if (inIndentedCode || previousLineWasBlank) {
+        inIndentedCode = true;
+        return "";
+      }
+      previousLineWasBlank = false;
+      return line;
+    }
+    if (line.trim() === "") {
+      previousLineWasBlank = true;
+      return line;
+    }
+    inIndentedCode = false;
+    previousLineWasBlank = false;
+    return line;
   });
 }
 

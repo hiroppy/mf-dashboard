@@ -103,6 +103,8 @@ describe("assertFinanceChatOutput", () => {
     "収入は313,235円とは限りません。",
     "収入は313,235円かもしれません。",
     "収入は313,235円とは断定できません。",
+    "収入は少なくとも313,235円です。",
+    "収入は最大でも313,235円です。",
   ])("rejects a materially different monetary claim: %s", (text) => {
     expect(
       assertFinanceChatOutput(output({ text }), {
@@ -131,6 +133,11 @@ describe("assertFinanceChatOutput", () => {
   test("treats financial triangle markers as negative signs", () => {
     expect(
       assertFinanceChatOutput(output({ text: "収支は▲93,341円です。" }), {
+        config: { expectedTextPairs: [["収支", "93341"]] },
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "収支は93,341円の赤字です。" }), {
         config: { expectedTextPairs: [["収支", "93341"]] },
       }),
     ).toMatchObject({ pass: false });
@@ -1037,6 +1044,15 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "収入は313,235円です。`借入残高は999,999円``" }), {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("keeps an indented paragraph continuation visible", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は313,235円です。\n    借入残高は999,999円です。" }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
     ).toMatchObject({ pass: false });
   });
 
@@ -2362,6 +2378,14 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の食費以外は41,837円です。" }), {
+        config: {
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["食費", "41837"]],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects unqueried account claims around exact detail tables", () => {
@@ -2499,6 +2523,17 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "カフェは5割2分3厘です。", charts: [chart] }), {
         config: { expectedCharts: [chart] },
       }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    expect(
+      assertFinanceChatOutput(output({ text: "食料品は五割九分四厘です。", charts: [chart] }), {
+        config: { expectedCharts: [chart] },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "| 区分 | 割合 |\n| --- | ---: |\n| カフェ | 59.4% |", charts: [chart] }),
+        { config: { expectedCharts: [chart] } },
+      ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
