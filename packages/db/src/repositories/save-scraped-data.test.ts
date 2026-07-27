@@ -167,7 +167,7 @@ describe("normalizePortfolioCategories", () => {
     {
       name: "口座が取得対象外",
       portfolioAccountMfId: "stale-account",
-      institution: "",
+      institution: "Bank A",
       institutionCategories: new Map([["stale-account", "暗号資産・FX・貴金属"]]),
     },
     {
@@ -259,6 +259,35 @@ describe("saveScrapedData", () => {
 
     await expect(saveScrapedData(db, data)).rejects.toThrow("Cannot classify a deposit");
     await expect(db.select().from(schema.holdings).all()).resolves.toEqual([]);
+  });
+
+  test("公式口座カテゴリで正規化した暗号資産カテゴリを保存する", async () => {
+    const data = createScrapedData();
+    data.portfolio.items[0] = {
+      ...data.portfolio.items[0]!,
+      accountMfId: "account-a",
+      type: "預金・現金",
+    };
+
+    await saveScrapedDataBatch(db, {
+      fullData: data,
+      groupOnlyData: [],
+      institutionCategories: new Map([["account-a", "暗号資産・FX・貴金属"]]),
+    });
+
+    const savedHolding = await db
+      .select({
+        holdingName: schema.holdings.name,
+        categoryName: schema.assetCategories.name,
+      })
+      .from(schema.holdings)
+      .innerJoin(schema.assetCategories, eq(schema.assetCategories.id, schema.holdings.categoryId))
+      .get();
+
+    expect(savedHolding).toEqual({
+      holdingName: "Fund A",
+      categoryName: "暗号資産",
+    });
   });
 
   test("accountMfIdが今回取得した口座と一致する手入力資産を紐づける", async () => {

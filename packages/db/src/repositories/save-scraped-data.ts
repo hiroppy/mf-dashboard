@@ -61,8 +61,8 @@ function resolvePortfolioAccountMfId(
   currentAccountMfIds: ReadonlySet<string>,
   accountMfIdByName: ReadonlyMap<string, string | null>,
 ): string | null {
-  if (item.accountMfId && currentAccountMfIds.has(item.accountMfId)) {
-    return item.accountMfId;
+  if (item.accountMfId) {
+    return currentAccountMfIds.has(item.accountMfId) ? item.accountMfId : null;
   }
 
   return accountMfIdByName.get(item.institution) ?? null;
