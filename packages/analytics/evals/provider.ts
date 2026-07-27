@@ -24,6 +24,7 @@ import {
   getRenderableMarkdownLines,
   isEscapedMarkdownMarker,
   normalizeReferenceLabel,
+  removeHiddenHtmlElements,
   removeInlineCodeSpans,
   removeMarkdownImages,
 } from "./markdown";
@@ -100,7 +101,7 @@ function unique(values: string[]): string[] {
 }
 
 function removeNonRenderedText(text: string): string {
-  return removeMarkdownImages(text)
+  return removeMarkdownImages(removeHiddenHtmlElements(text))
     .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
     .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
 }

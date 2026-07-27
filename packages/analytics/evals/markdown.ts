@@ -1,3 +1,16 @@
+const hiddenHtmlElementPattern =
+  /<([a-z][\w-]*)\b(?=[^>]*(?:\shidden(?:\s|=|>)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*'|[^\s"'<>]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^\s"'<>]*)))[^>]*>[\s\S]*?<\/\1\s*>/gi;
+
+export function removeHiddenHtmlElements(text: string): string {
+  let renderedText = text.replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+  let previousText: string;
+  do {
+    previousText = renderedText;
+    renderedText = renderedText.replace(hiddenHtmlElementPattern, "");
+  } while (renderedText !== previousText);
+  return renderedText;
+}
+
 function findBalancedEnd(text: string, start: number, open: "[" | "(", close: "]" | ")"): number {
   let depth = 0;
   for (let index = start; index < text.length; index += 1) {
@@ -72,7 +85,7 @@ export function getRenderableMarkdownLines(text: string): string[] {
       }
       return "";
     }
-    if (fenceMatch) {
+    if (fenceMatch && (fenceMatch[1]![0] === "~" || !fenceMatch[2]!.includes("`"))) {
       fence = { marker: fenceMatch[1]![0] as "`" | "~", length: fenceMatch[1]!.length };
       return "";
     }

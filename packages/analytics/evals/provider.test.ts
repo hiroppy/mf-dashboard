@@ -245,6 +245,16 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("excludes links inside hidden HTML elements", () => {
+    const output = toEvaluationOutput({
+      text: "<span hidden>[収支](/0/cf/2026-07)</span>",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual([]);
+  });
+
   test("excludes links inside matching multi-backtick code spans", () => {
     const output = toEvaluationOutput({
       text: "``[収支](/0/cf/2026-07)``",

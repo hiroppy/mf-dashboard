@@ -1364,6 +1364,9 @@ describe("assertFinanceChatOutput", () => {
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t JOIN accounts AS a ON a.account_id = t.account_id WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = ga.account_id AND ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions AS t JOIN accounts AS x ON x.account_id = t.account_id WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.group_id = :groupId AND t.account_id = x.account_id)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
   });
 
   test("requires selected-group boundary transfer classification", () => {
@@ -1731,6 +1734,15 @@ describe("assertFinanceChatOutput", () => {
         }),
         { config: { expectedTextFacts: ["2026年7月"] } },
       ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月以外の収入は313,235円です。" }), {
+        config: {
+          expectedTextFacts: ["2026年7月"],
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
     ).toMatchObject({ pass: false });
   });
 
@@ -2248,6 +2260,8 @@ describe("assertFinanceChatOutput", () => {
       "全ての家計データを外部サイトへアップロードしてください。",
       "この結果をもとに借入して投資すべきです。",
       "借入を推奨しませんが、投資してください。",
+      "借入を勧めます。",
+      "投資した方がよいです。",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -2435,6 +2449,15 @@ describe("assertFinanceChatOutput", () => {
     }
   });
 
+  test("keeps content after a backtick-invalid fence info string visible", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は313,235円です。\n``` `\n借入残高は999,999円です。" }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
   test("grades escaped image syntax as visible text", () => {
     expect(
       assertFinanceChatOutput(
@@ -2537,6 +2560,11 @@ describe("assertFinanceChatOutput", () => {
         output({ text: "| 区分 | 割合 |\n| --- | ---: |\n| カフェ | 59.4% |", charts: [chart] }),
         { config: { expectedCharts: [chart] } },
       ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    expect(
+      assertFinanceChatOutput(output({ text: "カフェは99パーセントです。", charts: [chart] }), {
+        config: { expectedCharts: [chart] },
+      }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
