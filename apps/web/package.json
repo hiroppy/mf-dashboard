@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
-    "@playwright/test": "1.61.1",
+    "@playwright/test": "1.62.0",
     "@storybook/addon-a11y": "10.5.5",
     "@storybook/addon-vitest": "10.5.5",
     "@storybook/nextjs-vite": "10.5.5",
