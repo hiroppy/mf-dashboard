@@ -7,6 +7,7 @@ import {
   isEscapedMarkdownMarker,
   normalizeReferenceLabel,
   removeHiddenHtmlElements,
+  removeHtmlStrikethrough,
   removeInlineCodeSpans,
   removeMarkdownImages,
   removeMarkdownReferenceDefinitions,
@@ -168,7 +169,7 @@ function getPolicyRenderedText(text: string): string {
 }
 
 function getGroundedText(text: string): string {
-  return getRenderedText(text.replace(/~~(?=\S)[\s\S]*?\S~~/g, ""));
+  return getRenderedText(removeHtmlStrikethrough(text).replace(/~~(?=\S)[\s\S]*?\S~~/g, ""));
 }
 
 function removeCode(text: string): string {
@@ -450,7 +451,9 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
   ];
   return [...arabicClaims, ...japaneseClaims].map((claim) => {
     const suffix = normalizedText.slice(claim.index, claim.index + 40);
-    return /(?:件|%|パーセント|割(?:\d+分)?(?:\d+厘)?)\s*(?:未満|以下|以上|超)/.test(suffix)
+    return /(?:件|%|パーセント|割(?:\d+分)?(?:\d+厘)?)\s*(?:未満|以下|以上|超|弱|強|より(?:少な|多|小さ|大き)|を(?:下回|上回))/.test(
+      suffix,
+    )
       ? { ...claim, value: Number.NaN }
       : claim;
   });

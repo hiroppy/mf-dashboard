@@ -2539,6 +2539,7 @@ describe("assertFinanceChatOutput", () => {
     for (const text of [
       `<span hidden>${hiddenEvidence}</span>`,
       `<div aria-hidden="true">${hiddenEvidence}</div>`,
+      `<div hidden><div>ignored</div>${hiddenEvidence}</div>`,
       `<p style="display: none">${hiddenEvidence}</p>`,
       `<span style=display:none>${hiddenEvidence}</span>`,
       `<span STYLE=VISIBILITY:HIDDEN>${hiddenEvidence}</span>`,
@@ -2893,6 +2894,19 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextPairs: [["収入", "313235"]] } },
       ),
     ).toMatchObject({ pass: false });
+    for (const text of [
+      "> ```\n> 2026年7月の収入は313,235円です。\n> ```",
+      "- ```\n  2026年7月の収入は313,235円です。\n  ```",
+    ]) {
+      expect(
+        assertFinanceChatOutput(output({ text }), {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [["収入", "313235"]],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    }
   });
 
   test("grades escaped image syntax as visible text", () => {
@@ -2939,6 +2953,24 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("期待する事実") });
     expect(
       assertFinanceChatOutput(output({ text: "~~借入してください。~~" }), {
+        config: {},
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
+    for (const tag of ["del", "s", "strike"]) {
+      expect(
+        assertFinanceChatOutput(
+          output({ text: `<${tag}>2026年7月の収入は313,235円です。</${tag}>` }),
+          {
+            config: {
+              expectedTextFacts: ["2026年7月"],
+              expectedTextPairs: [["収入", "313235"]],
+            },
+          },
+        ),
+      ).toMatchObject({ pass: false });
+    }
+    expect(
+      assertFinanceChatOutput(output({ text: "<del>借入してください。</del>" }), {
         config: {},
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
@@ -3024,6 +3056,13 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedCharts: [chart] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    for (const text of ["カフェは11%弱です。", "カフェは11%より少ないです。"]) {
+      expect(
+        assertFinanceChatOutput(output({ text, charts: [chart] }), {
+          config: { expectedCharts: [chart] },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    }
     expect(
       assertFinanceChatOutput(output({ text: "カフェは11%ではありません。", charts: [chart] }), {
         config: { expectedCharts: [chart] },

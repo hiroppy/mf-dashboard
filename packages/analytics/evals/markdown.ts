@@ -1,5 +1,5 @@
 const hiddenHtmlElementPattern =
-  /<([a-z][\w-]*)\b(?=[^>]*(?:\shidden(?:\s|=|>)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*'|[^\s"'<>]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^\s"'<>]*)))[^>]*>[\s\S]*?<\/\1\s*>/gi;
+  /<([a-z][\w-]*)\b(?=[^>]*(?:\shidden(?:\s|=|>)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*'|[^\s"'<>]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^\s"'<>]*)))[^>]*>/gi;
 const namedCharacterReferences: Record<string, string> = {
   amp: "&",
   apos: "'",
@@ -30,14 +30,42 @@ export function decodeHtmlCharacterReferences(text: string): string {
     );
 }
 
+function removeBalancedHtmlElements(text: string, openingPattern: RegExp): string {
+  let renderedText = text;
+  while (true) {
+    openingPattern.lastIndex = 0;
+    const opening = openingPattern.exec(renderedText);
+    if (!opening) return renderedText;
+
+    const tagName = opening[1]!;
+    const tagPattern = new RegExp(`<(/?)${tagName}\\b[^>]*>`, "gi");
+    tagPattern.lastIndex = opening.index + opening[0].length;
+    let depth = 1;
+    let closingEnd = renderedText.length;
+    for (const tag of renderedText.matchAll(tagPattern)) {
+      if (tag[1]) {
+        depth -= 1;
+      } else if (!/\/\s*>$/.test(tag[0])) {
+        depth += 1;
+      }
+      if (depth === 0) {
+        closingEnd = tag.index! + tag[0].length;
+        break;
+      }
+    }
+    renderedText = renderedText.slice(0, opening.index) + renderedText.slice(closingEnd);
+  }
+}
+
 export function removeHiddenHtmlElements(text: string): string {
-  let renderedText = text.replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
-  let previousText: string;
-  do {
-    previousText = renderedText;
-    renderedText = renderedText.replace(hiddenHtmlElementPattern, "");
-  } while (renderedText !== previousText);
-  return renderedText;
+  return removeBalancedHtmlElements(
+    removeBalancedHtmlElements(text, /<(script|style|template)\b[^>]*>/gi),
+    hiddenHtmlElementPattern,
+  );
+}
+
+export function removeHtmlStrikethrough(text: string): string {
+  return removeBalancedHtmlElements(text, /<(del|s|strike)\b[^>]*>/gi);
 }
 
 function findBalancedEnd(text: string, start: number, open: "[" | "(", close: "]" | ")"): number {
@@ -103,7 +131,10 @@ export function getRenderableMarkdownLines(text: string): string[] {
   let listContentIndent: number | undefined;
   let previousLineWasBlank = true;
   return text.split("\n").map((line) => {
-    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
+    const containerContent = line
+      .replace(/^(?: {0,3}>[ \t]?)+/, "")
+      .replace(/^\s{0,3}(?:[-+*]|\d+[.)])[ \t]+/, "");
+    const fenceMatch = containerContent.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
     if (fence) {
       if (
         fenceMatch &&
