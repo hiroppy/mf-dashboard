@@ -65,6 +65,12 @@ const monetaryScales: Record<string, number> = {
 };
 const hiddenHtmlElementPattern =
   /<([a-z][\w-]*)\b(?=[^>]*(?:\shidden(?:\s|=|>)|\saria-hidden\s*=\s*(?:"true"|'true'|true)|\sstyle\s*=\s*(?:"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"|'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*')))[^>]*>[\s\S]*?<\/\1\s*>/gi;
+const associationLabelAliases: Record<string, string[]> = {
+  balance: ["balance", "収支"],
+  expense: ["expense", "支出"],
+  income: ["income", "収入"],
+  total: ["total", "合計"],
+};
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
@@ -474,13 +480,17 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
 }
 
 function hasSuspiciousProjectionLiteral(sql: string): boolean {
-  return [...sql.matchAll(/\bselect\b([\s\S]*?)\bfrom\b/gi)].some(
-    (select) =>
-      /0x[0-9a-f]+/i.test(select[1]!) ||
-      [...select[1]!.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi)].some(
+  return [...sql.matchAll(/\bselect\b([\s\S]*?)\bfrom\b/gi)].some((select) => {
+    const projection = select[1]!;
+    return (
+      /0x[0-9a-f]+/i.test(projection) ||
+      /'\d+(?:\.\d+)?'\s*(?:\|\||[+*/-])/.test(projection) ||
+      /\d+(?:\.\d+)?\s*(?:\|\||[+*/-])\s*\d+(?:\.\d+)?/.test(projection) ||
+      [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/gi)].some(
         (literal) => Number(literal[1]) > 100,
-      ),
-  );
+      )
+    );
+  });
 }
 
 function removeSqlComments(sql: string): string {
@@ -571,9 +581,11 @@ function rowContainsAssociation(
   const rowValues = Object.values(row).map((value) => normalize(String(value)));
   if (expectedTerms.length === 2) {
     const [expectedLabel, expectedValue] = expectedTerms;
+    const labelAliases = associationLabelAliases[expectedLabel!] ?? [expectedLabel!];
     const hasPivotedBinding = Object.entries(row).some(
       ([key, value]) =>
-        normalize(key) === expectedLabel && normalize(String(value)) === expectedValue,
+        labelAliases.some((alias) => normalize(key).includes(normalize(alias))) &&
+        normalize(String(value)) === expectedValue,
     );
     return hasPivotedBinding || expectedTerms.every((term) => rowValues.includes(term));
   }

@@ -724,7 +724,7 @@ describe("assertFinanceChatOutput", () => {
 
   test("requires concrete link text for the dashboard route", () => {
     const pattern =
-      "\\[[^\\]]*(?:2026年7月[^\\]]*収支|収支[^\\]]*2026年7月)[^\\]]*\\](?:\\(/0/cf/2026-07(?:\\s+[^)]*)?\\)|\\[[^\\]]+\\])";
+      "\\[[^\\]]*(?:2026年7月[^\\]]*収支|収支[^\\]]*2026年7月)[^\\]]*\\](?:\\(/0/cf/2026-07(?:\\s+[^)]*)?\\)|\\[[^\\]]*\\]|(?=\\s*(?:\\n|$)))";
     const routeOutput = {
       textLinks: ["/0/cf/2026-07"],
       textRoutes: ["/0/cf/2026-07"],
@@ -745,6 +745,16 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] } },
       ),
     ).toMatchObject({ pass: true });
+    for (const text of [
+      "[2026年7月の収支を確認][]",
+      "[2026年7月の収支を確認]\n\n[2026年7月の収支を確認]: /0/cf/2026-07",
+    ]) {
+      expect(
+        assertFinanceChatOutput(output({ ...routeOutput, text }), {
+          config: { expectedTextLinks: ["/0/cf/2026-07"], expectedTextPatterns: [pattern] },
+        }),
+      ).toMatchObject({ pass: true });
+    }
   });
 
   test("rejects an ungrounded amount in a link-only answer", () => {
@@ -840,11 +850,16 @@ describe("assertFinanceChatOutput", () => {
   test("rejects qualified no-data wording", () => {
     const config = {
       expectedTextPatterns: [
-        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性|かもしれ))",
+        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性|かもしれ|でしょう|ようです|と思|[？?]))",
       ],
     };
     expect(
       assertFinanceChatOutput(output({ text: "2030年1月の食費データがないとは限りません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "2030年1月の食費データはありませんか？" }), {
         config,
       }),
     ).toMatchObject({ pass: false });
@@ -1242,6 +1257,47 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+  });
+
+  test("accepts equivalent and expression aggregate aliases", () => {
+    const context = {
+      config: {
+        databaseEvidence: {
+          expectedRows: [["313235", "219894"]],
+          expectedRowAssociations: [
+            ["income", "313235"],
+            ["expense", "219894"],
+          ],
+          requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+        },
+      },
+    };
+    for (const rows of [
+      [{ 収入: 313_235, 支出: 219_894 }],
+      [
+        {
+          "SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END)": 313_235,
+          "SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END)": 219_894,
+        },
+      ],
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            databaseQueries: [
+              {
+                input: {
+                  sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) FROM transactions",
+                },
+                output: { rows, truncated: false },
+              },
+            ],
+          }),
+          context,
+        ),
+      ).toMatchObject({ pass: true });
+    }
   });
 
   test("validates model evidence when only row associations are configured", () => {
@@ -1751,6 +1807,36 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT SUM(amount) * 0 + 3.13235e5 AS income, 2.19894e5 AS expense FROM transactions",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
+  test("rejects constants composed in SQL projections", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "WITH base AS (SELECT amount FROM transactions) SELECT CAST('31'||'32'||'35' AS INTEGER) AS income, CAST('21'||'98'||'94' AS INTEGER) AS expense FROM base",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
             },
