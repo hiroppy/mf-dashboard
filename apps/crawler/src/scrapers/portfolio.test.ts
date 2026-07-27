@@ -103,6 +103,36 @@ describe("linked insurance and pension completeness", () => {
     ).toEqual([manualItem, linkedItem]);
   });
 
+  test("明示キーを持つ未解決の手動行を比較対象から除外する", () => {
+    const unresolvedManualItem = {
+      mfId: "manual-holding-a",
+      subAccountMfId: "manual-sub-account-a",
+      name: "Manual Pension",
+      type: "年金",
+      institution: "",
+      balance: 1000,
+    };
+    const unresolvedLinkedItem = {
+      name: "Linked Pension",
+      type: "年金",
+      institution: "",
+      balance: 2000,
+    };
+    const linkedItem = { ...unresolvedLinkedItem, accountMfId: "linked-account-a" };
+
+    expect(
+      selectLinkedPnsPortfolioItems(
+        [unresolvedManualItem, unresolvedLinkedItem],
+        ["manual-row", "linked-row"],
+        {
+          complete: true,
+          fingerprints: ["linked-row"],
+          items: [linkedItem],
+        },
+      ),
+    ).toEqual([unresolvedManualItem, linkedItem]);
+  });
+
   test("同一fingerprintが複数口座に属する場合は口座を推測せず未解決のままにする", () => {
     const globalItems = [
       { name: "Pension A", type: "年金", institution: "", balance: 1000 },
@@ -298,10 +328,17 @@ describe("resolveDepositTableCategory", () => {
 });
 
 describe("parseDepositPortfolioItem", () => {
-  test("section title由来のsplitカテゴリを保持する", () => {
-    const item = parseDepositPortfolioItem("暗号資産", "Crypto Asset A", "Institution A", "1,234");
+  test("section title由来のsplitカテゴリと明示口座IDを保持する", () => {
+    const item = parseDepositPortfolioItem(
+      "暗号資産",
+      "Crypto Asset A",
+      "Institution A",
+      "1,234",
+      "account-a",
+    );
 
     expect(item).toEqual({
+      accountMfId: "account-a",
       name: "Crypto Asset A",
       type: "暗号資産",
       institution: "Institution A",

@@ -1,6 +1,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { extractAccountMfIdFromDetailUrl } from "../../src/scrapers/account-detail.js";
 import { scrapeInstitutionCategories } from "../../src/scrapers/institution-categories.js";
 import { selectManualHoldingAccounts } from "../../src/scrapers/manual-holding-accounts.js";
 import { PNS_CORE_COLUMN_COUNT, selectLinkedPnsAccounts } from "../../src/scrapers/portfolio.js";
@@ -53,8 +54,18 @@ describe("portfolio page structure", () => {
 
   test("手動口座詳細とportfolio行に同じ明示キー構造が存在する", async ({ skip }) => {
     await withNewPage(context, async (page) => {
-      const candidate = selectManualHoldingAccounts(await getRegisteredAccounts(page))[0];
-      if (!candidate) skip("The authenticated account has no manual holding candidate");
+      // Production scans every manual account for correctness. This structure-only E2E caps
+      // navigation at one detail page selected by sidebar category, without narrowing production.
+      const institutionCategories = await scrapeInstitutionCategories(page);
+      const candidate = selectManualHoldingAccounts(await getRegisteredAccounts(page)).find(
+        ({ mfId }) => {
+          const category = institutionCategories.get(mfId);
+          return category === "保険" || category === "年金";
+        },
+      );
+      if (!candidate) {
+        skip("The authenticated account has no manual insurance/pension account candidate");
+      }
 
       const response = await page.goto(new URL(candidate.url, mfUrls.home).toString(), {
         waitUntil: "domcontentloaded",
@@ -65,7 +76,7 @@ describe("portfolio page structure", () => {
         'table.table-pns tbody tr:has(input[name="user_asset_det[id]"]):has(input[name="user_asset_det[sub_account_id_hash]"])',
       );
       if ((await rowsWithKeys.count()) === 0) {
-        skip("The single manual-account candidate has no keyed holding row");
+        skip("The single manual insurance/pension candidate has no keyed holding row");
       }
       const detailRow = rowsWithKeys.first();
       const [holdingMfId, subAccountMfId] = await Promise.all([
@@ -95,6 +106,23 @@ describe("portfolio page structure", () => {
         }
       }
       expect(foundMatchingPortfolioKey).toBe(true);
+    });
+  });
+
+  test("預金行の金融機関リンクから明示口座IDを取得できる", async ({ skip }) => {
+    await withNewPage(context, async (page) => {
+      await gotoPortfolio(page);
+
+      const links = page.locator("table.table-depo tbody tr td:nth-child(3) a");
+      if ((await links.count()) === 0) {
+        skip("The authenticated account has no linked deposit row");
+      }
+
+      for (let index = 0; index < (await links.count()); index++) {
+        const href = await links.nth(index).getAttribute("href");
+        expect(href).not.toBeNull();
+        expect(extractAccountMfIdFromDetailUrl(href!, "show")).not.toBeNull();
+      }
     });
   });
 

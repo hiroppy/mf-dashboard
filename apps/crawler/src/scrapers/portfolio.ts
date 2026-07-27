@@ -78,6 +78,16 @@ async function getInstitutionFromCell(cells: Locator, index: number): Promise<st
   }
 }
 
+async function getAccountMfIdFromCell(cells: Locator, index: number): Promise<string | null> {
+  const href = await cells
+    .nth(index)
+    .locator("a")
+    .first()
+    .getAttribute("href", { timeout: CELL_TIMEOUT })
+    .catch(() => null);
+  return href ? extractAccountMfIdFromDetailUrl(href, "show") : null;
+}
+
 async function getPrecedingSectionTitle(table: Locator): Promise<string> {
   return table.evaluate((el) => {
     let prev = el.previousElementSibling;
@@ -102,6 +112,7 @@ export function parseDepositPortfolioItem(
   nameText: string,
   institution: string,
   balanceText: string,
+  accountMfId?: string | null,
 ): PortfolioItem | null {
   const name = nameText.trim();
   if (!name) return null;
@@ -111,6 +122,7 @@ export function parseDepositPortfolioItem(
     type: category,
     institution,
     balance: parseJapaneseNumber(balanceText),
+    ...(accountMfId ? { accountMfId } : {}),
   };
 }
 
@@ -132,12 +144,13 @@ async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
     for (let i = 0; i < count; i++) {
       const cells = rows.nth(i).locator("td");
       // 並列取得
-      const [name, institution, balanceText] = await Promise.all([
+      const [name, institution, balanceText, accountMfId] = await Promise.all([
         getCellText(cells, DEPOSIT_COLUMNS.NAME),
         getInstitutionFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
         getCellText(cells, DEPOSIT_COLUMNS.BALANCE, "0"),
+        getAccountMfIdFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
       ]);
-      const item = parseDepositPortfolioItem(category, name, institution, balanceText);
+      const item = parseDepositPortfolioItem(category, name, institution, balanceText, accountMfId);
       if (item) items.push(item);
     }
   }
@@ -323,8 +336,10 @@ export function selectLinkedPnsPortfolioItems(
     return globalItems;
   }
 
-  const unresolvedFingerprints = globalFingerprints.filter(
-    (_, index) => !globalItems[index]?.accountMfId,
+  const isUnresolvedLinkedItem = (item: PortfolioItem | undefined): boolean =>
+    Boolean(item && !item.accountMfId && !(item.mfId && item.subAccountMfId));
+  const unresolvedFingerprints = globalFingerprints.filter((_, index) =>
+    isUnresolvedLinkedItem(globalItems[index]),
   );
   if (unresolvedFingerprints.length === 0) return globalItems;
   if (!haveSamePnsRowMultiset(unresolvedFingerprints, linkedAccountPnsSource.fingerprints)) {
@@ -347,7 +362,7 @@ export function selectLinkedPnsPortfolioItems(
   }
 
   return globalItems.map((item, index) => {
-    if (item.accountMfId) return item;
+    if (!isUnresolvedLinkedItem(item)) return item;
     const fingerprint = globalFingerprints[index];
     const candidates = fingerprint ? detailItemsByFingerprint.get(fingerprint) : undefined;
     return candidates?.shift() ?? item;
