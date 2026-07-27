@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
-import { removeMarkdownImages } from "./markdown";
+import { getRenderableMarkdownLines, removeMarkdownImages } from "./markdown";
 
 interface ChartExpectation {
   chartType: FinanceChart["chartType"];
@@ -163,15 +163,29 @@ function getRenderedText(text: string): string {
 }
 
 function removeCode(text: string): string {
-  return getRenderableLines(text)
+  return getRenderableMarkdownLines(text)
     .join("\n")
     .replace(/`[^`\n]*`/g, "");
+}
+
+function inheritMarkdownHeadingScope(text: string): string {
+  let activeHeading = "";
+  return getRenderableMarkdownLines(text)
+    .map((line) => {
+      const heading = line.match(/^#{1,6}\s+(.+)$/);
+      if (heading) {
+        activeHeading = heading[1]!;
+        return line;
+      }
+      return activeHeading && line.trim() ? `${activeHeading} ${line}` : line;
+    })
+    .join("\n");
 }
 
 function hasScopedPair(text: string, label: string, value: string, facts: string[]): boolean {
   if (facts.length === 0) return true;
   if (hasScopedTablePair(text, normalize(label), normalize(value), facts)) return true;
-  const normalizedText = normalize(text);
+  const normalizedText = normalize(inheritMarkdownHeadingScope(text));
   const normalizedLabel = normalize(label);
   const normalizedValue = normalize(value);
   let labelIndex = normalizedText.indexOf(normalizedLabel);
@@ -348,19 +362,67 @@ interface QuantitativeClaim {
 
 function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
   const normalizedText = text.normalize("NFKC").replace(/,/g, "");
-  return [...normalizedText.matchAll(/(-?\d+(?:\.\d+)?)\s*(件|%)/g)].flatMap((match) => {
-    const suffix = normalizedText.slice(match.index! + match[0].length);
-    if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
-      return [];
+  const arabicClaims = [...normalizedText.matchAll(/(-?\d+(?:\.\d+)?)\s*(件|%)/g)].flatMap(
+    (match) => {
+      const suffix = normalizedText.slice(match.index! + match[0].length);
+      if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
+        return [];
+      }
+      return [
+        {
+          index: match.index!,
+          unit: match[2] === "件" ? ("count" as const) : ("percent" as const),
+          value: Number(match[1]),
+        },
+      ];
+    },
+  );
+  const japaneseClaims = [
+    ...normalizedText.matchAll(/([〇零一二三四五六七八九十百千壱弐参拾佰仟]+)(件|割)/g),
+  ].map((match) => ({
+    index: match.index!,
+    unit: match[2] === "件" ? ("count" as const) : ("percent" as const),
+    value: parseJapaneseInteger(match[1]!) * (match[2] === "割" ? 10 : 1),
+  }));
+  return [...arabicClaims, ...japaneseClaims];
+}
+
+function parseJapaneseInteger(value: string): number {
+  const digits: Record<string, number> = {
+    〇: 0,
+    零: 0,
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    壱: 1,
+    弐: 2,
+    参: 3,
+  };
+  const units: Record<string, number> = {
+    十: 10,
+    拾: 10,
+    百: 100,
+    佰: 100,
+    千: 1000,
+    仟: 1000,
+  };
+  let total = 0;
+  let digit: number | undefined;
+  for (const character of value) {
+    if (character in digits) {
+      digit = digits[character];
+    } else {
+      total += (digit ?? 1) * units[character]!;
+      digit = undefined;
     }
-    return [
-      {
-        index: match.index!,
-        unit: match[2] === "件" ? "count" : "percent",
-        value: Number(match[1]),
-      },
-    ];
-  });
+  }
+  return total + (digit ?? 0);
 }
 
 function getGroundedQuantities(
@@ -406,14 +468,7 @@ interface MarkdownTable {
 }
 
 function getRenderableLines(text: string): string[] {
-  let inFence = false;
-  return text.split("\n").map((line) => {
-    if (/^\s*(?:```|~~~)/.test(line)) {
-      inFence = !inFence;
-      return "";
-    }
-    return inFence || /^(?: {4}|\t)/.test(line) ? "" : line;
-  });
+  return getRenderableMarkdownLines(text);
 }
 
 function getMarkdownTables(text: string): MarkdownTable[] {
@@ -1069,7 +1124,7 @@ export default function assertFinanceChatOutput(
       .normalize("NFKC")
       .matchAll(
         new RegExp(
-          `(?:^|[。！？\\n、])([^。！？\\n、\\d]{0,12}(?:${monetaryLabelPattern}))[^。！？\\n、\\d]{0,4}(?:は|が|も|:|：)\\s*(-?\\d[\\d,]*)(?![\\d,年月日件%円千万億兆])`,
+          `(?:^|[。！？\\n、])([^。！？\\n、\\d]{0,12}(?:${monetaryLabelPattern}))[^。！？\\n、\\d]{0,4}(?:は|が|も|:|：|=|＝)?\\s*(-?\\d[\\d,]*)(?![\\d,年月日件%円千万億兆])`,
           "g",
         ),
       ),

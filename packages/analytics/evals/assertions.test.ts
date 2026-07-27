@@ -1282,7 +1282,7 @@ describe("assertFinanceChatOutput", () => {
           expectedRowAssociations: [["income", "313235"]],
           requiredSqlPatterns: [
             derivedAmountSqlPattern,
-            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?[\\s\\S]*\\bwhere\\b[\\s\\S]*\\bexists\\s*\\(\\s*select\\s+1\\s+from\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+where[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
           ],
         },
       },
@@ -1310,6 +1310,9 @@ describe("assertFinanceChatOutput", () => {
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND t.account_id IN (SELECT ga.account_id FROM group_accounts AS ga WHERE ga.group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = t.account_id AND ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
   });
 
@@ -2285,14 +2288,19 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test("does not use fenced code as expected prose evidence", () => {
-    expect(
-      assertFinanceChatOutput(output({ text: "```\n2026年7月の収入は313,235円です。\n```" }), {
-        config: {
-          expectedTextFacts: ["2026年7月"],
-          expectedTextPairs: [["収入", "313235"]],
-        },
-      }),
-    ).toMatchObject({ pass: false });
+    for (const text of [
+      "```\n2026年7月の収入は313,235円です。\n```",
+      "````\n```\n2026年7月の収入は313,235円です。\n```\n````",
+    ]) {
+      expect(
+        assertFinanceChatOutput(output({ text }), {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [["収入", "313235"]],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    }
   });
 
   test("grades escaped image syntax as visible text", () => {
@@ -2306,14 +2314,37 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
-  test("rejects unitless claims for every monetary label", () => {
+  test.each(["資産は999,999です。", "資産 999,999", "資産＝999,999"])(
+    "rejects unitless claims for every monetary label: %s",
+    (claim) => {
+      expect(
+        assertFinanceChatOutput(output({ text: `2026年7月の収入は313,235円です。${claim}` }), {
+          config: { expectedTextPairs: [["収入", "313235"]] },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし金額") });
+    },
+  );
+
+  test("inherits Markdown heading scope for prose claims", () => {
     expect(
-      assertFinanceChatOutput(
-        output({ text: "2026年7月の収入は313,235円です。資産は999,999です。" }),
-        { config: { expectedTextPairs: [["収入", "313235"]] } },
-      ),
-    ).toMatchObject({ pass: false, reason: expect.stringContaining("単位なし金額") });
+      assertFinanceChatOutput(output({ text: "## 2026年7月\n収入は313,235円です。" }), {
+        config: {
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
+
+  test.each(["取引は九百九十九件です。", "食料品は全体の九割です。"])(
+    "rejects ungrounded Japanese quantitative claims: %s",
+    (text) => {
+      expect(assertFinanceChatOutput(output({ text }), { config: {} })).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining("件数・割合"),
+      });
+    },
+  );
 
   test("accepts rounded percentages derived from verified chart values", () => {
     const chart = {

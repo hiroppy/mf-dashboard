@@ -25,18 +25,31 @@ export function isEscapedMarkdownMarker(text: string, index: number): boolean {
   return backslashes % 2 === 1;
 }
 
-export function removeMarkdownImages(text: string): string {
-  let inFence = false;
-  const renderableText = text
-    .split("\n")
-    .map((line) => {
-      if (/^\s*(?:```|~~~)/.test(line)) {
-        inFence = !inFence;
-        return "";
+export function getRenderableMarkdownLines(text: string): string[] {
+  let fence: { marker: "`" | "~"; length: number } | undefined;
+  return text.split("\n").map((line) => {
+    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (
+        fenceMatch &&
+        fenceMatch[1]![0] === fence.marker &&
+        fenceMatch[1]!.length >= fence.length &&
+        fenceMatch[2]!.trim() === ""
+      ) {
+        fence = undefined;
       }
-      return inFence || /^(?: {4}|\t)/.test(line) ? "" : line;
-    })
-    .join("\n");
+      return "";
+    }
+    if (fenceMatch) {
+      fence = { marker: fenceMatch[1]![0] as "`" | "~", length: fenceMatch[1]!.length };
+      return "";
+    }
+    return /^(?: {4}|\t)/.test(line) ? "" : line;
+  });
+}
+
+export function removeMarkdownImages(text: string): string {
+  const renderableText = getRenderableMarkdownLines(text).join("\n");
   const referenceDefinitions = new Set(
     [...renderableText.matchAll(/^\s*\[([^\]]+)]:\s*\S+.*$/gm)].map((match) =>
       normalizeReferenceLabel(match[1]!),

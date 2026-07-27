@@ -19,7 +19,12 @@ import {
 } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
-import { isEscapedMarkdownMarker, normalizeReferenceLabel, removeMarkdownImages } from "./markdown";
+import {
+  getRenderableMarkdownLines,
+  isEscapedMarkdownMarker,
+  normalizeReferenceLabel,
+  removeMarkdownImages,
+} from "./markdown";
 
 interface GeneratedResponse {
   text: string;
@@ -99,9 +104,8 @@ function removeNonRenderedText(text: string): string {
 }
 
 function removeCode(text: string): string {
-  return removeNonRenderedText(text)
-    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/g, "")
-    .replace(/^(?: {4}|\t).+$/gm, "")
+  return getRenderableMarkdownLines(removeNonRenderedText(text))
+    .join("\n")
     .replace(/`[^`\n]*`/g, "");
 }
 
