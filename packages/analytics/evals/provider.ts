@@ -20,6 +20,7 @@ import {
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
 import {
+  getMarkdownReferenceDefinitions,
   getRenderableMarkdownLines,
   isEscapedMarkdownMarker,
   normalizeReferenceLabel,
@@ -124,12 +125,7 @@ function getTextLinks(text: string): string[] {
   ]
     .filter((match) => !isEscapedMarkdownMarker(renderedText, match.index!))
     .map((match) => normalizeMarkdownDestination(match[1]!));
-  const referenceDefinitions = new Map(
-    [...renderedText.matchAll(/^\s*\[([^\]]+)]:\s*(\S+)/gm)].map((match) => [
-      normalizeReferenceLabel(match[1]!),
-      match[2]!,
-    ]),
-  );
+  const referenceDefinitions = getMarkdownReferenceDefinitions(renderedText);
   const referenceLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)]\[([^\]]*)]/g)].flatMap(
     (match) => {
       if (isEscapedMarkdownMarker(renderedText, match.index!)) return [];

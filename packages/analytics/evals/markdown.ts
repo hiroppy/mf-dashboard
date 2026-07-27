@@ -48,13 +48,21 @@ export function getRenderableMarkdownLines(text: string): string[] {
   });
 }
 
+export function getMarkdownReferenceDefinitions(text: string): Map<string, string> {
+  const definitions = new Map<string, string>();
+  for (const line of getRenderableMarkdownLines(text)) {
+    const definition = line.match(
+      /^\s*\[([^\]]+)]:\s*(<[^<>\s]+>|[^\s<>]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/,
+    );
+    if (!definition) continue;
+    const label = normalizeReferenceLabel(definition[1]!);
+    if (!definitions.has(label)) definitions.set(label, definition[2]!);
+  }
+  return definitions;
+}
+
 export function removeMarkdownImages(text: string): string {
-  const renderableText = getRenderableMarkdownLines(text).join("\n");
-  const referenceDefinitions = new Set(
-    [...renderableText.matchAll(/^\s*\[([^\]]+)]:\s*\S+.*$/gm)].map((match) =>
-      normalizeReferenceLabel(match[1]!),
-    ),
-  );
+  const referenceDefinitions = getMarkdownReferenceDefinitions(text);
   let result = "";
   let cursor = 0;
   while (cursor < text.length) {

@@ -1314,6 +1314,9 @@ describe("assertFinanceChatOutput", () => {
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = t.account_id AND ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = ga.account_id AND ga.group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
   });
 
   test("requires selected-group boundary transfer classification", () => {
@@ -2193,6 +2196,14 @@ describe("assertFinanceChatOutput", () => {
         ),
       ).toMatchObject({ pass: false, reason: expect.stringContaining("金融助言") });
     }
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。借入を推奨するものではありません。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("decodes visible character references before checking monetary claims", () => {
@@ -2458,6 +2469,32 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("does not treat account identifiers as count aliases", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "取引は7件です。",
+          fixtureResult: { rows: [{ account_id: 7 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT account_id FROM transactions" },
+              output: { rows: [{ account_id: 7 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["7"]],
+              expectedRowAssociations: [["account_id", "7"]],
+              requiredSqlPatterns: ["\\btransactions\\b", "\\baccount_id\\b"],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+  });
+
   test("rejects numeric string constants in SQL projections", () => {
     expect(
       assertFinanceChatOutput(
@@ -2523,6 +2560,25 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
+  test("does not resolve image references with invalid definitions", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![借入残高は999,999円][x]\n[x]: <not a url>\n2026年7月の収入は313,235円です。",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("decodes named minus references before grading amounts", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の収支は&minus;93,341円です。" }), {
+        config: { expectedTextPairs: [["収支", "93341"]] },
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   test("rejects unsupported monetary labels nested with a grounded label", () => {
     expect(
       assertFinanceChatOutput(output({ text: "2026年7月の収入（借入残高）は313,235円です。" }), {
@@ -2535,7 +2591,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
-          text: "| 内容 | 日付 | 金額 |\n| --- | --- | ---: |\n| サンマルクカフェ | 2026-07-03 | 761円 |",
+          text: "| 内容 | 日付 | 金額（円） |\n| --- | --- | ---: |\n| サンマルクカフェ | 2026-07-03 | 761 |",
         }),
         {
           config: {

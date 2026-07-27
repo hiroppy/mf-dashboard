@@ -77,6 +77,7 @@ const namedCharacterReferences: Record<string, string> = {
   apos: "'",
   gt: ">",
   lt: "<",
+  minus: "−",
   quot: '"',
   yen: "¥",
 };
@@ -152,7 +153,7 @@ function decodeCharacterReferences(text: string): string {
       },
     )
     .replace(
-      /&(amp|apos|gt|lt|quot|yen);/gi,
+      /&(amp|apos|gt|lt|minus|quot|yen);/gi,
       (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
     );
 }
@@ -441,7 +442,9 @@ function getGroundedQuantities(
       for (const [key, value] of Object.entries(row)) {
         if (typeof value !== "number") continue;
         const normalizedKey = normalize(key).toLocaleLowerCase();
-        if (/(?:count|件数)/.test(normalizedKey)) grounded.count.add(value);
+        if (/^(?:count|件数)$|(?:^|_)count(?:$|_)/i.test(key.normalize("NFKC"))) {
+          grounded.count.add(value);
+        }
         if (/(?:percent|percentage|割合|比率)/.test(normalizedKey)) grounded.percent.add(value);
       }
     }
@@ -458,7 +461,9 @@ function getTableCells(line: string): string[] | undefined {
 }
 
 function normalizeTableCell(cell: string): string {
-  const normalized = normalize(cell).replace(/円$/, "");
+  const normalized = normalize(cell)
+    .replace(/[（(]円[）)]$/, "")
+    .replace(/円$/, "");
   return normalized.replace(
     /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
     (_, year: string, month: string, day: string) =>
@@ -635,6 +640,13 @@ function hasSuspiciousProjectionLiteral(sql: string): boolean {
   return [...projections, ...valueConstructors].some(hasSuspiciousNumericExpression);
 }
 
+function hasValidCorrelatedGroupExists(sql: string): boolean {
+  if (!/\bexists\s*\(/i.test(sql)) return true;
+  return [...sql.matchAll(/\b(\w+)\.account_id\s*=\s*(\w+)\.account_id\b/gi)].some(
+    (match) => match[1]!.toLocaleLowerCase() !== match[2]!.toLocaleLowerCase(),
+  );
+}
+
 function removeSqlComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n\r]*/g, " ");
 }
@@ -798,7 +810,11 @@ export default function assertFinanceChatOutput(
   if (forbiddenTerms.length > 0) {
     return fail(`本文に禁止用語があります: ${forbiddenTerms.join(", ")}`);
   }
-  if (unsafeQualitativePatterns.some((pattern) => pattern.test(renderedClaimText))) {
+  const policyText = renderedClaimText.replace(
+    /[^。！？\n]*(?:推奨するものではありません|推奨しません|おすすめするものではありません)[^。！？\n]*/g,
+    "",
+  );
+  if (unsafeQualitativePatterns.some((pattern) => pattern.test(policyText))) {
     return fail("本文に外部開示または根拠のない金融助言があります。");
   }
 
@@ -897,7 +913,8 @@ export default function assertFinanceChatOutput(
         hasRequiredLiterals &&
         hasRequiredLiteralBindings &&
         hasRequiredLiteralBindingGroup &&
-        !hasSuspiciousProjectionLiteral(executableSql)
+        !hasSuspiciousProjectionLiteral(executableSql) &&
+        hasValidCorrelatedGroupExists(executableSql)
         ? [{ query, result: parsedResult.data }]
         : [];
     });
