@@ -14,40 +14,15 @@ allowBuilds:
   workerd: true
 
 minimumReleaseAgeExclude:
-  - ai
-  - "@cloudflare/workerd-*"
-  - "@csstools/css-color-parser"
-  - "@storybook/addon-a11y"
-  - "@storybook/addon-vitest"
-  - "@storybook/builder-vite"
-  - "@storybook/csf-plugin"
-  - "@storybook/nextjs-vite"
-  - "@storybook/react"
-  - "@storybook/react-dom-shim"
-  - "@storybook/react-vite"
-  - "@turbo/*"
-  - "@types/node"
-  - knip
-  - lucide-react
-  - miniflare
-  - storybook
-  - turbo
-  - workerd
-  - wrangler
-  - "@ai-sdk/gateway@4.0.22"
-  - recharts@3.10.1
-  - "@ai-sdk/anthropic@4.0.21"
-  - "@next/env@16.2.12"
-  - "@next/swc-darwin-arm64@16.2.12"
-  - "@next/swc-darwin-x64@16.2.12"
-  - "@next/swc-linux-arm64-gnu@16.2.12"
-  - "@next/swc-linux-arm64-musl@16.2.12"
-  - "@next/swc-linux-x64-gnu@16.2.12"
-  - "@next/swc-linux-x64-musl@16.2.12"
-  - "@next/swc-win32-arm64-msvc@16.2.12"
-  - "@next/swc-win32-x64-msvc@16.2.12"
-  - "@next/third-parties@16.2.12"
-  - next@16.2.12
+  - "@storybook/addon-a11y@10.5.5"
+  - "@storybook/addon-vitest@10.5.5"
+  - "@storybook/builder-vite@10.5.5"
+  - "@storybook/csf-plugin@10.5.5"
+  - "@storybook/nextjs-vite@10.5.5"
+  - "@storybook/react@10.5.5"
+  - "@storybook/react-dom-shim@10.5.5"
+  - "@storybook/react-vite@10.5.5"
+  - storybook@10.5.5
 
 catalog:
   "@libsql/client": 0.17.4
