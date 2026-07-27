@@ -1258,7 +1258,7 @@ describe("assertFinanceChatOutput", () => {
           expectedRowAssociations: [["income", "313235"]],
           requiredSqlPatterns: [
             derivedAmountSqlPattern,
-            "\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
+            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
           ],
         },
       },
@@ -1280,6 +1280,9 @@ describe("assertFinanceChatOutput", () => {
     });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(amount) AS income FROM transactions WHERE type = 'income' AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions t JOIN group_accounts ga ON ga.account_id = t.account_id AND ga.group_id = :groupId WHERE t.type = 'income'";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
   });
 
