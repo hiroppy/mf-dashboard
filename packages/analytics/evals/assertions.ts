@@ -76,7 +76,8 @@ function getRenderedText(text: string): string {
   return text
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/~~[\s\S]*?~~/g, "")
-    .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]/g, "")
+    .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]|!\[[^\]]*]/g, "")
+    .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
     .replace(/<img\b[^>]*>/gi, "");
 }
 

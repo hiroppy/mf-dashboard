@@ -1634,6 +1634,23 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。]\n\n[2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。]: x",
+        }),
+        {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("grounds counts only with scope-qualified database queries", () => {
