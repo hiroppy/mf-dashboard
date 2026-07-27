@@ -1,7 +1,6 @@
 import type { CategoryName } from "@mf-dashboard/meta/categories";
 
 const CATEGORY_VAR_MAP: Record<CategoryName, string> = {
-  "預金・現金・暗号資産": "--color-asset-deposit",
   "預金・現金": "--color-asset-deposit",
   暗号資産: "--color-asset-crypto",
   "電子マネー・プリペイド": "--color-asset-prepaid",

@@ -1,10 +1,4 @@
-const ASSET_CATEGORY_ORDER = [
-  "投資信託",
-  "株式(現物)",
-  "暗号資産",
-  "預金・現金",
-  "預金・現金・暗号資産",
-] as const;
+const ASSET_CATEGORY_ORDER = ["投資信託", "株式(現物)", "暗号資産", "預金・現金"] as const;
 
 export function compareAssetCategories(a: string, b: string): number {
   const aIndex = ASSET_CATEGORY_ORDER.findIndex((category) => category === a);

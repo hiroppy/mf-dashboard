@@ -16,7 +16,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 5000000 },
+      { category: "預金・現金", amount: 5000000 },
       { category: "株式(現物)", amount: 3000000 },
       { category: "投資信託", amount: 2000000 },
       { category: "年金", amount: 1500000 },
@@ -45,7 +45,7 @@ export const Empty: Story = {
 export const NoLiabilities: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 8000000 },
+      { category: "預金・現金", amount: 8000000 },
       { category: "株式(現物)", amount: 2000000 },
     ]);
     mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);

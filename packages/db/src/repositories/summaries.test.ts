@@ -34,7 +34,7 @@ describe("saveAssetHistory", () => {
       totalAssets: 10000000,
       change: 50000,
       categories: {
-        "預金・現金・暗号資産": 3000000,
+        "預金・現金": 3000000,
         "株式（現物）": 2000000,
         投資信託: 3000000,
         保険: 500000,
@@ -52,7 +52,7 @@ describe("saveAssetHistory", () => {
 
     const categories = await db.select().from(schema.assetHistoryCategories).all();
     expect(categories).toHaveLength(6);
-    const deposit = categories.find((c) => c.categoryName === "預金・現金・暗号資産");
+    const deposit = categories.find((c) => c.categoryName === "預金・現金");
     expect(deposit?.amount).toBe(3000000);
   });
 
@@ -63,7 +63,7 @@ describe("saveAssetHistory", () => {
         ...points[0],
         totalAssets: 11000000,
         categories: {
-          "預金・現金・暗号資産": 4000000,
+          "預金・現金": 4000000,
           "株式（現物）": 2000000,
           投資信託: 3000000,
           保険: 500000,
@@ -77,7 +77,7 @@ describe("saveAssetHistory", () => {
     expect(result[0].totalAssets).toBe(11000000);
 
     const categories = await db.select().from(schema.assetHistoryCategories).all();
-    const deposit = categories.find((c) => c.categoryName === "預金・現金・暗号資産");
+    const deposit = categories.find((c) => c.categoryName === "預金・現金");
     expect(deposit?.amount).toBe(4000000);
   });
 
@@ -93,7 +93,7 @@ describe("saveAssetHistory", () => {
       {
         ...points[0],
         categories: {
-          "預金・現金・暗号資産": 3000000,
+          "預金・現金": 3000000,
           "株式（現物）": 2000000,
           投資信託: 3000000,
           年金: 1000000,
@@ -148,7 +148,7 @@ describe("グループ分離", () => {
         date: "2025-04-25",
         totalAssets: 10000000,
         change: 50000,
-        categories: { "預金・現金・暗号資産": 5000000, "株式（現物）": 5000000 },
+        categories: { "預金・現金": 5000000, "株式（現物）": 5000000 },
       },
     ];
     const pointsB: AssetHistoryPoint[] = [
@@ -156,7 +156,7 @@ describe("グループ分離", () => {
         date: "2025-04-25", // 同じ日付
         totalAssets: 20000000,
         change: 100000,
-        categories: { "預金・現金・暗号資産": 15000000, 投資信託: 5000000 },
+        categories: { "預金・現金": 15000000, 投資信託: 5000000 },
       },
     ];
 

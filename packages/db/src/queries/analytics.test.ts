@@ -222,10 +222,6 @@ describe("isLiquidAssetCategory", () => {
     expect(isLiquidAssetCategory("電子マネー・プリペイド")).toBe(true);
   });
 
-  it("keeps compatibility with the legacy combined liquid asset category", () => {
-    expect(isLiquidAssetCategory("預金・現金・暗号資産")).toBe(true);
-  });
-
   it("normalizes surrounding whitespace before matching", () => {
     expect(isLiquidAssetCategory(" 預金・現金 ")).toBe(true);
   });

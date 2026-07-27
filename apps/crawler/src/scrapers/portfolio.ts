@@ -6,13 +6,7 @@ import { debug, warn } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 import { createManualHoldingKey, type ManualHoldingAccountMap } from "./manual-holding-accounts.js";
 
-const LEGACY_DEPOSIT_CATEGORY = "預金・現金・暗号資産";
-const DEPOSIT_TABLE_CATEGORIES = new Set([
-  LEGACY_DEPOSIT_CATEGORY,
-  "預金・現金",
-  "暗号資産",
-  "電子マネー・プリペイド",
-]);
+const DEPOSIT_TABLE_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
 const PENSION_CATEGORY = "年金";
@@ -98,7 +92,7 @@ async function getPrecedingSectionTitle(table: Locator): Promise<string> {
 
 export function resolveDepositTableCategory(titleText: string): string {
   const category = titleText.trim();
-  return DEPOSIT_TABLE_CATEGORIES.has(category) ? category : LEGACY_DEPOSIT_CATEGORY;
+  return DEPOSIT_TABLE_CATEGORIES.has(category) ? category : "預金・現金";
 }
 
 export function parseDepositPortfolioItem(
@@ -462,7 +456,6 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
 // Get category from section title (h1.heading-normal before the table)
 // Returns the title if it's a valid asset category, otherwise returns "不明"
 export function identifyTableTypeFromTitle(titleText: string): string {
-  // ASSET_CATEGORIES includes both legacy combined labels and current split labels.
   const validCategories = new Set(ASSET_CATEGORIES);
   if (validCategories.has(titleText as (typeof ASSET_CATEGORIES)[number])) {
     return titleText;

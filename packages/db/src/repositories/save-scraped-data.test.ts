@@ -6,7 +6,12 @@ import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest"
 import * as schema from "../schema/schema";
 import { closeTestDb, createTestDb, resetTestDb } from "../test-helpers";
 import type { ScrapedData } from "../types";
-import { saveGroupOnlyData, saveScrapedData, saveScrapedDataBatch } from "./save-scraped-data";
+import {
+  normalizePortfolioCategories,
+  saveGroupOnlyData,
+  saveScrapedData,
+  saveScrapedDataBatch,
+} from "./save-scraped-data";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -83,6 +88,148 @@ function createScrapedData(): ScrapedData {
   };
 }
 
+describe("normalizePortfolioCategories", () => {
+  const registeredAccounts: ScrapedData["registeredAccounts"] = {
+    accounts: [
+      {
+        mfId: "bank-a",
+        name: "Bank A",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 100000,
+      },
+      {
+        mfId: "crypto-a",
+        name: "Crypto Account A",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 200000,
+      },
+    ],
+  };
+
+  test("公式口座カテゴリに従って預金と暗号資産を分類する", () => {
+    const portfolio = {
+      totalAssets: 300000,
+      items: [
+        {
+          name: "Deposit A",
+          type: "預金・現金",
+          institution: "Bank A",
+          balance: 100000,
+        },
+        {
+          accountMfId: "crypto-a",
+          name: "Crypto Asset A",
+          type: "預金・現金",
+          institution: "Different Display Name",
+          balance: 200000,
+        },
+      ],
+    };
+
+    const result = normalizePortfolioCategories(
+      portfolio,
+      registeredAccounts,
+      new Map([
+        ["bank-a", "銀行"],
+        ["crypto-a", "暗号資産・FX・貴金属"],
+      ]),
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ name: "Deposit A", type: "預金・現金" }),
+      expect.objectContaining({ name: "Crypto Asset A", type: "暗号資産" }),
+    ]);
+  });
+
+  test("預金以外のカテゴリは口座カテゴリなしでも変更しない", () => {
+    const portfolio = {
+      totalAssets: 200000,
+      items: [
+        {
+          name: "Crypto Asset A",
+          type: "暗号資産",
+          institution: "",
+          balance: 200000,
+        },
+      ],
+    };
+
+    expect(normalizePortfolioCategories(portfolio, registeredAccounts)).toEqual(portfolio);
+  });
+
+  test.each([
+    {
+      name: "口座が取得対象外",
+      portfolioAccountMfId: "stale-account",
+      institution: "",
+      institutionCategories: new Map([["stale-account", "暗号資産・FX・貴金属"]]),
+    },
+    {
+      name: "公式口座カテゴリがない",
+      portfolioAccountMfId: "crypto-a",
+      institution: "",
+      institutionCategories: new Map<string, string>(),
+    },
+  ])(
+    "$nameの場合は預金を分類せず保存しない",
+    ({ portfolioAccountMfId, institution, institutionCategories }) => {
+      const portfolio = {
+        totalAssets: 100000,
+        items: [
+          {
+            accountMfId: portfolioAccountMfId,
+            name: "Asset A",
+            type: "預金・現金",
+            institution,
+            balance: 100000,
+          },
+        ],
+      };
+
+      expect(() =>
+        normalizePortfolioCategories(portfolio, registeredAccounts, institutionCategories),
+      ).toThrow("Cannot classify a deposit");
+    },
+  );
+
+  test("同名口座が複数ある場合は名称で推測しない", () => {
+    const duplicateAccounts = {
+      accounts: [
+        registeredAccounts.accounts[0]!,
+        { ...registeredAccounts.accounts[1]!, name: "Bank A" },
+      ],
+    };
+    const portfolio = {
+      totalAssets: 100000,
+      items: [
+        {
+          name: "Asset A",
+          type: "預金・現金",
+          institution: "Bank A",
+          balance: 100000,
+        },
+      ],
+    };
+
+    expect(() =>
+      normalizePortfolioCategories(
+        portfolio,
+        duplicateAccounts,
+        new Map([
+          ["bank-a", "銀行"],
+          ["crypto-a", "暗号資産・FX・貴金属"],
+        ]),
+      ),
+    ).toThrow("Cannot classify a deposit");
+  });
+});
+
 describe("saveScrapedData", () => {
   test("ポートフォリオの全詳細フィールドを保持して保存する", async () => {
     const data = createScrapedData();
@@ -104,6 +251,14 @@ describe("saveScrapedData", () => {
       unrealizedGain: 234500,
       unrealizedGainPct: 23.45,
     });
+  });
+
+  test("預金カテゴリは公式口座カテゴリなしで保存しない", async () => {
+    const data = createScrapedData();
+    data.portfolio.items[0]!.type = "預金・現金";
+
+    await expect(saveScrapedData(db, data)).rejects.toThrow("Cannot classify a deposit");
+    await expect(db.select().from(schema.holdings).all()).resolves.toEqual([]);
   });
 
   test("accountMfIdが今回取得した口座と一致する手入力資産を紐づける", async () => {

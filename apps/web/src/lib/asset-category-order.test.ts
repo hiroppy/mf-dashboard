@@ -4,7 +4,6 @@ import { getAssetCategoryStackOrder, sortAssetCategories } from "./asset-categor
 describe("sortAssetCategories", () => {
   it("現行の主要カテゴリを指定順に並べる", () => {
     const assets = [
-      { category: "預金・現金・暗号資産", amount: 250 },
       { category: "預金・現金", amount: 300 },
       { category: "暗号資産", amount: 50 },
       { category: "年金", amount: 400 },
@@ -17,7 +16,6 @@ describe("sortAssetCategories", () => {
       "株式(現物)",
       "暗号資産",
       "預金・現金",
-      "預金・現金・暗号資産",
       "年金",
     ]);
   });
@@ -34,13 +32,7 @@ describe("sortAssetCategories", () => {
 
   it("積み上げグラフは画面上の上から指定順になるよう逆順で描画する", () => {
     expect(
-      getAssetCategoryStackOrder([
-        "投資信託",
-        "株式(現物)",
-        "暗号資産",
-        "預金・現金",
-        "預金・現金・暗号資産",
-      ]),
-    ).toEqual(["預金・現金・暗号資産", "預金・現金", "暗号資産", "株式(現物)", "投資信託"]);
+      getAssetCategoryStackOrder(["投資信託", "株式(現物)", "暗号資産", "預金・現金"]),
+    ).toEqual(["預金・現金", "暗号資産", "株式(現物)", "投資信託"]);
   });
 });

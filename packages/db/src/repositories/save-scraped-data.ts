@@ -2,7 +2,13 @@ import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type { CashFlowItem, ScrapedData } from "../types";
+import type {
+  CashFlowItem,
+  Portfolio,
+  PortfolioItem,
+  RegisteredAccounts,
+  ScrapedData,
+} from "../types";
 import { now } from "../utils";
 import {
   upsertAccounts,
@@ -25,8 +31,71 @@ import { saveAssetHistory } from "./summaries";
 import { replaceTransactionsForMonth, saveTransaction } from "./transactions";
 
 const isCI = process.env.CI === "true";
+const DEPOSIT_ASSET_CATEGORY = "預金・現金";
+const CRYPTO_ASSET_CATEGORY = "暗号資産";
+const CRYPTO_INSTITUTION_CATEGORY = "暗号資産・FX・貴金属";
+
 function log(...args: unknown[]) {
   if (!isCI) console.log(...args);
+}
+
+function buildCurrentAccountMfIdByName(
+  registeredAccounts: RegisteredAccounts,
+): ReadonlyMap<string, string | null> {
+  const accountMfIdByName = new Map<string, string | null>();
+
+  for (const account of registeredAccounts.accounts) {
+    const existingMfId = accountMfIdByName.get(account.name);
+    if (existingMfId === undefined) {
+      accountMfIdByName.set(account.name, account.mfId);
+    } else if (existingMfId !== account.mfId) {
+      accountMfIdByName.set(account.name, null);
+    }
+  }
+
+  return accountMfIdByName;
+}
+
+function resolvePortfolioAccountMfId(
+  item: PortfolioItem,
+  currentAccountMfIds: ReadonlySet<string>,
+  accountMfIdByName: ReadonlyMap<string, string | null>,
+): string | null {
+  if (item.accountMfId && currentAccountMfIds.has(item.accountMfId)) {
+    return item.accountMfId;
+  }
+
+  return accountMfIdByName.get(item.institution) ?? null;
+}
+
+export function normalizePortfolioCategories(
+  portfolio: Portfolio,
+  registeredAccounts: RegisteredAccounts,
+  institutionCategories: ReadonlyMap<string, string> = new Map(),
+): Portfolio {
+  const currentAccountMfIds = new Set(registeredAccounts.accounts.map((account) => account.mfId));
+  const accountMfIdByName = buildCurrentAccountMfIdByName(registeredAccounts);
+
+  return {
+    ...portfolio,
+    items: portfolio.items.map((item) => {
+      if (item.type !== DEPOSIT_ASSET_CATEGORY) return item;
+
+      const accountMfId = resolvePortfolioAccountMfId(item, currentAccountMfIds, accountMfIdByName);
+      const institutionCategory = accountMfId ? institutionCategories.get(accountMfId) : undefined;
+      if (!institutionCategory) {
+        throw new Error("Cannot classify a deposit without a unique current account category");
+      }
+
+      return {
+        ...item,
+        type:
+          institutionCategory === CRYPTO_INSTITUTION_CATEGORY
+            ? CRYPTO_ASSET_CATEGORY
+            : DEPOSIT_ASSET_CATEGORY,
+      };
+    }),
+  };
 }
 
 function resolveHoldingAccountId(
@@ -65,8 +134,19 @@ export async function saveScrapedDataBatch(
     institutionCategories?: ReadonlyMap<string, string>;
   },
 ): Promise<number[]> {
+  const fullData = data.fullData
+    ? {
+        ...data.fullData,
+        portfolio: normalizePortfolioCategories(
+          data.fullData.portfolio,
+          data.fullData.registeredAccounts,
+          data.institutionCategories,
+        ),
+      }
+    : undefined;
+
   return db.transaction(async (transaction) => {
-    if (data.fullData) await saveScrapedDataAtomically(transaction, data.fullData);
+    if (fullData) await saveScrapedDataAtomically(transaction, fullData);
     for (const groupData of data.groupOnlyData) {
       await saveGroupOnlyDataAtomically(transaction, groupData);
     }

@@ -48,10 +48,6 @@ describe("identifyTableTypeFromTitle", () => {
     expect(identifyTableTypeFromTitle("保険")).toBe("保険");
   });
 
-  test("「預金・現金・暗号資産」はそのまま返す", () => {
-    expect(identifyTableTypeFromTitle("預金・現金・暗号資産")).toBe("預金・現金・暗号資産");
-  });
-
   test("現在の分離済み流動資産カテゴリはそのまま返す", () => {
     expect(identifyTableTypeFromTitle("預金・現金")).toBe("預金・現金");
     expect(identifyTableTypeFromTitle("暗号資産")).toBe("暗号資産");
@@ -80,10 +76,9 @@ describe("resolveDepositTableCategory", () => {
     expect(resolveDepositTableCategory("電子マネー・プリペイド")).toBe("電子マネー・プリペイド");
   });
 
-  test("legacyカテゴリと未知のタイトルはlegacy預金カテゴリとして扱う", () => {
-    expect(resolveDepositTableCategory("預金・現金・暗号資産")).toBe("預金・現金・暗号資産");
-    expect(resolveDepositTableCategory("")).toBe("預金・現金・暗号資産");
-    expect(resolveDepositTableCategory("その他")).toBe("預金・現金・暗号資産");
+  test("未知のタイトルは預金カテゴリとして扱う", () => {
+    expect(resolveDepositTableCategory("")).toBe("預金・現金");
+    expect(resolveDepositTableCategory("その他")).toBe("預金・現金");
   });
 });
 

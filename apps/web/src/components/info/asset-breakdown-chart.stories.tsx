@@ -21,7 +21,7 @@ type Story = StoryObj<typeof meta>;
 const sampleChanges = {
   categories: [
     {
-      name: "預金・現金・暗号資産",
+      name: "預金・現金",
       current: 5000000,
       previous: 4800000,
       change: 200000,
@@ -42,7 +42,7 @@ const sampleChanges = {
 export const Default: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 5000000 },
+      { category: "預金・現金", amount: 5000000 },
       { category: "株式(現物)", amount: 3000000 },
       { category: "投資信託", amount: 2000000 },
       { category: "債券", amount: 500000 },
@@ -74,7 +74,7 @@ export const Default: Story = {
 export const SingleCategory: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 10000000 },
+      { category: "預金・現金", amount: 10000000 },
     ]);
     mocked(getLatestTotalAssets).mockResolvedValue(10000000);
     mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
@@ -83,7 +83,7 @@ export const SingleCategory: Story = {
         return {
           categories: [
             {
-              name: "預金・現金・暗号資産",
+              name: "預金・現金",
               current: 10000000,
               previous: 9900000,
               change: 100000,
@@ -105,7 +105,7 @@ export const SingleCategory: Story = {
 export const ZeroAmount: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 0 },
+      { category: "預金・現金", amount: 0 },
       { category: "株式(現物)", amount: 0 },
     ]);
     mocked(getLatestTotalAssets).mockResolvedValue(0);
@@ -128,7 +128,7 @@ export const Empty: Story = {
 export const NoPeriodComparison: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 5000000 },
+      { category: "預金・現金", amount: 5000000 },
       { category: "株式(現物)", amount: 3000000 },
     ]);
     mocked(getLatestTotalAssets).mockResolvedValue(8000000);
