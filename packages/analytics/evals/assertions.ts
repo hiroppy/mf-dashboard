@@ -27,6 +27,7 @@ interface AssertionContext {
       expectNoData?: boolean;
       expectedRowAssociations?: Array<Array<number | string>>;
       expectedRows?: Array<Array<number | string>>;
+      requiredSqlLiteralBindingGroups?: Array<Array<[string, string]>>;
       requiredSqlLiteralBindings?: Array<[string, string]>;
       requiredSqlLiterals?: string[];
       requiredSqlPatterns?: string[];
@@ -72,7 +73,11 @@ function normalize(value: string): string {
 }
 
 function getRenderedText(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/~~[\s\S]*?~~/g, "");
+  return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/~~[\s\S]*?~~/g, "")
+    .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]/g, "")
+    .replace(/<img\b[^>]*>/gi, "");
 }
 
 function removeCode(text: string): string {
@@ -436,6 +441,7 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
 
 function hasSuspiciousProjectionLiteral(sql: string): boolean {
   const projection = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1] ?? "";
+  if (/0x[0-9a-f]+/i.test(projection)) return true;
   return [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
     (match) => Number(match[1]) > 100,
   );
@@ -633,6 +639,10 @@ export default function assertFinanceChatOutput(
     return fail("データのない回答に金額が含まれています。");
   }
 
+  let groundedQuantities: Record<QuantitativeClaim["unit"], Set<number>> = {
+    count: new Set(),
+    percent: new Set(),
+  };
   const databaseEvidence = config.databaseEvidence;
   if (databaseEvidence) {
     const requiredSqlPatterns = (databaseEvidence.requiredSqlPatterns ?? []).map(
@@ -641,8 +651,13 @@ export default function assertFinanceChatOutput(
     const requiredSqlLiteralBindings = (databaseEvidence.requiredSqlLiteralBindings ?? []).map(
       ([literal, pattern]) => [literal, new RegExp(pattern, "i")] as const,
     );
+    const requiredSqlLiteralBindingGroups = (
+      databaseEvidence.requiredSqlLiteralBindingGroups ?? []
+    ).map((group) =>
+      group.map(([literal, pattern]) => [literal, new RegExp(pattern, "i")] as const),
+    );
     const requiredSqlLiterals = databaseEvidence.requiredSqlLiterals ?? [];
-    const databaseResults = actual.databaseQueries.flatMap((query) => {
+    const qualifyingDatabaseQueries = actual.databaseQueries.flatMap((query) => {
       const parsedInput = databaseQueryInputSchema.safeParse(query.input);
       const parsedResult = databaseResultSchema.safeParse(query.output);
       if (!parsedInput.success || !parsedResult.success || parsedResult.data.truncated) return [];
@@ -657,16 +672,26 @@ export default function assertFinanceChatOutput(
       const hasRequiredLiteralBindings = requiredSqlLiteralBindings.every(([literal, pattern]) =>
         pattern.test(maskSqlForLiteralBinding(parsedInput.data.sql, literal)),
       );
+      const hasRequiredLiteralBindingGroup =
+        requiredSqlLiteralBindingGroups.length === 0 ||
+        requiredSqlLiteralBindingGroups.some((group) =>
+          group.every(([literal, pattern]) =>
+            pattern.test(maskSqlForLiteralBinding(parsedInput.data.sql, literal)),
+          ),
+        );
       return matchesRequiredSql &&
         hasRequiredLiterals &&
         hasRequiredLiteralBindings &&
+        hasRequiredLiteralBindingGroup &&
         !hasSuspiciousProjectionLiteral(executableSql)
-        ? [parsedResult.data]
+        ? [{ query, result: parsedResult.data }]
         : [];
     });
+    const databaseResults = qualifyingDatabaseQueries.map(({ result }) => result);
     if (databaseResults.length === 0) {
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
     }
+    groundedQuantities = getGroundedQuantities(qualifyingDatabaseQueries.map(({ query }) => query));
 
     const fixtureResult = databaseResultSchema.safeParse(actual.fixtureResult);
     if (!fixtureResult.success || fixtureResult.data.truncated) {
@@ -891,7 +916,6 @@ export default function assertFinanceChatOutput(
   if (validatesRenderedAmounts && unitlessMonetaryClaims.length > 0) {
     return fail("本文に根拠のない単位なし金額があります。");
   }
-  const groundedQuantities = getGroundedQuantities(actual.databaseQueries);
   const normalizedQuantitativeText = claimText.normalize("NFKC").replace(/,/g, "");
   const ungroundedQuantities = getAssertedQuantitativeClaims(claimText).filter((claim) => {
     if (groundedQuantities[claim.unit].has(claim.value)) return false;

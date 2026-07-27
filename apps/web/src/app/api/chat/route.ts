@@ -3,6 +3,7 @@ import { financeChartSchema, type FinanceChart } from "@mf-dashboard/analytics/c
 import {
   FINANCE_CHAT_MAX_GENERATION_STEPS,
   FINANCE_CHAT_MAX_OUTPUT_TOKENS,
+  FINANCE_CHAT_REQUEST_TIMEOUT_MS,
   getFinanceChatSystemPrompt,
 } from "@mf-dashboard/analytics/chat/prompt";
 import { createFinanceChatTools } from "@mf-dashboard/analytics/chat/tools";
@@ -28,7 +29,6 @@ export const maxDuration = 60;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_MESSAGES = 20;
 const MAX_CONVERSATION_TEXT_LENGTH = 32_000;
-const CHAT_REQUEST_TIMEOUT_MS = 55_000;
 const SIGNATURE_METADATA_KEY = "serverSignature";
 
 function errorResponse(status: number, code: string, message: string): Response {
@@ -165,7 +165,7 @@ export async function POST(request: Request): Promise<Response> {
   let body: unknown;
   const requestSignal = AbortSignal.any([
     request.signal,
-    AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS),
+    AbortSignal.timeout(FINANCE_CHAT_REQUEST_TIMEOUT_MS),
   ]);
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -277,7 +277,7 @@ export async function POST(request: Request): Promise<Response> {
       prepareStep: ({ stepNumber }) =>
         stepNumber === FINANCE_CHAT_MAX_GENERATION_STEPS - 1 ? { toolChoice: "none" } : undefined,
       system: getFinanceChatSystemPrompt(),
-      timeout: { totalMs: CHAT_REQUEST_TIMEOUT_MS },
+      timeout: { totalMs: FINANCE_CHAT_REQUEST_TIMEOUT_MS },
       messages: await convertToModelMessages(modelInputMessages, { tools }),
       tools,
       stopWhen: stepCountIs(FINANCE_CHAT_MAX_GENERATION_STEPS),

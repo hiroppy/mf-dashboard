@@ -14,6 +14,7 @@ import { financeChatHrefSchema } from "../src/chat/navigation-tool";
 import {
   FINANCE_CHAT_MAX_GENERATION_STEPS,
   FINANCE_CHAT_MAX_OUTPUT_TOKENS,
+  FINANCE_CHAT_REQUEST_TIMEOUT_MS,
   getFinanceChatSystemPrompt,
 } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
@@ -37,12 +38,14 @@ interface GeneratedResponse {
 }
 
 interface GenerateOptions {
+  abortSignal: AbortSignal;
   maxOutputTokens: number;
   model: ReturnType<typeof getModel>;
   prepareStep: (options: { stepNumber: number }) => { toolChoice: "none" } | undefined;
   prompt: string;
   stopWhen: ReturnType<typeof stepCountIs>;
   system: string;
+  timeout: { totalMs: number };
   tools: ReturnType<typeof createFinanceChatTools>;
 }
 
@@ -245,6 +248,7 @@ export default class FinanceChatProvider implements ApiProvider {
       if (!group) return { error: "評価用demo.dbに現在のグループがありません。" };
 
       const response = await this.dependencies.generate({
+        abortSignal: AbortSignal.timeout(FINANCE_CHAT_REQUEST_TIMEOUT_MS),
         maxOutputTokens: FINANCE_CHAT_MAX_OUTPUT_TOKENS,
         model: this.dependencies.getModel(),
         prepareStep: ({ stepNumber }) =>
@@ -252,6 +256,7 @@ export default class FinanceChatProvider implements ApiProvider {
         prompt,
         stopWhen: stepCountIs(FINANCE_CHAT_MAX_GENERATION_STEPS),
         system: getFinanceChatSystemPrompt(getEvaluationDate(context?.vars?.evaluationDate)),
+        timeout: { totalMs: FINANCE_CHAT_REQUEST_TIMEOUT_MS },
         tools: createFinanceChatTools(db, group.id),
       });
       const verificationSql = context?.vars?.verificationSql;

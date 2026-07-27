@@ -1,5 +1,6 @@
 export const FINANCE_CHAT_MAX_GENERATION_STEPS = 9;
 export const FINANCE_CHAT_MAX_OUTPUT_TOKENS = 2_000;
+export const FINANCE_CHAT_REQUEST_TIMEOUT_MS = 55_000;
 
 const SYSTEM_PROMPT = `あなたは家計改善を支援するAIアシスタントです。
 - 質問から対象期間、対象データ、絞り込み条件、集計単位、必要な指標、操作（検索・集計・順位・比較・推移）を解釈し、それらをツールの入力へ変換してください。

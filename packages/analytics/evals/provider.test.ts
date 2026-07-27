@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   FINANCE_CHAT_MAX_GENERATION_STEPS,
   FINANCE_CHAT_MAX_OUTPUT_TOKENS,
+  FINANCE_CHAT_REQUEST_TIMEOUT_MS,
 } from "../src/chat/prompt";
 import FinanceChatProvider, { toEvaluationOutput, type ProviderDependencies } from "./provider";
 
@@ -201,7 +202,9 @@ describe("FinanceChatProvider", () => {
     expect(options).toMatchObject({
       maxOutputTokens: FINANCE_CHAT_MAX_OUTPUT_TOKENS,
       prompt: "質問",
+      timeout: { totalMs: FINANCE_CHAT_REQUEST_TIMEOUT_MS },
     });
+    expect(options.abortSignal).toBeInstanceOf(AbortSignal);
     expect(options.system).toContain("現在日付は2026-07-31（Asia/Tokyo）");
     expect(options.tools).toHaveProperty("queryDatabase");
     expect(options.tools).toHaveProperty("presentChart");

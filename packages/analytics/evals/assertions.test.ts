@@ -1585,4 +1585,145 @@ describe("assertFinanceChatOutput", () => {
       ),
     ).toMatchObject({ pass: false });
   });
+
+  test("rejects hexadecimal constants in SQL projections", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount * 0 + 0x4C793) AS income, 0x35AF6 AS expense FROM transactions",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
+  test("does not grade image alt text as a rendered answer", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。](x)",
+        }),
+        {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("grounds counts only with scope-qualified database queries", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月の取引件数は999件です。",
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT COUNT(*) AS count FROM transactions WHERE date LIKE '2030-01%'",
+              },
+              output: { rows: [{ count: 0 }], truncated: false },
+            },
+            {
+              input: { sql: "SELECT 999 AS count" },
+              output: { rows: [{ count: 999 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectNoData: true,
+              requiredSqlLiteralBindings: [
+                ["2030-01", "\\bdate\\b\\s*(?:=|like)\\s*__required_literal__"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", "\\bcount\\s*\\(\\s*\\*\\s*\\)"],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+  });
+
+  test("accepts an equivalent half-open monthly date range", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS income FROM transactions WHERE date >= '2026-07-01' AND date < '2026-08-01'",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlLiteralBindingGroups: [
+                [["2026-07", "\\bdate\\b\\s*=\\s*__required_literal__"]],
+                [
+                  ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"],
+                  ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"],
+                ],
+              ],
+              requiredSqlPatterns: [
+                "\\btransactions\\b",
+                "\\bdate\\b\\s*>=\\s*\\?",
+                derivedAmountSqlPattern,
+              ],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("scopes the food total to the requested month", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年6月の食費は41,837円です。" }), {
+        config: {
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["食費", "41837"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+  });
+
+  test("rejects unqueried account claims around exact detail tables", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "支払い元は銀行Aです。" }), {
+        config: { forbiddenTextTerms: ["支払い元", "銀行"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+  });
 });
