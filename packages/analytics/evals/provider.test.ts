@@ -211,6 +211,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("extracts a blockquoted reference-style Markdown link", () => {
+    const output = toEvaluationOutput({
+      text: "> [2026年7月の収支を確認][収支]\n>\n> [収支]: /0/cf/2026-07",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
+  });
+
   test("normalizes whitespace in Markdown reference labels", () => {
     const output = toEvaluationOutput({
       text: "[2026年7月の収支を確認][cash flow]\n\n[cash   flow]: /0/cf/2026-07",

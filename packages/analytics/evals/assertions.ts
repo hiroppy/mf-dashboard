@@ -287,12 +287,15 @@ function getMissingTextPairs(
       }, normalizedText.length);
       return normalizedText.slice(valueStart, valueEnd);
     });
+    const lastSegment = segments.at(-1);
     const segment = /^\d+$/.test(normalizedValue)
-      ? segments.findLast(
-          (candidate) =>
-            getAssertedMonetaryClaims(candidate).length > 0 ||
-            (normalizedValue === "0" && /^(?:は|が)?(?:ありません|ない)/.test(candidate)),
-        )
+      ? lastSegment?.includes(normalizedValue) && hasDirectMonetaryNegation(lastSegment)
+        ? lastSegment
+        : segments.findLast(
+            (candidate) =>
+              getAssertedMonetaryClaims(candidate).length > 0 ||
+              (normalizedValue === "0" && /^(?:は|が)?(?:ありません|ない)/.test(candidate)),
+          )
       : segments.findLast((candidate) => candidate.includes(normalizedValue));
     if (segment === undefined) {
       return !(labelIndices.length === 1 && hasTablePair(text, normalizedLabel, normalizedValue));
@@ -775,6 +778,7 @@ function hasSuspiciousNumericExpression(expression: string): boolean {
     /\b(?:char|printf)\s*\([^)]*\d[^)]*\)/i.test(expressionWithoutStrings) ||
     /\bconcat\s*\([^)]*'\d+'[^)]*'\d+'[^)]*\)/i.test(expression) ||
     /\breplace\s*\([^)]*'[^']*\d[^']*'[^)]*\)/i.test(expression) ||
+    /\bsubstr(?:ing)?\s*\(\s*'[^']*\d[^']*'/i.test(expression) ||
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
@@ -1202,6 +1206,7 @@ export default function assertFinanceChatOutput(
   if (
     expectsNoData &&
     (/(?:データ|明細|取引|履歴|食費取引)?(?:が|は)?存在します/.test(patternText) ||
+      /(?:データ|明細|取引|履歴|食費取引)(?:が|は)?見つかりました/.test(patternText) ||
       /(?:ありません|見つかりません|0件(?:です|でした)?)[^。！？\n]*(?:実際には[^。！？\n]*)?(?:データ|明細|取引|履歴)(?:が|は)?あります/.test(
         patternText,
       ) ||

@@ -273,6 +273,7 @@ describe("assertFinanceChatOutput", () => {
     for (const text of [
       "2030年1月の食費データはありませんが、実際には取引があります。",
       "2030年1月の食費データはありません。ただし実際には取引があります。",
+      "2030年1月の食費データはありません。取引が見つかりました。",
       "食費取引が存在します。しかし、2030年1月の食費データはありません。",
     ]) {
       expect(
@@ -427,6 +428,11 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
     expect(
+      assertFinanceChatOutput(output({ text: "trans&NoBreak;actions" }), {
+        config: { forbiddenTextTerms: ["transactions"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+    expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円です。別計算の収入−313235です。" }), {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
@@ -443,6 +449,14 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "収入は313,235円というわけではありません。" }), {
         config: { expectedTextPairs: [["収入", "313235"]] },
       }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円です。訂正: 収入は313,235円ではありません。",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
     ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円未満です。" }), {
@@ -1438,6 +1452,30 @@ describe("assertFinanceChatOutput", () => {
               expectedRows: [["313235"]],
               expectedRowAssociations: [["income", "313235"]],
               requiredSqlPatterns: ["313235"],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) * 0 + CAST(substr('x313235', 2) AS INTEGER) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
             },
           },
         },

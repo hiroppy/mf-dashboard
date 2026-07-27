@@ -7,6 +7,7 @@ const namedCharacterReferences: Record<string, string> = {
   gt: ">",
   lt: "<",
   minus: "−",
+  nobreak: "\u2060",
   percnt: "%",
   quot: '"',
   sol: "/",
@@ -26,7 +27,7 @@ export function decodeHtmlCharacterReferences(text: string): string {
       },
     )
     .replace(
-      /&(amp|apos|colon|gt|lt|minus|percnt|quot|sol|yen|zerowidthspace);/gi,
+      /&(amp|apos|colon|gt|lt|minus|nobreak|percnt|quot|sol|yen|zerowidthspace);/gi,
       (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
     );
 }
@@ -182,7 +183,8 @@ export function getRenderableMarkdownLines(text: string): string[] {
 }
 
 function parseMarkdownReferenceDefinition(line: string): [string, string] | undefined {
-  const definition = line.match(
+  const containerContent = line.replace(/^(?: {0,3}>[ \t]?)+/, "");
+  const definition = containerContent.match(
     /^\s*\[([^\]]+)]:\s*(<[^<>\s]+>|[^\s<>]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/,
   );
   return definition ? [normalizeReferenceLabel(definition[1]!), definition[2]!] : undefined;
