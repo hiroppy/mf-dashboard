@@ -23,7 +23,7 @@
       "dependsOn": ["^build"]
     },
     "test:mutation": {
-      "dependsOn": ["^test:mutation"]
+      "cache": false
     },
     "test:e2e": {
       "dependsOn": ["^build:demo"],

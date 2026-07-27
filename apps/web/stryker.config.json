@@ -3,6 +3,15 @@
   "concurrency": "50%",
   "checkers": ["typescript"],
   "coverageAnalysis": "perTest",
+  "ignorePatterns": [
+    "**",
+    "!.next/types/**/*.ts",
+    "!next-env.d.ts",
+    "!package.json",
+    "!src/**/*",
+    "!tsconfig.json",
+    "!vitest.mutation.config.ts"
+  ],
   "ignoreStatic": true,
   "mutate": [
     "src/app/accounts/account-list.client.tsx",
