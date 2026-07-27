@@ -19,6 +19,7 @@ import {
 } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
+import { removeMarkdownImages } from "./markdown";
 
 interface GeneratedResponse {
   text: string;
@@ -92,10 +93,9 @@ function unique(values: string[]): string[] {
 }
 
 function removeNonRenderedText(text: string): string {
-  return text
+  return removeMarkdownImages(text)
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/~~[\s\S]*?~~/g, "")
-    .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]|!\[[^\]]*]/g, "");
+    .replace(/~~[\s\S]*?~~/g, "");
 }
 
 function removeCode(text: string): string {

@@ -4,13 +4,27 @@
     evaluationDate: "2026-07-31T03:00:00.000Z"
     verificationSql: >-
       SELECT
-        SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income,
-        SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense
+        SUM(CASE
+          WHEN type = 'income' THEN amount
+          WHEN type = 'transfer' AND is_internal_transfer = 0
+            AND account_id IS NOT NULL AND transfer_target_account_id IS NULL THEN amount
+          ELSE 0
+        END) AS income,
+        SUM(CASE
+          WHEN type = 'expense' THEN amount
+          WHEN type = 'transfer' AND is_internal_transfer = 0
+            AND account_id IS NULL AND transfer_target_account_id IS NOT NULL THEN amount
+          ELSE 0
+        END) AS expense
       FROM transactions
       WHERE substr(date, 1, 7) = '2026-07'
-        AND is_transfer = 0
-        AND is_excluded_from_calculation = 0
-        AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
+        AND (type = 'transfer' OR is_excluded_from_calculation = 0)
+        AND (
+          account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
+          OR transfer_target_account_id IN (
+            SELECT account_id FROM group_accounts WHERE group_id = :groupId
+          )
+        )
   assert:
     - type: is-json
     - type: javascript
@@ -41,12 +55,14 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
+              "\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
+              "\\btransfer_target_account_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
               "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\btype\\b",
               "\\b(?:sum|total)\\s*\\(",
-              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\btransfer_target_account_id\\b",
               "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
@@ -68,7 +84,6 @@
       WHERE substr(date, 1, 7) = '2026-07'
         AND type = 'expense'
         AND category = '食費'
-        AND is_transfer = 0
         AND is_excluded_from_calculation = 0
         AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
       GROUP BY sub_category
@@ -115,12 +130,11 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
+              "\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
               "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
               "\\btype\\b\\s*=\\s*\\?",
-              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
               "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
@@ -142,7 +156,6 @@
       WHERE date = '2026-07-03'
         AND type = 'expense'
         AND category = '食費'
-        AND is_transfer = 0
         AND is_excluded_from_calculation = 0
         AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
   assert:
@@ -170,12 +183,11 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
+              "\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
               "\\bdate\\b\\s*=\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
               "\\btype\\b\\s*=\\s*\\?",
-              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
               "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:
@@ -226,7 +238,6 @@
       WHERE substr(date, 1, 7) = '2030-01'
         AND type = 'expense'
         AND category = '食費'
-        AND is_transfer = 0
         AND is_excluded_from_calculation = 0
         AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
   assert:
@@ -256,12 +267,11 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
+              "\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
               "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?:\\bamount\\b|\\bcount\\s*\\(\\s*\\*\\s*\\))(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
               "\\btype\\b\\s*=\\s*\\?",
-              "\\bis_transfer\\b\\s*=\\s*(?:0|false)",
               "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
             ]
         forbiddenTextTerms:

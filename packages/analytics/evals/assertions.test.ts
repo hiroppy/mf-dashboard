@@ -473,6 +473,16 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: ["## 2026年7月", "| 項目 | 金額 |", "| --- | ---: |", "| 食費 | 41,837円 |"].join(
+            "\n",
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("compares chart values by label without requiring data order", () => {
@@ -1219,6 +1229,74 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("requires the selected-group filter to constrain transaction rows", () => {
+    const context = {
+      config: {
+        databaseEvidence: {
+          expectedRows: [["313235"]],
+          expectedRowAssociations: [["income", "313235"]],
+          requiredSqlPatterns: [
+            derivedAmountSqlPattern,
+            "\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
+          ],
+        },
+      },
+    };
+    const evidence = {
+      fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+      databaseQueries: [
+        {
+          input: {
+            sql: "WITH ignored AS (SELECT account_id FROM group_accounts WHERE group_id = :groupId) SELECT SUM(amount) AS income FROM transactions WHERE type = 'income'",
+          },
+          output: { rows: [{ income: 313_235 }], truncated: false },
+        },
+      ],
+    };
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("queryDatabase"),
+    });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(amount) AS income FROM transactions WHERE type = 'income' AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+  });
+
+  test("requires selected-group boundary transfer classification", () => {
+    const context = {
+      config: {
+        databaseEvidence: {
+          expectedRows: [["313235", "219894"]],
+          expectedRowAssociations: [
+            ["income", "313235"],
+            ["expense", "219894"],
+          ],
+          requiredSqlPatterns: [
+            derivedAmountSqlPattern,
+            "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)",
+            "\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
+            "\\btransfer_target_account_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId",
+          ],
+        },
+      },
+    };
+    const evidence = {
+      fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+      databaseQueries: [
+        {
+          input: {
+            sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense FROM transactions WHERE is_transfer = 0 AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)",
+          },
+          output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+        },
+      ],
+    };
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(CASE WHEN type = 'income' OR (type = 'transfer' AND is_internal_transfer = 0 AND account_id IS NOT NULL AND transfer_target_account_id IS NULL) THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' OR (type = 'transfer' AND is_internal_transfer = 0 AND account_id IS NULL AND transfer_target_account_id IS NOT NULL) THEN amount ELSE 0 END) AS expense FROM transactions WHERE account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId) OR transfer_target_account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+  });
+
   test("accepts one complete result among equivalent query result shapes", () => {
     expect(
       assertFinanceChatOutput(
@@ -1922,6 +2000,23 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "![x[y] 2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。](x)",
+        }),
+        {
+          config: {
+            expectedTextFacts: ["2026年7月"],
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("does not grade hidden HTML as rendered evidence", () => {
@@ -1942,6 +2037,33 @@ describe("assertFinanceChatOutput", () => {
     ]) {
       expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: false });
     }
+    for (const attribute of ["title", "aria-label", "data-summary"]) {
+      expect(
+        assertFinanceChatOutput(
+          output({ text: `<span ${attribute}="${hiddenEvidence}"></span>` }),
+          { config },
+        ),
+      ).toMatchObject({ pass: false });
+    }
+  });
+
+  test("decodes visible character references before checking monetary claims", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "予算は&#165;999,999です。2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
 
   test("grounds counts only with scope-qualified database queries", () => {

@@ -177,6 +177,17 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual([]);
   });
 
+  test("removes a nested Markdown image label", () => {
+    const output = toEvaluationOutput({
+      text: "![x[y] 2026年7月の収支](/0/cf/2026-07)",
+      steps: [],
+    });
+
+    expect(output.text).toContain("![x[y]");
+    expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual([]);
+  });
+
   test("does not collect an unused reference definition as a text route", () => {
     const output = toEvaluationOutput({
       text: "[未使用]: /0/cf/2026-07",

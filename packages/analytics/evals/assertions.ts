@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
+import { removeMarkdownImages } from "./markdown";
 
 interface ChartExpectation {
   chartType: FinanceChart["chartType"];
@@ -71,6 +72,14 @@ const associationLabelAliases: Record<string, string[]> = {
   income: ["income", "収入"],
   total: ["total", "合計"],
 };
+const namedCharacterReferences: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  quot: '"',
+  yen: "¥",
+};
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
@@ -90,13 +99,31 @@ function removeHiddenHtmlElements(text: string): string {
   return renderedText;
 }
 
+function decodeCharacterReferences(text: string): string {
+  return text
+    .replace(
+      /&#(?:x([0-9a-f]+)|(\d+));/gi,
+      (reference, hex: string | undefined, decimal: string | undefined) => {
+        const codePoint = Number.parseInt(hex ?? decimal!, hex ? 16 : 10);
+        return codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+          ? String.fromCodePoint(codePoint)
+          : reference;
+      },
+    )
+    .replace(
+      /&(amp|apos|gt|lt|quot|yen);/gi,
+      (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
+    );
+}
+
 function getRenderedText(text: string): string {
-  return removeHiddenHtmlElements(text)
+  const visibleText = removeMarkdownImages(removeHiddenHtmlElements(text))
     .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
     .replace(/~~[\s\S]*?~~/g, "")
-    .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]|!\[[^\]]*]/g, "")
-    .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
-    .replace(/<img\b[^>]*>/gi, "");
+    .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
+  return decodeCharacterReferences(visibleText);
 }
 
 function removeCode(text: string): string {
@@ -391,7 +418,10 @@ function hasScopedTablePair(text: string, label: string, value: string, facts: s
   const lines = getRenderableLines(text);
   return getMarkdownTables(text).some((table) => {
     const columnIndex = table.header.indexOf(label);
-    if (columnIndex === -1 || !table.rows.some((row) => row[columnIndex] === value)) return false;
+    const hasColumnPair =
+      columnIndex !== -1 && table.rows.some((row) => row[columnIndex] === value);
+    const hasRowPair = table.rows.some((row) => row.includes(label) && row.includes(value));
+    if (!hasColumnPair && !hasRowPair) return false;
     const nearestHeading = lines
       .slice(0, table.startLine)
       .findLast((line) => /^#{1,6}\s+/.test(line));
