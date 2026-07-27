@@ -2136,6 +2136,8 @@ describe("assertFinanceChatOutput", () => {
       `<span hidden>${hiddenEvidence}</span>`,
       `<div aria-hidden="true">${hiddenEvidence}</div>`,
       `<p style="display: none">${hiddenEvidence}</p>`,
+      `<span style=display:none>${hiddenEvidence}</span>`,
+      `<span STYLE=VISIBILITY:HIDDEN>${hiddenEvidence}</span>`,
       `<template>${hiddenEvidence}</template>`,
     ]) {
       expect(assertFinanceChatOutput(output({ text }), { config })).toMatchObject({ pass: false });
