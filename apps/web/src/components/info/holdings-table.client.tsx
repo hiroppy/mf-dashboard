@@ -3,6 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { sortByAmountDescending } from "../../lib/amount-order";
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getChartColorArray } from "../../lib/colors";
 import { formatCurrency, formatPercent } from "../../lib/format";
@@ -42,24 +43,41 @@ interface HoldingsTableClientProps {
   enableSharedFilter?: boolean;
 }
 
+function sortCategoryGroups(categories: readonly CategoryGroup[]): CategoryGroup[] {
+  return sortByAmountDescending(
+    categories.map((group) => ({
+      ...group,
+      items: sortByAmountDescending(
+        group.items,
+        (item) => item.amount,
+        (item) => `${item.name}\u0000${item.id}`,
+      ),
+    })),
+    (group) => group.total,
+    (group) => group.category,
+  );
+}
+
 export function filterCategories(categories: CategoryGroup[], selectedFilter?: string) {
-  if (!selectedFilter || selectedFilter === "__all__") return categories;
+  if (!selectedFilter || selectedFilter === "__all__") return sortCategoryGroups(categories);
 
   const [institution, categoryName] = selectedFilter.split("|");
-  return categories
-    .map((group) => {
-      const items = group.items.filter(
-        (item) =>
-          item.institution === institution &&
-          (categoryName === undefined || item.categoryName === categoryName),
-      );
-      return {
-        ...group,
-        items,
-        total: items.reduce((sum, item) => sum + (item.amount ?? 0), 0),
-      };
-    })
-    .filter((group) => group.items.length > 0);
+  return sortCategoryGroups(
+    categories
+      .map((group) => {
+        const items = group.items.filter(
+          (item) =>
+            item.institution === institution &&
+            (categoryName === undefined || item.categoryName === categoryName),
+        );
+        return {
+          ...group,
+          items,
+          total: items.reduce((sum, item) => sum + (item.amount ?? 0), 0),
+        };
+      })
+      .filter((group) => group.items.length > 0),
+  );
 }
 
 export function HoldingsTableTotal({

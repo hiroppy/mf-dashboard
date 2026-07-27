@@ -3,7 +3,7 @@
 import { Scale } from "lucide-react";
 import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { getAssetCategoryStackOrder, sortAssetCategories } from "../../lib/asset-category-order";
+import { sortByAmountDescending } from "../../lib/amount-order";
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
@@ -32,7 +32,11 @@ export function BalanceSheetChartClient({
 
   const totalAssets = assets.reduce((sum, a) => sum + a.amount, 0);
   const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
-  const orderedAssets = sortAssetCategories(assets);
+  const orderedAssets = sortByAmountDescending(
+    assets,
+    (asset) => asset.amount,
+    (asset) => asset.category,
+  );
 
   // チャートデータ: 左=資産、右=負債+純資産
   const assetData: Record<string, string | number> = { name: "資産" };
@@ -48,8 +52,20 @@ export function BalanceSheetChartClient({
 
   const chartData = [assetData, liabilityData];
   const assetKeys = orderedAssets.map((a) => a.category);
-  const stackedAssetKeys = getAssetCategoryStackOrder(assetKeys);
-  const legendKeys = [...assetKeys, "負債", "純資産"];
+  const stackedAssetKeys = [...assetKeys].reverse();
+  const orderedBalanceItems = sortByAmountDescending(
+    [
+      ...orderedAssets.map(({ category, amount }) => ({ key: category, amount })),
+      { key: "負債", amount: totalLiabilities },
+      { key: "純資産", amount: netAssets },
+    ],
+    (item) => item.amount,
+    (item) => item.key,
+  );
+  const legendKeys = orderedBalanceItems.map((item) => item.key);
+  const stackedBalanceKeys = [...orderedBalanceItems]
+    .filter((item) => item.key === "負債" || item.key === "純資産")
+    .reverse();
   const getLegendOrder = (name: string) => {
     const index = legendKeys.indexOf(name);
     return index === -1 ? Number.MAX_SAFE_INTEGER : index;
@@ -73,18 +89,19 @@ export function BalanceSheetChartClient({
     return (
       <ChartTooltipContent>
         <div className="font-bold mb-2">{label}</div>
-        {[...payload]
-          .filter((p) => p.value > 0)
-          .sort((a, b) => getLegendOrder(a.name) - getLegendOrder(b.name))
-          .map((p) => (
-            <div key={p.name} className="flex justify-between gap-4">
-              <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: p.fill }} />
-                {p.name}
-              </span>
-              <AmountDisplay amount={p.value} weight="medium" />
-            </div>
-          ))}
+        {sortByAmountDescending(
+          payload.filter((item) => Number.isFinite(item.value)),
+          (item) => item.value,
+          (item) => item.name,
+        ).map((p) => (
+          <div key={p.name} className="flex justify-between gap-4">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: p.fill }} />
+              {p.name}
+            </span>
+            <AmountDisplay amount={p.value} weight="medium" />
+          </div>
+        ))}
         <div className="flex justify-between gap-4 mt-2 pt-2 border-t font-bold">
           <span>合計</span>
           <AmountDisplay amount={total} weight="bold" />
@@ -143,10 +160,16 @@ export function BalanceSheetChartClient({
                 name={key}
               />
             ))}
-            {/* 負債 */}
-            <Bar dataKey="負債" stackId="stack" fill={semanticColors.liability} name="負債" />
-            {/* 純資産 */}
-            <Bar dataKey="純資産" stackId="stack" fill={semanticColors.netAssets} name="純資産" />
+            {/* 負債・純資産 */}
+            {stackedBalanceKeys.map(({ key }) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                stackId="stack"
+                fill={key === "負債" ? semanticColors.liability : semanticColors.netAssets}
+                name={key}
+              />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
