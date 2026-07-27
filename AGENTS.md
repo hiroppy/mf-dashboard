@@ -92,6 +92,18 @@ Import these functions from `./logger.js`.
 - Select appropriate ISTQB test techniques based on the specification, risks, and quality characteristics under test. Techniques include equivalence partitioning, boundary value analysis, decision table testing, state transition testing, statement testing, branch testing, exploratory testing, checklist-based testing, and error guessing.
 - In QA plans and PR descriptions, document the selected quality characteristics, test techniques, primary test conditions, and any significant risks left out of scope. Do not apply techniques as a box-checking exercise; be able to explain why each technique was selected and what coverage it is expected to provide.
 
+### Crawler Test Layering
+
+Use the following priority for crawler tests. See `.agents/skills/crawler-scraper/SKILL.md` for implementation details and commands.
+
+1. Test post-extraction parsing, transformation, comparison, and decision logic as DOM-independent unit tests using anonymous strings or objects.
+2. Test selectors, navigation, and HTML/DOM structure against the authenticated real service with read-only crawler E2E tests.
+3. Use embedded HTML fixtures only for failure branches that cannot be represented safely and deterministically in read-only E2E. Keep the markup minimal and record the reason for the exception in a nearby test comment.
+
+Crawler tests must not assert or log real names, balances, account identifiers, or other personal values. E2E assertions may verify only navigation and structural properties such as the presence and shape of headings, tables, rows, cells, attributes, and links.
+
+Bound structure-only E2E navigation independently from production crawl coverage. When production must inspect every account for correctness, an E2E may inspect at most one representative detail page and skip when no suitable candidate exists; document that scope difference in the test and pull request.
+
 ## Validation and Completion
 
 - Add unit tests for new logic.

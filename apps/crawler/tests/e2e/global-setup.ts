@@ -11,7 +11,6 @@ export const SCREENSHOT_DIR = path.resolve(process.cwd(), "tests/e2e/screenshots
 const ROOT_ENV_PATH = path.resolve(process.cwd(), "../../.env");
 
 let defaultGroupId: string | null = null;
-let defaultGroupName: string | null = null;
 
 export function ensureScreenshotDir(): void {
   if (!existsSync(SCREENSHOT_DIR)) {
@@ -39,10 +38,7 @@ export async function setup() {
     await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
     const group = await getCurrentGroup(page);
     defaultGroupId = group?.id ?? null;
-    defaultGroupName = group?.name ?? null;
-    console.log(
-      `Default group captured: ${defaultGroupName ?? "none"} (id: ${defaultGroupId ?? "null"})`,
-    );
+    console.log(defaultGroupId ? "Default group state captured" : "No default group found");
   } finally {
     await browser.close();
   }
@@ -54,7 +50,7 @@ export async function teardown() {
     return;
   }
 
-  console.log(`Restoring default group: ${defaultGroupName} (id: ${defaultGroupId})`);
+  console.log("Restoring default group state");
   const browser = await chromium.launch({ headless: true });
   const context = await createBrowserContext(browser, { useAuthState: true });
   const page = await context.newPage();
@@ -72,7 +68,7 @@ export async function teardown() {
     }
 
     await switchGroup(page, defaultGroupId);
-    console.log(`Successfully restored group to: ${defaultGroupName}`);
+    console.log("Successfully restored default group state");
   } catch (err) {
     console.error("Failed to restore default group:", err);
   } finally {

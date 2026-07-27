@@ -107,8 +107,7 @@ export const Default: Story = {
     await expect(sortSelect).toHaveTextContent("金額順");
 
     await userEvent.click(sortSelect);
-    await waitFor(() => expect(sortSelect).toHaveAttribute("aria-expanded", "true"));
-    await userEvent.click(screen.getByRole("option", { name: "日付順" }));
+    await userEvent.click(await screen.findByRole("option", { name: "日付順" }));
     await waitFor(() => expect(sortSelect).toHaveTextContent("日付順"));
 
     const dateSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
@@ -117,8 +116,7 @@ export const Default: Story = {
     await expect(sortSelect).toHaveTextContent("日付順");
 
     await userEvent.click(sortSelect);
-    await waitFor(() => expect(sortSelect).toHaveAttribute("aria-expanded", "true"));
-    await userEvent.click(screen.getByRole("option", { name: "金額順" }));
+    await userEvent.click(await screen.findByRole("option", { name: "金額順" }));
     await waitFor(() => expect(sortSelect).toHaveTextContent("金額順"));
 
     const amountSortedDescriptions = screen.getAllByText(/店舗 [AB]/);

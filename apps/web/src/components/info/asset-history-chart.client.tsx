@@ -11,7 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { compareAssetCategories } from "../../lib/asset-category-order";
+import { sortByAmountDescending } from "../../lib/amount-order";
 import {
   CHART_INITIAL_DIMENSION,
   CHART_PERIOD_OPTIONS,
@@ -37,6 +37,30 @@ interface AssetHistoryChartProps {
   height?: number;
 }
 
+export function getAssetHistoryCategoryLines(data: AssetHistoryPoint[]) {
+  const categoryLines = [
+    {
+      dataKey: "totalAssets",
+      name: "総資産",
+      color: semanticColors.totalAssets,
+    },
+  ];
+  if (data.length === 0) return categoryLines;
+
+  return [
+    ...categoryLines,
+    ...sortByAmountDescending(
+      Object.entries(data[data.length - 1]!.categories),
+      ([, amount]) => amount,
+      ([name]) => name,
+    ).map(([name]) => ({
+      dataKey: name,
+      name,
+      color: getAssetCategoryColor(name),
+    })),
+  ];
+}
+
 interface AssetHistoryTooltipProps {
   active?: boolean;
   label?: string;
@@ -56,9 +80,12 @@ export function AssetHistoryTooltip({ active, label, payload, period }: AssetHis
   const formattedDate =
     period === "1m" ? `${year}/${Number(month)}/${Number(day)}` : `${year}/${Number(month)}`;
   const totalAssets = payload.find((item) => item.dataKey === "totalAssets")?.value;
-  const categories = payload
-    .filter((item) => item.dataKey !== "totalAssets")
-    .sort((a, b) => compareAssetCategories(String(a.dataKey), String(b.dataKey)));
+  const categories = payload.filter((item) => item.dataKey !== "totalAssets");
+  const orderedCategories = sortByAmountDescending(
+    categories,
+    (item) => item.value,
+    (item) => String(item.dataKey),
+  );
 
   return (
     <ChartTooltipContent>
@@ -68,9 +95,9 @@ export function AssetHistoryTooltip({ active, label, payload, period }: AssetHis
           <span className="font-semibold">{formatCurrency(totalAssets)}</span>
         )}
       </div>
-      {categories.length > 0 && (
+      {orderedCategories.length > 0 && (
         <div className="mt-2 space-y-1 border-t pt-2">
-          {categories.map((item) => (
+          {orderedCategories.map((item) => (
             <div key={String(item.dataKey)} className="flex items-center justify-between gap-6">
               <span className="flex items-center gap-2">
                 <span
@@ -93,29 +120,7 @@ export function AssetHistoryChartClient({ data, height = 350 }: AssetHistoryChar
   const [period, setPeriod] = useState<Period>("6m");
   const [visibleLines, setVisibleLines] = useState<Set<string>>(() => new Set(["totalAssets"]));
 
-  const categoryLines =
-    data.length === 0
-      ? [
-          {
-            dataKey: "totalAssets",
-            name: "総資産",
-            color: semanticColors.totalAssets,
-          },
-        ]
-      : [
-          {
-            dataKey: "totalAssets",
-            name: "総資産",
-            color: semanticColors.totalAssets,
-          },
-          ...Object.entries(data[data.length - 1].categories)
-            .sort(([a], [b]) => compareAssetCategories(a, b))
-            .map(([name]) => ({
-              dataKey: name,
-              name,
-              color: getAssetCategoryColor(name),
-            })),
-        ];
+  const categoryLines = getAssetHistoryCategoryLines(data);
 
   // When data changes, update visible lines to show all categories
   useEffect(() => {

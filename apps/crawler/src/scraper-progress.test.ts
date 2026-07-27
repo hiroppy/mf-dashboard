@@ -10,7 +10,8 @@ import { getAssetSummary } from "./scrapers/asset-summary.js";
 import { getCashFlow } from "./scrapers/cash-flow.js";
 import { getAllGroups, getCurrentGroup, switchGroup } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
-import { getPortfolio } from "./scrapers/portfolio.js";
+import { getManualHoldingAccountMap } from "./scrapers/manual-holding-accounts.js";
+import { getLinkedAccountPnsSource, getPortfolio } from "./scrapers/portfolio.js";
 import { clickRefreshButton } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
@@ -27,7 +28,13 @@ vi.mock("./scrapers/group.js", () => ({
   switchGroup: vi.fn<() => void>(),
 }));
 vi.mock("./scrapers/liabilities.js", () => ({ getLiabilities: vi.fn<() => void>() }));
-vi.mock("./scrapers/portfolio.js", () => ({ getPortfolio: vi.fn<() => void>() }));
+vi.mock("./scrapers/manual-holding-accounts.js", () => ({
+  getManualHoldingAccountMap: vi.fn<() => void>(),
+}));
+vi.mock("./scrapers/portfolio.js", () => ({
+  getLinkedAccountPnsSource: vi.fn<() => void>(),
+  getPortfolio: vi.fn<() => void>(),
+}));
 vi.mock("./scrapers/refresh.js", () => ({
   clickRefreshButton: vi.fn<() => void>(),
   getMaxWaitMinutes: () => 20,
@@ -51,6 +58,12 @@ beforeEach(async () => {
     incompleteAccounts: ["Institution A", "Institution B"],
   });
   vi.mocked(getRegisteredAccounts).mockResolvedValue({ accounts: [] });
+  vi.mocked(getManualHoldingAccountMap).mockResolvedValue(new Map());
+  vi.mocked(getLinkedAccountPnsSource).mockResolvedValue({
+    complete: true,
+    fingerprints: [],
+    items: [],
+  });
   vi.mocked(getPortfolio).mockResolvedValue({ items: [], totalAssets: 0 });
   vi.mocked(getLiabilities).mockResolvedValue({ items: [], totalLiabilities: 0 });
   vi.mocked(getCashFlow).mockResolvedValue({
@@ -133,6 +146,7 @@ describe("scraper progress", () => {
 
   test.each([
     ["登録口座", getRegisteredAccounts, "registered_accounts"],
+    ["通常口座の保険・年金", getLinkedAccountPnsSource, "portfolio"],
     ["ポートフォリオ", getPortfolio, "portfolio"],
     ["負債", getLiabilities, "liabilities"],
   ] as const)("%s の取得失敗を対応する step に記録する", async (_label, getData, step) => {

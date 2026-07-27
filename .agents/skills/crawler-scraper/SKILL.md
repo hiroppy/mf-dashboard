@@ -12,7 +12,8 @@ description: Use when adding new scraping targets to the crawler
 - [ ] Define types in `packages/db/src/types.ts`
 - [ ] Add repository if new data storage needed
 - [ ] Integrate into `apps/crawler/src/index.ts`
-- [ ] Add unit tests for parsers
+- [ ] Add DOM-independent unit tests for parser decisions and transformations
+- [ ] Add authenticated read-only E2E coverage when selectors, navigation, or page structure change
 
 ## File Locations
 
@@ -77,18 +78,24 @@ export const mfUrls = {
 
 ## Testing
 
-### Test Types
+### Test Types and Priority
 
-| Type | When to Use                                               | Location                       |
-| ---- | --------------------------------------------------------- | ------------------------------ |
-| Unit | Service-independent logic (parsers, data transformations) | `*.test.ts` next to source     |
-| E2E  | Requires actual account/service interaction               | `vitest.config.ts` e2e project |
+| Priority | Type                   | When to Use                                                                                                               | Location                                          |
+| -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| 1        | Unit                   | Post-extraction parsing, normalization, comparison, mapping, and fail-closed decisions using anonymous strings or objects | `*.test.ts` next to source                        |
+| 2        | E2E                    | Selectors, navigation, and required HTML/DOM structure on the authenticated real service                                  | `tests/e2e/*.test.ts` in the `e2e` Vitest project |
+| 3        | HTML fixture exception | A failure branch that cannot be produced safely and deterministically against the real service                            | The narrowest applicable unit test                |
 
 ### Rules (MUST follow)
 
-- **NEVER write tests that depend on actual data** (personal financial data changes constantly)
-- Unit tests: Use hardcoded mock strings, not real scraped data
-- E2E tests: Only verify page navigation and element existence, not actual values
+- Extract DOM values into strings or objects, then test the resulting pure transformation and decision logic without Playwright or embedded HTML.
+- Verify selector compatibility and page structure with authenticated **read-only** E2E tests. Do not trigger refresh, account updates, crawling, or database writes in structure-only E2E tests.
+- **NEVER write assertions that depend on actual financial data.** Do not assert or log real names, balances, account IDs, or other personal values.
+- E2E assertions may check navigation and structural properties only, including the presence and shape of headings, tables, rows, cells, attributes, and links.
+- Bound structure-only E2E navigation independently from production crawl coverage. If production scans every account for correctness, inspect at most one representative detail page in E2E, skip when no suitable candidate exists, and document the scope difference in the test and pull request.
+- Do not use embedded HTML fixtures merely to imitate the current service DOM. They are allowed only when a failure branch cannot be represented safely and deterministically in read-only E2E.
+- For every HTML fixture exception, keep the markup to the minimum needed and add a nearby comment explaining why authenticated read-only E2E cannot cover that branch.
+- Use anonymous hardcoded strings and objects for unit tests; never copy values from the production database or authenticated pages.
 
 ### Running Tests
 

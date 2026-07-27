@@ -2,7 +2,7 @@ import { getAccountByMfId } from "@mf-dashboard/db";
 import { getLatestTotalAssets } from "@mf-dashboard/db";
 import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
 import { LucideIcon, PiggyBankIcon, LandmarkIcon } from "lucide-react";
-import { sortAssetCategories } from "../../lib/asset-category-order";
+import { sortByAmountDescending } from "../../lib/amount-order";
 import { Card, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
 import { HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
@@ -105,14 +105,19 @@ export async function HoldingsTable({
     return acc;
   }, {});
 
-  const categories = Object.entries(grouped)
-    .map(([category, items]) => ({
+  const orderedCategories = sortByAmountDescending(
+    Object.entries(grouped).map(([category, items]) => ({
       category,
-      items: items.sort((a, b) => (b.amount || 0) - (a.amount || 0)),
-      total: items.reduce((sum, h) => sum + (h.amount || 0), 0),
-    }))
-    .sort((a, b) => b.total - a.total);
-  const orderedCategories = type === "asset" ? sortAssetCategories(categories) : categories;
+      items: sortByAmountDescending(
+        items,
+        (item) => item.amount,
+        (item) => `${item.name}\u0000${item.id}`,
+      ),
+      total: items.reduce((sum, h) => sum + (h.amount ?? 0), 0),
+    })),
+    (category) => category.total,
+    (category) => category.category,
+  );
 
   return (
     <Card>
