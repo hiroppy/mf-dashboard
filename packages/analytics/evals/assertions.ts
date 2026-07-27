@@ -881,9 +881,8 @@ function preservesOneSidedGroupBoundary(sql: string, requiredColumns: string[]):
   ) {
     return true;
   }
-  const whereClause = normalizeSqlIdentifiers(removeSqlComments(sql)).match(
-    /\bwhere\b([\s\S]*)/i,
-  )?.[1];
+  const normalizedSql = normalizeSqlIdentifiers(removeSqlComments(sql));
+  const whereClause = normalizedSql.match(/\bwhere\b([\s\S]*)/i)?.[1];
   if (whereClause === undefined) return false;
   const sourceScope = String.raw`(?:\w+\.)?account_id\b[\s\S]{0,160}\bgroup_accounts\b[\s\S]{0,160}\bgroup_id\b\s*=\s*:groupId`;
   const targetScope = String.raw`(?:\w+\.)?transfer_target_account_id\b[\s\S]{0,160}\bgroup_accounts\b[\s\S]{0,160}\bgroup_id\b\s*=\s*:groupId`;
@@ -895,7 +894,39 @@ function preservesOneSidedGroupBoundary(sql: string, requiredColumns: string[]):
     `case\\s+when\\s+(?:${sourceScope})\\s*\\)?\\s+then\\s+1\\s+when\\s+(?:${targetScope})\\s*\\)?\\s+then\\s+1\\s+else\\s+0\\s+end\\s*=\\s*1`,
     "i",
   ).test(whereClause);
-  return directEitherSide || caseEitherSide;
+  return (
+    directEitherSide || caseEitherSide || hasLeftJoinEitherSideBoundary(normalizedSql, whereClause)
+  );
+}
+
+function hasLeftJoinEitherSideBoundary(normalizedSql: string, whereClause: string): boolean {
+  const leftJoins = [
+    ...normalizedSql.matchAll(
+      /\bleft\s+join\s+group_accounts(?:\s+(?:as\s+)?(?!on\b)(\w+))?\s+on\s+([\s\S]*?)(?=\b(?:left|inner)\s+join\b|\bwhere\b|$)/gi,
+    ),
+  ];
+  const aliasesForColumn = (column: string): string[] =>
+    leftJoins.flatMap((join) => {
+      const alias = (join[1] ?? "group_accounts").toLocaleLowerCase();
+      const clause = join[2]!;
+      return new RegExp(
+        `\\b${alias}\\.account_id\\s*=\\s*\\w+\\.${column}\\b|\\b\\w+\\.${column}\\s*=\\s*${alias}\\.account_id\\b`,
+        "i",
+      ).test(clause) && new RegExp(`\\b${alias}\\.group_id\\b\\s*=\\s*:groupId`, "i").test(clause)
+        ? [alias]
+        : [];
+    });
+  const sourceAliases = aliasesForColumn("account_id");
+  const targetAliases = aliasesForColumn("transfer_target_account_id");
+  const leftJoinEitherSide = sourceAliases.some((sourceAlias) =>
+    targetAliases.some((targetAlias) =>
+      new RegExp(
+        `(?:\\b${sourceAlias}\\.account_id\\b\\s+is\\s+not\\s+null\\s+or\\s+\\b${targetAlias}\\.account_id\\b\\s+is\\s+not\\s+null)|(?:\\b${targetAlias}\\.account_id\\b\\s+is\\s+not\\s+null\\s+or\\s+\\b${sourceAlias}\\.account_id\\b\\s+is\\s+not\\s+null)`,
+        "i",
+      ).test(whereClause),
+    ),
+  );
+  return leftJoinEitherSide;
 }
 
 function hasIneffectiveGroupPredicate(sql: string): boolean {

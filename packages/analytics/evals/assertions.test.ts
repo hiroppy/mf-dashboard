@@ -1649,6 +1649,9 @@ describe("assertFinanceChatOutput", () => {
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(CASE WHEN t.type = 'income' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NOT NULL AND t.transfer_target_account_id IS NULL) THEN t.amount ELSE 0 END) AS income, SUM(CASE WHEN t.type = 'expense' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NULL AND t.transfer_target_account_id IS NOT NULL) THEN t.amount ELSE 0 END) AS expense FROM transactions t WHERE EXISTS (SELECT 1 FROM group_accounts source_group WHERE source_group.account_id = t.account_id AND source_group.group_id = :groupId) AND EXISTS (SELECT 1 FROM group_accounts target_group WHERE target_group.account_id = t.transfer_target_account_id AND target_group.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(CASE WHEN t.type = 'income' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NOT NULL AND t.transfer_target_account_id IS NULL) THEN t.amount ELSE 0 END) AS income, SUM(CASE WHEN t.type = 'expense' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NULL AND t.transfer_target_account_id IS NOT NULL) THEN t.amount ELSE 0 END) AS expense FROM transactions t LEFT JOIN group_accounts sg ON sg.account_id = t.account_id AND sg.group_id = :groupId LEFT JOIN group_accounts tg ON tg.account_id = t.transfer_target_account_id AND tg.group_id = :groupId WHERE sg.account_id IS NOT NULL OR tg.account_id IS NOT NULL";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
   });
 
   test("accepts one complete result among equivalent query result shapes", () => {
