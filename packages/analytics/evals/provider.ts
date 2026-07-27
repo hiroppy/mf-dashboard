@@ -20,7 +20,6 @@ import {
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
 import {
-  decodeHtmlCharacterReferences,
   getMarkdownReferenceDefinitions,
   getRenderableMarkdownLines,
   isEscapedMarkdownMarker,
@@ -109,11 +108,9 @@ function unique(values: string[]): string[] {
 }
 
 function removeNonRenderedText(text: string): string {
-  return decodeHtmlCharacterReferences(
-    removeMarkdownImages(removeHiddenHtmlElements(text))
-      .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
-      .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1"),
-  );
+  return removeMarkdownImages(removeHiddenHtmlElements(text))
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
+    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
 }
 
 function removeCode(text: string): string {

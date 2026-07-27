@@ -47,6 +47,8 @@
                 ]
             - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
+              - ["2026-07-31", "\\bdate\\b\\s*<=\\s*__required_literal__"]
             - - ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
               - ["2026-07-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           expectedRows:
@@ -131,6 +133,8 @@
                 ]
             - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
+              - ["2026-07-31", "\\bdate\\b\\s*<=\\s*__required_literal__"]
             - - ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
               - ["2026-07-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           requiredSqlPatterns:
@@ -197,6 +201,8 @@
                 ]
             - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
+              - ["2026-07-31", "\\bdate\\b\\s*<=\\s*__required_literal__"]
             - - ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
               - ["2026-07-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           expectedRows:
@@ -344,6 +350,8 @@
                 ]
             - - ["2030-01-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2030-02-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2030-01-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
+              - ["2030-01-31", "\\bdate\\b\\s*<=\\s*__required_literal__"]
             - - ["2030-01-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
               - ["2030-01-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           requiredSqlPatterns:

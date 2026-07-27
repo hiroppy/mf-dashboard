@@ -15,7 +15,7 @@ const namedCharacterReferences: Record<string, string> = {
   zerowidthspace: "\u200b",
 };
 
-export function decodeHtmlCharacterReferences(text: string): string {
+function decodeHtmlCharacterReferences(text: string): string {
   return text
     .replace(
       /&#(?:x([0-9a-f]+)|(\d+));/gi,
@@ -60,8 +60,9 @@ function removeBalancedHtmlElements(text: string, openingPattern: RegExp): strin
 }
 
 export function removeHiddenHtmlElements(text: string): string {
+  const renderedText = decodeHtmlCharacterReferences(text);
   return removeBalancedHtmlElements(
-    removeBalancedHtmlElements(text, /<(script|style|template)\b[^>]*>/gi),
+    removeBalancedHtmlElements(renderedText, /<(script|style|template)\b[^>]*>/gi),
     hiddenHtmlElementPattern,
   );
 }

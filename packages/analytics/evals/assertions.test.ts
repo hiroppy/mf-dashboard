@@ -641,6 +641,25 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
 
+    const scaledBudgetTable = [
+      text,
+      "",
+      "| 項目 | 金額 |",
+      "| --- | ---: |",
+      "| 予算 | 999万円 |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text: scaledBudgetTable }), {
+        config: {
+          expectedTextPairs: [
+            ["収入", "313235"],
+            ["支出", "219894"],
+            ["収支", "93341"],
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
+
     const currencyPrefixTable = [
       text,
       "",
@@ -1465,6 +1484,30 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT SUM(amount) * 0 + CAST(substr('x313235', 2) AS INTEGER) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) * 0 + CAST('313235x' AS INTEGER) AS income FROM transactions",
               },
               output: { rows: [{ income: 313_235 }], truncated: false },
             },
@@ -2744,6 +2787,7 @@ describe("assertFinanceChatOutput", () => {
       `<div aria-hidden="true">${hiddenEvidence}</div>`,
       `<div hidden><div>ignored</div>${hiddenEvidence}</div>`,
       `<p style="display: none">${hiddenEvidence}</p>`,
+      `<div style="display&#58;none">${hiddenEvidence}</div>`,
       `<span style=display:none>${hiddenEvidence}</span>`,
       `<span STYLE=VISIBILITY:HIDDEN>${hiddenEvidence}</span>`,
       `<template>${hiddenEvidence}</template>`,
@@ -2949,6 +2993,7 @@ describe("assertFinanceChatOutput", () => {
   test.each([
     "strftime('%Y-%m', date) = '2026-07'",
     "date >= '2026-07-01' AND date < '2026-08-01'",
+    "date >= '2026-07-01' AND date <= '2026-07-31'",
     "date BETWEEN '2026-07-01' AND '2026-07-31'",
   ])("accepts an equivalent monthly date range: %s", (datePredicate) => {
     expect(
@@ -2979,6 +3024,10 @@ describe("assertFinanceChatOutput", () => {
                 [
                   ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"],
                   ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"],
+                ],
+                [
+                  ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"],
+                  ["2026-07-31", "\\bdate\\b\\s*<=\\s*__required_literal__"],
                 ],
                 [
                   ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"],

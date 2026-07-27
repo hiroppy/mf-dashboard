@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
 import {
-  decodeHtmlCharacterReferences,
   getMarkdownReferenceDefinitions,
   getRenderableMarkdownLines,
   isEscapedMarkdownMarker,
@@ -153,7 +152,7 @@ function getRenderedText(text: string): string {
     .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
     .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
-  return normalizeKanjiMonetaryAmounts(decodeHtmlCharacterReferences(visibleText));
+  return normalizeKanjiMonetaryAmounts(visibleText);
 }
 
 function getPolicyRenderedText(text: string): string {
@@ -779,6 +778,7 @@ function hasSuspiciousNumericExpression(expression: string): boolean {
     /\bconcat\s*\([^)]*'\d+'[^)]*'\d+'[^)]*\)/i.test(expression) ||
     /\breplace\s*\([^)]*'[^']*\d[^']*'[^)]*\)/i.test(expression) ||
     /\bsubstr(?:ing)?\s*\(\s*'[^']*\d[^']*'/i.test(expression) ||
+    /\bcast\s*\(\s*'\d{3,}[^']*'\s+as\s+(?:int|integer|numeric|decimal|real)\b/i.test(expression) ||
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
@@ -1094,8 +1094,9 @@ function hasUngroundedTableAmount(
   return tables.some((table) =>
     table.rows.some((row) =>
       row.some((cell, columnIndex) => {
-        if (!/^-?\d+$/.test(cell)) return false;
-        const amount = Number(cell);
+        const monetaryCell = cell.match(/^(-?)(\d+(?:\.\d+)?(?:千|万|億|兆)?)$/);
+        if (!monetaryCell) return false;
+        const amount = (monetaryCell[1] === "-" ? -1 : 1) * parseMonetaryNumber(monetaryCell[2]!);
         const hasColumnBinding = allowedPairs.some(
           ([label, expectedAmount]) =>
             expectedAmount === amount && table.header[columnIndex] === normalize(label),
