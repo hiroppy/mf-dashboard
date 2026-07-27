@@ -138,7 +138,7 @@ function getTextLinks(text: string): string[] {
 }
 
 function getTextRoutes(text: string): string[] {
-  const renderedText = removeNonRenderedText(text);
+  const renderedText = removeNonRenderedText(text).replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
   const bareRoutes = [
     ...renderedText.matchAll(/(?<![A-Za-z0-9%._~:/-])\/[A-Za-z0-9%._~-]+(?:\/[A-Za-z0-9%._~-]+)*/g),
   ]

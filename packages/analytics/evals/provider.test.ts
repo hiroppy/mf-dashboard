@@ -177,6 +177,16 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual([]);
   });
 
+  test("does not collect an unused reference definition as a text route", () => {
+    const output = toEvaluationOutput({
+      text: "[未使用]: /0/cf/2026-07",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual([]);
+    expect(output.textRoutes).toEqual([]);
+  });
+
   test("excludes links in HTML comments and strikethrough", () => {
     const output = toEvaluationOutput({
       text: "<!-- [収支](/0/cf/2026-07) -->\n~~[収支](/0/cf/2026-07)~~\n<!-- /0/cf/2026-07 -->",

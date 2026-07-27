@@ -840,11 +840,16 @@ describe("assertFinanceChatOutput", () => {
   test("rejects qualified no-data wording", () => {
     const config = {
       expectedTextPatterns: [
-        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
+        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性|かもしれ))",
       ],
     };
     expect(
       assertFinanceChatOutput(output({ text: "2030年1月の食費データがないとは限りません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "2030年1月の食費データはないかもしれません。" }), {
         config,
       }),
     ).toMatchObject({ pass: false });
