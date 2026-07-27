@@ -210,7 +210,7 @@ export function toEvaluationOutput(
     databaseQueries,
     fixtureResult,
     toolRoutes: unique(toolRoutes),
-    textLinks: getTextLinks(text),
+    textLinks: unique([text, ...charts.map((chart) => chart.title)].flatMap(getTextLinks)),
     textRoutes: getTextRoutes([text, ...charts.map((chart) => chart.title)].join("\n")),
   };
 }

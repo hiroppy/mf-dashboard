@@ -107,7 +107,7 @@ describe("toEvaluationOutput", () => {
               toolCallId: "chart-1",
               toolName: "presentChart",
               output: {
-                title: "食費 /0/bs",
+                title: "食費 /0/bs https://evil.example",
                 chartType: "pie",
                 unit: "currency",
                 series: [{ name: "支出", amountType: "expense" }],
@@ -119,6 +119,7 @@ describe("toEvaluationOutput", () => {
       ],
     });
 
+    expect(output.textLinks).toEqual(["https://evil.example"]);
     expect(output.textRoutes).toEqual(["/0/bs"]);
   });
 
