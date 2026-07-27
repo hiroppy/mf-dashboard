@@ -62,6 +62,7 @@ interface GenerateOptions {
 
 export interface EvaluationOutput {
   text: string;
+  finalText: string;
   intermediateText: string[];
   charts: FinanceChart[];
   databaseQueries: Array<{ input: unknown; output: unknown }>;
@@ -173,8 +174,8 @@ export function toEvaluationOutput(
   response: GeneratedResponse,
   fixtureResult: unknown = null,
 ): EvaluationOutput {
-  const text = response.text;
   const intermediateText = response.steps.map((step) => step.text).filter(Boolean);
+  const text = intermediateText.join("\n") || response.text;
   const toolResults = response.steps.flatMap((step) => step.toolResults);
   const databaseQueries = response.steps.flatMap((step) =>
     step.toolCalls.flatMap((call) => {
@@ -206,6 +207,7 @@ export function toEvaluationOutput(
 
   return {
     text,
+    finalText: response.text,
     intermediateText,
     charts,
     databaseQueries,

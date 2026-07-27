@@ -52,6 +52,7 @@ interface AssertionResult {
 
 const evaluationOutputSchema = z.object({
   text: z.string(),
+  finalText: z.string().optional(),
   charts: z.array(financeChartSchema),
   databaseQueries: z.array(z.object({ input: z.unknown(), output: z.unknown() })),
   fixtureResult: z.unknown(),
@@ -830,6 +831,19 @@ function hasGroupMembershipScopeForColumn(sql: string, column: string): boolean 
   });
 }
 
+function preservesOneSidedGroupBoundary(sql: string, requiredColumns: string[]): boolean {
+  if (
+    !requiredColumns.includes("account_id") ||
+    !requiredColumns.includes("transfer_target_account_id")
+  ) {
+    return true;
+  }
+  const whereClause = normalizeSqlIdentifiers(removeSqlComments(sql)).match(
+    /\bwhere\b([\s\S]*)/i,
+  )?.[1];
+  return whereClause !== undefined && /\bor\b/i.test(whereClause);
+}
+
 function removeSqlComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n\r]*/g, " ");
 }
@@ -984,8 +998,13 @@ export default function assertFinanceChatOutput(
   const config = context.config ?? {};
   const renderedText = getRenderedText(actual.text);
   const renderedClaimText = removeFencedCode(renderedText);
+  const expectedRenderedText = getRenderedText(actual.finalText ?? actual.text);
+  const expectedClaimText = removeFencedCode(expectedRenderedText);
   const visibleText = [renderedClaimText, ...actual.charts.map((chart) => chart.title)].join("\n");
   const normalizedText = normalize(visibleText);
+  const expectedNormalizedText = normalize(
+    [expectedClaimText, ...actual.charts.map((chart) => chart.title)].join("\n"),
+  );
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
     normalizedText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
   );
@@ -1002,7 +1021,8 @@ export default function assertFinanceChatOutput(
 
   const missingFacts = (config.expectedTextFacts ?? []).filter(
     (fact) =>
-      !normalizedText.includes(normalize(fact)) || hasContradictedFact(renderedClaimText, fact),
+      !expectedNormalizedText.includes(normalize(fact)) ||
+      hasContradictedFact(expectedClaimText, fact),
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
@@ -1014,13 +1034,13 @@ export default function assertFinanceChatOutput(
     ),
   );
   const missingPairs = getMissingTextPairs(
-    renderedClaimText,
+    expectedClaimText,
     config.expectedTextPairs ?? [],
     chartTextPairs,
   );
   const unscopedPairs = (config.expectedTextPairs ?? []).filter(
     ([label, value]) =>
-      !hasScopedPair(renderedClaimText, label, value, config.expectedTextPairFacts ?? []),
+      !hasScopedPair(expectedClaimText, label, value, config.expectedTextPairFacts ?? []),
   );
   if (missingPairs.length > 0 || unscopedPairs.length > 0) {
     const invalidPairs = [...new Set([...missingPairs, ...unscopedPairs])];
@@ -1031,7 +1051,7 @@ export default function assertFinanceChatOutput(
     );
   }
 
-  const patternText = removeCode(renderedText);
+  const patternText = removeCode(expectedRenderedText);
   const missingPatterns = (config.expectedTextPatterns ?? []).filter(
     (pattern) => !new RegExp(pattern, "s").test(patternText),
   );
@@ -1109,9 +1129,11 @@ export default function assertFinanceChatOutput(
             pattern.test(maskSqlForLiteralBinding(parsedInput.data.sql, literal)),
           ),
         );
-      const hasRequiredGroupScopes = (databaseEvidence.requiredGroupScopedColumns ?? []).every(
-        (column) => hasGroupMembershipScopeForColumn(executableSql, column),
-      );
+      const requiredGroupScopedColumns = databaseEvidence.requiredGroupScopedColumns ?? [];
+      const hasRequiredGroupScopes =
+        requiredGroupScopedColumns.every((column) =>
+          hasGroupMembershipScopeForColumn(executableSql, column),
+        ) && preservesOneSidedGroupBoundary(executableSql, requiredGroupScopedColumns);
       return matchesRequiredSql &&
         hasRequiredLiterals &&
         hasRequiredLiteralBindings &&
