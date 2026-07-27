@@ -53,6 +53,8 @@ interface AssertionResult {
 const evaluationOutputSchema = z.object({
   text: z.string(),
   finalText: z.string().optional(),
+  finalTextLinks: z.array(z.string()).optional(),
+  finalTextRoutes: z.array(z.string()).optional(),
   charts: z.array(financeChartSchema),
   databaseQueries: z.array(z.object({ input: z.unknown(), output: z.unknown() })),
   fixtureResult: z.unknown(),
@@ -148,6 +150,10 @@ function getRenderedText(text: string): string {
     .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\s*\/?>/gi, "")
     .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1");
   return normalizeKanjiMonetaryAmounts(decodeHtmlCharacterReferences(visibleText));
+}
+
+function getGroundedText(text: string): string {
+  return getRenderedText(text.replace(/~~(?=\S)[\s\S]*?\S~~/g, ""));
 }
 
 function removeCode(text: string): string {
@@ -309,8 +315,14 @@ function getMissingTextPairs(
 }
 
 function hasDirectMonetaryNegation(segment: string): boolean {
-  return /(?:円|[¥￥]\d[\d,.]*)(?:の)?(?:黒字|赤字|プラス|マイナス)?(?:(?:という)?わけ)?(?:ではありません|ではない|じゃない|でない)/.test(
-    segment,
+  return [...segment.matchAll(/(?:円|[¥￥]\d[\d,.]*)/g)].some((match) =>
+    isMonetaryNegationSuffix(segment.slice(match.index! + match[0].length)),
+  );
+}
+
+function isMonetaryNegationSuffix(suffix: string): boolean {
+  return /^(?:の)?(?:黒字|赤字|プラス|マイナス)?(?:(?:という)?わけ)?(?:では[^。！？\n]{0,8}(?:ありません|ない|なく)|じゃない|でな(?:い|く))/.test(
+    suffix.trimStart(),
   );
 }
 
@@ -335,7 +347,7 @@ function getAssertedMonetaryClaims(text: string): MonetaryClaim[] {
   const monetaryPattern = new RegExp(`(マイナス|[-−])?${monetaryNumberSource}\\s*円`, "g");
   return [...normalizedText.matchAll(monetaryPattern)].flatMap((match) => {
     const suffix = normalizedText.slice(match.index! + match[0].length);
-    if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
+    if (isMonetaryNegationSuffix(suffix) || /^\s*(?:誤り)/.test(suffix)) {
       return [];
     }
     const sign = match[1] ? -1 : /^\s*(?:の)?(?:赤字|マイナス)/.test(suffix) ? -1 : 1;
@@ -729,7 +741,7 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
 function hasSuspiciousNumericExpression(expression: string): boolean {
   const expressionWithoutStrings = expression.replace(/'(?:''|[^'])*'/g, " ");
   return (
-    /\bchar\s*\(\s*\d+(?:\s*,\s*\d+)*\s*\)/i.test(expressionWithoutStrings) ||
+    /\b(?:char|printf)\s*\([^)]*\d[^)]*\)/i.test(expressionWithoutStrings) ||
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
@@ -1039,8 +1051,8 @@ export default function assertFinanceChatOutput(
   const actual = result.data;
   const config = context.config ?? {};
   const renderedText = getRenderedText(actual.text);
-  const renderedClaimText = removeFencedCode(renderedText);
-  const expectedRenderedText = getRenderedText(actual.finalText ?? actual.text);
+  const renderedClaimText = removeFencedCode(getGroundedText(actual.text));
+  const expectedRenderedText = getGroundedText(actual.finalText ?? actual.text);
   const expectedClaimText = removeFencedCode(expectedRenderedText);
   const visibleText = [renderedClaimText, ...actual.charts.map((chart) => chart.title)].join("\n");
   const safetyText = [renderedText, ...actual.charts.map((chart) => chart.title)].join("\n");
@@ -1496,7 +1508,7 @@ export default function assertFinanceChatOutput(
   if (unexpectedRoutes.length > 0) {
     return fail(`本文に期待しないrouteがあります: ${unexpectedRoutes.join(", ")}`);
   }
-  if (!sameValues(actual.textLinks, expectedLinks)) {
+  if (!sameValues(actual.finalTextLinks ?? actual.textLinks, expectedLinks)) {
     return fail("本文linkが期待と異なります。");
   }
   const routeSet = new Set(actual.toolRoutes);

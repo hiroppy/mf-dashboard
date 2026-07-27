@@ -63,6 +63,8 @@ interface GenerateOptions {
 export interface EvaluationOutput {
   text: string;
   finalText: string;
+  finalTextLinks: string[];
+  finalTextRoutes: string[];
   intermediateText: string[];
   charts: FinanceChart[];
   databaseQueries: Array<{ input: unknown; output: unknown }>;
@@ -150,12 +152,17 @@ function getTextLinks(text: string): string[] {
       return destination ? [normalizeMarkdownDestination(destination)] : [];
     },
   );
-  const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
+  const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/gi)].map((match) =>
+    match[1]!.replace(/^https?/i, (scheme) => scheme.toLocaleLowerCase()),
+  );
   const textWithoutReferenceDefinitions = removeMarkdownReferenceDefinitions(
     removeNonRenderedText(text),
   );
-  const rawUrls = [...textWithoutReferenceDefinitions.matchAll(/https?:\/\/[^\s<>)]+/g)].map(
-    (match) => match[0].replace(/[.,。、!?！？]+$/, ""),
+  const rawUrls = [...textWithoutReferenceDefinitions.matchAll(/https?:\/\/[^\s<>)]+/gi)].map(
+    (match) =>
+      match[0]
+        .replace(/[.,。、!?！？]+$/, "")
+        .replace(/^https?/i, (scheme) => scheme.toLocaleLowerCase()),
   );
   return unique([...markdownLinks, ...referenceLinks, ...shortcutLinks, ...autoLinks, ...rawUrls]);
 }
@@ -210,6 +217,8 @@ export function toEvaluationOutput(
   return {
     text,
     finalText: response.text,
+    finalTextLinks: getTextLinks(response.text),
+    finalTextRoutes: getTextRoutes(response.text),
     intermediateText,
     charts,
     databaseQueries,

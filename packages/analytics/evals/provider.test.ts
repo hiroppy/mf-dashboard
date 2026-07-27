@@ -82,6 +82,8 @@ describe("toEvaluationOutput", () => {
     ).toEqual({
       text: "[収支を見る](/0/cf/2026-07)",
       finalText: "[収支を見る](/0/cf/2026-07)",
+      finalTextLinks: ["/0/cf/2026-07"],
+      finalTextRoutes: ["/0/cf/2026-07"],
       intermediateText: ["[収支を見る](/0/cf/2026-07)"],
       charts: [chart],
       databaseQueries: [
@@ -151,6 +153,15 @@ describe("toEvaluationOutput", () => {
     });
 
     expect(output.textLinks).toEqual(["https://example.com/"]);
+  });
+
+  test("collects uppercase URL schemes and normalizes the scheme", () => {
+    const output = toEvaluationOutput({
+      text: "<HTTPS://evil.example/autolink> HTTP://evil.example/raw",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["https://evil.example/autolink", "http://evil.example/raw"]);
   });
 
   test("does not treat an indented code block as a clickable link", () => {
@@ -359,6 +370,25 @@ describe("toEvaluationOutput", () => {
       text: "2026年7月の収入は313,235円です",
       finalText: "データを確認できませんでした",
       intermediateText: ["2026年7月の収入は313,235円です"],
+    });
+  });
+
+  test("keeps final response links separate from intermediate links", () => {
+    expect(
+      toEvaluationOutput({
+        text: "最終回答にはリンクがありません。",
+        steps: [
+          {
+            text: "[収支を見る](/0/cf/2026-07)",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      textLinks: ["/0/cf/2026-07"],
+      finalTextLinks: [],
+      finalTextRoutes: [],
     });
   });
 });
