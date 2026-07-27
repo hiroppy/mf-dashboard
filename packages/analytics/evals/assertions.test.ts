@@ -129,6 +129,7 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "該当する取引は0件です。",
           fixtureResult: { rows: [{ amount: null }], truncated: false },
           databaseQueries: [
             {
@@ -392,6 +393,17 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
+
+    const conflictingHeaderTable = [
+      "| カテゴリ | 予算 |",
+      "| --- | ---: |",
+      "| 食費 | 41,837円 |",
+    ].join("\n");
+    expect(
+      assertFinanceChatOutput(output({ text: conflictingHeaderTable }), {
+        config: { expectedTextPairs: [["食費", "41837"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
   });
 
   test("compares chart values by label without requiring data order", () => {
@@ -463,6 +475,49 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [{ ...chart, title: "2026年7月の食費（予算999,999円）" }] }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                chartType: "pie",
+                titlePatterns: ["2026年7月", "食費"],
+                unit: "currency",
+                series: [{ name: "支出", amountType: "expense" }],
+                data: [
+                  { label: "食料品", values: [24_833] },
+                  { label: "外食", values: [12_214] },
+                ],
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [{ ...chart, title: "2026年7月のtransactions食費" }] }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                chartType: "pie",
+                titlePatterns: ["2026年7月", "食費"],
+                unit: "currency",
+                series: [{ name: "支出", amountType: "expense" }],
+                data: [
+                  { label: "食料品", values: [24_833] },
+                  { label: "外食", values: [12_214] },
+                ],
+              },
+            ],
+            forbiddenTextTerms: ["transactions"],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -684,7 +739,7 @@ describe("assertFinanceChatOutput", () => {
   test("rejects qualified no-data wording", () => {
     const config = {
       expectedTextPatterns: [
-        "(?=[^。！？\\n]*2030年1月)(?=[^。！？\\n]*食費)[^。！？\\n]*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
+        "(?:2030年1月(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*食費|食費(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*2030年1月)(?:(?!\\d{4}年\\d{1,2}月)[^。！？\\n])*(?:データ|明細|取引|履歴)(?:が|は)?(?:ありません|ない|見つかりません)(?![^。！？\\n]*(?:とは|わけ|限り|断定|言い切|可能性))",
       ],
     };
     expect(
@@ -708,6 +763,56 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2030年1月の食費は確認しましたが、2025年1月の食費データはありません。" }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
+  test("rejects ungrounded counts and percentages in text and chart titles", () => {
+    const config = { expectedTextPairs: [["収入", "313235"]] as Array<[string, string]> };
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円で、取引件数は999件です。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円で、前年比は500%です。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円です。",
+          charts: [
+            {
+              title: "取引件数999件",
+              chartType: "pie",
+              unit: "currency",
+              series: [{ name: "支出", amountType: "expense" }],
+              data: [{ label: "食料品", values: [24_833] }],
+            },
+          ],
+        }),
+        {
+          config: {
+            ...config,
+            expectedCharts: [
+              {
+                titlePatterns: ["取引件数"],
+                chartType: "pie",
+                unit: "currency",
+                series: [{ name: "支出", amountType: "expense" }],
+                data: [{ label: "食料品", values: [24_833] }],
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
   test("rejects visible routes when navigation was not requested", () => {

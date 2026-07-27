@@ -139,6 +139,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
   });
 
+  test("extracts a collapsed reference-style Markdown link", () => {
+    const output = toEvaluationOutput({
+      text: "[2026年7月の収支を確認][]\n\n[2026年7月の収支を確認]: /0/cf/2026-07",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["/0/cf/2026-07"]);
+  });
+
   test("does not treat a reference-style image as a clickable link", () => {
     const output = toEvaluationOutput({
       text: "![2026年7月の収支][収支]\n\n[収支]: /0/cf/2026-07",

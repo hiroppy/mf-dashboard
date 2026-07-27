@@ -245,6 +245,48 @@ function getAssertedMonetaryClaims(text: string): MonetaryClaim[] {
   });
 }
 
+interface QuantitativeClaim {
+  index: number;
+  unit: "count" | "percent";
+  value: number;
+}
+
+function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
+  const normalizedText = text.normalize("NFKC").replace(/,/g, "");
+  return [...normalizedText.matchAll(/(-?\d+(?:\.\d+)?)\s*(件|%)/g)].flatMap((match) => {
+    const suffix = normalizedText.slice(match.index! + match[0].length);
+    if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
+      return [];
+    }
+    return [
+      {
+        index: match.index!,
+        unit: match[2] === "件" ? "count" : "percent",
+        value: Number(match[1]),
+      },
+    ];
+  });
+}
+
+function getGroundedQuantities(
+  databaseQueries: Array<{ input: unknown; output: unknown }>,
+): Record<QuantitativeClaim["unit"], Set<number>> {
+  const grounded = { count: new Set<number>(), percent: new Set<number>() };
+  for (const query of databaseQueries) {
+    const result = databaseResultSchema.safeParse(query.output);
+    if (!result.success || result.data.truncated) continue;
+    for (const row of result.data.rows) {
+      for (const [key, value] of Object.entries(row)) {
+        if (typeof value !== "number") continue;
+        const normalizedKey = normalize(key).toLocaleLowerCase();
+        if (/(?:count|件数)/.test(normalizedKey)) grounded.count.add(value);
+        if (/(?:percent|percentage|割合|比率)/.test(normalizedKey)) grounded.percent.add(value);
+      }
+    }
+  }
+  return grounded;
+}
+
 function getTableCells(line: string): string[] | undefined {
   if (!line.includes("|")) return undefined;
   return line
@@ -479,10 +521,12 @@ function hasUngroundedTableAmount(
           ([label, expectedAmount]) =>
             expectedAmount === amount && table.header[columnIndex] === normalize(label),
         );
+        const hasConflictingColumnHeader =
+          /(?:予算|目標|見込|予測)/.test(table.header[columnIndex]!) && !hasColumnBinding;
         const hasRowBinding = allowedPairs.some(
           ([label, expectedAmount]) => expectedAmount === amount && row.includes(normalize(label)),
         );
-        return !hasColumnBinding && !hasRowBinding;
+        return hasConflictingColumnHeader || (!hasColumnBinding && !hasRowBinding);
       }),
     ),
   );
@@ -505,7 +549,8 @@ export default function assertFinanceChatOutput(
   const actual = result.data;
   const config = context.config ?? {};
   const renderedText = getRenderedText(actual.text);
-  const normalizedText = normalize(renderedText);
+  const visibleText = [renderedText, ...actual.charts.map((chart) => chart.title)].join("\n");
+  const normalizedText = normalize(visibleText);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
     normalizedText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
   );
@@ -704,6 +749,24 @@ export default function assertFinanceChatOutput(
     ),
     ...chartTextPairs,
   ];
+  const ungroundedChartTitleAmounts = actual.charts.flatMap((chart) =>
+    getAssertedMonetaryClaims(chart.title).filter((claim) => {
+      const prefix = normalize(chart.title.slice(0, claim.index));
+      return !allowedTextPairs.some(
+        ([label, amount]) => amount === claim.amount && prefix.includes(normalize(label)),
+      );
+    }),
+  );
+  if (ungroundedChartTitleAmounts.length > 0) {
+    return fail(
+      `chart titleに根拠のない金額があります: ${ungroundedChartTitleAmounts
+        .map((claim) => claim.amount)
+        .join(", ")}`,
+    );
+  }
+  const claimText = [removeCode(renderedText), ...actual.charts.map((chart) => chart.title)].join(
+    "\n",
+  );
   if (
     !config.exactMarkdownRows &&
     (config.expectedMarkdownRows ?? []).length === 0 &&
@@ -711,8 +774,8 @@ export default function assertFinanceChatOutput(
   ) {
     return fail("Markdown表に根拠のないラベルと金額があります。");
   }
-  const normalizedClaimText = normalizeYenPrefix(renderedText.normalize("NFKC")).replace(/,/g, "");
-  const ungroundedAmounts = getAssertedMonetaryClaims(renderedText).filter((claim) => {
+  const normalizedClaimText = normalizeYenPrefix(claimText.normalize("NFKC")).replace(/,/g, "");
+  const ungroundedAmounts = getAssertedMonetaryClaims(claimText).filter((claim) => {
     const clauseStart =
       Math.max(
         normalizedClaimText.lastIndexOf("。", claim.index),
@@ -785,10 +848,33 @@ export default function assertFinanceChatOutput(
   if (validatesRenderedAmounts && unitlessMonetaryClaims.length > 0) {
     return fail("本文に根拠のない単位なし金額があります。");
   }
+  const groundedQuantities = getGroundedQuantities(actual.databaseQueries);
+  const normalizedQuantitativeText = claimText.normalize("NFKC").replace(/,/g, "");
+  const ungroundedQuantities = getAssertedQuantitativeClaims(claimText).filter((claim) => {
+    if (groundedQuantities[claim.unit].has(claim.value)) return false;
+    const clauseStart =
+      Math.max(
+        normalizedQuantitativeText.lastIndexOf("。", claim.index),
+        normalizedQuantitativeText.lastIndexOf("！", claim.index),
+        normalizedQuantitativeText.lastIndexOf("？", claim.index),
+        normalizedQuantitativeText.lastIndexOf("\n", claim.index),
+      ) + 1;
+    const prefix = normalize(normalizedQuantitativeText.slice(clauseStart, claim.index));
+    return !allowedTextPairs.some(
+      ([label, value]) => value === claim.value && prefix.includes(normalize(label)),
+    );
+  });
+  if (ungroundedQuantities.length > 0) {
+    return fail(
+      `本文またはchart titleに根拠のない件数・割合があります: ${ungroundedQuantities
+        .map((claim) => `${claim.value}${claim.unit === "count" ? "件" : "%"}`)
+        .join(", ")}`,
+    );
+  }
   if (
     validatesRenderedAmounts &&
     /[〇零一二三四五六七八九十百壱弐参拾佰仟]+[千万億兆][〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟]*(?:円)?|[〇零一二三四五六七八九十百壱弐参拾佰仟]+円|(?<![\d〇零一二三四五六七八九十百千万億兆壱弐参拾佰仟])[千万億兆]円/.test(
-      renderedText,
+      claimText,
     )
   ) {
     return fail("本文に根拠のない漢数字金額があります。");
