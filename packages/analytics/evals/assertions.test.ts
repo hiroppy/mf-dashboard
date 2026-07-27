@@ -2228,7 +2228,7 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
-  test("rejects hexadecimal constants in SQL projections", () => {
+  test("rejects hexadecimal and concat constants in SQL projections", () => {
     expect(
       assertFinanceChatOutput(
         output({
@@ -2250,6 +2250,31 @@ describe("assertFinanceChatOutput", () => {
                 ["income", "313235"],
                 ["expense", "219894"],
               ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) * 0 + CAST(concat('31', '32', '35') AS INTEGER) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
               requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
             },
           },
@@ -3060,6 +3085,13 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
     for (const text of ["カフェは11%弱です。", "カフェは11%より少ないです。"]) {
+      expect(
+        assertFinanceChatOutput(output({ text, charts: [chart] }), {
+          config: { expectedCharts: [chart] },
+        }),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
+    }
+    for (const text of ["カフェは最大でも11%です。", "カフェは少なくとも11%です。"]) {
       expect(
         assertFinanceChatOutput(output({ text, charts: [chart] }), {
           config: { expectedCharts: [chart] },

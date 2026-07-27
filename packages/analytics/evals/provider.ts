@@ -164,7 +164,19 @@ function getTextLinks(text: string): string[] {
         .replace(/[.,。、!?！？]+$/, "")
         .replace(/^https?/i, (scheme) => scheme.toLocaleLowerCase()),
   );
-  return unique([...markdownLinks, ...referenceLinks, ...shortcutLinks, ...autoLinks, ...rawUrls]);
+  const gfmUrlLiterals = [
+    ...textWithoutReferenceDefinitions.matchAll(
+      /\bwww\.[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}(?:\/[^\s<>)]+)?/gi,
+    ),
+  ].map((match) => match[0].replace(/[.,。、!?！？]+$/, ""));
+  return unique([
+    ...markdownLinks,
+    ...referenceLinks,
+    ...shortcutLinks,
+    ...autoLinks,
+    ...rawUrls,
+    ...gfmUrlLiterals,
+  ]);
 }
 
 function getTextRoutes(text: string): string[] {

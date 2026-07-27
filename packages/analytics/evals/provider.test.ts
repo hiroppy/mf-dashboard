@@ -164,6 +164,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textLinks).toEqual(["https://evil.example/autolink", "http://evil.example/raw"]);
   });
 
+  test("collects scheme-less GFM URL literals for safety validation", () => {
+    const output = toEvaluationOutput({
+      text: "詳細は www.evil.example/path です。",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["www.evil.example/path"]);
+  });
+
   test("does not treat an indented code block as a clickable link", () => {
     const output = toEvaluationOutput({
       text: "    [収支を見る](/0/cf/2026-07)",

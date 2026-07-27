@@ -451,9 +451,17 @@ function getAssertedQuantitativeClaims(text: string): QuantitativeClaim[] {
   ];
   return [...arabicClaims, ...japaneseClaims].map((claim) => {
     const suffix = normalizedText.slice(claim.index, claim.index + 40);
+    const clauseStart =
+      Math.max(
+        normalizedText.lastIndexOf("。", claim.index),
+        normalizedText.lastIndexOf("！", claim.index),
+        normalizedText.lastIndexOf("？", claim.index),
+        normalizedText.lastIndexOf("\n", claim.index),
+      ) + 1;
+    const prefix = normalizedText.slice(clauseStart, claim.index);
     return /(?:件|%|パーセント|割(?:\d+分)?(?:\d+厘)?)\s*(?:未満|以下|以上|超|弱|強|より(?:少な|多|小さ|大き)|を(?:下回|上回))/.test(
       suffix,
-    )
+    ) || /(?:最大でも|高くても|少なくとも|最低でも)\s*$/.test(prefix)
       ? { ...claim, value: Number.NaN }
       : claim;
   });
@@ -752,6 +760,7 @@ function hasSuspiciousNumericExpression(expression: string): boolean {
   const expressionWithoutStrings = expression.replace(/'(?:''|[^'])*'/g, " ");
   return (
     /\b(?:char|printf)\s*\([^)]*\d[^)]*\)/i.test(expressionWithoutStrings) ||
+    /\bconcat\s*\([^)]*'\d+'[^)]*'\d+'[^)]*\)/i.test(expression) ||
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
