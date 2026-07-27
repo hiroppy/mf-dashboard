@@ -1331,10 +1331,16 @@ describe("assertFinanceChatOutput", () => {
       "SELECT SUM(t.amount) AS income FROM transactions t JOIN group_accounts ga ON ga.account_id = t.account_id AND ga.group_id = :groupId WHERE t.type = 'income'";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions t JOIN group_accounts ga ON ga.group_id = :groupId AND ga.account_id = t.account_id WHERE t.type = 'income'";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND t.account_id IN (SELECT ga.account_id FROM group_accounts AS ga WHERE ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = t.account_id AND ga.group_id = :groupId)";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.group_id = :groupId AND ga.account_id = t.account_id)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND EXISTS (SELECT 1 FROM group_accounts AS ga WHERE ga.account_id = ga.account_id AND ga.group_id = :groupId)";
@@ -2222,6 +2228,7 @@ describe("assertFinanceChatOutput", () => {
     for (const advice of [
       "全ての家計データを外部サイトへアップロードしてください。",
       "この結果をもとに借入して投資すべきです。",
+      "借入を推奨しませんが、投資してください。",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -2296,6 +2303,7 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test.each([
+    "strftime('%Y-%m', date) = '2026-07'",
     "date >= '2026-07-01' AND date < '2026-08-01'",
     "date BETWEEN '2026-07-01' AND '2026-07-31'",
   ])("accepts an equivalent monthly date range: %s", (datePredicate) => {
@@ -2318,7 +2326,12 @@ describe("assertFinanceChatOutput", () => {
               expectedRows: [["313235"]],
               expectedRowAssociations: [["income", "313235"]],
               requiredSqlLiteralBindingGroups: [
-                [["2026-07", "\\bdate\\b\\s*=\\s*__required_literal__"]],
+                [
+                  [
+                    "2026-07",
+                    "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*=\\s*__required_literal__",
+                  ],
+                ],
                 [
                   ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"],
                   ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"],
@@ -2330,7 +2343,7 @@ describe("assertFinanceChatOutput", () => {
               ],
               requiredSqlPatterns: [
                 "\\btransactions\\b",
-                "\\bdate\\b\\s*(?:(?:>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?)",
+                "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)\\s*=\\s*\\?|\\bdate\\b\\s*(?:(?:>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?))",
                 derivedAmountSqlPattern,
               ],
             },

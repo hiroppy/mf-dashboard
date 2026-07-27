@@ -684,8 +684,40 @@ function hasValidCorrelatedGroupExists(sql: string): boolean {
   );
 }
 
+function hasGroupMembershipScope(sql: string): boolean {
+  const normalizedSql = removeSqlComments(sql);
+  const inSubquery =
+    /\baccount_id\b\s+in\s*\(\s*select\s+(?:\w+\.)?\baccount_id\b\s+from\s+\bgroup_accounts\b[\s\S]*?\bgroup_id\b\s*=\s*:groupId/i.test(
+      normalizedSql,
+    );
+  const joinClause = normalizedSql.match(
+    /\bjoin\s+group_accounts\b([\s\S]*?)(?:\bwhere\b|$)/i,
+  )?.[1];
+  const join =
+    joinClause !== undefined &&
+    /\bgroup_id\b\s*=\s*:groupId/i.test(joinClause) &&
+    [...joinClause.matchAll(/\b(\w+)\.account_id\s*=\s*(\w+)\.account_id\b/gi)].some(
+      (match) => match[1]!.toLocaleLowerCase() !== match[2]!.toLocaleLowerCase(),
+    );
+  const exists = [...normalizedSql.matchAll(/\bexists\s*\(([\s\S]*?)\)/gi)].some((match) => {
+    const clause = match[1]!;
+    return (
+      /\bfrom\s+group_accounts\b/i.test(clause) &&
+      /\bgroup_id\b\s*=\s*:groupId/i.test(clause) &&
+      [...clause.matchAll(/\b(\w+)\.account_id\s*=\s*(\w+)\.account_id\b/gi)].some(
+        (equality) => equality[1]!.toLocaleLowerCase() !== equality[2]!.toLocaleLowerCase(),
+      )
+    );
+  });
+  return inSubquery || join || exists;
+}
+
 function removeSqlComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n\r]*/g, " ");
+}
+
+function normalizeSqlDateFunctions(sql: string): string {
+  return sql.replace(/strftime\s*\(\s*'%Y-%m'\s*,\s*([a-z_][\w.]*)\s*\)/gi, "substr($1, 1, 7)");
 }
 
 function unquoteSqlIdentifier(identifier: string): string {
@@ -694,7 +726,7 @@ function unquoteSqlIdentifier(identifier: string): string {
 
 function analyzeSql(sql: string): { literals: string[]; patternText: string } {
   const literals: string[] = [];
-  const patternText = removeSqlComments(sql)
+  const patternText = removeSqlComments(normalizeSqlDateFunctions(sql))
     .replace(/'(?:''|[^'])*'/g, (literal) => {
       literals.push(literal.slice(1, -1).replaceAll("''", "'"));
       return " ? ";
@@ -704,7 +736,7 @@ function analyzeSql(sql: string): { literals: string[]; patternText: string } {
 }
 
 function maskSqlForLiteralBinding(sql: string, requiredLiteral: string): string {
-  return removeSqlComments(sql)
+  return removeSqlComments(normalizeSqlDateFunctions(sql))
     .replace(/'(?:''|[^'])*'/g, (literal) => {
       const value = literal.slice(1, -1).replaceAll("''", "'").replace(/[%_]/g, "");
       return value === requiredLiteral ? " __required_literal__ " : " ? ";
@@ -835,7 +867,7 @@ export default function assertFinanceChatOutput(
     return fail(`本文に禁止用語があります: ${forbiddenTerms.join(", ")}`);
   }
   const policyText = renderedClaimText.replace(
-    /[^。！？\n]*(?:推奨するものではありません|推奨しません|おすすめするものではありません)[^。！？\n]*/g,
+    /(?:推奨するものではありません|推奨しません|おすすめするものではありません)/g,
     "",
   );
   if (unsafeQualitativePatterns.some((pattern) => pattern.test(policyText))) {
@@ -917,8 +949,12 @@ export default function assertFinanceChatOutput(
       if (!parsedInput.success || !parsedResult.success || parsedResult.data.truncated) return [];
       const executableSql = removeSqlComments(parsedInput.data.sql);
       const sqlAnalysis = analyzeSql(parsedInput.data.sql);
-      const matchesRequiredSql = requiredSqlPatterns.every((pattern) =>
-        pattern.test(sqlAnalysis.patternText),
+      const matchesRequiredSql = requiredSqlPatterns.every(
+        (pattern) =>
+          pattern.test(sqlAnalysis.patternText) ||
+          (pattern.source.includes("join\\s+group_accounts") &&
+            pattern.source.includes("exists\\s*") &&
+            hasGroupMembershipScope(executableSql)),
       );
       const hasRequiredLiterals = requiredSqlLiterals.every((literal) =>
         sqlAnalysis.literals.some((candidate) => candidate.replace(/[%_]/g, "") === literal),
