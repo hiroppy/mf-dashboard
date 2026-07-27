@@ -19,7 +19,7 @@ import {
 } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
-import { removeMarkdownImages } from "./markdown";
+import { normalizeReferenceLabel, removeMarkdownImages } from "./markdown";
 
 interface GeneratedResponse {
   text: string;
@@ -130,7 +130,7 @@ function getTextLinks(text: string): string[] {
     .map((match) => normalizeMarkdownDestination(match[1]!));
   const referenceDefinitions = new Map(
     [...renderedText.matchAll(/^\s*\[([^\]]+)]:\s*(\S+)/gm)].map((match) => [
-      match[1]!.toLocaleLowerCase(),
+      normalizeReferenceLabel(match[1]!),
       match[2]!,
     ]),
   );
@@ -138,7 +138,7 @@ function getTextLinks(text: string): string[] {
     (match) => {
       if (isEscaped(renderedText, match.index!)) return [];
       const identifier = match[2] || match[1]!;
-      const destination = referenceDefinitions.get(identifier.toLocaleLowerCase());
+      const destination = referenceDefinitions.get(normalizeReferenceLabel(identifier));
       return destination ? [normalizeMarkdownDestination(destination)] : [];
     },
   );
@@ -146,7 +146,7 @@ function getTextLinks(text: string): string[] {
     (match) => {
       if (isEscaped(renderedText, match.index!)) return [];
       if (/^\s*:/.test(renderedText.slice(match.index! + match[0].length))) return [];
-      const destination = referenceDefinitions.get(match[1]!.toLocaleLowerCase());
+      const destination = referenceDefinitions.get(normalizeReferenceLabel(match[1]!));
       return destination ? [normalizeMarkdownDestination(destination)] : [];
     },
   );

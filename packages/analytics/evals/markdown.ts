@@ -13,6 +13,10 @@ function findBalancedEnd(text: string, start: number, open: "[" | "(", close: "]
   return -1;
 }
 
+export function normalizeReferenceLabel(label: string): string {
+  return label.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
 export function removeMarkdownImages(text: string): string {
   let inFence = false;
   const renderableText = text
@@ -27,7 +31,7 @@ export function removeMarkdownImages(text: string): string {
     .join("\n");
   const referenceDefinitions = new Set(
     [...renderableText.matchAll(/^\s*\[([^\]]+)]:\s*\S+.*$/gm)].map((match) =>
-      match[1]!.trim().toLocaleLowerCase(),
+      normalizeReferenceLabel(match[1]!),
     ),
   );
   let result = "";
@@ -56,16 +60,13 @@ export function removeMarkdownImages(text: string): string {
         const referenceLabel =
           text.slice(destinationStart + 1, destinationEnd).trim() ||
           text.slice(imageStart + 2, labelEnd).trim();
-        if (referenceDefinitions.has(referenceLabel.toLocaleLowerCase())) {
+        if (referenceDefinitions.has(normalizeReferenceLabel(referenceLabel))) {
           cursor = destinationEnd + 1;
           continue;
         }
       }
     } else {
-      const shortcutLabel = text
-        .slice(imageStart + 2, labelEnd)
-        .trim()
-        .toLocaleLowerCase();
+      const shortcutLabel = normalizeReferenceLabel(text.slice(imageStart + 2, labelEnd));
       if (referenceDefinitions.has(shortcutLabel)) {
         cursor = destinationStart;
         continue;

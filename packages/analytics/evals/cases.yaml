@@ -47,6 +47,8 @@
                 ]
             - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
+              - ["2026-07-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           expectedRows:
             - ["313235", "219894"]
           expectedRowAssociations:
@@ -55,8 +57,8 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
-              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
+              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:(?:=|like|>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?)",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\btype\\b",
               "\\b(?:sum|total)\\s*\\(",
@@ -118,6 +120,8 @@
                 ]
             - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
+              - ["2026-07-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           expectedRows:
             - [食料品, "24833"]
             - [外食, "12214"]
@@ -129,8 +133,8 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
-              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
+              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:(?:=|like|>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?)",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
               "\\btype\\b\\s*=\\s*\\?",
@@ -182,7 +186,7 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
               "\\bdate\\b\\s*=\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
@@ -263,11 +267,13 @@
                 ]
             - - ["2030-01-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
               - ["2030-02-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+            - - ["2030-01-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"]
+              - ["2030-01-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"]
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
-              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
-              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
+              "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:(?:=|like|>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?)",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?:\\bamount\\b|\\bcount\\s*\\(\\s*\\*\\s*\\))(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
               "\\btype\\b\\s*=\\s*\\?",

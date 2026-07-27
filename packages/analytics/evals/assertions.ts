@@ -82,13 +82,25 @@ const namedCharacterReferences: Record<string, string> = {
 };
 const monetaryLabelTermPattern =
   /(?:収入|支出|収支|食費|金額|合計|総額|残高|予算|目標|見込|予測|借入|借金|ローン|資産|負債|評価額|元本|債務|貯蓄)/;
+const monetaryNumberSource = String.raw`((?:\d+(?:\.\d+)?(?:千|万|億|兆))+\d*(?:\.\d+)?|\d+(?:\.\d+)?(?:千|万|億|兆)?)`;
 
 function fail(reason: string): AssertionResult {
   return { pass: false, reason, score: 0 };
 }
 
 function normalize(value: string): string {
-  return value.normalize("NFKC").replace(/[,\s*_`]/g, "");
+  return normalizeJapaneseYearMonth(value.normalize("NFKC")).replace(/[,\s*_`]/g, "");
+}
+
+function normalizeJapaneseYearMonth(value: string): string {
+  return value.replace(/(\d{4})年0+(\d{1,2})月/g, "$1年$2月");
+}
+
+function parseMonetaryNumber(value: string): number {
+  return [...value.matchAll(/(\d+(?:\.\d+)?)(千|万|億|兆)?/g)].reduce(
+    (total, token) => total + Number(token[1]) * (monetaryScales[token[2] ?? ""] ?? 1),
+    0,
+  );
 }
 
 function removeHiddenHtmlElements(text: string): string {
@@ -264,7 +276,7 @@ function normalizeYenPrefix(segment: string): string {
 function getMonetaryClaims(segment: string): number[] {
   const normalizedSegment = normalizeYenPrefix(segment);
   const correctionPattern = /ではなく|でなく|ではない|ではありません|誤り|訂正|実際は|正しくは/g;
-  const monetaryPattern = /(マイナス|[-−])?\d+(?:\.\d+)?(?:千|万|億|兆)?円/;
+  const monetaryPattern = new RegExp(`(?:マイナス|[-−])?${monetaryNumberSource}円`);
   const corrections = [...normalizedSegment.matchAll(correctionPattern)].filter((match) =>
     monetaryPattern.test(normalizedSegment.slice(match.index! + match[0].length)),
   );
@@ -273,10 +285,12 @@ function getMonetaryClaims(segment: string): number[] {
     lastCorrection?.index === undefined
       ? normalizedSegment
       : normalizedSegment.slice(lastCorrection.index + lastCorrection[0].length);
-  return [...claims.matchAll(/(マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?円/g)].map((match) => {
-    const sign = match[1] ? -1 : 1;
-    return sign * Number(match[2]) * (monetaryScales[match[3] ?? ""] ?? 1);
-  });
+  return [...claims.matchAll(new RegExp(`(マイナス|[-−])?${monetaryNumberSource}円`, "g"))].map(
+    (match) => {
+      const sign = match[1] ? -1 : 1;
+      return sign * parseMonetaryNumber(match[2]!);
+    },
+  );
 }
 
 interface MonetaryClaim {
@@ -287,7 +301,7 @@ interface MonetaryClaim {
 
 function getAssertedMonetaryClaims(text: string): MonetaryClaim[] {
   const normalizedText = normalizeYenPrefix(text.normalize("NFKC")).replace(/,/g, "");
-  const monetaryPattern = /(マイナス|[-−])?(\d+(?:\.\d+)?)(千|万|億|兆)?円/g;
+  const monetaryPattern = new RegExp(`(マイナス|[-−])?${monetaryNumberSource}円`, "g");
   return [...normalizedText.matchAll(monetaryPattern)].flatMap((match) => {
     const suffix = normalizedText.slice(match.index! + match[0].length);
     if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
@@ -296,7 +310,7 @@ function getAssertedMonetaryClaims(text: string): MonetaryClaim[] {
     const sign = match[1] ? -1 : 1;
     return [
       {
-        amount: sign * Number(match[2]) * (monetaryScales[match[3] ?? ""] ?? 1),
+        amount: sign * parseMonetaryNumber(match[2]!),
         index: match.index!,
         suffix,
       },
@@ -477,7 +491,8 @@ function validateChart(actual: FinanceChart, expected: ChartExpectation): boolea
     actual.unit === expected.unit &&
     (expected.titlePatterns ?? []).every(
       (pattern) =>
-        new RegExp(pattern).test(actual.title) && !hasContradictedFact(actual.title, pattern),
+        new RegExp(pattern).test(normalizeJapaneseYearMonth(actual.title)) &&
+        !hasContradictedFact(actual.title, pattern),
     ) &&
     JSON.stringify(actual.series) === JSON.stringify(expected.series) &&
     JSON.stringify(sortChartData(actual.data)) === JSON.stringify(sortChartData(expected.data))

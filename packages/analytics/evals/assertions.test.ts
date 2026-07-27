@@ -508,7 +508,7 @@ describe("assertFinanceChatOutput", () => {
 
   test("compares chart values by label without requiring data order", () => {
     const chart = {
-      title: "2026年7月の食費",
+      title: "2026年07月の食費",
       chartType: "pie",
       unit: "currency",
       series: [{ name: "支出", amountType: "expense" }],
@@ -1258,7 +1258,7 @@ describe("assertFinanceChatOutput", () => {
           expectedRowAssociations: [["income", "313235"]],
           requiredSqlPatterns: [
             derivedAmountSqlPattern,
-            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b\\s+where\\s+\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
           ],
         },
       },
@@ -1283,6 +1283,9 @@ describe("assertFinanceChatOutput", () => {
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions t JOIN group_accounts ga ON ga.account_id = t.account_id AND ga.group_id = :groupId WHERE t.type = 'income'";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions AS t WHERE t.type = 'income' AND t.account_id IN (SELECT ga.account_id FROM group_accounts AS ga WHERE ga.group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
   });
 
@@ -2173,7 +2176,10 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("件数・割合") });
   });
 
-  test("accepts an equivalent half-open monthly date range", () => {
+  test.each([
+    "date >= '2026-07-01' AND date < '2026-08-01'",
+    "date BETWEEN '2026-07-01' AND '2026-07-31'",
+  ])("accepts an equivalent monthly date range: %s", (datePredicate) => {
     expect(
       assertFinanceChatOutput(
         output({
@@ -2181,7 +2187,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT SUM(amount) AS income FROM transactions WHERE date >= '2026-07-01' AND date < '2026-08-01'",
+                sql: `SELECT SUM(amount) AS income FROM transactions WHERE ${datePredicate}`,
               },
               output: { rows: [{ income: 313_235 }], truncated: false },
             },
@@ -2198,10 +2204,14 @@ describe("assertFinanceChatOutput", () => {
                   ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"],
                   ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"],
                 ],
+                [
+                  ["2026-07-01", "\\bdate\\b\\s+between\\s+__required_literal__\\s+and\\s+\\?"],
+                  ["2026-07-31", "\\bdate\\b\\s+between\\s+\\?\\s+and\\s+__required_literal__"],
+                ],
               ],
               requiredSqlPatterns: [
                 "\\btransactions\\b",
-                "\\bdate\\b\\s*>=\\s*\\?",
+                "\\bdate\\b\\s*(?:(?:>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?)",
                 derivedAmountSqlPattern,
               ],
             },
@@ -2228,6 +2238,26 @@ describe("assertFinanceChatOutput", () => {
         config: { forbiddenTextTerms: ["支払い元", "銀行"] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+  });
+
+  test("accepts compound Japanese monetary notation", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年7月の収入は31万3,235円です。" }), {
+        config: { expectedTextPairs: [["収入", "313235"]] },
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("canonicalizes zero-padded Japanese months", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年07月の収入は313,235円です。" }), {
+        config: {
+          expectedTextFacts: ["2026年7月"],
+          expectedTextPairFacts: ["2026年7月"],
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   test("grades visible angle-bracket text that is not an HTML tag", () => {
