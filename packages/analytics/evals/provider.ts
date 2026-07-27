@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { closeDb, getCurrentGroup, getDb, type Db } from "@mf-dashboard/db";
+import { closeDb, getAccountIdsForGroup, getCurrentGroup, getDb, type Db } from "@mf-dashboard/db";
 import { executeReadOnlyQuery } from "@mf-dashboard/db/queries/read-only-query";
 import { generateText, stepCountIs } from "ai";
 import type {
@@ -72,6 +72,7 @@ export interface ProviderDependencies {
   canonicalizePath: (path: string) => string;
   closeDb: () => void;
   generate: (options: GenerateOptions) => Promise<GeneratedResponse>;
+  getAccountIdsForGroup: (db: Db, groupId: string) => Promise<number[]>;
   getCurrentGroup: (db: Db) => Promise<{ id: string } | undefined>;
   getDatabasePath: () => string | undefined;
   getDb: () => Db;
@@ -86,6 +87,7 @@ const defaultDependencies: ProviderDependencies = {
   canonicalizePath: realpathSync,
   closeDb,
   generate: async (options) => (await generateText(options)) as GeneratedResponse,
+  getAccountIdsForGroup,
   getCurrentGroup,
   getDatabasePath: () => process.env.DB_PATH,
   getDb,
@@ -266,8 +268,20 @@ export default class FinanceChatProvider implements ApiProvider {
       }
 
       const db = this.dependencies.getDb();
-      const group = await this.dependencies.getCurrentGroup(db);
-      if (!group) return { error: "評価用demo.dbに現在のグループがありません。" };
+      const requestedGroupId = context?.vars?.groupId;
+      if (requestedGroupId !== undefined && typeof requestedGroupId !== "string") {
+        return { error: "評価用groupIdは文字列で指定してください。" };
+      }
+      const currentGroup = requestedGroupId
+        ? { id: requestedGroupId }
+        : await this.dependencies.getCurrentGroup(db);
+      if (!currentGroup) return { error: "評価用demo.dbに現在のグループがありません。" };
+      if (
+        requestedGroupId &&
+        (await this.dependencies.getAccountIdsForGroup(db, requestedGroupId)).length === 0
+      ) {
+        return { error: "評価用demo.dbに指定されたグループがありません。" };
+      }
 
       const response = await this.dependencies.generate({
         abortSignal: AbortSignal.timeout(FINANCE_CHAT_REQUEST_TIMEOUT_MS),
@@ -279,12 +293,12 @@ export default class FinanceChatProvider implements ApiProvider {
         stopWhen: stepCountIs(FINANCE_CHAT_MAX_GENERATION_STEPS),
         system: getFinanceChatSystemPrompt(getEvaluationDate(context?.vars?.evaluationDate)),
         timeout: { totalMs: FINANCE_CHAT_REQUEST_TIMEOUT_MS },
-        tools: createFinanceChatTools(db, group.id),
+        tools: createFinanceChatTools(db, currentGroup.id),
       });
       const verificationSql = context?.vars?.verificationSql;
       const fixtureResult =
         typeof verificationSql === "string"
-          ? await this.dependencies.queryFixture(db, verificationSql, group.id)
+          ? await this.dependencies.queryFixture(db, verificationSql, currentGroup.id)
           : null;
 
       return { output: JSON.stringify(toEvaluationOutput(response, fixtureResult)) };

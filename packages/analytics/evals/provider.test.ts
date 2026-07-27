@@ -14,6 +14,9 @@ function dependencies(overrides: Partial<ProviderDependencies> = {}): ProviderDe
     generate: vi
       .fn<ProviderDependencies["generate"]>()
       .mockResolvedValue({ text: "回答", steps: [] }),
+    getAccountIdsForGroup: vi
+      .fn<ProviderDependencies["getAccountIdsForGroup"]>()
+      .mockResolvedValue([1]),
     getCurrentGroup: vi
       .fn<ProviderDependencies["getCurrentGroup"]>()
       .mockResolvedValue({ id: "0" }),
@@ -317,6 +320,48 @@ describe("FinanceChatProvider", () => {
     expect(options.prepareStep({ stepNumber: FINANCE_CHAT_MAX_GENERATION_STEPS - 1 })).toEqual({
       toolChoice: "none",
     });
+  });
+
+  test("uses an explicit demo subgroup for tools and fixture verification", async () => {
+    const deps = dependencies();
+    const provider = new FinanceChatProvider({}, deps);
+
+    const result = await provider.callApi("質問", {
+      prompt: {} as never,
+      vars: {
+        evaluationDate: "2026-07-31T03:00:00.000Z",
+        groupId: "demo_group_001",
+        verificationSql: "SELECT amount FROM transactions",
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(deps.getAccountIdsForGroup).toHaveBeenCalledWith(expect.anything(), "demo_group_001");
+    expect(deps.queryFixture).toHaveBeenCalledWith(
+      expect.anything(),
+      "SELECT amount FROM transactions",
+      "demo_group_001",
+    );
+  });
+
+  test("rejects an explicit group that has no demo accounts", async () => {
+    const deps = dependencies({
+      getAccountIdsForGroup: vi
+        .fn<ProviderDependencies["getAccountIdsForGroup"]>()
+        .mockResolvedValue([]),
+    });
+    const provider = new FinanceChatProvider({}, deps);
+
+    await expect(
+      provider.callApi("質問", {
+        prompt: {} as never,
+        vars: {
+          evaluationDate: "2026-07-31T03:00:00.000Z",
+          groupId: "missing",
+        },
+      }),
+    ).resolves.toMatchObject({ error: expect.stringContaining("指定されたグループ") });
+    expect(deps.generate).not.toHaveBeenCalled();
   });
 
   test.each([

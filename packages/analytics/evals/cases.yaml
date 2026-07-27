@@ -77,6 +77,81 @@
             ":groupId",
           ]
 
+- description: 投資グループ境界の振替を支出として分類する
+  vars:
+    question: 2026年7月の収入と支出を教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+    groupId: demo_group_001
+    verificationSql: >-
+      SELECT
+        SUM(CASE
+          WHEN type = 'income' THEN amount
+          WHEN type = 'transfer' AND is_internal_transfer = 0
+            AND account_id IS NOT NULL AND transfer_target_account_id IS NULL THEN amount
+          ELSE 0
+        END) AS income,
+        SUM(CASE
+          WHEN type = 'expense' THEN amount
+          WHEN type = 'transfer' AND is_internal_transfer = 0
+            AND account_id IS NULL AND transfer_target_account_id IS NOT NULL THEN amount
+          ELSE 0
+        END) AS expense
+      FROM transactions
+      WHERE substr(date, 1, 7) = '2026-07'
+        AND (type = 'transfer' OR is_excluded_from_calculation = 0)
+        AND (
+          account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
+          OR transfer_target_account_id IN (
+            SELECT account_id FROM group_accounts WHERE group_id = :groupId
+          )
+        )
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextFacts: ["2026年7月"]
+        expectedTextPairFacts: ["2026年7月"]
+        expectedTextPairs:
+          - [収入, "0"]
+          - [支出, "33333"]
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        databaseEvidence:
+          expectedRows:
+            - ["0", "33333"]
+          expectedRowAssociations:
+            - [income, "0"]
+            - [expense, "33333"]
+          requiredSqlLiteralBindingGroups:
+            - - [
+                  "2026-07",
+                  "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like)\\s*__required_literal__",
+                ]
+            - - ["2026-07-01", "\\bdate\\b\\s*>=\\s*__required_literal__"]
+              - ["2026-08-01", "\\bdate\\b\\s*<\\s*__required_literal__"]
+          requiredSqlPatterns:
+            [
+              "\\btransactions\\b",
+              "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:(?:=|like|>=)\\s*\\?|between\\s+\\?\\s+and\\s+\\?)",
+              "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
+              "\\btype\\b",
+              "\\b(?:sum|total)\\s*\\(",
+              "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)",
+              "\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId",
+              "\\btransfer_target_account_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId",
+              "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)",
+            ]
+        forbiddenTextTerms:
+          [
+            transactions,
+            is_transfer,
+            is_internal_transfer,
+            is_excluded_from_calculation,
+            ":groupId",
+          ]
+
 - description: 食費の内訳を正しい円グラフで返す
   vars:
     question: 2026年7月の食費合計と内訳を円グラフで見せて
