@@ -599,11 +599,17 @@ function normalizeTableCell(cell: string): string {
     .replace(/^[¥￥]/, "")
     .replace(/[（(]円[）)]$/, "")
     .replace(/円$/, "");
-  return normalized.replace(
-    /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
-    (_, year: string, month: string, day: string) =>
-      `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
-  );
+  return normalized
+    .replace(
+      /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+      (_, year: string, month: string, day: string) =>
+        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
+    )
+    .replace(
+      /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/,
+      (_, year: string, month: string, day: string) =>
+        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
+    );
 }
 
 interface MarkdownTable {
@@ -950,7 +956,7 @@ function hasIneffectiveGroupPredicate(sql: string): boolean {
   const normalizedSql = normalizeSqlIdentifiers(removeSqlComments(sql));
   return (
     /\bjoin\s+group_accounts\b[\s\S]*?\bon\b[^;]*?\band\s+0\b/i.test(normalizedSql) ||
-    /\bgroup_id\b\s*=\s*:groupId[^;]*?\bor\s+1\s*=\s*1\b/i.test(normalizedSql)
+    /\bgroup_id\b\s*=\s*:groupId[^;]*?\bor\s+(?:1\s*=\s*1|true)\b/i.test(normalizedSql)
   );
 }
 
@@ -958,6 +964,7 @@ function hasUnsafeNoDataDerivation(sql: string): boolean {
   const normalizedSql = normalizeSqlIdentifiers(removeSqlComments(sql));
   return (
     /\bwhere\b[\s\S]*\bor\s+(?:1\s*=\s*1|true)\b/i.test(normalizedSql) ||
+    /\b(?:where|and|or)\s+(?:1\s*=\s*0|false)\b/i.test(normalizedSql) ||
     /\b(?:sum|count|avg|min|max)\s*\([^)]*(?:\*\s*0|0\s*\*)[^)]*\)/i.test(normalizedSql)
   );
 }
@@ -1348,6 +1355,11 @@ export default function assertFinanceChatOutput(
     );
     if (databaseEvidence.expectNoData && (!fixtureHasOnlyNoData || !modelHasOnlyNoData)) {
       return fail("queryDatabase結果がデータなしを裏付けていません。");
+    }
+    if (databaseEvidence.expectNoData) {
+      groundedQuantityPairs.count.push(
+        ...["取引", "明細", "履歴", "データ", "食費"].map((label): [string, number] => [label, 0]),
+      );
     }
   }
 

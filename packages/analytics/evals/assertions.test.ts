@@ -233,6 +233,32 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月の食費に該当する取引は0件です。",
+          fixtureResult: { rows: [{ amount: null }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS amount FROM transactions WHERE date LIKE '2030-01%'",
+              },
+              output: { rows: [{ amount: null }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            expectedTextPatterns: [noDataPattern],
+            databaseEvidence: {
+              expectNoData: true,
+              requiredSqlLiterals: ["2030-01"],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("uses the final repeated label as the authoritative claim", () => {
@@ -392,6 +418,11 @@ describe("assertFinanceChatOutput", () => {
   test("preserves invisible separators and unitless monetary signs for safety checks", () => {
     expect(
       assertFinanceChatOutput(output({ text: "trans​actions" }), {
+        config: { forbiddenTextTerms: ["transactions"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+    expect(
+      assertFinanceChatOutput(output({ text: "trans&ZeroWidthSpace;actions" }), {
         config: { forbiddenTextTerms: ["transactions"] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
@@ -845,6 +876,15 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(output({ text: text.replace("2026-07-03", "2026年7月3日") }), {
+        config: {
+          exactMarkdownRows: true,
+          expectedMarkdownColumns: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: text.replace("2026-07-03", "2026/07/03") }), {
         config: {
           exactMarkdownRows: true,
           expectedMarkdownColumns: ["日付", "内容", "金額"],
@@ -1666,6 +1706,8 @@ describe("assertFinanceChatOutput", () => {
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(CASE WHEN type = 'income' OR (type = 'transfer' AND is_internal_transfer = 0 AND account_id IS NOT NULL AND transfer_target_account_id IS NULL) THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' OR (type = 'transfer' AND is_internal_transfer = 0 AND account_id IS NULL AND transfer_target_account_id IS NOT NULL) THEN amount ELSE 0 END) AS expense FROM transactions WHERE account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId) OR transfer_target_account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql += " OR TRUE";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(CASE WHEN t.type = 'income' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NOT NULL AND t.transfer_target_account_id IS NULL) THEN t.amount ELSE 0 END) AS income, SUM(CASE WHEN t.type = 'expense' OR (t.type = 'transfer' AND t.is_internal_transfer = 0 AND t.account_id IS NULL AND t.transfer_target_account_id IS NOT NULL) THEN t.amount ELSE 0 END) AS expense FROM transactions t JOIN group_accounts source_group ON source_group.account_id = t.account_id AND source_group.group_id = :groupId JOIN group_accounts target_group ON target_group.account_id = t.transfer_target_account_id AND target_group.group_id = :groupId";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: false });
@@ -2270,9 +2312,17 @@ describe("assertFinanceChatOutput", () => {
         context,
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
-    for (const sql of [
-      "SELECT SUM(amount * 0) AS amount FROM transactions WHERE date LIKE '2030-01%'",
-      "SELECT SUM(amount) AS amount FROM transactions WHERE date LIKE '2030-01%' OR 1=1",
+    for (const [sql, rows] of [
+      [
+        "SELECT SUM(amount * 0) AS amount FROM transactions WHERE date LIKE '2030-01%'",
+        [{ amount: 0 }],
+      ],
+      [
+        "SELECT SUM(amount) AS amount FROM transactions WHERE date LIKE '2030-01%' OR 1=1",
+        [{ amount: 0 }],
+      ],
+      ["SELECT amount FROM transactions WHERE date LIKE '2030-01%' AND 1=0", []],
+      ["SELECT amount FROM transactions WHERE date LIKE '2030-01%' AND false", []],
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -2281,7 +2331,7 @@ describe("assertFinanceChatOutput", () => {
             databaseQueries: [
               {
                 input: { sql },
-                output: { rows: [{ amount: 0 }], truncated: false },
+                output: { rows, truncated: false },
               },
             ],
           }),
@@ -3012,6 +3062,7 @@ describe("assertFinanceChatOutput", () => {
     for (const text of [
       "> ```\n> 2026年7月の収入は313,235円です。\n> ```",
       "- ```\n  2026年7月の収入は313,235円です。\n  ```",
+      ">     2026年7月の収入は313,235円です。",
     ]) {
       expect(
         assertFinanceChatOutput(output({ text }), {

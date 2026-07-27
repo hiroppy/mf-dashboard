@@ -11,6 +11,7 @@ const namedCharacterReferences: Record<string, string> = {
   quot: '"',
   sol: "/",
   yen: "¥",
+  zerowidthspace: "\u200b",
 };
 
 export function decodeHtmlCharacterReferences(text: string): string {
@@ -25,7 +26,7 @@ export function decodeHtmlCharacterReferences(text: string): string {
       },
     )
     .replace(
-      /&(amp|apos|colon|gt|lt|minus|percnt|quot|sol|yen);/gi,
+      /&(amp|apos|colon|gt|lt|minus|percnt|quot|sol|yen|zerowidthspace);/gi,
       (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
     );
 }
@@ -131,9 +132,8 @@ export function getRenderableMarkdownLines(text: string): string[] {
   let listContentIndent: number | undefined;
   let previousLineWasBlank = true;
   return text.split("\n").map((line) => {
-    const containerContent = line
-      .replace(/^(?: {0,3}>[ \t]?)+/, "")
-      .replace(/^\s{0,3}(?:[-+*]|\d+[.)])[ \t]+/, "");
+    const blockquoteContent = line.replace(/^(?: {0,3}>[ \t]?)+/, "");
+    const containerContent = blockquoteContent.replace(/^\s{0,3}(?:[-+*]|\d+[.)])[ \t]+/, "");
     const fenceMatch = containerContent.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
     if (fence) {
       if (
@@ -150,15 +150,15 @@ export function getRenderableMarkdownLines(text: string): string[] {
       fence = { marker: fenceMatch[1]![0] as "`" | "~", length: fenceMatch[1]!.length };
       return "";
     }
-    const listMarker = line.match(/^(\s*)(?:[-+*]|\d+[.)])(\s+)/);
+    const listMarker = blockquoteContent.match(/^(\s*)(?:[-+*]|\d+[.)])(\s+)/);
     if (listMarker) {
       listContentIndent = listMarker[0].length;
       inIndentedCode = false;
       previousLineWasBlank = false;
       return line;
     }
-    if (/^(?: {4}|\t)/.test(line)) {
-      const indentation = line.match(/^(?: +|\t)/)![0].replace("\t", "    ").length;
+    if (/^(?: {4}|\t)/.test(blockquoteContent)) {
+      const indentation = blockquoteContent.match(/^(?: +|\t)/)![0].replace("\t", "    ").length;
       if (listContentIndent !== undefined && indentation >= listContentIndent) {
         previousLineWasBlank = false;
         return line;
@@ -170,7 +170,7 @@ export function getRenderableMarkdownLines(text: string): string[] {
       previousLineWasBlank = false;
       return line;
     }
-    if (line.trim() === "") {
+    if (blockquoteContent.trim() === "") {
       previousLineWasBlank = true;
       return line;
     }
