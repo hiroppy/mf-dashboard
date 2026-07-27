@@ -325,7 +325,7 @@ interface MonetaryClaim {
 
 function getAssertedMonetaryClaims(text: string): MonetaryClaim[] {
   const normalizedText = normalizeYenPrefix(text.normalize("NFKC")).replace(/,/g, "");
-  const monetaryPattern = new RegExp(`(マイナス|[-−])?${monetaryNumberSource}円`, "g");
+  const monetaryPattern = new RegExp(`(マイナス|[-−])?${monetaryNumberSource}\\s*円`, "g");
   return [...normalizedText.matchAll(monetaryPattern)].flatMap((match) => {
     const suffix = normalizedText.slice(match.index! + match[0].length);
     if (/^\s*(?:ではなく|でなく|ではない|ではありません|じゃない|誤り)/.test(suffix)) {
@@ -709,6 +709,7 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
 function hasSuspiciousNumericExpression(expression: string): boolean {
   const expressionWithoutStrings = expression.replace(/'(?:''|[^'])*'/g, " ");
   return (
+    /\bchar\s*\(\s*\d+(?:\s*,\s*\d+)*\s*\)/i.test(expressionWithoutStrings) ||
     /0x[0-9a-f]+/i.test(expression) ||
     [...expression.matchAll(/'(\d+(?:\.\d+)?)'/g)].some((literal) => Number(literal[1]) > 100) ||
     [...expression.matchAll(/\bjsonb?_extract\s*\(\s*'[^']*?(\d{3,})[^']*'/gi)].some(
@@ -804,8 +805,11 @@ function hasGroupMembershipScopeForColumn(sql: string, column: string): boolean 
   const join = joins.some((match) => {
     const alias = (match[1] ?? "group_accounts").toLocaleLowerCase();
     const clause = match[2]!;
+    const hasGroupFilter =
+      new RegExp(`\\b${alias}\\.group_id\\b\\s*=\\s*:groupId`, "i").test(normalizedSql) ||
+      (alias === "group_accounts" && /\bgroup_id\b\s*=\s*:groupId/i.test(normalizedSql));
     return (
-      /\bgroup_id\b\s*=\s*:groupId/i.test(clause) &&
+      hasGroupFilter &&
       new RegExp(
         `\\b${alias}\\.account_id\\s*=\\s*\\w+\\.${escapedColumn}\\b|\\b\\w+\\.${escapedColumn}\\s*=\\s*${alias}\\.account_id\\b`,
         "i",

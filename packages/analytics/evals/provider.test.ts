@@ -143,6 +143,15 @@ describe("toEvaluationOutput", () => {
     expect(output.textRoutes).toEqual(["/0/bs", "/0/cf"]);
   });
 
+  test("decodes a named colon before collecting visible URLs", () => {
+    const output = toEvaluationOutput({
+      text: "https&colon;//example.com/",
+      steps: [],
+    });
+
+    expect(output.textLinks).toEqual(["https://example.com/"]);
+  });
+
   test("does not treat an indented code block as a clickable link", () => {
     const output = toEvaluationOutput({
       text: "    [収支を見る](/0/cf/2026-07)",

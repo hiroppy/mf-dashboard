@@ -3,6 +3,7 @@ const hiddenHtmlElementPattern =
 const namedCharacterReferences: Record<string, string> = {
   amp: "&",
   apos: "'",
+  colon: ":",
   gt: ">",
   lt: "<",
   minus: "−",
@@ -24,7 +25,7 @@ export function decodeHtmlCharacterReferences(text: string): string {
       },
     )
     .replace(
-      /&(amp|apos|gt|lt|minus|percnt|quot|sol|yen);/gi,
+      /&(amp|apos|colon|gt|lt|minus|percnt|quot|sol|yen);/gi,
       (_, name: string) => namedCharacterReferences[name.toLocaleLowerCase()]!,
     );
 }

@@ -1403,7 +1403,7 @@ describe("assertFinanceChatOutput", () => {
           expectedRowAssociations: [["income", "313235"]],
           requiredSqlPatterns: [
             derivedAmountSqlPattern,
-            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:inner\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?[\\s\\S]*\\bwhere\\b[\\s\\S]*\\bexists\\s*\\(\\s*select\\s+1\\s+from\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+where[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
+            "(?:\\bfrom\\s+transactions\\b[\\s\\S]*\\bwhere\\b[\\s\\S]*\\baccount_id\\b\\s+in\\s*\\(\\s*select\\s+(?:\\w+\\.)?\\baccount_id\\b\\s+from\\s+\\bgroup_accounts\\b(?:\\s+(?:as\\s+)?\\w+)?\\s+where\\s+(?:\\w+\\.)?\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?\\s+(?:(?:inner|left)\\s+)?join\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+on[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId|\\bfrom\\s+transactions(?:\\s+(?:as\\s+)?\\w+)?[\\s\\S]*\\bwhere\\b[\\s\\S]*\\bexists\\s*\\(\\s*select\\s+1\\s+from\\s+group_accounts(?:\\s+(?:as\\s+)?\\w+)?\\s+where[\\s\\S]*\\baccount_id\\b\\s*=\\s*(?:\\w+\\.)?\\baccount_id\\b[\\s\\S]*\\bgroup_id\\b\\s*=\\s*:groupId)",
           ],
         },
       },
@@ -1431,6 +1431,9 @@ describe("assertFinanceChatOutput", () => {
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions t JOIN group_accounts ga ON ga.group_id = :groupId AND ga.account_id = t.account_id WHERE t.type = 'income'";
+    expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
+    evidence.databaseQueries[0]!.input.sql =
+      "SELECT SUM(t.amount) AS income FROM transactions t LEFT JOIN group_accounts ga ON ga.account_id = t.account_id WHERE ga.group_id = :groupId AND t.type = 'income'";
     expect(assertFinanceChatOutput(output(evidence), context)).toMatchObject({ pass: true });
     evidence.databaseQueries[0]!.input.sql =
       "SELECT SUM(t.amount) AS income FROM transactions t JOIN accounts x ON x.account_id = t.account_id JOIN group_accounts ga ON ga.group_id = :groupId AND t.account_id = x.account_id WHERE t.type = 'income'";
@@ -2192,6 +2195,33 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
   });
 
+  test("rejects numeric constants assembled by SQL scalar functions", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) * 0 + CAST(char(51,49,51,50,51,53) AS INTEGER) AS income FROM transactions",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
   test("rejects fabricated constants in SQL VALUES constructors", () => {
     expect(
       assertFinanceChatOutput(
@@ -2441,6 +2471,22 @@ describe("assertFinanceChatOutput", () => {
             ],
           },
         },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
+  });
+
+  test("checks monetary claims with whitespace before the yen unit in chart titles", () => {
+    const chart = {
+      title: "2026年7月の食費",
+      chartType: "pie" as const,
+      unit: "currency" as const,
+      series: [{ name: "支出", amountType: "expense" as const }],
+      data: [{ label: "食料品", values: [100] }],
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [{ ...chart, title: "2026年7月の食費：架空額999,999 円" }] }),
+        { config: { expectedCharts: [{ ...chart, titlePatterns: ["食費"] }] } },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("根拠のない金額") });
   });
