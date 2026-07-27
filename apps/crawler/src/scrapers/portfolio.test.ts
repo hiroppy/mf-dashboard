@@ -1,5 +1,7 @@
 import { describe, test, expect } from "vitest";
+import { createManualHoldingKey } from "./manual-holding-accounts.js";
 import {
+  attachManualHoldingReference,
   createPensionRowFingerprint,
   haveSamePensionRowMultiset,
   identifyTableTypeFromTitle,
@@ -10,6 +12,7 @@ import {
   parsePnsPortfolioItem,
   parseStockPortfolioItem,
   resolveDepositTableCategory,
+  selectPensionPortfolioItems,
 } from "./portfolio.js";
 
 describe("pension row completeness", () => {
@@ -32,6 +35,71 @@ describe("pension row completeness", () => {
     expect(haveSamePensionRowMultiset(["row-a", "row-b"], ["row-b", "row-a"])).toBe(true);
     expect(haveSamePensionRowMultiset(["row-a", "row-a"], ["row-a"])).toBe(false);
     expect(haveSamePensionRowMultiset(["row-a", "row-a"], ["row-a", "row-b"])).toBe(false);
+  });
+
+  test.each([
+    ["完全一致", true, ["row-a"], true],
+    ["取得不完全", false, ["row-a"], false],
+    ["行不一致", true, ["row-b"], false],
+  ] as const)(
+    "%sの分岐で通常口座詳細を採用するか決定する",
+    (_label, complete, detailFingerprints, usesDetail) => {
+      const globalItems = [{ name: "Pension A", type: "年金", institution: "", balance: 1000 }];
+      const detailItems = [
+        {
+          accountMfId: "account-a",
+          name: "Pension A",
+          type: "年金",
+          institution: "",
+          balance: 1000,
+        },
+      ];
+      const selected = selectPensionPortfolioItems(globalItems, ["row-a"], {
+        complete,
+        fingerprints: detailFingerprints,
+        items: detailItems,
+      });
+
+      expect(selected).toBe(usesDetail ? detailItems : globalItems);
+    },
+  );
+});
+
+describe("attachManualHoldingReference", () => {
+  const item = {
+    name: "Asset A",
+    type: "保険",
+    institution: "",
+    balance: 1000,
+  };
+  const accountMap = new Map([
+    [createManualHoldingKey("holding-a", "sub-account-a"), "manual-account-a"],
+  ]);
+
+  test("両方の明示キーが完全一致した場合だけ口座IDを付与する", () => {
+    expect(attachManualHoldingReference(item, "holding-a", "sub-account-a", accountMap)).toEqual({
+      ...item,
+      mfId: "holding-a",
+      subAccountMfId: "sub-account-a",
+      accountMfId: "manual-account-a",
+    });
+  });
+
+  test.each([
+    ["候補なし", "holding-a", "sub-account-a", new Map()],
+    ["片キー不一致", "holding-a", "sub-account-b", accountMap],
+  ] as const)("%sでは口座IDを付与しない", (_label, holdingMfId, subAccountMfId, map) => {
+    const result = attachManualHoldingReference(item, holdingMfId, subAccountMfId, map);
+
+    expect(result).toMatchObject({ mfId: holdingMfId, subAccountMfId });
+    expect(result).not.toHaveProperty("accountMfId");
+  });
+
+  test.each([
+    ["保有IDなし", "", "sub-account-a"],
+    ["sub-account IDなし", "holding-a", ""],
+  ] as const)("%sでは明示キー自体を付与しない", (_label, holdingMfId, subAccountMfId) => {
+    expect(attachManualHoldingReference(item, holdingMfId, subAccountMfId, accountMap)).toBe(item);
   });
 });
 

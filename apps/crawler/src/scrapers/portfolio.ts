@@ -4,14 +4,14 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
 import { debug, warn } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
+import { extractAccountMfIdFromDetailUrl, isExpectedAccountDetailPage } from "./account-detail.js";
 import { createManualHoldingKey, type ManualHoldingAccountMap } from "./manual-holding-accounts.js";
 
 const DEPOSIT_TABLE_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
 const PENSION_CATEGORY = "年金";
-const PENSION_CORE_COLUMN_COUNT = 6;
-const LINKED_ACCOUNT_PATH_PATTERN = /^\/accounts\/show\/([^/]+)$/;
+export const PENSION_CORE_COLUMN_COUNT = 6;
 
 // Column indices for each table type
 const CELL_TIMEOUT = 1000;
@@ -239,8 +239,8 @@ export function parsePnsPortfolioItem(
 
 export interface LinkedAccountPensionSource {
   complete: boolean;
-  fingerprints: string[];
-  items: PortfolioItem[];
+  fingerprints: readonly string[];
+  items: readonly PortfolioItem[];
 }
 
 function normalizePensionCellText(value: string): string {
@@ -275,14 +275,34 @@ export function haveSamePensionRowMultiset(
   return counts.size === 0;
 }
 
-function extractLinkedAccountMfId(href: string): string | null {
-  try {
-    const pathname = new URL(href, mfUrls.home).pathname;
-    const match = pathname.match(LINKED_ACCOUNT_PATH_PATTERN);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    return null;
-  }
+export function attachManualHoldingReference(
+  item: PortfolioItem,
+  holdingMfId: string,
+  subAccountMfId: string,
+  manualHoldingAccountMap: ManualHoldingAccountMap,
+): PortfolioItem {
+  if (!holdingMfId || !subAccountMfId) return item;
+
+  const accountMfId = manualHoldingAccountMap.get(
+    createManualHoldingKey(holdingMfId, subAccountMfId),
+  );
+  return {
+    ...item,
+    mfId: holdingMfId,
+    subAccountMfId,
+    ...(accountMfId ? { accountMfId } : {}),
+  };
+}
+
+export function selectPensionPortfolioItems(
+  globalItems: readonly PortfolioItem[],
+  globalFingerprints: readonly string[],
+  linkedAccountPensionSource?: LinkedAccountPensionSource,
+): readonly PortfolioItem[] {
+  return linkedAccountPensionSource?.complete === true &&
+    haveSamePensionRowMultiset(globalFingerprints, linkedAccountPensionSource.fingerprints)
+    ? linkedAccountPensionSource.items
+    : globalItems;
 }
 
 async function getRowCellTexts(row: Locator): Promise<string[]> {
@@ -301,7 +321,8 @@ export async function getLinkedAccountPensionSource(
 ): Promise<LinkedAccountPensionSource> {
   const linkedAccounts = registeredAccounts.accounts.filter(
     (account) =>
-      account.type === "自動連携" && extractLinkedAccountMfId(account.url) === account.mfId,
+      account.type === "自動連携" &&
+      extractAccountMfIdFromDetailUrl(account.url, "show") === account.mfId,
   );
   const items: PortfolioItem[] = [];
   const fingerprints: string[] = [];
@@ -313,7 +334,7 @@ export async function getLinkedAccountPensionSource(
       const response = await page.goto(mfUrls.accountDetail(account.mfId), {
         waitUntil: "domcontentloaded",
       });
-      if (!response?.ok() || new URL(page.url()).pathname !== expectedPath) {
+      if (!isExpectedAccountDetailPage(response?.ok() === true, page.url(), expectedPath)) {
         failedPageCount++;
         continue;
       }
@@ -506,40 +527,37 @@ export async function parseInsuranceAndPoints(
       const item = parsePnsPortfolioItem(category, cellTexts);
       if (!item) continue;
 
-      if (holdingMfId && subAccountMfId) {
-        item.mfId = holdingMfId;
-        item.subAccountMfId = subAccountMfId;
-        const accountMfId = manualHoldingAccountMap.get(
-          createManualHoldingKey(holdingMfId, subAccountMfId),
-        );
-        if (accountMfId) item.accountMfId = accountMfId;
-      }
+      const resolvedItem = attachManualHoldingReference(
+        item,
+        holdingMfId,
+        subAccountMfId,
+        manualHoldingAccountMap,
+      );
       if (category === PENSION_CATEGORY) {
         pensionInsertionIndex ??= items.length;
-        globalPensionItems.push(item);
+        globalPensionItems.push(resolvedItem);
         globalPensionFingerprints.push(createPensionRowFingerprint(cellTexts));
       } else {
-        items.push(item);
+        items.push(resolvedItem);
       }
     }
   }
 
-  const useLinkedAccountPensions =
-    linkedAccountPensionSource?.complete === true &&
-    haveSamePensionRowMultiset(globalPensionFingerprints, linkedAccountPensionSource.fingerprints);
+  const selectedPensionItems = selectPensionPortfolioItems(
+    globalPensionItems,
+    globalPensionFingerprints,
+    linkedAccountPensionSource,
+  );
+  items.splice(pensionInsertionIndex ?? items.length, 0, ...selectedPensionItems);
 
-  if (useLinkedAccountPensions) {
-    items.splice(pensionInsertionIndex ?? items.length, 0, ...linkedAccountPensionSource.items);
+  if (selectedPensionItems === linkedAccountPensionSource?.items) {
     debug(
       `Linked account pension source applied: ${linkedAccountPensionSource.items.length} items`,
     );
-  } else {
-    items.splice(pensionInsertionIndex ?? items.length, 0, ...globalPensionItems);
-    if (linkedAccountPensionSource) {
-      warn(
-        `Linked account pension source not applied: global=${globalPensionItems.length}, detail=${linkedAccountPensionSource.items.length}, complete=${linkedAccountPensionSource.complete}`,
-      );
-    }
+  } else if (linkedAccountPensionSource) {
+    warn(
+      `Linked account pension source not applied: global=${globalPensionItems.length}, detail=${linkedAccountPensionSource.items.length}, complete=${linkedAccountPensionSource.complete}`,
+    );
   }
   return items;
 }

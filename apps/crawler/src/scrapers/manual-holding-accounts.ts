@@ -2,6 +2,7 @@ import type { RegisteredAccounts } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
 import { debug, warn } from "../logger.js";
+import { extractAccountMfIdFromDetailUrl, isExpectedAccountDetailPage } from "./account-detail.js";
 
 export interface ManualHoldingReference {
   holdingMfId: string;
@@ -11,21 +12,10 @@ export interface ManualHoldingReference {
 
 export type ManualHoldingAccountMap = ReadonlyMap<string, string>;
 
-const MANUAL_ACCOUNT_PATH_PATTERN = /^\/accounts\/show_manual\/([^/]+)$/;
 const INPUT_TIMEOUT = 1000;
 
 export function createManualHoldingKey(holdingMfId: string, subAccountMfId: string): string {
   return JSON.stringify([holdingMfId, subAccountMfId]);
-}
-
-function extractManualAccountMfId(href: string): string | null {
-  try {
-    const pathname = new URL(href, mfUrls.home).pathname;
-    const match = pathname.match(MANUAL_ACCOUNT_PATH_PATTERN);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    return null;
-  }
 }
 
 async function getInputValue(row: Locator, name: string): Promise<string> {
@@ -37,7 +27,7 @@ async function getInputValue(row: Locator, name: string): Promise<string> {
     .catch(() => "");
 }
 
-export async function extractManualHoldingReferences(
+async function extractManualHoldingReferences(
   page: Page,
   expectedAccountMfId: string,
 ): Promise<ManualHoldingReference[]> {
@@ -92,7 +82,9 @@ export async function getManualHoldingAccountMap(
   registeredAccounts: RegisteredAccounts,
 ): Promise<ManualHoldingAccountMap> {
   const manualAccounts = registeredAccounts.accounts.filter(
-    (account) => account.type === "手動" && extractManualAccountMfId(account.url) === account.mfId,
+    (account) =>
+      account.type === "手動" &&
+      extractAccountMfIdFromDetailUrl(account.url, "show_manual") === account.mfId,
   );
   const references: ManualHoldingReference[] = [];
   let skippedPageCount = 0;
@@ -103,7 +95,7 @@ export async function getManualHoldingAccountMap(
       const response = await page.goto(mfUrls.accountDetail(account.mfId, "show_manual"), {
         waitUntil: "domcontentloaded",
       });
-      if (!response?.ok() || new URL(page.url()).pathname !== expectedPath) {
+      if (!isExpectedAccountDetailPage(response?.ok() === true, page.url(), expectedPath)) {
         skippedPageCount++;
         continue;
       }
