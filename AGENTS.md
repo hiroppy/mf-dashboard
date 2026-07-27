@@ -102,6 +102,8 @@ Use the following priority for crawler tests. See `.agents/skills/crawler-scrape
 
 Crawler tests must not assert or log real names, balances, account identifiers, or other personal values. E2E assertions may verify only navigation and structural properties such as the presence and shape of headings, tables, rows, cells, attributes, and links.
 
+Bound structure-only E2E navigation independently from production crawl coverage. When production must inspect every account for correctness, an E2E may inspect at most one representative detail page and skip when no suitable candidate exists; document that scope difference in the test and pull request.
+
 ## Validation and Completion
 
 - Add unit tests for new logic.

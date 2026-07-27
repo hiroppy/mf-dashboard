@@ -164,6 +164,7 @@ describe("runInstitutionCategoryPhase", () => {
     ).resolves.toBe(categoryMap);
 
     expect(switchGroup).toHaveBeenCalledWith(page, "0");
+    expect(scrapeInstitutionCategories).toHaveBeenCalledWith(page);
     expect(vi.mocked(switchGroup).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(scrapeInstitutionCategories).mock.invocationCallOrder[0]!,
     );

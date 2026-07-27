@@ -93,15 +93,21 @@ export function buildUniqueManualHoldingAccountMap(
   return uniqueAccounts;
 }
 
-export async function getManualHoldingAccountMap(
-  page: Page,
+export function selectManualHoldingAccounts(
   registeredAccounts: RegisteredAccounts,
-): Promise<ManualHoldingAccountMap> {
-  const manualAccounts = registeredAccounts.accounts.filter(
+): RegisteredAccounts["accounts"] {
+  return registeredAccounts.accounts.filter(
     (account) =>
       account.type === "手動" &&
       extractAccountMfIdFromDetailUrl(account.url, "show_manual") === account.mfId,
   );
+}
+
+export async function getManualHoldingAccountMap(
+  page: Page,
+  registeredAccounts: RegisteredAccounts,
+): Promise<ManualHoldingAccountMap> {
+  const manualAccounts = selectManualHoldingAccounts(registeredAccounts);
   const references: ManualHoldingReference[] = [];
   let skippedPageCount = 0;
 

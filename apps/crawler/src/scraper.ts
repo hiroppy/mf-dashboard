@@ -21,7 +21,7 @@ import {
 } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
 import { getManualHoldingAccountMap } from "./scrapers/manual-holding-accounts.js";
-import { getLinkedAccountPensionSource, getPortfolio } from "./scrapers/portfolio.js";
+import { getLinkedAccountPnsSource, getPortfolio } from "./scrapers/portfolio.js";
 import { clickRefreshButton, getMaxWaitMinutes } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
@@ -139,11 +139,8 @@ async function scrapeGlobalData(
     CRAWLER_STEPS.portfolio,
     async () => {
       const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
-      const linkedAccountPensionSource = await getLinkedAccountPensionSource(
-        page,
-        registeredAccounts,
-      );
-      return getPortfolio(page, manualHoldingAccountMap, linkedAccountPensionSource);
+      const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
+      return getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
     },
     { failureCode: "portfolio_failed" },
   );
@@ -328,8 +325,8 @@ export async function scrape(page: Page, options: ScrapeOptions = {}): Promise<S
   const assetHistory = await getAssetHistory(page);
   const registeredAccounts = await getRegisteredAccounts(page);
   const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
-  const linkedAccountPensionSource = await getLinkedAccountPensionSource(page, registeredAccounts);
-  const portfolio = await getPortfolio(page, manualHoldingAccountMap, linkedAccountPensionSource);
+  const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
+  const portfolio = await getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
   const spendingTargets = await getSpendingTargets(page).catch(() => null);
 
   const updatedAt = formatJstDateTimeForDisplay();

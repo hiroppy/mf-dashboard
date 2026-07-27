@@ -1,10 +1,13 @@
-import { describe, test, expect } from "vitest";
+import type { RegisteredAccounts } from "@mf-dashboard/db/types";
+import type { Page } from "playwright";
+import { describe, test, expect, vi } from "vitest";
 import { createManualHoldingKey } from "./manual-holding-accounts.js";
 import {
   attachManualHoldingReference,
-  createPensionRowFingerprint,
-  hasRequiredPensionColumns,
-  haveSamePensionRowMultiset,
+  createLinkedPnsRowFingerprint,
+  getLinkedAccountPnsSource,
+  hasRequiredPnsColumns,
+  haveSamePnsRowMultiset,
   identifyTableTypeFromTitle,
   isPointCategory,
   parseDepositPortfolioItem,
@@ -13,19 +16,20 @@ import {
   parsePnsPortfolioItem,
   parseStockPortfolioItem,
   resolveDepositTableCategory,
-  selectPensionPortfolioItems,
+  selectLinkedPnsAccounts,
+  selectLinkedPnsPortfolioItems,
 } from "./portfolio.js";
 
-describe("pension row completeness", () => {
+describe("linked insurance and pension completeness", () => {
   test("主要列が5列なら不完全、6列以上なら完全と判定する", () => {
-    expect(hasRequiredPensionColumns(["1", "2", "3", "4", "5"])).toBe(false);
-    expect(hasRequiredPensionColumns(["1", "2", "3", "4", "5", "6"])).toBe(true);
-    expect(hasRequiredPensionColumns(["1", "2", "3", "4", "5", "6", "7"])).toBe(true);
+    expect(hasRequiredPnsColumns(["1", "2", "3", "4", "5"])).toBe(false);
+    expect(hasRequiredPnsColumns(["1", "2", "3", "4", "5", "6"])).toBe(true);
+    expect(hasRequiredPnsColumns(["1", "2", "3", "4", "5", "6", "7"])).toBe(true);
   });
 
-  test("主要6列だけを正規化してfingerprintにする", () => {
+  test("カテゴリと主要6列だけを正規化してfingerprintにする", () => {
     expect(
-      createPensionRowFingerprint([
+      createLinkedPnsRowFingerprint("年金", [
         " Pension A ",
         "1,000",
         "3,000",
@@ -35,13 +39,16 @@ describe("pension row completeness", () => {
         "変更",
         "削除",
       ]),
-    ).toBe('["Pension A","1,000","3,000","200","10%","2026-07-01"]');
+    ).toBe('["年金","Pension A","1,000","3,000","200","10%","2026-07-01"]');
+    expect(createLinkedPnsRowFingerprint("保険", ["Asset A", "1", "2", "3", "4", "5"])).not.toBe(
+      createLinkedPnsRowFingerprint("年金", ["Asset A", "1", "2", "3", "4", "5"]),
+    );
   });
 
   test("順序に依存せず重複数を含めてmultisetを比較する", () => {
-    expect(haveSamePensionRowMultiset(["row-a", "row-b"], ["row-b", "row-a"])).toBe(true);
-    expect(haveSamePensionRowMultiset(["row-a", "row-a"], ["row-a"])).toBe(false);
-    expect(haveSamePensionRowMultiset(["row-a", "row-a"], ["row-a", "row-b"])).toBe(false);
+    expect(haveSamePnsRowMultiset(["row-a", "row-b"], ["row-b", "row-a"])).toBe(true);
+    expect(haveSamePnsRowMultiset(["row-a", "row-a"], ["row-a"])).toBe(false);
+    expect(haveSamePnsRowMultiset(["row-a", "row-a"], ["row-a", "row-b"])).toBe(false);
   });
 
   test.each([
@@ -61,15 +68,129 @@ describe("pension row completeness", () => {
           balance: 1000,
         },
       ];
-      const selected = selectPensionPortfolioItems(globalItems, ["row-a"], {
+      const selected = selectLinkedPnsPortfolioItems(globalItems, ["row-a"], {
         complete,
         fingerprints: detailFingerprints,
         items: detailItems,
       });
 
-      expect(selected).toBe(usesDetail ? detailItems : globalItems);
+      expect(selected).toEqual(usesDetail ? detailItems : globalItems);
     },
   );
+
+  test("手動の解決済み行を保持し、未解決の自動連携行だけを詳細行へ置換する", () => {
+    const manualItem = {
+      accountMfId: "manual-account-a",
+      name: "Manual Pension",
+      type: "年金",
+      institution: "",
+      balance: 1000,
+    };
+    const unresolvedItem = {
+      name: "Linked Pension",
+      type: "年金",
+      institution: "",
+      balance: 2000,
+    };
+    const linkedItem = { ...unresolvedItem, accountMfId: "linked-account-a" };
+
+    expect(
+      selectLinkedPnsPortfolioItems([manualItem, unresolvedItem], ["manual-row", "linked-row"], {
+        complete: true,
+        fingerprints: ["linked-row"],
+        items: [linkedItem],
+      }),
+    ).toEqual([manualItem, linkedItem]);
+  });
+});
+
+describe("linked insurance and pension candidates", () => {
+  const registeredAccounts: RegisteredAccounts = {
+    accounts: [
+      {
+        mfId: "pension-a",
+        name: "Institution A",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "",
+        url: "/accounts/show/pension-a",
+        totalAssets: 0,
+      },
+      {
+        mfId: "insurance-a",
+        name: "Institution B",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "",
+        url: "/accounts/show/insurance-a",
+        totalAssets: 0,
+      },
+      {
+        mfId: "bank-a",
+        name: "Institution C",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "",
+        url: "/accounts/show/bank-a",
+        totalAssets: 0,
+      },
+      {
+        mfId: "manual-a",
+        name: "Institution D",
+        type: "手動",
+        status: "ok",
+        lastUpdated: "",
+        url: "/accounts/show_manual/manual-a",
+        totalAssets: 0,
+      },
+      {
+        mfId: "stale-a",
+        name: "Institution E",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "",
+        url: "/accounts/show/other-a",
+        totalAssets: 0,
+      },
+    ],
+  };
+
+  test("正規の詳細URLを持つ全自動連携口座を候補にする", () => {
+    expect(selectLinkedPnsAccounts(registeredAccounts).map(({ mfId }) => mfId)).toEqual([
+      "pension-a",
+      "insurance-a",
+      "bank-a",
+    ]);
+  });
+
+  test("手動口座とURL不整合口座だけなら候補0件にする", () => {
+    expect(
+      selectLinkedPnsAccounts({
+        accounts: registeredAccounts.accounts.filter(({ mfId }) =>
+          ["manual-a", "stale-a"].includes(mfId),
+        ),
+      }),
+    ).toEqual([]);
+  });
+
+  test("候補詳細の取得失敗は不完全としてfail closedにする", async () => {
+    const goto = vi.fn<() => Promise<{ ok: () => boolean }>>().mockResolvedValue({
+      ok: () => false,
+    });
+    const page = {
+      goto,
+      url: vi.fn<() => string>().mockReturnValue("https://moneyforward.com/"),
+    } as unknown as Page;
+
+    await expect(
+      getLinkedAccountPnsSource(page, { accounts: [registeredAccounts.accounts[0]!] }),
+    ).resolves.toEqual({
+      complete: false,
+      fingerprints: [],
+      items: [],
+    });
+    expect(goto).toHaveBeenCalledOnce();
+  });
 });
 
 describe("attachManualHoldingReference", () => {

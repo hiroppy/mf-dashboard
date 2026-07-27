@@ -92,6 +92,7 @@ export const mfUrls = {
 - Verify selector compatibility and page structure with authenticated **read-only** E2E tests. Do not trigger refresh, account updates, crawling, or database writes in structure-only E2E tests.
 - **NEVER write assertions that depend on actual financial data.** Do not assert or log real names, balances, account IDs, or other personal values.
 - E2E assertions may check navigation and structural properties only, including the presence and shape of headings, tables, rows, cells, attributes, and links.
+- Bound structure-only E2E navigation independently from production crawl coverage. If production scans every account for correctness, inspect at most one representative detail page in E2E, skip when no suitable candidate exists, and document the scope difference in the test and pull request.
 - Do not use embedded HTML fixtures merely to imitate the current service DOM. They are allowed only when a failure branch cannot be represented safely and deterministically in read-only E2E.
 - For every HTML fixture exception, keep the markup to the minimum needed and add a nearby comment explaining why authenticated read-only E2E cannot cover that branch.
 - Use anonymous hardcoded strings and objects for unit tests; never copy values from the production database or authenticated pages.

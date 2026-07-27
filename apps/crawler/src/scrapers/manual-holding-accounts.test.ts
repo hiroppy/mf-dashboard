@@ -3,6 +3,7 @@ import {
   buildUniqueManualHoldingAccountMap,
   createManualHoldingKey,
   createManualHoldingReference,
+  selectManualHoldingAccounts,
 } from "./manual-holding-accounts.js";
 
 describe("createManualHoldingReference", () => {
@@ -78,5 +79,41 @@ describe("buildUniqueManualHoldingAccountMap", () => {
     expect(createManualHoldingKey("holding-a|sub", "account-a")).not.toBe(
       createManualHoldingKey("holding-a", "sub|account-a"),
     );
+  });
+});
+
+describe("selectManualHoldingAccounts", () => {
+  test("正規の詳細URLを持つ手動口座だけを選ぶ", () => {
+    const account = {
+      name: "Institution A",
+      status: "ok" as const,
+      lastUpdated: "",
+      totalAssets: 0,
+    };
+
+    expect(
+      selectManualHoldingAccounts({
+        accounts: [
+          {
+            ...account,
+            mfId: "manual-a",
+            type: "手動",
+            url: "/accounts/show_manual/manual-a",
+          },
+          {
+            ...account,
+            mfId: "linked-a",
+            type: "自動連携",
+            url: "/accounts/show/linked-a",
+          },
+          {
+            ...account,
+            mfId: "stale-a",
+            type: "手動",
+            url: "/accounts/show_manual/other-a",
+          },
+        ],
+      }).map(({ mfId }) => mfId),
+    ).toEqual(["manual-a"]);
   });
 });
