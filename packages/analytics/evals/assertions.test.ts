@@ -444,6 +444,37 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("Markdown表") });
   });
 
+  test("uses the nearest preceding heading to scope a Markdown table", () => {
+    const config = {
+      expectedTextPairFacts: ["2026年7月"],
+      expectedTextPairs: [["食費", "41837"]] as Array<[string, string]>,
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: ["## 2026年7月", "| 項目 | 食費 |", "| --- | ---: |", "| 合計 | 41,837円 |"].join(
+            "\n",
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "## 2026年6月",
+            "| 項目 | 食費 |",
+            "| --- | ---: |",
+            "| 合計 | 41,837円 |",
+            "## 2026年7月",
+          ].join("\n"),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("対象期間") });
+  });
+
   test("compares chart values by label without requiring data order", () => {
     const chart = {
       title: "2026年7月の食費",
@@ -495,6 +526,29 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({ charts: [{ ...chart, title: "2026年7月ではなく2025年7月の食費" }] }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                chartType: "pie",
+                titlePatterns: ["2026年7月", "食費"],
+                unit: "currency",
+                series: [{ name: "支出", amountType: "expense" }],
+                data: [
+                  { label: "食料品", values: [24_833] },
+                  { label: "外食", values: [12_214] },
+                ],
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          charts: [{ ...chart, title: "2026年7月ではなく2025年7月の食費（比較対象: 2026年7月）" }],
+        }),
         {
           config: {
             expectedCharts: [
@@ -1145,6 +1199,46 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
   });
 
+  test("accepts one complete result among equivalent query result shapes", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+          databaseQueries: [
+            {
+              input: { sql: "SELECT type, SUM(amount) AS total FROM transactions GROUP BY type" },
+              output: {
+                rows: [
+                  { type: "income", total: 313_235 },
+                  { type: "expense", total: 219_894 },
+                ],
+                truncated: false,
+              },
+            },
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS income, SUM(amount) AS expense FROM transactions",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235", "219894"]],
+              expectedRowAssociations: [
+                ["income", "313235"],
+                ["expense", "219894"],
+              ],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("validates model evidence when only row associations are configured", () => {
     const context = {
       config: {
@@ -1614,6 +1708,62 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
+  test("rejects fabricated constants in every SELECT projection", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: "WITH fabricated AS (SELECT 313235 AS income FROM transactions) SELECT SUM(amount) AS income FROM fabricated",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("queryDatabase") });
+  });
+
+  test("preserves double-quoted SQL identifiers while masking string literals", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          fixtureResult: { rows: [{ income: 313_235 }], truncated: false },
+          databaseQueries: [
+            {
+              input: {
+                sql: `SELECT SUM("amount") AS "income" FROM "transactions" WHERE "type" = 'income'`,
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            databaseEvidence: {
+              expectedRows: [["313235"]],
+              expectedRowAssociations: [["income", "313235"]],
+              requiredSqlLiteralBindings: [["income", "\\btype\\b\\s*=\\s*__required_literal__"]],
+              requiredSqlLiterals: ["income"],
+              requiredSqlPatterns: ["\\btransactions\\b", derivedAmountSqlPattern],
+            },
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("does not grade image alt text as a rendered answer", () => {

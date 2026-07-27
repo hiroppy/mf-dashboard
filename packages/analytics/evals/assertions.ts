@@ -89,6 +89,7 @@ function removeCode(text: string): string {
 
 function hasScopedPair(text: string, label: string, value: string, facts: string[]): boolean {
   if (facts.length === 0) return true;
+  if (hasScopedTablePair(text, normalize(label), normalize(value), facts)) return true;
   const normalizedText = normalize(text);
   const normalizedLabel = normalize(label);
   const normalizedValue = normalize(value);
@@ -318,6 +319,7 @@ function normalizeTableCell(cell: string): string {
 interface MarkdownTable {
   header: string[];
   rows: string[][];
+  startLine: number;
 }
 
 function getRenderableLines(text: string): string[] {
@@ -354,7 +356,7 @@ function getMarkdownTables(text: string): MarkdownTable[] {
       if (!row || row.length !== header.length) break;
       rows.push(row);
     }
-    tables.push({ header, rows });
+    tables.push({ header, rows, startLine: index });
     index = rowIndex - 1;
   }
   return tables;
@@ -364,6 +366,25 @@ function hasTablePair(text: string, label: string, value: string): boolean {
   return getMarkdownTables(text).some((table) => {
     const columnIndex = table.header.indexOf(label);
     return columnIndex !== -1 && table.rows.some((row) => row[columnIndex] === value);
+  });
+}
+
+function hasScopedTablePair(text: string, label: string, value: string, facts: string[]): boolean {
+  const lines = getRenderableLines(text);
+  return getMarkdownTables(text).some((table) => {
+    const columnIndex = table.header.indexOf(label);
+    if (columnIndex === -1 || !table.rows.some((row) => row[columnIndex] === value)) return false;
+    const nearestHeading = lines
+      .slice(0, table.startLine)
+      .findLast((line) => /^#{1,6}\s+/.test(line));
+    return (
+      nearestHeading !== undefined &&
+      facts.every(
+        (fact) =>
+          normalize(nearestHeading).includes(normalize(fact)) &&
+          !hasContradictedFact(nearestHeading, fact),
+      )
+    );
   });
 }
 
@@ -441,10 +462,12 @@ function uniqueRows(rows: Array<Record<string, unknown>>): Array<Record<string, 
 }
 
 function hasSuspiciousProjectionLiteral(sql: string): boolean {
-  const projection = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1] ?? "";
-  if (/0x[0-9a-f]+/i.test(projection)) return true;
-  return [...projection.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
-    (match) => Number(match[1]) > 100,
+  return [...sql.matchAll(/\bselect\b([\s\S]*?)\bfrom\b/gi)].some(
+    (select) =>
+      /0x[0-9a-f]+/i.test(select[1]!) ||
+      [...select[1]!.matchAll(/(?<![\w.])(\d+(?:\.\d+)?)(?![\w.])/g)].some(
+        (literal) => Number(literal[1]) > 100,
+      ),
   );
 }
 
@@ -452,40 +475,45 @@ function removeSqlComments(sql: string): string {
   return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n\r]*/g, " ");
 }
 
+function unquoteSqlIdentifier(identifier: string): string {
+  return identifier.slice(1, -1).replaceAll('""', '"');
+}
+
 function analyzeSql(sql: string): { literals: string[]; patternText: string } {
   const literals: string[] = [];
-  const patternText = removeSqlComments(sql).replace(
-    /'(?:''|[^'])*'|"(?:""|[^"])*"/g,
-    (literal) => {
-      const quote = literal[0]!;
-      literals.push(literal.slice(1, -1).replaceAll(quote + quote, quote));
+  const patternText = removeSqlComments(sql)
+    .replace(/'(?:''|[^'])*'/g, (literal) => {
+      literals.push(literal.slice(1, -1).replaceAll("''", "'"));
       return " ? ";
-    },
-  );
+    })
+    .replace(/"(?:""|[^"])*"/g, unquoteSqlIdentifier);
   return { literals, patternText };
 }
 
 function maskSqlForLiteralBinding(sql: string, requiredLiteral: string): string {
-  return removeSqlComments(sql).replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, (literal) => {
-    const quote = literal[0]!;
-    const value = literal
-      .slice(1, -1)
-      .replaceAll(quote + quote, quote)
-      .replace(/[%_]/g, "");
-    return value === requiredLiteral ? " __required_literal__ " : " ? ";
-  });
+  return removeSqlComments(sql)
+    .replace(/'(?:''|[^'])*'/g, (literal) => {
+      const value = literal.slice(1, -1).replaceAll("''", "'").replace(/[%_]/g, "");
+      return value === requiredLiteral ? " __required_literal__ " : " ? ";
+    })
+    .replace(/"(?:""|[^"])*"/g, unquoteSqlIdentifier);
 }
 
 function hasContradictedFact(text: string, fact: string): boolean {
   const normalizedText = normalize(text);
   const normalizedFact = normalize(fact);
-  const index = normalizedText.lastIndexOf(normalizedFact);
-  if (index === -1) return false;
-  const suffix = normalizedText.slice(
-    index + normalizedFact.length,
-    index + normalizedFact.length + 24,
-  );
-  return /^[^。！？\n]{0,16}(?:ではなく|でなく|ではない|ではありません|じゃなく)/.test(suffix);
+  let index = normalizedText.indexOf(normalizedFact);
+  while (index !== -1) {
+    const suffix = normalizedText.slice(
+      index + normalizedFact.length,
+      index + normalizedFact.length + 24,
+    );
+    if (/^[^。！？\n]{0,16}(?:ではなく|でなく|ではない|ではありません|じゃなく)/.test(suffix)) {
+      return true;
+    }
+    index = normalizedText.indexOf(normalizedFact, index + normalizedFact.length);
+  }
+  return false;
 }
 
 function hasUngroundedAmountOutsideMarkdownTables(text: string, expectedRows: string[][]): boolean {
@@ -538,6 +566,20 @@ function rowContainsAssociation(
     return hasPivotedBinding || expectedTerms.every((term) => rowValues.includes(term));
   }
   return expectedTerms.every((term) => rowValues.includes(term));
+}
+
+function rowsMatchAssociations(
+  rows: Array<Record<string, unknown>>,
+  expectedAssociations: Array<Array<number | string>>,
+): boolean {
+  return (
+    expectedAssociations.every((association) =>
+      rows.some((row) => rowContainsAssociation(row, association)),
+    ) &&
+    rows.every((row) =>
+      expectedAssociations.some((association) => rowContainsAssociation(row, association)),
+    )
+  );
 }
 
 function hasUngroundedTableAmount(
@@ -692,7 +734,15 @@ export default function assertFinanceChatOutput(
     if (databaseResults.length === 0) {
       return fail("期待する事実を裏付けるqueryDatabase結果がありません。");
     }
-    groundedQuantities = getGroundedQuantities(qualifyingDatabaseQueries.map(({ query }) => query));
+    if (databaseEvidence.expectNoData) {
+      groundedQuantities = getGroundedQuantities(
+        qualifyingDatabaseQueries.map(({ query }) => query),
+      );
+      groundedQuantities.count = new Set(
+        [...groundedQuantities.count].filter((value) => value === 0),
+      );
+      groundedQuantities.percent.clear();
+    }
 
     const fixtureResult = databaseResultSchema.safeParse(actual.fixtureResult);
     if (!fixtureResult.success || fixtureResult.data.truncated) {
@@ -716,17 +766,22 @@ export default function assertFinanceChatOutput(
     }
     const expectedAssociations = databaseEvidence.expectedRowAssociations ?? [];
     const maximumExpectedRowCount = Math.max(expectedRows.length, expectedAssociations.length);
-    const modelRows = uniqueRows(databaseResults.flatMap((databaseResult) => databaseResult.rows));
+    const combinedModelRows = uniqueRows(
+      databaseResults.flatMap((databaseResult) => databaseResult.rows),
+    );
     const modelHasExpectedResult = expectedAssociations.length
-      ? modelRows.length <= maximumExpectedRowCount &&
-        expectedAssociations.every((association) =>
-          modelRows.some((row) => rowContainsAssociation(row, association)),
-        ) &&
-        modelRows.every((row) =>
-          expectedAssociations.some((association) => rowContainsAssociation(row, association)),
-        )
+      ? databaseResults.some(({ rows }) => {
+          const resultRows = uniqueRows(rows);
+          return (
+            resultRows.length <= maximumExpectedRowCount &&
+            rowsMatchAssociations(resultRows, expectedAssociations)
+          );
+        }) || rowsMatchAssociations(combinedModelRows, expectedAssociations)
       : expectedRows.length === 0 ||
-        JSON.stringify(normalizeRows(modelRows)) === JSON.stringify(expectedRows);
+        databaseResults.some(
+          ({ rows }) => JSON.stringify(normalizeRows(rows)) === JSON.stringify(expectedRows),
+        ) ||
+        JSON.stringify(normalizeRows(combinedModelRows)) === JSON.stringify(expectedRows);
     if (!modelHasExpectedResult) {
       return fail("queryDatabase結果に期待しない行があるか、値の関連が不足しています。");
     }

@@ -92,7 +92,10 @@ function unique(values: string[]): string[] {
 }
 
 function removeNonRenderedText(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/~~[\s\S]*?~~/g, "");
+  return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/~~[\s\S]*?~~/g, "")
+    .replace(/!\[[^\]]*]\([^)]*\)|!\[[^\]]*]\[[^\]]*]|!\[[^\]]*]/g, "");
 }
 
 function removeCode(text: string): string {
@@ -120,11 +123,18 @@ function getTextLinks(text: string): string[] {
       return destination ? [destination] : [];
     },
   );
+  const shortcutLinks = [...renderedText.matchAll(/(?<!!)\[([^\]]+)](?![[(])/g)].flatMap(
+    (match) => {
+      if (/^\s*:/.test(renderedText.slice(match.index! + match[0].length))) return [];
+      const destination = referenceDefinitions.get(match[1]!.toLocaleLowerCase());
+      return destination ? [destination] : [];
+    },
+  );
   const autoLinks = [...renderedText.matchAll(/<(https?:\/\/[^>\s]+)>/g)].map((match) => match[1]!);
   const rawUrls = [...renderedText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  return unique([...markdownLinks, ...referenceLinks, ...autoLinks, ...rawUrls]);
+  return unique([...markdownLinks, ...referenceLinks, ...shortcutLinks, ...autoLinks, ...rawUrls]);
 }
 
 function getTextRoutes(text: string): string[] {

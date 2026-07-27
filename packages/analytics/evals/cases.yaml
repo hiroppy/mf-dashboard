@@ -10,6 +10,7 @@
       WHERE substr(date, 1, 7) = '2026-07'
         AND is_transfer = 0
         AND is_excluded_from_calculation = 0
+        AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
   assert:
     - type: is-json
     - type: javascript
@@ -40,6 +41,7 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
+              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
               "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\btype\\b",
@@ -68,6 +70,7 @@
         AND category = '食費'
         AND is_transfer = 0
         AND is_excluded_from_calculation = 0
+        AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
       GROUP BY sub_category
   assert:
     - type: is-json
@@ -112,6 +115,7 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
+              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
               "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
@@ -140,6 +144,7 @@
         AND category = '食費'
         AND is_transfer = 0
         AND is_excluded_from_calculation = 0
+        AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
   assert:
     - type: is-json
     - type: javascript
@@ -165,6 +170,7 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
+              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
               "\\bdate\\b\\s*=\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?<!\\bas\\s)\\bamount\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
@@ -222,6 +228,7 @@
         AND category = '食費'
         AND is_transfer = 0
         AND is_excluded_from_calculation = 0
+        AND account_id IN (SELECT account_id FROM group_accounts WHERE group_id = :groupId)
   assert:
     - type: is-json
     - type: javascript
@@ -249,6 +256,7 @@
           requiredSqlPatterns:
             [
               "\\btransactions\\b",
+              "\\bgroup_accounts\\b[\\s\\S]*:groupId",
               "(?:substr\\s*\\(\\s*date\\s*,\\s*1\\s*,\\s*7\\s*\\)|\\bdate\\b)\\s*(?:=|like|>=)\\s*\\?",
               "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?:\\bamount\\b|\\bcount\\s*\\(\\s*\\*\\s*\\))(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
               "\\b(?:category|sub_category)\\b\\s*=\\s*\\?",
