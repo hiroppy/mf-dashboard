@@ -51,6 +51,14 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "食費合計は41,837円です。内訳は食料品24,833円、外食12,214円、カフェ4,790円です。",
+        }),
+        { config: { expectedTextPairs: [["食費", "41837"]] } },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("rejects a missing label/value pair", () => {
@@ -277,6 +285,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "WITH classified AS (SELECT type, amount FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId) SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense FROM classified",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT SUM(income), SUM(expense) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: true },
@@ -325,7 +348,7 @@ describe("assertFinanceChatOutput", () => {
     const config = {
       forbiddenNoDataQueryPatterns: [
         "\\b1\\s*=\\s*0\\b",
-        "\\blimit\\b",
+        "\\blimit\\s+(?:0\\b|:[a-z_][a-z0-9_]*|\\?)",
         "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)",
         "\\bdate\\b\\s+like\\s*['\"]2030-01['\"]",
       ],
@@ -400,9 +423,39 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId LIMIT 10",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT amount FROM transactions JOIN group_accounts ga ON ga.account_id = transactions.account_id WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND ga.group_id = :groupId",
               },
               output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [{ total: 0 }], truncated: false },
             },
           ],
         }),
@@ -607,6 +660,22 @@ describe("assertFinanceChatOutput", () => {
         { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月について確認しました。食費のデータはありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
         output({

@@ -128,6 +128,8 @@ function getMissingTextPairs(
         .slice(valueStart)
         .search(/(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:は|が|[:：])/);
       if (nextFinanceLabel !== -1) valueEnd = Math.min(valueEnd, valueStart + nextFinanceLabel);
+      const sentenceEnd = normalizedText.slice(valueStart).search(/[。！？]/);
+      if (sentenceEnd !== -1) valueEnd = Math.min(valueEnd, valueStart + sentenceEnd);
       const segment = normalizedText.slice(valueStart, valueEnd);
       const displayedAmounts = getDisplayedAmounts(segment);
       const hasNegatedValue = new RegExp(
@@ -291,22 +293,8 @@ function matchesDatabaseQuery(
 
 function hasRequiredAggregateAliases(sql: string, aliases: string[]): boolean {
   if (aliases.length === 0) return true;
-  const selectClause = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1];
-  if (!selectClause) return false;
-
-  const expressions: string[] = [];
-  let depth = 0;
-  let expressionStart = 0;
-  for (let index = 0; index < selectClause.length; index += 1) {
-    const character = selectClause[index];
-    if (character === "(") depth += 1;
-    if (character === ")") depth -= 1;
-    if (character === "," && depth === 0) {
-      expressions.push(selectClause.slice(expressionStart, index));
-      expressionStart = index + 1;
-    }
-  }
-  expressions.push(selectClause.slice(expressionStart));
+  const expressions = getTopLevelSelectExpressions(sql);
+  if (expressions.length === 0) return false;
 
   return aliases.every((alias) =>
     expressions.some((expression) => {
@@ -341,10 +329,74 @@ function hasRequiredAggregateAliases(sql: string, aliases: string[]): boolean {
   );
 }
 
+function getTopLevelSelectExpressions(sql: string): string[] {
+  let depth = 0;
+  let inString = false;
+  let selectStart = -1;
+  let selectClause = "";
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index]!;
+    if (character === "'" && sql[index + 1] === "'") {
+      index += 1;
+      continue;
+    }
+    if (character === "'") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    const before = sql[index - 1] ?? " ";
+    const isWordBoundary = !/[a-z0-9_]/i.test(before);
+    if (
+      depth === 0 &&
+      selectStart === -1 &&
+      isWordBoundary &&
+      /^select\b/i.test(sql.slice(index))
+    ) {
+      selectStart = index + "select".length;
+      index = selectStart - 1;
+      continue;
+    }
+    if (depth === 0 && selectStart !== -1 && isWordBoundary && /^from\b/i.test(sql.slice(index))) {
+      selectClause = sql.slice(selectStart, index);
+      break;
+    }
+  }
+  if (!selectClause) return [];
+
+  const expressions: string[] = [];
+  let expressionDepth = 0;
+  let expressionInString = false;
+  let expressionStart = 0;
+  for (let index = 0; index < selectClause.length; index += 1) {
+    const character = selectClause[index];
+    if (character === "'" && selectClause[index + 1] === "'") {
+      index += 1;
+      continue;
+    }
+    if (character === "'") {
+      expressionInString = !expressionInString;
+      continue;
+    }
+    if (expressionInString) continue;
+    if (character === "(") expressionDepth += 1;
+    if (character === ")") expressionDepth -= 1;
+    if (character === "," && expressionDepth === 0) {
+      expressions.push(selectClause.slice(expressionStart, index));
+      expressionStart = index + 1;
+    }
+  }
+  expressions.push(selectClause.slice(expressionStart));
+  return expressions;
+}
+
 function hasContradictoryEqualityPredicates(sql: string): boolean {
   const clauses = [
     ...sql.matchAll(
-      /\b(?:where|having)\b([\s\S]*?)(?=\b(?:group\s+by|order\s+by|limit|union|where|having)\b|$)/gi,
+      /\b(?:where|having)\b([\s\S]*?)(?=\b(?:group\s+by|order\s+by|limit|union|where|having)\b|\)\s*select\b|$)/gi,
     ),
   ].map((match) => match[1]!);
   for (const branch of clauses.flatMap((clause) => clause.split(/\bor\b/i))) {
@@ -731,7 +783,8 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return true;
   const executableSql = getExecutableSql(query.data.sql);
-  if (/\b(?:except|having|intersect|limit|not|offset)\b/i.test(executableSql)) return true;
+  if (/\b(?:except|having|intersect|not|offset)\b/i.test(executableSql)) return true;
+  if (/\blimit\s+(?:0\b|:[a-z_][a-z0-9_]*|\?)/i.test(executableSql)) return true;
   if (
     /(?:\b\d+(?:\.\d+)?\b|'[^']*')\s+is\s+null\b|\bnull\s+is\s+not\s+null\b/i.test(executableSql)
   ) {
@@ -776,16 +829,18 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
 function hasEmptyAggregateResult(input: unknown, row: Record<string, unknown>): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return false;
-  const selectClause = getExecutableSql(query.data.sql).match(/\bselect\b([\s\S]*?)\bfrom\b/i);
-  if (!selectClause) return false;
-  const aggregateFields = [
-    ...selectClause[1]!.matchAll(
-      /\b(count\s*\(\s*\*\s*\)|sum\s*\(\s*(?:[a-z_][a-z0-9_.]*\.)?amount\s*\))\s+(?:as\s+)?["`]?([a-z_][a-z0-9_]*)/gi,
-    ),
-  ].map((match) => ({
-    alias: match[2]!,
-    kind: match[1]!.toLocaleLowerCase().startsWith("count") ? "count" : "sum",
-  }));
+  const aggregateFields = getTopLevelSelectExpressions(getExecutableSql(query.data.sql)).flatMap<{
+    alias: string;
+    kind: "count" | "sum";
+  }>((expression) => {
+    const alias = expression.match(/\s+(?:as\s+)?([a-z_][a-z0-9_]*)\s*$/i)?.[1];
+    if (!alias) return [];
+    if (/\bcount\s*\(\s*\*\s*\)/i.test(expression)) return [{ alias, kind: "count" }];
+    if (/\bsum\s*\(\s*(?:[a-z_][a-z0-9_.]*\.)?amount\s*\)/i.test(expression)) {
+      return [{ alias, kind: "sum" }];
+    }
+    return [];
+  });
   if (aggregateFields.length === 0) return false;
 
   return aggregateFields.every(({ alias, kind }) => {
@@ -887,11 +942,11 @@ export default function assertFinanceChatOutput(
   if (
     noDataFacts.length > 0 &&
     !factualText
-      .split(/[。！？\n]/)
+      .split(/\n\s*\n/)
       .some(
-        (clause) =>
-          /(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません)/.test(clause) &&
-          noDataFacts.every((fact) => normalize(clause).includes(normalize(fact))),
+        (scope) =>
+          /(?:データ|明細|記録|取引)[\s\S]*(?:ありません|ない|見つかりません)/.test(scope) &&
+          noDataFacts.every((fact) => normalize(scope).includes(normalize(fact))),
       )
   ) {
     return fail("データなし回答の期間または対象が期待と異なります。");
@@ -918,11 +973,11 @@ export default function assertFinanceChatOutput(
           "\\bcast\\s*\\(\\s*['\"]?[+-]?\\d",
           "\\b(?:char|concat|concat_ws|format|hex|printf|quote|unicode|unhex)\\s*\\(",
           "\\|\\|",
-          "\\bselect\\b[^;]*?\\d[\\d_]*(?:\\.\\d+)?\\s*(?:/|%|\\*|<<|>>|&|\\|)\\s*\\d[^;]*?\\bfrom\\b",
+          "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\d[\\d_]*(?:\\.\\d+)?\\s*(?:/|%|\\*|<<|>>|&|\\|)\\s*\\d(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
           "\\b[a-z_][a-z0-9_.]*\\s*\\*\\s*0\\b",
           "\\b0\\s*\\*\\s*[a-z_][a-z0-9_.]*\\b",
-          "\\bselect\\b[^;]*?(?:\\+|-)\\s*\\d+(?:\\.\\d+)?[^;]*?\\bfrom\\b",
-          "\\bselect\\b[^;]*?\\bsum\\s*\\(([^)]*)\\)\\s*-\\s*sum\\s*\\(\\1\\)[^;]*?\\bfrom\\b",
+          "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?(?:\\+|-)\\s*\\d+(?:\\.\\d+)?(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
+          "\\bselect\\b(?:(?!\\bfrom\\b)[\\s\\S])*?\\bsum\\s*\\(([^)]*)\\)\\s*-\\s*sum\\s*\\(\\1\\)(?:(?!\\bfrom\\b)[\\s\\S])*?\\bfrom\\b",
         ];
   const databaseRows = getDatabaseRows(
     actual.databaseQueries,

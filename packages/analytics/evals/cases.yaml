@@ -158,7 +158,7 @@
           - "\\b1\\s*=\\s*0\\b"
           - "\\b0\\s*=\\s*1\\b"
           - "\\bfalse\\b"
-          - "\\blimit\\b"
+          - "\\blimit\\s+(?:0\\b|:[a-z_][a-z0-9_]*|\\?)"
           - "\\b(?:where|and)\\s+(?:0|null|false)\\b"
           - "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)"
           - "\\bdate\\b\\s+like\\s*['\"]2030-01['\"]"
