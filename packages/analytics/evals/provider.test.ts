@@ -114,6 +114,21 @@ describe("toEvaluationOutput", () => {
       }).textLinks,
     ).toEqual(["/0/cf/2026-07"]);
   });
+
+  test("removes text and links hidden in HTML comments", () => {
+    expect(
+      toEvaluationOutput({
+        text: "unused final text",
+        steps: [
+          {
+            text: "<!-- 2026年7月 [2026年7月の収支](/0/cf/2026-07) -->",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ text: "", textLinkLabels: [], textLinks: [] });
+  });
 });
 
 describe("FinanceChatProvider", () => {

@@ -87,6 +87,10 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function getVisibleText(text: string): string {
+  return text.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+}
+
 function getTextLinks(text: string): {
   labels: Array<{ href: string; label: string }>;
   links: string[];
@@ -116,7 +120,8 @@ function getTextLinks(text: string): {
 }
 
 export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
-  const text = response.steps.map((step) => step.text).join("") || response.text;
+  const generatedText = response.steps.map((step) => step.text).join("") || response.text;
+  const text = getVisibleText(generatedText);
   const toolResults = response.steps.flatMap((step) => step.toolResults);
   const databaseQueries = response.steps.flatMap((step) =>
     step.toolCalls.flatMap((call) => {

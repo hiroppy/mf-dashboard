@@ -314,10 +314,7 @@ function hasNoDataEvidence(
       return false;
     }
 
-    const isEmpty =
-      result.data.rows.length === 0 ||
-      result.data.rows.every((row) => Object.values(row).every((value) => value === null));
-    return isEmpty;
+    return result.data.rows.length === 0;
   });
 }
 
