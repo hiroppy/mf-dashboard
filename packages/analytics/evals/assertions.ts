@@ -1422,15 +1422,23 @@ export default function assertFinanceChatOutput(
   if (expectedMarkdownHeader && eligibleMarkdownTables.length === 0) {
     return fail("Markdown表のheaderが期待と異なります。");
   }
+  const requireExactMarkdownRows = config.requireExactMarkdownRows ?? false;
+  if (
+    requireExactMarkdownRows &&
+    expectedMarkdownHeader &&
+    eligibleMarkdownTables.length !== markdownTables.length
+  ) {
+    return fail("Markdown表に想定外の明細表があります。");
+  }
   const markdownRows = eligibleMarkdownTables.flatMap(({ rows }) => rows);
   const expectedMarkdownRows = config.expectedMarkdownRows ?? [];
   const missingRows = expectedMarkdownRows.filter(
-    (row) => !hasExpectedRow(markdownRows, row, config.requireExactMarkdownRows ?? false),
+    (row) => !hasExpectedRow(markdownRows, row, requireExactMarkdownRows),
   );
   if (missingRows.length > 0) {
     return fail(`Markdown表に期待する行がありません: ${missingRows.join(", ")}`);
   }
-  if (config.requireExactMarkdownRows && markdownRows.length !== expectedMarkdownRows.length) {
+  if (requireExactMarkdownRows && markdownRows.length !== expectedMarkdownRows.length) {
     return fail("Markdown表に想定外の明細行があります。");
   }
   const expectedRoutes = config.expectedToolRoutes ?? [];

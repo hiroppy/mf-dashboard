@@ -1869,6 +1869,26 @@ describe("assertFinanceChatOutput", () => {
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("想定外") });
     expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            text,
+            "",
+            "| 対象日 | 店舗 | 支払額 |",
+            "| --- | --- | ---: |",
+            "| 2026-07-04 | 架空店舗 | 999円 |",
+          ].join("\n"),
+        }),
+        {
+          config: {
+            expectedMarkdownHeader: ["日付", "内容", "金額"],
+            expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+            requireExactMarkdownRows: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("想定外") });
+    expect(
       assertFinanceChatOutput(output({ text: ["```markdown", text, "```"].join("\n") }), {
         config: {
           expectedMarkdownHeader: ["日付", "内容", "金額"],
