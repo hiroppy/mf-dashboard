@@ -350,6 +350,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId OR group_id <> :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT SUM(amount) AS income FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId AND type = 'income'",
               },
               output: { rows: [{ income: 313_235 }], truncated: false },
@@ -529,6 +544,9 @@ describe("assertFinanceChatOutput", () => {
       "2 = 3",
       "1 IN (2)",
       "3 BETWEEN 4 AND 5",
+      "is_transfer = 1",
+      "is_internal_transfer = 1",
+      "is_excluded_from_calculation = true",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -576,6 +594,26 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    for (const aggregate of ["SUM(amount) * 0 AS total", "COUNT(*) - COUNT(*) AS count"]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            databaseQueries: [
+              {
+                input: {
+                  sql: `SELECT ${aggregate} FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId`,
+                },
+                output: {
+                  rows: [aggregate.includes("count") ? { count: 0 } : { total: 0 }],
+                  truncated: false,
+                },
+              },
+            ],
+          }),
+          { config },
+        ),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    }
     expect(
       assertFinanceChatOutput(
         output({

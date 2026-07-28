@@ -333,6 +333,37 @@ function matchesDatabaseQuery(
   ) {
     return false;
   }
+  const whereClause = executableSql.match(
+    /\bwhere\b([\s\S]*?)(?=\b(?:group\s+by|order\s+by|having|limit)\b|$)/i,
+  )?.[1];
+  if (whereClause) {
+    let depth = 0;
+    let branchStart = 0;
+    const branches: string[] = [];
+    for (let index = 0; index < whereClause.length; index += 1) {
+      if (whereClause[index] === "(") depth += 1;
+      if (whereClause[index] === ")") depth -= 1;
+      if (
+        depth === 0 &&
+        whereClause.slice(index).match(/^\bor\b/i) &&
+        /\s/.test(whereClause[index - 1] ?? " ") &&
+        /\s/.test(whereClause[index + 2] ?? " ")
+      ) {
+        branches.push(whereClause.slice(branchStart, index));
+        branchStart = index + 2;
+      }
+    }
+    if (branches.length > 0) {
+      branches.push(whereClause.slice(branchStart));
+      if (
+        branches.some(
+          (branch) => !/\bdate\b/i.test(branch) || !/\bgroup_id\b\s*=\s*:groupId/i.test(branch),
+        )
+      ) {
+        return false;
+      }
+    }
+  }
   const matches = (pattern: string) => new RegExp(pattern, "i").test(executableSql);
   return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
 }
@@ -992,6 +1023,13 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   ]);
   const allowedDateFunctions = new Set(["strftime", "substr"]);
   const whereSql = whereClause[1]!;
+  if (
+    /\b(?:is_transfer|is_internal_transfer|is_excluded_from_calculation)\b\s*=\s*(?:1|true)\b/i.test(
+      whereSql,
+    )
+  ) {
+    return true;
+  }
   const hasUnexpectedFunction = [...whereSql.matchAll(/\b([a-z_][a-z0-9_]*)\s*\(/gi)].some(
     (match) => {
       const name = match[1]!.toLocaleLowerCase();
@@ -1020,8 +1058,13 @@ function hasEmptyAggregateResult(input: unknown, row: Record<string, unknown>): 
   }>((expression) => {
     const alias = expression.match(/\s+(?:as\s+)?([a-z_][a-z0-9_]*)\s*$/i)?.[1];
     if (!alias) return [];
-    if (/\bcount\s*\(\s*\*\s*\)/i.test(expression)) return [{ alias, kind: "count" }];
-    if (/\bsum\s*\(\s*(?:[a-z_][a-z0-9_.]*\.)?amount\s*\)/i.test(expression)) {
+    const aggregate = expression.replace(/\s+(?:as\s+)?[a-z_][a-z0-9_]*\s*$/i, "").trim();
+    if (/^count\s*\(\s*\*\s*\)$/i.test(aggregate)) return [{ alias, kind: "count" }];
+    if (
+      /^(?:coalesce\s*\(\s*)?sum\s*\(\s*(?:[a-z_][a-z0-9_.]*\.)?amount\s*\)(?:\s*,\s*0\s*\))?$/i.test(
+        aggregate,
+      )
+    ) {
       return [{ alias, kind: "sum" }];
     }
     return [];
