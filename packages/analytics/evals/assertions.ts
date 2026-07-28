@@ -886,21 +886,22 @@ function hasNoDataEvidence(
   requiredPatterns: string[],
   forbiddenPatterns: string[],
 ): boolean {
-  return queries.some(({ input, output }) => {
-    const result = databaseResultSchema.safeParse(output);
-    if (
-      !result.success ||
-      result.data.truncated === true ||
-      hasUnexpectedNoDataPredicate(input) ||
-      !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)
-    ) {
-      return false;
-    }
+  const relevantQueries = queries.filter(
+    ({ input }) =>
+      !hasUnexpectedNoDataPredicate(input) &&
+      matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns),
+  );
+  return (
+    relevantQueries.length > 0 &&
+    relevantQueries.every(({ input, output }) => {
+      const result = databaseResultSchema.safeParse(output);
+      if (!result.success || result.data.truncated === true) return false;
 
-    if (result.data.rows.length === 0) return true;
-    if (result.data.rows.length !== 1) return false;
-    return hasEmptyAggregateResult(input, result.data.rows[0]!);
-  });
+      if (result.data.rows.length === 0) return true;
+      if (result.data.rows.length !== 1) return false;
+      return hasEmptyAggregateResult(input, result.data.rows[0]!);
+    })
+  );
 }
 
 export default function assertFinanceChatOutput(
