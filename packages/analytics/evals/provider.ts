@@ -119,10 +119,11 @@ function getTextLinks(text: string): {
     label: match[4]!.replace(/<[^>]*>/g, ""),
   }));
   const referenceDefinitions = new Map(
-    [...linkableText.matchAll(/^\s*\[([^\]]+)]:\s*(\S+)\s*$/gm)].map((match) => [
-      match[1]!.toLocaleLowerCase(),
-      match[2]!,
-    ]),
+    [
+      ...linkableText.matchAll(
+        /^\s*\[([^\]]+)]:\s*(?:<([^>]+)>|(\S+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/gm,
+      ),
+    ].map((match) => [match[1]!.toLocaleLowerCase(), match[2] ?? match[3]!]),
   );
   const referenceLinks = [...linkableText.matchAll(/(?<![!\\])\[([^\]]+)]\[([^\]]*)]/g)].flatMap(
     (match) => {
@@ -130,14 +131,15 @@ function getTextLinks(text: string): {
       return href ? [{ href, label: match[1]! }] : [];
     },
   );
-  const autoLinkText = linkableText.replace(/<\/[a-z][^>]*>/gi, "");
+  const scannableText = linkableText.replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
+  const autoLinkText = scannableText.replace(/<\/[a-z][^>]*>/gi, "");
   const autoLinks = [...autoLinkText.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
     (match) => match[1]!,
   );
-  const rawUrls = [...linkableText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
+  const rawUrls = [...scannableText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  const routeText = linkableText.replace(/<[^>]*>/g, "");
+  const routeText = scannableText.replace(/<[^>]*>/g, "");
   const bareRoutes = [...routeText.matchAll(/(?<![:\w])\/[^\s<>()\]]+/g)]
     .map((match) => match[0].replace(/[.,。、!?！？]+$/, ""))
     .filter((route) => financeChatHrefSchema.safeParse(route).success);

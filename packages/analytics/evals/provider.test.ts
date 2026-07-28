@@ -195,6 +195,21 @@ describe("toEvaluationOutput", () => {
       textLinks: ["/0/cf/2026-07"],
     });
   });
+
+  test("does not collect an unused reference definition", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: "[unused]: /0/cf/2026-07",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+  });
 });
 
 describe("FinanceChatProvider", () => {

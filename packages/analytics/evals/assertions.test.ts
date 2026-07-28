@@ -92,6 +92,22 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: '[収入]: x "313,235円"\n[支出]: x "219,894円"\n[収支]: x "93,341円"',
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("requires expected facts to be backed by database results", () => {

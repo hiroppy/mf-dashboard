@@ -89,6 +89,7 @@ function getFactualText(text: string): string {
     )
     .replace(/```[\s\S]*?(?:```|$)/g, "")
     .replace(/^(?: {4}|\t).+$/gm, "")
+    .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
     .replace(/(?<!\\)~~(?=\S)[\s\S]*?\S~~/g, "")
     .replace(/`([^`\n]*)`/g, "$1")
