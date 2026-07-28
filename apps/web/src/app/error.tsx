@@ -19,6 +19,7 @@ export default function Error({
             alt="エラーが発生しました"
             width={120}
             height={120}
+            loading="eager"
             className="mx-auto mb-4 rounded-full"
           />
           <h1 className="text-2xl font-bold text-foreground">エラーが発生しました</h1>

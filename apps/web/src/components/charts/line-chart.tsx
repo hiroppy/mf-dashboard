@@ -15,7 +15,7 @@ import {
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { formatCurrency } from "../../lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { chartTooltipStyle } from "./chart-tooltip";
+import { chartTooltipStyle, formatChartLabel } from "./chart-tooltip";
 
 interface LineChartProps {
   title: string;
@@ -53,7 +53,7 @@ export function LineChart({ title, icon, data, lines, xAxisKey, height = 300 }: 
             />
             <Tooltip
               formatter={(value) => formatCurrency(value as number)}
-              labelFormatter={(label) => `${label}`}
+              labelFormatter={formatChartLabel}
               contentStyle={chartTooltipStyle}
             />
             <Legend />

@@ -29,6 +29,29 @@ export interface ProjectionChartProps {
   currentTotalAssets?: number;
 }
 
+export function formatProjectionLabel(
+  label: unknown,
+  projections: ReadonlyArray<{
+    year: number;
+    isContributing?: boolean;
+    isWithdrawing?: boolean;
+  }>,
+  currentAge?: number,
+): string {
+  if (typeof label !== "number" || !Number.isFinite(label)) return "";
+
+  const entry = projections.find((projection) => projection.year === label);
+  let phase = "";
+  if (entry?.isContributing && entry.isWithdrawing) phase = "積立+切り崩し";
+  else if (entry?.isWithdrawing) phase = "切り崩し";
+
+  const phaseSuffix = phase ? `（${phase}）` : "";
+  if (currentAge != null) {
+    return `${currentAge + label}歳（${label}年後${phase ? `・${phase}` : ""}）`;
+  }
+  return `${label}年後${phaseSuffix}`;
+}
+
 export function ProjectionChart({
   projections,
   taxFree,
@@ -67,15 +90,7 @@ export function ProjectionChart({
               formatCurrency(value as number),
               labelMap[name as string] ?? name,
             ]}
-            labelFormatter={(label) => {
-              const entry = projections.find((p) => p.year === label);
-              let phase = "";
-              if (entry?.isContributing && entry?.isWithdrawing) phase = "・積立+切り崩し";
-              else if (entry?.isWithdrawing) phase = "・切り崩し";
-              if (currentAge != null)
-                return `${currentAge + (label as number)}歳（${label}年後${phase}）`;
-              return `${label}年後${phase ? `（${phase.slice(1)}）` : ""}`;
-            }}
+            labelFormatter={(label) => formatProjectionLabel(label, projections, currentAge)}
             contentStyle={chartTooltipStyle}
           />
           <Legend formatter={(value) => labelMap[value] ?? value} />

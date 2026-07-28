@@ -13,6 +13,10 @@ export const chartTooltipStyle: CSSProperties = {
   boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
 };
 
+export function formatChartLabel(label: unknown): string {
+  return typeof label === "string" || typeof label === "number" ? String(label) : "";
+}
+
 /**
  * カスタム Tooltip の外枠。Recharts / Nivo の content prop で使う。
  */
