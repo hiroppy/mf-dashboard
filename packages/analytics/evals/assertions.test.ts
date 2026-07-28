@@ -72,6 +72,28 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextPairs: [["食費", "41837"]] } },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "| 項目 | 金額 |",
+            "| --- | ---: |",
+            "| 収入 | 313,235円 |",
+            "| 支出 | 219,894円 |",
+            "| 収支 | 93,341円 |",
+          ].join("\n"),
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("rejects a missing label/value pair", () => {
@@ -480,6 +502,8 @@ describe("assertFinanceChatOutput", () => {
       "NOT category = '食費'",
       "1 IS NULL",
       "2 = 3",
+      "1 IN (2)",
+      "3 BETWEEN 4 AND 5",
     ]) {
       expect(
         assertFinanceChatOutput(

@@ -131,8 +131,10 @@ function getMissingTextPairs(
     const normalizedValue = normalize(value);
     let hasValue = tables.some(({ header, rows }) => {
       const columnIndex = header.indexOf(normalizedLabel);
-      if (columnIndex === -1) return false;
-      return rows.some((row) => row[columnIndex] === normalizedValue);
+      return (
+        (columnIndex !== -1 && rows.some((row) => row[columnIndex] === normalizedValue)) ||
+        rows.some((row) => row.includes(normalizedLabel) && row.includes(normalizedValue))
+      );
     });
     let hasConflictingValue = false;
     let labelIndex = normalizedText.indexOf(normalizedLabel);
@@ -894,6 +896,13 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   if (/\blimit\s+(?:0\b|:[a-z_][a-z0-9_]*|\?)/i.test(executableSql)) return true;
   if (
     /(?:\b\d+(?:\.\d+)?\b|'[^']*')\s+is\s+null\b|\bnull\s+is\s+not\s+null\b/i.test(executableSql)
+  ) {
+    return true;
+  }
+  if (
+    /(?<![\w.])(?:-?\d+(?:\.\d+)?|'[^']*')\s+(?:not\s+)?(?:in\s*\(|between\s+(?:-?\d+(?:\.\d+)?|'[^']*')\s+and\s+(?:-?\d+(?:\.\d+)?|'[^']*'))/i.test(
+      executableSql,
+    )
   ) {
     return true;
   }
