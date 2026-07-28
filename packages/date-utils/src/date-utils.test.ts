@@ -47,6 +47,7 @@ describe("ISO date key helpers", () => {
   it("preserves four-digit years below 1000", () => {
     expect(formatIsoDateKey({ year: 20, month: 1, day: 1 })).toBe("0020-01-01");
     expect(formatYearMonthKey({ year: 20, month: 1 })).toBe("0020-01");
+    expect(formatYearMonthKey({ year: 9999, month: 12 })).toBe("9999-12");
   });
 
   it("preserves years 0-99 in UTC calendar arithmetic", () => {

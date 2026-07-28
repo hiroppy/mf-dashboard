@@ -11,62 +11,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr-critical:
-    if: github.event_name == 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - workspace: analytics
-            path: packages/analytics
-          - workspace: date-utils
-            path: packages/date-utils
-          - workspace: meta
-            path: packages/meta
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: ./.github/actions/setup-node
-      - run: pnpm --filter @mf-dashboard/${{ matrix.workspace }} test:mutation
-      - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: mutation-report-${{ matrix.workspace }}
-          path: |
-            ${{ matrix.path }}/reports/mutation/mutation.html
-            ${{ matrix.path }}/reports/mutation/mutation.json
-          retention-days: 7
-
-  full:
-    if: github.event_name != 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - workspace: crawler
-            path: apps/crawler
-          - workspace: web
-            path: apps/web
-          - workspace: analytics
-            path: packages/analytics
-          - workspace: date-utils
-            path: packages/date-utils
-          - workspace: db
-            path: packages/db
-          - workspace: meta
-            path: packages/meta
+  mutation:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-node
-      - run: pnpm --filter @mf-dashboard/${{ matrix.workspace }} test:mutation
+      - run: pnpm test:mutation
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: mutation-report-${{ matrix.workspace }}
+          name: mutation-reports
           path: |
-            ${{ matrix.path }}/reports/mutation/mutation.html
-            ${{ matrix.path }}/reports/mutation/mutation.json
+            apps/*/reports/mutation/mutation.html
+            apps/*/reports/mutation/mutation.json
+            packages/*/reports/mutation/mutation.html
+            packages/*/reports/mutation/mutation.json
           retention-days: 7
