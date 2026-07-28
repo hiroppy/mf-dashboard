@@ -201,6 +201,24 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    for (const sql of [
+      "SELECT printf('%d%d', 313, 235) AS income, printf('%d%d', 219, 894) AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+      "SELECT 313 || 235 AS income, 219 || 894 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            databaseQueries: [
+              {
+                input: { sql },
+                output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+              },
+            ],
+          }),
+          { config },
+        ),
+      ).toMatchObject({ pass: false });
+    }
     expect(
       assertFinanceChatOutput(
         output({
@@ -338,6 +356,7 @@ describe("assertFinanceChatOutput", () => {
       "substr(category, 1, 1) = 'X'",
       "length(substr(date, 1, 7)) < 0",
       "type <> 'expense'",
+      "category IS NULL",
     ]) {
       expect(
         assertFinanceChatOutput(

@@ -291,6 +291,10 @@ function hasContradictoryEqualityPredicates(sql: string): boolean {
       const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
       if (valuesByColumn.get(column)?.has(match[2]!)) return true;
     }
+    for (const match of branch.matchAll(/\b([a-z_][a-z0-9_.]*)\s+is\s+null\b/gi)) {
+      const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
+      if (valuesByColumn.has(column)) return true;
+    }
     const boundsByColumn = new Map<
       string,
       Array<{ inclusive: boolean; kind: "lower" | "upper"; value: string }>
@@ -814,6 +818,8 @@ export default function assertFinanceChatOutput(
           "\\b0x[0-9a-f]+\\b",
           "\\b\\d+(?:\\.\\d+)?e[+-]?\\d+\\b",
           "\\bcast\\s*\\(\\s*['\"]?[+-]?\\d",
+          "\\b(?:char|concat|concat_ws|format|hex|printf|quote|unicode|unhex)\\s*\\(",
+          "\\|\\|",
           "\\b[a-z_][a-z0-9_.]*\\s*\\*\\s*0\\b",
           "\\b0\\s*\\*\\s*[a-z_][a-z0-9_.]*\\b",
           "\\bselect\\b[^;]*?(?:\\+|-)\\s*\\d+(?:\\.\\d+)?[^;]*?\\bfrom\\b",
