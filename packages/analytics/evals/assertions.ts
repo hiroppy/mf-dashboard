@@ -577,6 +577,29 @@ function getDisclosedDatabaseTerms(text: string): string[] {
   ];
 }
 
+function hasUnexpectedNoDataPredicate(input: unknown): boolean {
+  const query = databaseQueryInputSchema.safeParse(input);
+  if (!query.success) return true;
+  const executableSql = getExecutableSql(query.data.sql);
+  const whereClause = executableSql.match(
+    /\bwhere\b([\s\S]*?)(?:\bgroup\s+by\b|\border\s+by\b|$)/i,
+  );
+  if (!whereClause) return true;
+
+  const allowedColumns = new Set([
+    "date",
+    "category",
+    "group_id",
+    "is_transfer",
+    "is_excluded_from_calculation",
+  ]);
+  return [
+    ...whereClause[1]!.matchAll(
+      /\b([a-z_][a-z0-9_.]*)\s*(?:=|<>|!=|<=|>=|<|>|\bis\b|\blike\b|\bin\b|\bbetween\b)/gi,
+    ),
+  ].some((match) => !allowedColumns.has(match[1]!.split(".").at(-1)!.toLocaleLowerCase()));
+}
+
 function hasNoDataEvidence(
   queries: Array<{ input: unknown; output: unknown }>,
   requiredPatterns: string[],
@@ -587,6 +610,7 @@ function hasNoDataEvidence(
     if (
       !result.success ||
       result.data.truncated === true ||
+      hasUnexpectedNoDataPredicate(input) ||
       !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)
     ) {
       return false;

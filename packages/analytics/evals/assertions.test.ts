@@ -317,6 +317,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId AND id IS NULL",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT amount FROM transactions WHERE date >= '2026-07-01' AND '2030-01' = '2030-01' AND category = '食費' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
