@@ -1,5 +1,8 @@
 description: mf-dashboard finance chat evaluation
 
+evaluateOptions:
+  maxConcurrency: 1
+
 providers:
   - id: file://./provider.ts
     label: production finance chat
