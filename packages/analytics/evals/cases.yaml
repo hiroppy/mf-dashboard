@@ -1,0 +1,169 @@
+- description: 月次収支が収入・支出・収支の正しい値を返す
+  vars:
+    question: 2026年7月の収入・支出・収支を教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedDatabaseValues: ["313235", "219894"]
+        expectedDatabaseRows:
+          - income: "313235"
+            expense: "219894"
+        requiredDatabaseAggregateAliases: [income, expense]
+        requiredDatabaseQueryPatterns:
+          - "\\btransactions\\b"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"
+          - "(?:\\bdate\\b\\s+like\\s*['\"]2026-07%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2026-07|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-08)"
+          - "\\bgroup_id\\b\\s*=\\s*:groupId"
+          - "\\bsum\\s*\\("
+          - "(?:\\bis_internal_transfer\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_internal_transfer\\b)"
+          - "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)"
+          - "\\btype\\b[^;]{0,240}['\"]transfer"
+          - "\\bgroup_accounts\\b"
+          - "\\baccount_id\\b"
+          - "\\btransfer_target_account_id\\b"
+        expectedTextFacts: ["2026年7月"]
+        expectedTextPairs:
+          - [収入, "313235"]
+          - [支出, "219894"]
+          - [収支, "93341"]
+        expectedScopedTextPairs:
+          scopeFact: "2026年7月"
+          pairs:
+            - [収入, "313235"]
+            - [支出, "219894"]
+            - [収支, "93341"]
+        allowOnlyGroundedAmounts: true
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+
+- description: 食費の内訳を正しい円グラフで返す
+  vars:
+    question: 2026年7月の食費合計と内訳を円グラフで見せて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedDatabaseValues: ["24833", "12214", "4790"]
+        expectedDatabaseRows:
+          - [食料品, "24833"]
+          - [外食, "12214"]
+          - [カフェ, "4790"]
+        requiredDatabaseQueryPatterns:
+          - "\\btransactions\\b"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"
+          - "(?:\\bdate\\b\\s+like\\s*['\"]2026-07%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2026-07|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-08)"
+          - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
+          - "\\btype\\b\\s*=\\s*['\"]?expense"
+          - "\\bgroup_id\\b\\s*=\\s*:groupId"
+          - "\\bsum\\s*\\("
+          - "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)"
+        expectedTextPairs:
+          - [食費, "41837"]
+        expectedScopedTextPairs:
+          scopeFact: "2026年7月"
+          pairs:
+            - [食費, "41837"]
+        allowOnlyGroundedAmounts: true
+        groundPercentagesInCharts: true
+        validateChartAmounts: true
+        validateChartComparisons: true
+        expectedCharts:
+          - chartType: pie
+            title: "2026年7月の食費"
+            unit: currency
+            series:
+              - { name: 支出, amountType: expense }
+            data:
+              - { label: 食料品, values: [24833] }
+              - { label: 外食, values: [12214] }
+              - { label: カフェ, values: [4790] }
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+
+- description: 指定日の食費明細をMarkdown表で返す
+  vars:
+    question: 2026年7月3日の食費明細をMarkdown表で教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedDatabaseValues: ["2026-07-03", サンマルクカフェ, "761"]
+        expectedDatabaseRows:
+          - ["2026-07-03", サンマルクカフェ, "761"]
+        requiredDatabaseQueryPatterns:
+          - "\\btransactions\\b"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07-03"
+          - "(?:\\bdate\\b\\s*=\\s*['\"]?2026-07-03|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-07-04)"
+          - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
+          - "\\btype\\b\\s*=\\s*['\"]?expense"
+          - "\\bgroup_id\\b\\s*=\\s*:groupId"
+          - "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)"
+        expectedMarkdownRows:
+          - ["2026-07-03", サンマルクカフェ, "761"]
+        expectedMarkdownHeader: [日付, 内容, 金額]
+        requireExactMarkdownRows: true
+        allowOnlyGroundedAmounts: true
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]
+
+- description: 収支画面へのリンクがroute toolの結果と一致する
+  vars:
+    question: 2026年7月の収支画面を開くリンクを教えて
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextFacts: ["2026年7月"]
+        expectedCharts: []
+        expectedToolRoutes: ["/0/cf/2026-07"]
+        expectedTextLinks: ["/0/cf/2026-07"]
+        expectedTextLinkLabels:
+          - href: "/0/cf/2026-07"
+            pattern: "2026年7月.*収支"
+
+- description: データのない期間で金額を推測しない
+  vars:
+    question: 2030年1月の食費はいくら？
+    evaluationDate: "2026-07-31T03:00:00.000Z"
+  assert:
+    - type: is-json
+    - type: javascript
+      value: file://./assertions.ts
+      config:
+        expectedTextPatterns:
+          - "(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません|確認できません(?:でした)?)"
+        expectedNoDataTextFacts: ["2030年1月", 食費]
+        forbidAmounts: true
+        requireNoDataEvidence: true
+        requiredNoDataQueryPatterns:
+          - "\\btransactions\\b"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2030-01"
+          - "(?:\\bdate\\b\\s+like\\s*['\"]2030-01%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2030-01|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2030-02)"
+          - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
+          - "\\btype\\b\\s*=\\s*['\"]?expense"
+          - "\\bgroup_id\\b\\s*=\\s*:groupId"
+        forbiddenNoDataQueryPatterns:
+          - "\\b1\\s*=\\s*0\\b"
+          - "\\b0\\s*=\\s*1\\b"
+          - "\\blimit\\s+(?:0\\b|:[a-z_][a-z0-9_]*|\\?)"
+          - "\\b(?:where|and)\\s+(?:0|null|false)\\b"
+          - "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)"
+          - "\\bdate\\b\\s+like\\s*['\"]2030-01['\"]"
+        expectedCharts: []
+        expectedToolRoutes: []
+        expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]

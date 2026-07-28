@@ -1,0 +1,290 @@
+import { existsSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { closeDb, getCurrentGroup, getDb, type Db } from "@mf-dashboard/db";
+import { generateText, stepCountIs } from "ai";
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from "promptfoo";
+import { financeChartSchema, type FinanceChart } from "../src/chat/chart";
+import { financeChatHrefSchema } from "../src/chat/navigation-tool";
+import {
+  FINANCE_CHAT_MAX_GENERATION_STEPS,
+  FINANCE_CHAT_MAX_OUTPUT_TOKENS,
+  FINANCE_CHAT_REQUEST_TIMEOUT_MS,
+  getFinanceChatSystemPrompt,
+} from "../src/chat/prompt";
+import { createFinanceChatTools } from "../src/chat/tools";
+import { getModel, isLLMEnabled } from "../src/config";
+import { removeHiddenHtmlElements } from "./markdown";
+
+interface GeneratedResponse {
+  text: string;
+  steps: ReadonlyArray<{
+    text: string;
+    toolCalls: ReadonlyArray<{
+      input: unknown;
+      toolCallId: string;
+      toolName: string;
+    }>;
+    toolResults: ReadonlyArray<{
+      output: unknown;
+      toolCallId: string;
+      toolName: string;
+    }>;
+  }>;
+}
+
+interface GenerateOptions {
+  abortSignal: AbortSignal;
+  maxOutputTokens: number;
+  model: ReturnType<typeof getModel>;
+  prepareStep: (options: { stepNumber: number }) => { toolChoice: "none" } | undefined;
+  prompt: string;
+  stopWhen: ReturnType<typeof stepCountIs>;
+  system: string;
+  timeout: { totalMs: number };
+  tools: ReturnType<typeof createFinanceChatTools>;
+}
+
+export interface EvaluationOutput {
+  text: string;
+  charts: FinanceChart[];
+  databaseQueries: Array<{ input: unknown; output: unknown }>;
+  textLinkLabels: Array<{ href: string; label: string }>;
+  toolRoutes: string[];
+  textLinks: string[];
+}
+
+export interface ProviderDependencies {
+  canonicalizePath: (path: string) => string;
+  closeDb: () => void;
+  generate: (options: GenerateOptions) => Promise<GeneratedResponse>;
+  getCurrentGroup: (db: Db) => Promise<{ id: string } | undefined>;
+  getDatabasePath: () => string | undefined;
+  getDb: () => Db;
+  getDemoDatabasePath: () => string;
+  getModel: typeof getModel;
+  isFileAvailable: (path: string) => boolean;
+  isLLMEnabled: typeof isLLMEnabled;
+}
+
+const defaultDependencies: ProviderDependencies = {
+  canonicalizePath: realpathSync,
+  closeDb,
+  generate: async (options) => (await generateText(options)) as GeneratedResponse,
+  getCurrentGroup,
+  getDatabasePath: () => process.env.DB_PATH,
+  getDb,
+  getDemoDatabasePath: () => fileURLToPath(new URL("../../../data/demo.db", import.meta.url)),
+  getModel,
+  isFileAvailable: existsSync,
+  isLLMEnabled,
+};
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function normalizeMarkdownDestination(href: string): string {
+  return href.startsWith("<") && href.endsWith(">") ? href.slice(1, -1) : href;
+}
+
+function getVisibleText(text: string): string {
+  return text.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+}
+
+function getLinkableText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .replace(/~~~[\s\S]*?(?:~~~|$)/g, "")
+    .replace(/^(?: {4}|\t).+$/gm, "")
+    .replace(/(^|[^`])(`+)(?!`)([\s\S]*?)(?<!`)\2(?!`)/g, "$1")
+    .replace(/!?\[[^\]]*]\([^)]*\)/g, (link) => (link.startsWith("![") ? "" : link))
+    .replace(/\\\[[^\]]*]\([^)]*\)/g, "");
+}
+
+function getTextLinks(text: string): {
+  labels: Array<{ href: string; label: string }>;
+  links: string[];
+} {
+  const linkableText = removeHiddenHtmlElements(getLinkableText(text));
+  const markdownLinks = [
+    ...linkableText.matchAll(
+      /(?<![!\\])\[([^\]]+)]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g,
+    ),
+  ].map((match) => ({
+    href: normalizeMarkdownDestination(match[2]!),
+    label: match[1]!,
+  }));
+  const htmlLinks = [
+    ...linkableText.matchAll(
+      /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi,
+    ),
+  ].map((match) => ({
+    href: match[1] ?? match[2] ?? match[3]!,
+    label: match[4]!.replace(/<[^>]*>/g, ""),
+  }));
+  const referenceDefinitions = new Map(
+    [
+      ...linkableText.matchAll(
+        /^\s*\[([^\]]+)]:\s*(?:<([^>]+)>|(\S+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/gm,
+      ),
+    ].map((match) => [match[1]!.toLocaleLowerCase(), match[2] ?? match[3]!]),
+  );
+  const scannableText = linkableText.replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
+  const referenceLinks = [...linkableText.matchAll(/(?<![!\\])\[([^\]]+)]\[([^\]]*)]/g)].flatMap(
+    (match) => {
+      const href = referenceDefinitions.get((match[2] || match[1]!).toLocaleLowerCase());
+      return href ? [{ href, label: match[1]! }] : [];
+    },
+  );
+  const shortcutReferenceLinks = [
+    ...scannableText.matchAll(/(?<![\]!\\])\[([^\]]+)](?![[(])/g),
+  ].flatMap((match) => {
+    const href = referenceDefinitions.get(match[1]!.toLocaleLowerCase());
+    return href ? [{ href, label: match[1]! }] : [];
+  });
+  const autoLinkText = scannableText.replace(/<\/[a-z][^>]*>/gi, "");
+  const autoLinks = [...autoLinkText.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
+    (match) => match[1]!,
+  );
+  const rawUrls = [...scannableText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
+    match[0].replace(/[.,。、!?！？]+$/, ""),
+  );
+  return {
+    labels: [...markdownLinks, ...htmlLinks, ...referenceLinks, ...shortcutReferenceLinks],
+    links: unique([
+      ...markdownLinks.map(({ href }) => href),
+      ...htmlLinks.map(({ href }) => href),
+      ...referenceLinks.map(({ href }) => href),
+      ...shortcutReferenceLinks.map(({ href }) => href),
+      ...autoLinks,
+      ...rawUrls,
+    ]),
+  };
+}
+
+export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
+  const text = getVisibleText(response.text);
+  const toolResults = response.steps.flatMap((step) => step.toolResults);
+  const databaseQueries = response.steps.flatMap((step) =>
+    step.toolCalls.flatMap((call) => {
+      if (call.toolName !== "queryDatabase") return [];
+      const result = step.toolResults.find(
+        (candidate) =>
+          candidate.toolName === "queryDatabase" && candidate.toolCallId === call.toolCallId,
+      );
+      return result ? [{ input: call.input, output: result.output }] : [];
+    }),
+  );
+  const charts = toolResults.flatMap((result) => {
+    if (result.toolName !== "presentChart") return [];
+    const chart = financeChartSchema.safeParse(result.output);
+    return chart.success ? [chart.data] : [];
+  });
+  const toolRoutes = toolResults.flatMap((result) => {
+    if (
+      result.toolName !== "getFinanceDashboardRoute" ||
+      typeof result.output !== "object" ||
+      result.output === null ||
+      !("href" in result.output)
+    ) {
+      return [];
+    }
+    const route = financeChatHrefSchema.safeParse(result.output.href);
+    return route.success ? [route.data] : [];
+  });
+
+  const textLinks = getTextLinks(text);
+  return {
+    text,
+    charts,
+    databaseQueries,
+    textLinkLabels: textLinks.labels,
+    toolRoutes: unique(toolRoutes),
+    textLinks: textLinks.links,
+  };
+}
+
+function getEvaluationDate(value: unknown): Date {
+  if (typeof value !== "string") {
+    throw new Error("evaluationDate はISO 8601文字列で指定してください。");
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("evaluationDate が有効な日時ではありません。");
+  }
+  return date;
+}
+
+export default class FinanceChatProvider implements ApiProvider {
+  readonly config: Record<string, unknown>;
+  private readonly providerId: string;
+
+  constructor(
+    options: ProviderOptions = {},
+    private readonly dependencies: ProviderDependencies = defaultDependencies,
+  ) {
+    this.providerId = options.id ?? "finance-chat";
+    this.config = options.config ?? {};
+  }
+
+  id(): string {
+    return this.providerId;
+  }
+
+  cleanup(): void {
+    this.dependencies.closeDb();
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    try {
+      const databasePath = this.dependencies.getDatabasePath();
+      const demoDatabasePath = this.dependencies.getDemoDatabasePath();
+      if (
+        !databasePath ||
+        !this.dependencies.isFileAvailable(databasePath) ||
+        !this.dependencies.isFileAvailable(demoDatabasePath)
+      ) {
+        return {
+          error:
+            "評価用demo.dbがありません。`pnpm --filter @mf-dashboard/db build:demo --period=2026-07`を実行してください。",
+        };
+      }
+      if (
+        this.dependencies.canonicalizePath(databasePath) !==
+        this.dependencies.canonicalizePath(demoDatabasePath)
+      ) {
+        return { error: "評価では匿名化されたdata/demo.dbのみ使用できます。" };
+      }
+      if (!this.dependencies.isLLMEnabled()) {
+        return { error: "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。" };
+      }
+
+      this.dependencies.closeDb();
+      const db = this.dependencies.getDb();
+      const group = await this.dependencies.getCurrentGroup(db);
+      if (!group) return { error: "評価用demo.dbに現在のグループがありません。" };
+
+      const response = await this.dependencies.generate({
+        abortSignal: AbortSignal.timeout(FINANCE_CHAT_REQUEST_TIMEOUT_MS),
+        maxOutputTokens: FINANCE_CHAT_MAX_OUTPUT_TOKENS,
+        model: this.dependencies.getModel(),
+        prepareStep: ({ stepNumber }) =>
+          stepNumber === FINANCE_CHAT_MAX_GENERATION_STEPS - 1 ? { toolChoice: "none" } : undefined,
+        prompt,
+        stopWhen: stepCountIs(FINANCE_CHAT_MAX_GENERATION_STEPS),
+        system: getFinanceChatSystemPrompt(getEvaluationDate(context?.vars?.evaluationDate)),
+        timeout: { totalMs: FINANCE_CHAT_REQUEST_TIMEOUT_MS },
+        tools: createFinanceChatTools(db, group.id),
+      });
+
+      return { output: JSON.stringify(toEvaluationOutput(response)) };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "評価の実行に失敗しました。" };
+    }
+  }
+}
