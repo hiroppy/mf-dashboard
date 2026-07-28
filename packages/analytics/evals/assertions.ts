@@ -631,6 +631,7 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return true;
   const executableSql = getExecutableSql(query.data.sql);
+  if (/\b(?:except|having|intersect|limit|offset)\b/i.test(executableSql)) return true;
   const whereClause = executableSql.match(
     /\bwhere\b([\s\S]*?)(?:\bgroup\s+by\b|\border\s+by\b|$)/i,
   );
