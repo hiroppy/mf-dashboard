@@ -5,6 +5,12 @@ function output(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
     charts: [],
+    databaseQueries: [
+      {
+        input: { sql: "SELECT income, expense FROM transactions" },
+        output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+      },
+    ],
     toolRoutes: [],
     textLinks: [],
     ...overrides,
@@ -36,6 +42,36 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収入", "999999"]] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("収入=999999") });
+  });
+
+  test("requires expected facts to be backed by database results", () => {
+    expect(
+      assertFinanceChatOutput(output({ databaseQueries: [] }), {
+        config: { expectedDatabaseValues: ["313235", "219894"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
+  });
+
+  test("requires no-data answers to be backed by an empty database result", () => {
+    const config = { requireNoDataEvidence: true };
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions" },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(assertFinanceChatOutput(output({ databaseQueries: [] }), { config })).toMatchObject({
+      pass: false,
+      reason: expect.stringContaining("データなし"),
+    });
   });
 
   test("does not bind a value to a neighboring label", () => {

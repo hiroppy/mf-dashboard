@@ -22,7 +22,16 @@ import { getModel, isLLMEnabled } from "../src/config";
 interface GeneratedResponse {
   text: string;
   steps: ReadonlyArray<{
-    toolResults: ReadonlyArray<{ toolName: string; output: unknown }>;
+    toolCalls: ReadonlyArray<{
+      input: unknown;
+      toolCallId: string;
+      toolName: string;
+    }>;
+    toolResults: ReadonlyArray<{
+      output: unknown;
+      toolCallId: string;
+      toolName: string;
+    }>;
   }>;
 }
 
@@ -41,6 +50,7 @@ interface GenerateOptions {
 export interface EvaluationOutput {
   text: string;
   charts: FinanceChart[];
+  databaseQueries: Array<{ input: unknown; output: unknown }>;
   toolRoutes: string[];
   textLinks: string[];
 }
@@ -90,6 +100,16 @@ function getTextLinks(text: string): string[] {
 
 export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
   const toolResults = response.steps.flatMap((step) => step.toolResults);
+  const databaseQueries = response.steps.flatMap((step) =>
+    step.toolCalls.flatMap((call) => {
+      if (call.toolName !== "queryDatabase") return [];
+      const result = step.toolResults.find(
+        (candidate) =>
+          candidate.toolName === "queryDatabase" && candidate.toolCallId === call.toolCallId,
+      );
+      return result ? [{ input: call.input, output: result.output }] : [];
+    }),
+  );
   const charts = toolResults.flatMap((result) => {
     if (result.toolName !== "presentChart") return [];
     const chart = financeChartSchema.safeParse(result.output);
@@ -111,6 +131,7 @@ export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutpu
   return {
     text: response.text,
     charts,
+    databaseQueries,
     toolRoutes: unique(toolRoutes),
     textLinks: getTextLinks(response.text),
   };

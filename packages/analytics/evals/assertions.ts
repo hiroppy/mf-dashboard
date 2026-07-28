@@ -11,6 +11,7 @@ interface ChartExpectation {
 interface AssertionContext {
   config?: {
     expectedCharts?: ChartExpectation[];
+    expectedDatabaseValues?: string[];
     expectedMarkdownRows?: string[][];
     expectedTextFacts?: string[];
     expectedTextLinks?: string[];
@@ -19,6 +20,7 @@ interface AssertionContext {
     expectedToolRoutes?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    requireNoDataEvidence?: boolean;
   };
 }
 
@@ -31,8 +33,13 @@ interface AssertionResult {
 const evaluationOutputSchema = z.object({
   text: z.string(),
   charts: z.array(financeChartSchema),
+  databaseQueries: z.array(z.object({ input: z.unknown(), output: z.unknown() })),
   toolRoutes: z.array(z.string()),
   textLinks: z.array(z.string()),
+});
+
+const databaseResultSchema = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())),
 });
 
 function fail(reason: string): AssertionResult {
@@ -107,6 +114,13 @@ function sameValues(actual: string[], expected: string[]): boolean {
   return JSON.stringify(sortedActual) === JSON.stringify(sortedExpected);
 }
 
+function getDatabaseRows(queries: Array<{ output: unknown }>): Array<Record<string, unknown>> {
+  return queries.flatMap(({ output }) => {
+    const result = databaseResultSchema.safeParse(output);
+    return result.success ? result.data.rows : [];
+  });
+}
+
 export default function assertFinanceChatOutput(
   output: string,
   context: AssertionContext,
@@ -154,6 +168,30 @@ export default function assertFinanceChatOutput(
 
   if (config.forbidAmounts && /(?:[¥￥]\s*\d|\d[\d,.]*\s*円)/.test(actual.text.normalize("NFKC"))) {
     return fail("データのない回答に金額が含まれています。");
+  }
+
+  const databaseRows = getDatabaseRows(actual.databaseQueries);
+  const databaseValues = new Set(
+    databaseRows.flatMap((row) => Object.values(row)).map((value) => normalize(String(value))),
+  );
+  const missingDatabaseValues = (config.expectedDatabaseValues ?? []).filter(
+    (value) => !databaseValues.has(normalize(value)),
+  );
+  if (missingDatabaseValues.length > 0) {
+    return fail(`DB結果に期待する値がありません: ${missingDatabaseValues.join(", ")}`);
+  }
+  if (
+    config.requireNoDataEvidence &&
+    !actual.databaseQueries.some(({ output }) => {
+      const result = databaseResultSchema.safeParse(output);
+      return (
+        result.success &&
+        (result.data.rows.length === 0 ||
+          result.data.rows.every((row) => Object.values(row).every((value) => value === null)))
+      );
+    })
+  ) {
+    return fail("データなし回答を裏付けるDB結果がありません。");
   }
 
   const expectedCharts = config.expectedCharts ?? [];
