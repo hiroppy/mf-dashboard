@@ -29,6 +29,7 @@ export interface ProjectionChartProps {
   currentTotalAssets?: number;
 }
 
+/** Formats a projection year while rejecting unexpected Recharts label values. */
 export function formatProjectionLabel(
   label: unknown,
   projections: ReadonlyArray<{

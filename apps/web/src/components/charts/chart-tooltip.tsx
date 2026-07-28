@@ -13,6 +13,7 @@ export const chartTooltipStyle: CSSProperties = {
   boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
 };
 
+/** Formats Recharts labels without falling back to object stringification. */
 export function formatChartLabel(label: unknown): string {
   return typeof label === "string" || typeof label === "number" ? String(label) : "";
 }
