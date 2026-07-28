@@ -199,6 +199,36 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2026-07-01' AND group_id = :groupId /* date >= '2030-01-01' AND category = '食費' */",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT 'date >= 2030-01 category = 食費' FROM transactions WHERE group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
   });
 
   test("does not bind a value to a neighboring label", () => {
@@ -219,6 +249,22 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({ text: "収入は313,235円、支出は219,894円、収支は▲93,341円です。" }),
         { config: { expectedTextPairs: [["収支", "93341"]] } },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円ではなく、支出は219,894円ではなく、収支は93,341円ではありません。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
       ),
     ).toMatchObject({ pass: false });
   });

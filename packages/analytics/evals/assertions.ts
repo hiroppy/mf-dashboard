@@ -97,11 +97,16 @@ function getMissingTextPairs(
       }, normalizedText.length);
       const segment = normalizedText.slice(valueStart, valueEnd);
       const displayedAmounts = getDisplayedAmounts(segment);
-      const hasValue = /^\d+$/.test(normalizedValue)
-        ? displayedAmounts.length > 0
-          ? displayedAmounts.includes(normalizedValue)
-          : new RegExp(`(?<![\\d▲△(\\-])${normalizedValue}(?!\\d)`).test(segment)
-        : segment.includes(normalizedValue);
+      const hasNegatedValue = new RegExp(
+        `${normalizedValue}(?:円)?(?:ではなく|ではありません|でない|じゃない)`,
+      ).test(segment);
+      const hasValue =
+        !hasNegatedValue &&
+        (/^\d+$/.test(normalizedValue)
+          ? displayedAmounts.length > 0
+            ? displayedAmounts.includes(normalizedValue)
+            : new RegExp(`(?<![\\d▲△(\\-])${normalizedValue}(?!\\d)`).test(segment)
+          : segment.includes(normalizedValue));
       if (hasValue) return false;
 
       labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
@@ -213,8 +218,54 @@ function matchesDatabaseQuery(
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return false;
 
-  const matches = (pattern: string) => new RegExp(pattern, "i").test(query.data.sql);
+  const executableSql = getExecutableSql(query.data.sql);
+  const matches = (pattern: string) => new RegExp(pattern, "i").test(executableSql);
   return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
+}
+
+function getExecutableSql(sql: string): string {
+  let result = "";
+  let index = 0;
+  let inString = false;
+
+  while (index < sql.length) {
+    const character = sql[index]!;
+    const next = sql[index + 1];
+
+    if (inString) {
+      if (character === "'" && next === "'") {
+        result += "__";
+        index += 2;
+        continue;
+      }
+      if (character === "'") {
+        result += character;
+        inString = false;
+      } else {
+        result += /[\s=<>]/.test(character) ? "_" : character;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (character === "-" && next === "-") {
+      const lineEnd = sql.indexOf("\n", index + 2);
+      index = lineEnd === -1 ? sql.length : lineEnd;
+      result += " ";
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      const commentEnd = sql.indexOf("*/", index + 2);
+      index = commentEnd === -1 ? sql.length : commentEnd + 2;
+      result += " ";
+      continue;
+    }
+    if (character === "'") inString = true;
+    result += character;
+    index += 1;
+  }
+
+  return result;
 }
 
 function getDatabaseRows(
