@@ -70,6 +70,32 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND date < '2030-02-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId OR date >= '2030-01-01' AND date < '2030-02-01' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            requireNoDataEvidence: true,
+            requiredNoDataQueryPatterns: [
+              "transactions",
+              "2030-01",
+              "category\\s*=\\s*'食費'",
+              "type\\s*=\\s*'expense'",
+              "group_id\\s*=\\s*:groupId",
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income, COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },

@@ -368,8 +368,6 @@ function matchesDatabaseQuery(
   )?.[1];
   if (whereClause) {
     let depth = 0;
-    let branchStart = 0;
-    const branches: string[] = [];
     for (let index = 0; index < whereClause.length; index += 1) {
       if (whereClause[index] === "(") depth += 1;
       if (whereClause[index] === ")") depth -= 1;
@@ -378,17 +376,6 @@ function matchesDatabaseQuery(
         whereClause.slice(index).match(/^\bor\b/i) &&
         /\s/.test(whereClause[index - 1] ?? " ") &&
         /\s/.test(whereClause[index + 2] ?? " ")
-      ) {
-        branches.push(whereClause.slice(branchStart, index));
-        branchStart = index + 2;
-      }
-    }
-    if (branches.length > 0) {
-      branches.push(whereClause.slice(branchStart));
-      if (
-        branches.some(
-          (branch) => !/\bdate\b/i.test(branch) || !/\bgroup_id\b\s*=\s*:groupId/i.test(branch),
-        )
       ) {
         return false;
       }
