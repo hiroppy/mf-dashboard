@@ -72,7 +72,7 @@ describe("assertFinanceChatOutput", () => {
 
   test("binds database facts to a scoped query and the same result row", () => {
     const config = {
-      expectedDatabaseRows: [["313235", "219894"]],
+      expectedDatabaseRows: [{ income: "313235", expense: "219894" }],
       expectedDatabaseValues: ["313235", "219894"],
       requiredDatabaseQueryPatterns: ["transactions", "2026-07", ":groupId", "\\bsum\\s*\\("],
     };
@@ -137,6 +137,21 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(income), SUM(expense) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 219_894, expense: 313_235 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
     expect(
       assertFinanceChatOutput(
         output({

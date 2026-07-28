@@ -23,7 +23,7 @@ interface AssertionContext {
   config?: {
     allowOnlyGroundedAmounts?: boolean;
     expectedCharts?: ChartExpectation[];
-    expectedDatabaseRows?: string[][];
+    expectedDatabaseRows?: Array<Record<string, string> | string[]>;
     expectedDatabaseValues?: string[];
     expectedMarkdownHeader?: string[];
     expectedMarkdownRows?: string[][];
@@ -621,6 +621,17 @@ export default function assertFinanceChatOutput(
     return fail(`DB結果に期待する値がありません: ${missingDatabaseValues.join(", ")}`);
   }
   const missingDatabaseRows = (config.expectedDatabaseRows ?? []).filter((expectedRow) => {
+    if (!Array.isArray(expectedRow)) {
+      return !databaseRows.some((row) =>
+        Object.entries(expectedRow).every(([expectedKey, expectedValue]) =>
+          Object.entries(row).some(
+            ([key, value]) =>
+              normalize(key) === normalize(expectedKey) &&
+              normalize(String(value)) === normalize(expectedValue),
+          ),
+        ),
+      );
+    }
     const expectedValues = expectedRow.map(normalize);
     return !databaseRows.some((row) => {
       const values = Object.values(row).map((value) => normalize(String(value)));
@@ -628,7 +639,7 @@ export default function assertFinanceChatOutput(
     });
   });
   if (missingDatabaseRows.length > 0) {
-    return fail(`DB結果に期待する行がありません: ${missingDatabaseRows.join(", ")}`);
+    return fail(`DB結果に期待する行がありません: ${JSON.stringify(missingDatabaseRows)}`);
   }
   if (config.allowOnlyGroundedAmounts) {
     const allowedAmounts = new Set([

@@ -9,7 +9,8 @@
       config:
         expectedDatabaseValues: ["313235", "219894"]
         expectedDatabaseRows:
-          - ["313235", "219894"]
+          - income: "313235"
+            expense: "219894"
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07"
