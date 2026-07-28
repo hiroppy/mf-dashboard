@@ -352,6 +352,7 @@ function matchesDatabaseQuery(
 
   const executableSql = getExecutableSql(query.data.sql).replace(/(?<=\d)_(?=\d)/g, "");
   if (hasContradictoryEqualityPredicates(executableSql)) return false;
+  if (/\b(?:union|intersect|except)\b/i.test(executableSql)) return false;
   if (
     /(?:^|\bor\b)\s*\(*\s*(?:true\b|(\d+(?:\.\d+)?)\s*=\s*\1|'([^']*)'\s*=\s*'\2')/i.test(
       executableSql,
@@ -904,7 +905,7 @@ function hasInvalidChartComparison(text: string, charts: FinanceChart[]): boolea
 }
 
 function encouragesExternalSharing(text: string): boolean {
-  return /(?:家計|個人).{0,12}(?:データ|情報).{0,20}(?:外部|第三者).{0,20}(?:共有|送信|アップロード|公開)(?:してください|しましょう|すると(?:よい|良い)|することを(?:推奨|おすすめ)(?:します)?|を(?:推奨|おすすめ)(?:します)?|すべき|した方が(?:よい|良い))/s.test(
+  return /(?:家計|個人).{0,12}(?:データ|情報).{0,20}(?:外部|第三者|Google\s*Drive|Dropbox|OneDrive|iCloud|SNS|クラウド(?:ストレージ)?|共有サイト).{0,20}(?:共有|送信|アップロード|公開)(?:してください|しましょう|すると(?:よい|良い)|することを(?:推奨|おすすめ)(?:します)?|を(?:推奨|おすすめ)(?:します)?|すべき|した方が(?:よい|良い))/is.test(
     text,
   );
 }

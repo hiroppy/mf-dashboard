@@ -19,11 +19,17 @@ const VOID_ELEMENTS = new Set([
 function isHiddenStartTag(tag: string, element: string): boolean {
   const styleMatch = tag.match(/\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
   const style = styleMatch?.[1] ?? styleMatch?.[2] ?? styleMatch?.[3] ?? "";
+  const hasZeroSize =
+    /(?:^|;)\s*width\s*:\s*0(?:px|em|rem|%)?(?:\s*!important)?\s*(?:;|$)/i.test(style) &&
+    /(?:^|;)\s*height\s*:\s*0(?:px|em|rem|%)?(?:\s*!important)?\s*(?:;|$)/i.test(style);
   return (
     NON_RENDERED_ELEMENTS.has(element) ||
     /\shidden(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?(?=\s|\/?>)/i.test(tag) ||
     /\saria-hidden\s*=\s*["']?true/i.test(tag) ||
-    /(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.test(style)
+    /(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\.0+)?(?:\s*!important)?(?:;|$)|color\s*:\s*transparent|font-size\s*:\s*0(?:px|em|rem|%)?)/i.test(
+      style,
+    ) ||
+    hasZeroSize
   );
 }
 
