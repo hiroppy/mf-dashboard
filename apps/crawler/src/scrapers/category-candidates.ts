@@ -6,7 +6,7 @@ import { debug } from "../logger.js";
 /**
  * Passed to page.evaluate() — must be self-contained (no external references).
  */
-export function parseCategoryCandidates(): CategoryCandidate[] {
+function parseCategoryCandidates(): CategoryCandidate[] {
   const candidates: CategoryCandidate[] = [];
   const seen = new Set<string>();
   const largeCategoryItems = document.querySelectorAll<HTMLElement>(
