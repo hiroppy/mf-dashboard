@@ -641,6 +641,22 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("20000") });
+    expect(
+      assertFinanceChatOutput(output({ text: "食費は4万1,837円です。" }), {
+        config: {
+          allowOnlyGroundedAmounts: true,
+          expectedTextPairs: [["食費", "41837"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "資産は1億2,500万円です。" }), {
+        config: {
+          allowOnlyGroundedAmounts: true,
+          expectedTextPairs: [["資産", "125000000"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
   });
 
   test("accepts natural no-data wording while rejecting internal terms", () => {

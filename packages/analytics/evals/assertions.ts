@@ -296,21 +296,24 @@ function getDisplayedAmounts(text: string): string[] {
     if (unit?.startsWith("千")) return 1_000;
     return 1;
   };
+  const parseDigitAmount = (value: string): number =>
+    [...value.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(億|万|千)?/g)].reduce(
+      (total, match) => total + Number(match[1]!.replaceAll(",", "")) * unitFactor(match[2]),
+      0,
+    );
 
   const normalizedText = text.normalize("NFKC");
   const digitAmounts = [
     ...normalizedText.matchAll(
-      /(?:(?:¥\s*)?([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?\s*((?:億|万|千)円?|円)|¥\s*([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?)/g,
+      /(¥\s*)?([▲△+-]?)(\(?)((?:\d[\d,]*(?:\.\d+)?\s*(?:億|万|千)\s*)*\d[\d,]*(?:\.\d+)?(?:\s*(?:億|万|千))?)\)?\s*(円)?/g,
     ),
   ]
     .map((match) => {
-      const marker = match[1] ?? match[5];
-      const openingParenthesis = match[2] ?? match[6];
-      const value = match[3] ?? match[7];
-      const factor = unitFactor(match[4]);
+      const [, currency, marker, openingParenthesis, value, yen] = match;
+      if (!currency && !yen && !/[億万千]\s*$/.test(value!)) return "";
       const sign =
         marker === "-" || marker === "▲" || marker === "△" || openingParenthesis ? -1 : 1;
-      return value ? String(Number(value.replaceAll(",", "")) * factor * sign) : "";
+      return value ? String(parseDigitAmount(value) * sign) : "";
     })
     .filter(Boolean);
   const kanjiAmounts = [
