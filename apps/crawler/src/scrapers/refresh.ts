@@ -32,7 +32,7 @@ export async function navigateToAccountsPage(page: Page): Promise<void> {
   }
 }
 
-async function getRefreshStatus(
+export async function getRefreshStatus(
   page: Page,
 ): Promise<{ incompleteAccounts: string[]; remainingCount: number }> {
   const rows = page.locator("#account-table tr:has(td.account-status)");
@@ -42,9 +42,10 @@ async function getRefreshStatus(
   for (let i = 0; i < count; i++) {
     const row = rows.nth(i);
     const statuses = await row.locator("td.account-status").allTextContents();
+    const nameLink = row.locator("td.service a").first();
     refreshRows.push({
       name: statuses.some((status) => status.trim() === "更新中")
-        ? await row.locator("td.service a").first().textContent()
+        ? await ((await nameLink.count()) > 0 ? nameLink : row.locator("td").first()).textContent()
         : null,
       statuses,
     });

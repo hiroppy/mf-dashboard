@@ -2,6 +2,7 @@ import type { Page } from "playwright";
 import { describe, expect, test, vi } from "vitest";
 import {
   getMaxWaitMinutes,
+  getRefreshStatus,
   navigateToAccountsPage,
   summarizeRefreshRows,
   type RefreshStatusRow,
@@ -63,6 +64,48 @@ describe("summarizeRefreshRows", () => {
     },
   ])("$name", ({ rows, expected }) => {
     expect(summarizeRefreshRows(rows)).toEqual(expected);
+  });
+});
+
+describe("getRefreshStatus", () => {
+  test("service linkがない更新中行は先頭セルの名称を使う", async () => {
+    const statusCells = {
+      allTextContents: vi.fn<() => Promise<string[]>>().mockResolvedValue(["更新中"]),
+    };
+    const nameLink = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    };
+    const firstCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue(" Institution A "),
+    };
+    const allCells = {
+      first: vi.fn<() => typeof firstCell>().mockReturnValue(firstCell),
+    };
+    const nameLinkLocator = {
+      first: vi.fn<() => typeof nameLink>().mockReturnValue(nameLink),
+    };
+    const row = {
+      locator: vi.fn<
+        (selector: string) => typeof statusCells | typeof nameLinkLocator | typeof allCells
+      >((selector) => {
+        if (selector === "td.account-status") return statusCells;
+        if (selector === "td.service a") return nameLinkLocator;
+        return allCells;
+      }),
+    };
+    const rows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      nth: vi.fn<() => typeof row>().mockReturnValue(row),
+    };
+    const page = {
+      locator: vi.fn<() => typeof rows>().mockReturnValue(rows),
+    } as unknown as Page;
+
+    await expect(getRefreshStatus(page)).resolves.toEqual({
+      incompleteAccounts: ["Institution A"],
+      remainingCount: 1,
+    });
+    expect(firstCell.textContent).toHaveBeenCalledOnce();
   });
 });
 
