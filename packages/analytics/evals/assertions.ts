@@ -97,45 +97,63 @@ function getMissingTextPairs(
   text: string,
   expectedPairs: Array<[string, string]>,
 ): Array<[string, string]> {
-  const normalizedText = normalize(text);
+  const normalizedText = normalize(
+    text
+      .split("\n")
+      .filter((line) => !line.includes("|"))
+      .join("\n"),
+  );
   const labels = expectedPairs.map(([label]) => normalize(label));
   const tables = getMarkdownTables(text);
 
   return expectedPairs.filter(([, value], pairIndex) => {
     const normalizedLabel = labels[pairIndex]!;
     const normalizedValue = normalize(value);
-    const hasTableValue = tables.some(({ header, rows }) => {
+    let hasValue = tables.some(({ header, rows }) => {
       const columnIndex = header.indexOf(normalizedLabel);
       if (columnIndex === -1) return false;
       return rows.some((row) => row[columnIndex] === normalizedValue);
     });
-    if (hasTableValue) return false;
+    let hasConflictingValue = false;
     let labelIndex = normalizedText.indexOf(normalizedLabel);
 
     while (labelIndex !== -1) {
       const valueStart = labelIndex + normalizedLabel.length;
-      const valueEnd = labels.reduce((nearest, candidate) => {
+      let valueEnd = labels.reduce((nearest, candidate) => {
         const candidateIndex = normalizedText.indexOf(candidate, valueStart);
         return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
       }, normalizedText.length);
+      const nextFinanceLabel = normalizedText
+        .slice(valueStart)
+        .search(/(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:は|が|[:：])/);
+      if (nextFinanceLabel !== -1) valueEnd = Math.min(valueEnd, valueStart + nextFinanceLabel);
       const segment = normalizedText.slice(valueStart, valueEnd);
       const displayedAmounts = getDisplayedAmounts(segment);
       const hasNegatedValue = new RegExp(
         `${normalizedValue}(?:円)?(?:ではなく|ではありません|でない|じゃない)`,
       ).test(segment);
-      const hasValue =
+      if (/^\d+$/.test(normalizedValue) && displayedAmounts.length > 0) {
+        for (const amount of displayedAmounts) {
+          const isNegated = new RegExp(
+            `${amount}(?:円)?(?:ではなく|ではありません|でない|じゃない)`,
+          ).test(segment);
+          if (isNegated) continue;
+          if (amount === normalizedValue) hasValue = true;
+          else hasConflictingValue = true;
+        }
+      } else if (
         !hasNegatedValue &&
         (/^\d+$/.test(normalizedValue)
-          ? displayedAmounts.length > 0
-            ? displayedAmounts.includes(normalizedValue)
-            : new RegExp(`(?<![\\d▲△(\\-])${normalizedValue}(?!\\d)`).test(segment)
-          : segment.includes(normalizedValue));
-      if (hasValue) return false;
+          ? new RegExp(`(?<![\\d▲△(\\-])${normalizedValue}(?!\\d)`).test(segment)
+          : segment.includes(normalizedValue))
+      ) {
+        hasValue = true;
+      }
 
       labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
     }
 
-    return true;
+    return !hasValue || hasConflictingValue;
   });
 }
 
@@ -553,8 +571,15 @@ function hasInvalidChartComparison(text: string, charts: FinanceChart[]): boolea
       const minimumClaim = new RegExp(
         `${escapedLabel}(?:が|は)(?:(?:最も|一番)(?:少ない|小さい|低い)|最少|最小)`,
       ).test(normalizedText);
+      const comparisonFirstMaximum = new RegExp(
+        `(?:(?:最も|一番)(?:多い|大きい|高い)|最多|最大)(?:なの|の)?は${escapedLabel}`,
+      ).test(normalizedText);
+      const comparisonFirstMinimum = new RegExp(
+        `(?:(?:最も|一番)(?:少ない|小さい|低い)|最少|最小)(?:なの|の)?は${escapedLabel}`,
+      ).test(normalizedText);
       return (
-        (maximumClaim && values[index] !== maximum) || (minimumClaim && values[index] !== minimum)
+        ((maximumClaim || comparisonFirstMaximum) && values[index] !== maximum) ||
+        ((minimumClaim || comparisonFirstMinimum) && values[index] !== minimum)
       );
     });
   });
@@ -895,12 +920,10 @@ export default function assertFinanceChatOutput(
   if (unprovenLinks.length > 0) {
     return fail(`route toolに由来しない本文linkがあります: ${unprovenLinks.join(", ")}`);
   }
-  const invalidLinkLabels = (config.expectedTextLinkLabels ?? []).filter(
-    ({ href, pattern }) =>
-      !actual.textLinkLabels.some(
-        (link) => link.href === href && new RegExp(pattern).test(link.label),
-      ),
-  );
+  const invalidLinkLabels = (config.expectedTextLinkLabels ?? []).filter(({ href, pattern }) => {
+    const labels = actual.textLinkLabels.filter((link) => link.href === href);
+    return labels.length === 0 || labels.some((link) => !new RegExp(pattern).test(link.label));
+  });
   if (invalidLinkLabels.length > 0) {
     return fail("本文linkの表示labelが期待と異なります。");
   }

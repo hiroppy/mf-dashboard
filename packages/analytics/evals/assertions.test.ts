@@ -271,6 +271,7 @@ describe("assertFinanceChatOutput", () => {
         "\\b1\\s*=\\s*0\\b",
         "\\blimit\\b",
         "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)",
+        "\\bdate\\b\\s+like\\s*['\"]2030-01['\"]",
       ],
       requiredNoDataQueryPatterns: [
         "\\btransactions\\b",
@@ -304,6 +305,36 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND category = '不存在' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date LIKE '2030-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'income' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -629,6 +660,22 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円、支出は219,894円、収支は93,341円です。収入は219,894円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
         output({ text: "収入は313,235円、支出は219,894円、収支は▲93,341円です。" }),
         { config: { expectedTextPairs: [["収支", "93341"]] } },
       ),
@@ -901,6 +948,25 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("比較") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円です。最も多いのは外食です。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            validateChartComparisons: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("比較") });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -1000,6 +1066,25 @@ describe("assertFinanceChatOutput", () => {
         output({
           text: "2026年7月はこちら: [2025年6月の収支](/0/cf/2026-07)",
           textLinkLabels: [{ href, label: "2025年6月の収支" }],
+          textLinks: [href],
+          toolRoutes: [href],
+        }),
+        {
+          config: {
+            expectedTextLinkLabels: [{ href, pattern: "2026年7月.*収支" }],
+            expectedTextLinks: [href],
+            expectedToolRoutes: [href],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          textLinkLabels: [
+            { href, label: "2026年7月の収支" },
+            { href, label: "2025年6月の収支" },
+          ],
           textLinks: [href],
           toolRoutes: [href],
         }),

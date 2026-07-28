@@ -136,6 +136,7 @@
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2030-01"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
+          - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
         forbiddenNoDataQueryPatterns:
           - "\\b1\\s*=\\s*0\\b"
@@ -144,6 +145,7 @@
           - "\\blimit\\b"
           - "\\b(?:where|and)\\s+(?:0|null|false)\\b"
           - "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)"
+          - "\\bdate\\b\\s+like\\s*['\"]2030-01['\"]"
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []

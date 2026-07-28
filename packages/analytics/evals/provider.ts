@@ -128,13 +128,19 @@ function getTextLinks(text: string): {
       ),
     ].map((match) => [match[1]!.toLocaleLowerCase(), match[2] ?? match[3]!]),
   );
+  const scannableText = linkableText.replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
   const referenceLinks = [...linkableText.matchAll(/(?<![!\\])\[([^\]]+)]\[([^\]]*)]/g)].flatMap(
     (match) => {
       const href = referenceDefinitions.get((match[2] || match[1]!).toLocaleLowerCase());
       return href ? [{ href, label: match[1]! }] : [];
     },
   );
-  const scannableText = linkableText.replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "");
+  const shortcutReferenceLinks = [
+    ...scannableText.matchAll(/(?<![\]!\\])\[([^\]]+)](?![[(])/g),
+  ].flatMap((match) => {
+    const href = referenceDefinitions.get(match[1]!.toLocaleLowerCase());
+    return href ? [{ href, label: match[1]! }] : [];
+  });
   const autoLinkText = scannableText.replace(/<\/[a-z][^>]*>/gi, "");
   const autoLinks = [...autoLinkText.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
     (match) => match[1]!,
@@ -147,11 +153,12 @@ function getTextLinks(text: string): {
     .map((match) => match[0].replace(/[.,。、!?！？]+$/, ""))
     .filter((route) => financeChatHrefSchema.safeParse(route).success);
   return {
-    labels: [...markdownLinks, ...htmlLinks, ...referenceLinks],
+    labels: [...markdownLinks, ...htmlLinks, ...referenceLinks, ...shortcutReferenceLinks],
     links: unique([
       ...markdownLinks.map(({ href }) => href),
       ...htmlLinks.map(({ href }) => href),
       ...referenceLinks.map(({ href }) => href),
+      ...shortcutReferenceLinks.map(({ href }) => href),
       ...autoLinks,
       ...rawUrls,
       ...bareRoutes,

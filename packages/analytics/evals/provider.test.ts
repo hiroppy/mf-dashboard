@@ -196,6 +196,24 @@ describe("toEvaluationOutput", () => {
     });
   });
 
+  test("collects a shortcut reference link", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: "[2026年7月の収支]\n\n[2026年7月の収支]: /0/cf/2026-07",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      textLinkLabels: [{ href: "/0/cf/2026-07", label: "2026年7月の収支" }],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
+
   test("does not collect an unused reference definition", () => {
     expect(
       toEvaluationOutput({
