@@ -83,6 +83,18 @@ function normalize(value: string): string {
   return value.normalize("NFKC").replace(/[,\s*_`]/g, "");
 }
 
+function hasAffirmedFact(text: string, fact: string): boolean {
+  const normalizedText = normalize(text);
+  const normalizedFact = normalize(fact);
+  let factIndex = normalizedText.indexOf(normalizedFact);
+  while (factIndex !== -1) {
+    const suffix = normalizedText.slice(factIndex + normalizedFact.length);
+    if (!/^(?:ではなく|ではありません|でない|じゃない)/.test(suffix)) return true;
+    factIndex = normalizedText.indexOf(normalizedFact, factIndex + normalizedFact.length);
+  }
+  return false;
+}
+
 function getFactualText(text: string): string {
   return removeHiddenHtmlElements(text)
     .replace(/```[\s\S]*?(?:```|$)/g, "")
@@ -558,6 +570,23 @@ function getDisplayedAmounts(text: string): string[] {
   return [...digitAmounts, ...kanjiAmounts, ...bareAmounts];
 }
 
+function getLabeledAmountClaims(text: string): Array<{ amount: string; label: string }> {
+  const labelPattern =
+    /(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:合計)?(?:は|が|[:：])/g;
+  const matches = [...text.matchAll(labelPattern)];
+  return matches.flatMap((match, index) => {
+    const valueStart = match.index! + match[0].length;
+    const nextLabel = matches[index + 1]?.index ?? text.length;
+    const sentenceEnd = text.slice(valueStart).search(/[。！？\n]/);
+    const valueEnd = sentenceEnd === -1 ? nextLabel : Math.min(nextLabel, valueStart + sentenceEnd);
+    const amount = getDisplayedAmounts(text.slice(valueStart, valueEnd))[0];
+    const label = match[0].match(
+      /^(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)/,
+    )?.[0];
+    return amount && label ? [{ amount, label: normalize(label) }] : [];
+  });
+}
+
 function parseKanjiNumber(value: string): number {
   const digits: Record<string, number> = {
     〇: 0,
@@ -891,7 +920,6 @@ export default function assertFinanceChatOutput(
   const actual = result.data;
   const config = context.config ?? {};
   const factualText = getFactualText(actual.text);
-  const normalizedText = normalize(factualText);
   const normalizedPolicyText = normalize(actual.text);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
     normalizedPolicyText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
@@ -909,7 +937,7 @@ export default function assertFinanceChatOutput(
   }
 
   const missingFacts = (config.expectedTextFacts ?? []).filter(
-    (fact) => !normalizedText.includes(normalize(fact)),
+    (fact) => !hasAffirmedFact(factualText, fact),
   );
   if (missingFacts.length > 0) {
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
@@ -946,7 +974,7 @@ export default function assertFinanceChatOutput(
       .some(
         (scope) =>
           /(?:データ|明細|記録|取引)[\s\S]*(?:ありません|ない|見つかりません)/.test(scope) &&
-          noDataFacts.every((fact) => normalize(scope).includes(normalize(fact))),
+          noDataFacts.every((fact) => hasAffirmedFact(scope, fact)),
       )
   ) {
     return fail("データなし回答の期間または対象が期待と異なります。");
@@ -1029,6 +1057,22 @@ export default function assertFinanceChatOutput(
     );
     if (unexpectedAmounts.length > 0) {
       return fail(`本文に根拠のない金額があります: ${[...new Set(unexpectedAmounts)].join(", ")}`);
+    }
+    const amountsByLabel = new Map<string, Set<string>>();
+    for (const [label, value] of config.expectedTextPairs ?? []) {
+      const values = amountsByLabel.get(normalize(label)) ?? new Set<string>();
+      values.add(normalize(value));
+      amountsByLabel.set(normalize(label), values);
+    }
+    const mislabeledClaims = getLabeledAmountClaims(factualText).filter(
+      ({ amount, label }) => !amountsByLabel.get(label)?.has(amount),
+    );
+    if (mislabeledClaims.length > 0) {
+      return fail(
+        `本文の金額ラベルに根拠がありません: ${mislabeledClaims
+          .map(({ amount, label }) => `${label}=${amount}`)
+          .join(", ")}`,
+      );
     }
   }
   if (

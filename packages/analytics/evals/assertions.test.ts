@@ -38,6 +38,14 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "2026年7月ではなく2025年7月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        { config: { expectedTextFacts: ["2026年7月"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("事実") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: "収入は `313,235円`、支出は `219,894円`、収支は `93,341円`です。",
         }),
         {
@@ -679,6 +687,22 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "2030年1月ではなく、食費データはありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期間") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: "2030年1月の食費データはありません。2030年1月の食費取引は存在します。",
           databaseQueries: [
             {
@@ -1019,6 +1043,23 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円、支出は219,894円、収支は93,341円です。予算は93,341円です。",
+        }),
+        {
+          config: {
+            allowOnlyGroundedAmounts: true,
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("予算") });
   });
 
   test("compares chart values by label without requiring data order", () => {
