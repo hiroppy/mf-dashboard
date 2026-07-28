@@ -32,7 +32,7 @@ export async function navigateToAccountsPage(page: Page): Promise<void> {
   }
 }
 
-export async function getRefreshStatus(
+async function getRefreshStatus(
   page: Page,
 ): Promise<{ incompleteAccounts: string[]; remainingCount: number }> {
   const rows = page.locator("#account-table tr:has(td.account-status)");

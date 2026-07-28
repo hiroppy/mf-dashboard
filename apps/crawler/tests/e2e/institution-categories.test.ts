@@ -23,19 +23,37 @@ describe("scrapeInstitutionCategories", () => {
         let accountCount = 0;
         let categoryHeadingCount = 0;
         let extractableLinkCount = 0;
+        const extractableAccountIds = new Set<string>();
 
         for (const list of lists) {
+          let hasCategory = false;
           accountCount += list.querySelectorAll(":scope > li.account").length;
           categoryHeadingCount += list.querySelectorAll(":scope > li.heading-category-name").length;
-          extractableLinkCount += list.querySelectorAll(
-            ":scope > li.account .heading-accounts a[href*='/accounts/show'], " +
-              ":scope > li.account a[href*='/accounts/edit/']",
-          ).length;
+
+          for (const child of list.children) {
+            if (child.classList.contains("heading-category-name")) {
+              hasCategory = Boolean(child.textContent?.trim());
+              continue;
+            }
+            if (!hasCategory || !child.classList.contains("account")) continue;
+
+            const link = child.querySelector<HTMLAnchorElement>(
+              ".heading-accounts a[href*='/accounts/show'], a[href*='/accounts/edit/']",
+            );
+            const match = link
+              ?.getAttribute("href")
+              ?.match(/\/accounts\/(?:show(?:_manual)?|edit)\/([^/?]+)/);
+            if (match?.[1]) {
+              extractableLinkCount++;
+              extractableAccountIds.add(match[1]);
+            }
+          }
         }
 
         return {
           accountCount,
           categoryHeadingCount,
+          extractableAccountCount: extractableAccountIds.size,
           extractableLinkCount,
           listCount: lists.length,
         };
@@ -45,10 +63,7 @@ describe("scrapeInstitutionCategories", () => {
       expect(structure.accountCount).toBeGreaterThan(0);
       expect(structure.categoryHeadingCount).toBeGreaterThan(0);
       expect(structure.extractableLinkCount).toBeGreaterThan(0);
-      expect(categoryMap.size).toBeGreaterThan(0);
-      expect([...categoryMap].every(([id, category]) => id.length > 0 && category.length > 0)).toBe(
-        true,
-      );
+      expect(categoryMap.size).toBe(structure.extractableAccountCount);
     });
   });
 });
