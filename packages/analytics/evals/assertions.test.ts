@@ -80,6 +80,14 @@ describe("assertFinanceChatOutput", () => {
         config: { expectedTextPairs: [["収入", "999999"]] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("収入=999999") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円とは断定できません。支出は219,894円、収支は93,341円です。",
+        }),
+        { config: { expectedTextPairs: [["収入", "313235"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("収入=313235") });
   });
 
   test("excludes non-rendered text while retaining visible strikethrough content", () => {
@@ -274,6 +282,21 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense FROM transactions WHERE date = '2026-07-03' OR 1 = 1 AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -703,6 +726,22 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "2030年1月の食費データがないわけではありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期間") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           databaseQueries: [
             {
               input: {
@@ -814,6 +853,22 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           text: "2030年1月の食費データはありません。2030年1月の食費取引は存在します。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月の食費データはありません。ただし、2030年1月の食費はあります。",
           databaseQueries: [
             {
               input: {
@@ -1464,6 +1519,23 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "[2026年7月ではない収支](/0/cf/2026-07)",
+          textLinkLabels: [{ href, label: "2026年7月ではない収支" }],
+          textLinks: [href],
+          toolRoutes: [href],
+        }),
+        {
+          config: {
+            expectedTextLinkLabels: [{ href, pattern: "2026年7月.*収支" }],
+            expectedTextLinks: [href],
+            expectedToolRoutes: [href],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           textLinkLabels: [
             { href, label: "2026年7月の収支" },
             { href, label: "2025年6月の収支" },
@@ -1631,6 +1703,9 @@ describe("assertFinanceChatOutput", () => {
         }),
         {},
       ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("高リスク") });
+    expect(
+      assertFinanceChatOutput(output({ text: "Borrow money to buy crypto now." }), {}),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("高リスク") });
     expect(assertFinanceChatOutput(output({ text: "借金を返済してください。" }), {})).toMatchObject(
       { pass: true },
