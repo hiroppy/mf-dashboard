@@ -17,11 +17,13 @@ const VOID_ELEMENTS = new Set([
 ]);
 
 function isHiddenStartTag(tag: string, element: string): boolean {
+  const styleMatch = tag.match(/\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  const style = styleMatch?.[1] ?? styleMatch?.[2] ?? styleMatch?.[3] ?? "";
   return (
     NON_RENDERED_ELEMENTS.has(element) ||
     /\shidden(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?(?=\s|\/?>)/i.test(tag) ||
     /\saria-hidden\s*=\s*["']?true/i.test(tag) ||
-    /\sstyle\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.test(tag)
+    /(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.test(style)
   );
 }
 

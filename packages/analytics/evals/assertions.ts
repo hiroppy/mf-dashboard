@@ -375,22 +375,27 @@ function getAggregateResultKeys(sql: string, classification: string): string[] {
     ),
   );
   return getTopLevelSelectExpressions(sql).flatMap((expression) => {
-    if (!/^\s*sum\s*\(/i.test(expression)) return [];
+    const resultKey = expression.match(
+      /\s+(?:as\s+)?(?:"([^"]+)"|`([^`]+)`|\[([^\]]+)]|([a-z_][a-z0-9_]*))\s*$/i,
+    );
+    const aggregate = resultKey ? expression.slice(0, resultKey.index).trim() : expression.trim();
+    const isDirectAggregate = /^sum\s*\(/i.test(aggregate);
+    const isCoalescedAggregate =
+      /^coalesce\s*\(\s*sum\s*\(/i.test(aggregate) && /,\s*0\s*\)$/i.test(aggregate);
+    if (!isDirectAggregate && !isCoalescedAggregate) return [];
     if (
-      new RegExp(
-        `^\\s*sum\\s*\\(\\s*(?:[a-z_][a-z0-9_]*\\.)?${classification}\\s*\\)\\s*$`,
-        "i",
-      ).test(expression)
+      new RegExp(`\\bsum\\s*\\(\\s*(?:[a-z_][a-z0-9_]*\\.)?${classification}\\s*\\)`, "i").test(
+        aggregate,
+      )
     ) {
-      return [classification];
+      return resultKey
+        ? [resultKey[1] ?? resultKey[2] ?? resultKey[3] ?? resultKey[4]!]
+        : [classification];
     }
     const hasClassification =
       new RegExp(`\\btype\\b[^)]{0,160}['"]${classification}`, "i").test(expression) ||
       (typeValues.size === 1 && typeValues.has(classification.toLocaleLowerCase()));
     if (!hasClassification) return [];
-    const resultKey = expression.match(
-      /\s+(?:as\s+)?(?:"([^"]+)"|`([^`]+)`|\[([^\]]+)]|([a-z_][a-z0-9_]*))\s*$/i,
-    );
     return resultKey ? [resultKey[1] ?? resultKey[2] ?? resultKey[3] ?? resultKey[4]!] : [];
   });
 }
@@ -1059,7 +1064,9 @@ function hasEmptyAggregateResult(input: unknown, row: Record<string, unknown>): 
     const alias = expression.match(/\s+(?:as\s+)?([a-z_][a-z0-9_]*)\s*$/i)?.[1];
     if (!alias) return [];
     const aggregate = expression.replace(/\s+(?:as\s+)?[a-z_][a-z0-9_]*\s*$/i, "").trim();
-    if (/^count\s*\(\s*\*\s*\)$/i.test(aggregate)) return [{ alias, kind: "count" }];
+    if (/^count\s*\(\s*(?:\*|(?:[a-z_][a-z0-9_]*\.)?id)\s*\)$/i.test(aggregate)) {
+      return [{ alias, kind: "count" }];
+    }
     if (
       /^(?:coalesce\s*\(\s*)?sum\s*\(\s*(?:[a-z_][a-z0-9_.]*\.)?amount\s*\)(?:\s*,\s*0\s*\))?$/i.test(
         aggregate,
@@ -1255,9 +1262,10 @@ export default function assertFinanceChatOutput(
       values.add(normalize(value));
       amountsByLabel.set(normalize(label), values);
     }
-    const mislabeledClaims = getLabeledAmountClaims(factualText).filter(
-      ({ amount, label }) => !amountsByLabel.get(label)?.has(amount),
-    );
+    const mislabeledClaims = getLabeledAmountClaims(factualText).filter(({ amount, label }) => {
+      const expectedAmounts = amountsByLabel.get(label);
+      return amountsByLabel.size > 0 && !expectedAmounts?.has(amount);
+    });
     if (mislabeledClaims.length > 0) {
       return fail(
         `本文の金額ラベルに根拠がありません: ${mislabeledClaims

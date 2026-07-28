@@ -70,6 +70,28 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income, COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            expectedDatabaseRows: [{ income: "313235", expense: "219894" }],
+            expectedDatabaseValues: ["313235", "219894"],
+            requiredDatabaseAggregateAliases: ["income", "expense"],
+            requiredDatabaseQueryPatterns: ["transactions", "2026-07", ":groupId", "\\bsum\\s*\\("],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS total_income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS total_expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: {
@@ -164,6 +186,14 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           text: "<span hidden>2026年7月の収入は313,235円です。</span>",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "<span style=display:none>2026年7月の収入は313,235円です。</span>",
         }),
         { config },
       ),
@@ -673,6 +703,21 @@ describe("assertFinanceChatOutput", () => {
                 sql: "SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [{ total: 0 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT COUNT(id) AS count FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [{ count: 0 }], truncated: false },
             },
           ],
         }),
@@ -1283,6 +1328,25 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test("rejects displayed amounts that are not expected or database-backed", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "金額は761円です。",
+          databaseQueries: [
+            {
+              input: { sql: "SELECT amount FROM transactions" },
+              output: { rows: [{ amount: 761 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            allowOnlyGroundedAmounts: true,
+            expectedDatabaseValues: ["761"],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
         output({

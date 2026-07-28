@@ -101,7 +101,7 @@ function getLinkableText(text: string): string {
     .replace(/```[\s\S]*?(?:```|$)/g, "")
     .replace(/~~~[\s\S]*?(?:~~~|$)/g, "")
     .replace(/^(?: {4}|\t).+$/gm, "")
-    .replace(/`[^`\n]*`/g, "")
+    .replace(/(^|[^`])(`+)(?!`)([\s\S]*?)(?<!`)\2(?!`)/g, "$1")
     .replace(/!?\[[^\]]*]\([^)]*\)/g, (link) => (link.startsWith("![") ? "" : link))
     .replace(/\\\[[^\]]*]\([^)]*\)/g, "");
 }

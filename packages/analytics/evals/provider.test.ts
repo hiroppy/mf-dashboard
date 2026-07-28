@@ -133,6 +133,7 @@ describe("toEvaluationOutput", () => {
   test("does not treat links inside code as rendered links", () => {
     for (const text of [
       "```\n[2026年7月の収支](/0/cf/2026-07)\n``` and `/0/cf/2026-07`",
+      "``[2026年7月の収支](/0/cf/2026-07)``",
       "~~~markdown\n[2026年7月の収支](/0/cf/2026-07)\n~~~",
       "    [2026年7月の収支](/0/cf/2026-07)",
     ]) {
@@ -236,6 +237,21 @@ describe("toEvaluationOutput", () => {
         steps: [
           {
             text: '<a hidden href="/0/cf/2026-07">2026年7月の収支</a>',
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+  });
+
+  test("does not collect an anchor hidden by an unquoted style", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: '<span style=display:none><a href="/0/cf/2026-07">収支</a></span>',
             toolCalls: [],
             toolResults: [],
           },
