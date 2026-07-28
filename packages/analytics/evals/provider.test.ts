@@ -261,6 +261,24 @@ describe("toEvaluationOutput", () => {
       textLinks: ["/0/cf/2026-07"],
     });
   });
+
+  test("unwraps an angle-bracket inline Markdown destination", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: "[2026年7月の収支](</0/cf/2026-07>)",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      textLinkLabels: [{ href: "/0/cf/2026-07", label: "2026年7月の収支" }],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
 });
 
 describe("FinanceChatProvider", () => {

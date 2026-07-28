@@ -208,6 +208,25 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    for (const sql of [
+      'SELECT SUM("income"), SUM("expense") FROM "transactions" WHERE "date" LIKE \'2026-07%\' AND "group_id" = :groupId',
+      "SELECT SUM(`income`), SUM(`expense`) FROM `transactions` WHERE `date` LIKE '2026-07%' AND `group_id` = :groupId",
+      "SELECT SUM([income]), SUM([expense]) FROM [transactions] WHERE [date] LIKE '2026-07%' AND [group_id] = :groupId",
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            databaseQueries: [
+              {
+                input: { sql },
+                output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+              },
+            ],
+          }),
+          { config },
+        ),
+      ).toMatchObject({ pass: true });
+    }
     expect(
       assertFinanceChatOutput(
         output({
@@ -306,6 +325,27 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    for (const hiddenPredicate of [
+      "length(category) < 0",
+      "substr(category, 1, 1) = 'X'",
+      "length(substr(date, 1, 7)) < 0",
+    ]) {
+      expect(
+        assertFinanceChatOutput(
+          output({
+            databaseQueries: [
+              {
+                input: {
+                  sql: `SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId AND ${hiddenPredicate}`,
+                },
+                output: { rows: [], truncated: false },
+              },
+            ],
+          }),
+          { config },
+        ),
+      ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    }
     expect(
       assertFinanceChatOutput(
         output({

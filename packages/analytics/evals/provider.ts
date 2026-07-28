@@ -88,6 +88,10 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function normalizeMarkdownDestination(href: string): string {
+  return href.startsWith("<") && href.endsWith(">") ? href.slice(1, -1) : href;
+}
+
 function getVisibleText(text: string): string {
   return text.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
 }
@@ -110,7 +114,7 @@ function getTextLinks(text: string): {
       /(?<![!\\])\[([^\]]+)]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g,
     ),
   ].map((match) => ({
-    href: match[2]!,
+    href: normalizeMarkdownDestination(match[2]!),
     label: match[1]!,
   }));
   const htmlLinks = [

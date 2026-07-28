@@ -363,7 +363,10 @@ function getExecutableSql(sql: string): string {
     index += 1;
   }
 
-  return result;
+  return result
+    .replace(/"([a-z_][a-z0-9_]*)"/gi, "$1")
+    .replace(/`([a-z_][a-z0-9_]*)`/gi, "$1")
+    .replace(/\[([a-z_][a-z0-9_]*)]/gi, "$1");
 }
 
 function getDatabaseRows(
@@ -642,6 +645,20 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
     "is_excluded_from_calculation",
     "type",
   ]);
+  const allowedDateFunctions = new Set(["strftime", "substr"]);
+  const whereSql = whereClause[1]!;
+  const hasUnexpectedFunction = [...whereSql.matchAll(/\b([a-z_][a-z0-9_]*)\s*\(/gi)].some(
+    (match) => {
+      const name = match[1]!.toLocaleLowerCase();
+      if (name === "in") return false;
+      const argumentsText = whereSql
+        .slice(match.index! + match[0].length)
+        .match(/^([^()]*)\)/)?.[1];
+      return !allowedDateFunctions.has(name) || !argumentsText || !/\bdate\b/i.test(argumentsText);
+    },
+  );
+  if (hasUnexpectedFunction) return true;
+
   return [
     ...whereClause[1]!.matchAll(
       /\b([a-z_][a-z0-9_.]*)\s*(?:=|<>|!=|<=|>=|<|>|\bis\b|\blike\b|\bin\b|\bbetween\b)/gi,
