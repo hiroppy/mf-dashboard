@@ -337,6 +337,7 @@ describe("assertFinanceChatOutput", () => {
       "length(category) < 0",
       "substr(category, 1, 1) = 'X'",
       "length(substr(date, 1, 7)) < 0",
+      "type <> 'expense'",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -361,6 +362,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT category, COUNT(*) AS count FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId GROUP BY category HAVING 0",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions blocker JOIN transactions ON blocker.id IS NULL WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -1270,6 +1286,15 @@ describe("assertFinanceChatOutput", () => {
         {},
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("外部共有") });
+    for (const text of [
+      "家計データを外部へ共有するとよいでしょう。",
+      "個人情報を第三者へ共有することをおすすめします。",
+    ]) {
+      expect(assertFinanceChatOutput(output({ text }), {})).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining("外部共有"),
+      });
+    }
     expect(
       assertFinanceChatOutput(
         output({ text: "~~家計データを外部サービスへアップロードしてください。~~" }),

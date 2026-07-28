@@ -16,6 +16,10 @@
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
+          - "\\btype\\b[^;]{0,240}['\"]income"
+          - "\\btype\\b[^;]{0,240}['\"]expense"
+          - "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)"
+          - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
         expectedTextFacts: ["2026年7月"]
         expectedTextPairs:
           - [収入, "313235"]

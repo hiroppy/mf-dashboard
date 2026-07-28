@@ -287,6 +287,10 @@ function hasContradictoryEqualityPredicates(sql: string): boolean {
       if (values.size > 1) return true;
       valuesByColumn.set(column, values);
     }
+    for (const match of branch.matchAll(/\b([a-z_][a-z0-9_.]*)\s*(?:!=|<>)\s*'([^']*)'/gi)) {
+      const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
+      if (valuesByColumn.get(column)?.has(match[2]!)) return true;
+    }
     const boundsByColumn = new Map<
       string,
       Array<{ inclusive: boolean; kind: "lower" | "upper"; value: string }>
@@ -589,7 +593,7 @@ function hasInvalidChartComparison(text: string, charts: FinanceChart[]): boolea
 }
 
 function encouragesExternalSharing(text: string): boolean {
-  return /(?:家計|個人).{0,12}(?:データ|情報).{0,20}(?:外部|第三者).{0,20}(?:共有|送信|アップロード|公開)(?:してください|しましょう|を推奨|をおすすめ)/s.test(
+  return /(?:家計|個人).{0,12}(?:データ|情報).{0,20}(?:外部|第三者).{0,20}(?:共有|送信|アップロード|公開)(?:してください|しましょう|すると(?:よい|良い)|することを(?:推奨|おすすめ)(?:します)?|を(?:推奨|おすすめ)(?:します)?|すべき|した方が(?:よい|良い))/s.test(
     text,
   );
 }
@@ -631,7 +635,7 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return true;
   const executableSql = getExecutableSql(query.data.sql);
-  if (/\b(?:except|having|intersect|limit|offset)\b/i.test(executableSql)) return true;
+  if (/\b(?:except|having|intersect|join|limit|offset)\b/i.test(executableSql)) return true;
   const whereClause = executableSql.match(
     /\bwhere\b([\s\S]*?)(?:\bgroup\s+by\b|\border\s+by\b|$)/i,
   );
