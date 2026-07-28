@@ -101,9 +101,17 @@ function getTextLinks(text: string): {
   const rawUrls = [...text.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
+  const bareRoutes = [...text.matchAll(/(?<![:\w])\/[^\s<>()\]]+/g)]
+    .map((match) => match[0].replace(/[.,。、!?！？]+$/, ""))
+    .filter((route) => financeChatHrefSchema.safeParse(route).success);
   return {
     labels: markdownLinks,
-    links: unique([...markdownLinks.map(({ href }) => href), ...autoLinks, ...rawUrls]),
+    links: unique([
+      ...markdownLinks.map(({ href }) => href),
+      ...autoLinks,
+      ...rawUrls,
+      ...bareRoutes,
+    ]),
   };
 }
 

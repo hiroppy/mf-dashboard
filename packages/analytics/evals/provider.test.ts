@@ -99,6 +99,21 @@ describe("toEvaluationOutput", () => {
       }).text,
     ).toBe("途中の表示。最終回答");
   });
+
+  test("collects a visible bare dashboard route", () => {
+    expect(
+      toEvaluationOutput({
+        text: "unused final text",
+        steps: [
+          {
+            text: "2026年7月の収支は /0/cf/2026-07 で確認できます。",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }).textLinks,
+    ).toEqual(["/0/cf/2026-07"]);
+  });
 });
 
 describe("FinanceChatProvider", () => {

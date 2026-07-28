@@ -113,7 +113,12 @@ describe("assertFinanceChatOutput", () => {
   test("requires no-data answers to be backed by an empty database result", () => {
     const config = {
       forbiddenNoDataQueryPatterns: ["\\b1\\s*=\\s*0\\b", "\\blimit\\b"],
-      requiredNoDataQueryPatterns: ["transactions", "2030-01", "食費", ":groupId"],
+      requiredNoDataQueryPatterns: [
+        "\\btransactions\\b",
+        "\\bdate\\b\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01",
+        "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費",
+        "\\bgroup_id\\b\\s*=\\s*:groupId",
+      ],
       requireNoDataEvidence: true,
     };
 
@@ -143,6 +148,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: { sql: "SELECT * FROM accounts WHERE 1 = 0" },
               output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT NULL AS amount FROM transactions WHERE group_id = :groupId AND '2030-01' = '2030-01' AND '食費' = '食費'",
+              },
+              output: { rows: [{ amount: null }], truncated: false },
             },
           ],
         }),
