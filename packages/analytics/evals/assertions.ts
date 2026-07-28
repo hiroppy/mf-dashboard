@@ -65,6 +65,7 @@ const evaluationOutputSchema = z.object({
 
 const databaseResultSchema = z.object({
   rows: z.array(z.record(z.string(), z.unknown())),
+  truncated: z.boolean().optional(),
 });
 
 const databaseQueryInputSchema = z.object({
@@ -243,9 +244,22 @@ function matchesDatabaseQuery(
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return false;
 
-  const executableSql = getExecutableSql(query.data.sql);
+  const executableSql = getExecutableSql(query.data.sql).replace(/(?<=\d)_(?=\d)/g, "");
+  if (hasContradictoryEqualityPredicates(executableSql)) return false;
   const matches = (pattern: string) => new RegExp(pattern, "i").test(executableSql);
   return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
+}
+
+function hasContradictoryEqualityPredicates(sql: string): boolean {
+  const valuesByColumn = new Map<string, Set<string>>();
+  for (const match of sql.matchAll(/\b([a-z_][a-z0-9_.]*)\s*=\s*'([^']*)'/gi)) {
+    const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
+    const values = valuesByColumn.get(column) ?? new Set<string>();
+    values.add(match[2]!);
+    if (values.size > 1) return true;
+    valuesByColumn.set(column, values);
+  }
+  return false;
 }
 
 function getExecutableSql(sql: string): string {
@@ -301,7 +315,7 @@ function getDatabaseRows(
   return queries.flatMap(({ input, output }) => {
     if (!matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) return [];
     const result = databaseResultSchema.safeParse(output);
-    return result.success ? result.data.rows : [];
+    return result.success && result.data.truncated !== true ? result.data.rows : [];
   });
 }
 
@@ -503,7 +517,11 @@ function hasNoDataEvidence(
 ): boolean {
   return queries.some(({ input, output }) => {
     const result = databaseResultSchema.safeParse(output);
-    if (!result.success || !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) {
+    if (
+      !result.success ||
+      result.data.truncated === true ||
+      !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)
+    ) {
       return false;
     }
 

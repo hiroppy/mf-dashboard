@@ -159,6 +159,24 @@ describe("toEvaluationOutput", () => {
       }),
     ).toMatchObject({ textLinkLabels: [], textLinks: [] });
   });
+
+  test("collects rendered HTML anchor links", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: '<a href="/0/cf/2026-07">2026年7月の収支</a>',
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      textLinkLabels: [{ href: "/0/cf/2026-07", label: "2026年7月の収支" }],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
 });
 
 describe("FinanceChatProvider", () => {
