@@ -41,6 +41,7 @@ interface AssertionContext {
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
     groundPercentagesInCharts?: boolean;
+    requiredDatabaseAggregateAliases?: string[];
     requiredDatabaseQueryPatterns?: string[];
     requiredNoDataQueryPatterns?: string[];
     requireExactMarkdownRows?: boolean;
@@ -88,7 +89,7 @@ function getFactualText(text: string): string {
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
-    .replace(/(?<!\\)~~(?=\S)[\s\S]*?\S~~/g, "")
+    .replace(/(?<!\\)~~(?=\S)([\s\S]*?\S)~~/g, "$1")
     .replace(/`([^`\n]*)`/g, "$1")
     .replace(/<[^>]*>/g, "");
 }
@@ -273,6 +274,7 @@ function matchesDatabaseQuery(
   input: unknown,
   requiredPatterns: string[],
   forbiddenPatterns: string[],
+  requiredAggregateAliases: string[] = [],
 ): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return false;
@@ -280,7 +282,63 @@ function matchesDatabaseQuery(
   const executableSql = getExecutableSql(query.data.sql).replace(/(?<=\d)_(?=\d)/g, "");
   if (hasContradictoryEqualityPredicates(executableSql)) return false;
   const matches = (pattern: string) => new RegExp(pattern, "i").test(executableSql);
-  return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
+  return (
+    requiredPatterns.every(matches) &&
+    !forbiddenPatterns.some(matches) &&
+    hasRequiredAggregateAliases(executableSql, requiredAggregateAliases)
+  );
+}
+
+function hasRequiredAggregateAliases(sql: string, aliases: string[]): boolean {
+  if (aliases.length === 0) return true;
+  const selectClause = sql.match(/\bselect\b([\s\S]*?)\bfrom\b/i)?.[1];
+  if (!selectClause) return false;
+
+  const expressions: string[] = [];
+  let depth = 0;
+  let expressionStart = 0;
+  for (let index = 0; index < selectClause.length; index += 1) {
+    const character = selectClause[index];
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    if (character === "," && depth === 0) {
+      expressions.push(selectClause.slice(expressionStart, index));
+      expressionStart = index + 1;
+    }
+  }
+  expressions.push(selectClause.slice(expressionStart));
+
+  return aliases.every((alias) =>
+    expressions.some((expression) => {
+      const directColumnAggregate = new RegExp(
+        `^\\s*sum\\s*\\(\\s*(?:[a-z_][a-z0-9_]*\\.)?${alias}\\s*\\)\\s*$`,
+        "i",
+      ).test(expression);
+      if (directColumnAggregate) return true;
+
+      const aliasPattern = new RegExp(`\\s+(?:as\\s+)?${alias}\\s*$`, "i");
+      const aggregate = expression.replace(aliasPattern, "").trim();
+      if (aggregate === expression.trim() || !/^sum\s*\(/i.test(aggregate)) return false;
+
+      const openingParenthesis = aggregate.indexOf("(");
+      let aggregateDepth = 0;
+      let closingParenthesis = -1;
+      for (let index = openingParenthesis; index < aggregate.length; index += 1) {
+        if (aggregate[index] === "(") aggregateDepth += 1;
+        if (aggregate[index] === ")") aggregateDepth -= 1;
+        if (aggregateDepth === 0) {
+          closingParenthesis = index;
+          break;
+        }
+      }
+      return (
+        closingParenthesis === aggregate.length - 1 &&
+        /\b(?:amount|expense|income)\b/i.test(
+          aggregate.slice(openingParenthesis + 1, closingParenthesis),
+        )
+      );
+    }),
+  );
 }
 
 function hasContradictoryEqualityPredicates(sql: string): boolean {
@@ -392,9 +450,14 @@ function getDatabaseRows(
   queries: Array<{ input: unknown; output: unknown }>,
   requiredPatterns: string[],
   forbiddenPatterns: string[],
+  requiredAggregateAliases: string[] = [],
 ): Array<Record<string, unknown>> {
   return queries.flatMap(({ input, output }) => {
-    if (!matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) return [];
+    if (
+      !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns, requiredAggregateAliases)
+    ) {
+      return [];
+    }
     const result = databaseResultSchema.safeParse(output);
     return result.success && result.data.truncated !== true ? result.data.rows : [];
   });
@@ -670,6 +733,11 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   if (!query.success) return true;
   const executableSql = getExecutableSql(query.data.sql);
   if (/\b(?:except|having|intersect|limit|not|offset)\b/i.test(executableSql)) return true;
+  if (
+    /(?:\b\d+(?:\.\d+)?\b|'[^']*')\s+is\s+null\b|\bnull\s+is\s+not\s+null\b/i.test(executableSql)
+  ) {
+    return true;
+  }
   if (hasUnexpectedNoDataJoin(executableSql)) return true;
   const whereClause = executableSql.match(
     /\bwhere\b([\s\S]*?)(?:\bgroup\s+by\b|\border\s+by\b|$)/i,
@@ -865,6 +933,7 @@ export default function assertFinanceChatOutput(
       ...expectedNumericLiteralPatterns,
       ...unsafeNumericExpressionPatterns,
     ],
+    config.requiredDatabaseAggregateAliases ?? [],
   );
   const databaseValues = new Set(
     databaseRows.flatMap((row) => Object.values(row)).map((value) => normalize(String(value))),

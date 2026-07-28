@@ -11,6 +11,7 @@
         expectedDatabaseRows:
           - income: "313235"
             expense: "219894"
+        requiredDatabaseAggregateAliases: [income, expense]
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"

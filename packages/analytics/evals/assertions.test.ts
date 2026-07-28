@@ -61,7 +61,7 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("収入=999999") });
   });
 
-  test("does not use image alt text or struck-through text as factual evidence", () => {
+  test("excludes non-rendered text while retaining visible strikethrough content", () => {
     const config = {
       expectedTextFacts: ["2026年7月"],
       expectedTextPairs: [["収入", "313235"]] as Array<[string, string]>,
@@ -75,7 +75,7 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "~~2026年7月の収入は313,235円です。~~" }), {
         config,
       }),
-    ).toMatchObject({ pass: false });
+    ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
         output({
@@ -138,6 +138,7 @@ describe("assertFinanceChatOutput", () => {
     const config = {
       expectedDatabaseRows: [{ income: "313235", expense: "219894" }],
       expectedDatabaseValues: ["313235", "219894"],
+      requiredDatabaseAggregateAliases: ["income", "expense"],
       requiredDatabaseQueryPatterns: ["transactions", "2026-07", ":groupId", "\\bsum\\s*\\("],
     };
 
@@ -205,6 +206,7 @@ describe("assertFinanceChatOutput", () => {
       "SELECT printf('%d%d', 313, 235) AS income, printf('%d%d', 219, 894) AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
       "SELECT 313 || 235 AS income, 219 || 894 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
       "SELECT 626470 / 2 AS income, 439788 / 2 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+      "SELECT round(313234.6) AS income, round(219893.6) AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -359,6 +361,7 @@ describe("assertFinanceChatOutput", () => {
       "type <> 'expense'",
       "category IS NULL",
       "NOT category = '食費'",
+      "1 IS NULL",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -933,6 +936,14 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
     expect(
       assertFinanceChatOutput(output({ text: "収入は313,235円、予算は999999です。" }), {
+        config: {
+          allowOnlyGroundedAmounts: true,
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円です。~~予算は999,999円です。~~" }), {
         config: {
           allowOnlyGroundedAmounts: true,
           expectedTextPairs: [["収入", "313235"]],
