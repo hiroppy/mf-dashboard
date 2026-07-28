@@ -51,6 +51,7 @@
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
+          - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
         expectedTextPairs:

@@ -225,6 +225,24 @@ describe("toEvaluationOutput", () => {
       }),
     ).toMatchObject({ textLinkLabels: [], textLinks: [] });
   });
+
+  test("collects an inline Markdown link with a title", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: '[2026年7月の収支](/0/cf/2026-07 "収支画面")',
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      textLinkLabels: [{ href: "/0/cf/2026-07", label: "2026年7月の収支" }],
+      textLinks: ["/0/cf/2026-07"],
+    });
+  });
 });
 
 describe("FinanceChatProvider", () => {

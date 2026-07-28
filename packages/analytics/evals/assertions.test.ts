@@ -276,6 +276,7 @@ describe("assertFinanceChatOutput", () => {
         "\\btransactions\\b",
         "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2030-01",
         "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費",
+        "\\btype\\b\\s*=\\s*['\"]?expense",
         "\\bgroup_id\\b\\s*=\\s*:groupId",
       ],
       requireNoDataEvidence: true,
@@ -287,7 +288,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND is_internal_transfer = 0 AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -302,7 +303,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND category = '不存在' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND category = '不存在' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -317,7 +318,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId AND id IS NULL",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId AND id IS NULL",
               },
               output: { rows: [], truncated: false },
             },
@@ -332,7 +333,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2026-07-01' AND '2030-01' = '2030-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2026-07-01' AND '2030-01' = '2030-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -347,7 +348,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId AND amount < 0",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId AND amount < 0",
               },
               output: { rows: [], truncated: false },
             },
@@ -362,7 +363,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND date < '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND date < '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -378,7 +379,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -390,11 +391,41 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS total FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [{ total: null }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT 0 AS count, COUNT(*) AS actual_count FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [{ count: 0, actual_count: 1 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: "2029年12月の住宅費データはありません。",
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -410,7 +441,23 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月の食費データはありません。2030年1月の食費取引は存在します。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
@@ -425,7 +472,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [], truncated: true },
             },
@@ -440,7 +487,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT COUNT(*) AS count FROM transactions WHERE substr(date, 1, 7) = '2030-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT COUNT(*) AS count FROM transactions WHERE substr(date, 1, 7) = '2030-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [{ count: 0 }], truncated: false },
             },
@@ -472,7 +519,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId AND 0",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId AND 0",
               },
               output: { rows: [], truncated: false },
             },
@@ -495,7 +542,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT NULL AS amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+                sql: "SELECT NULL AS amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
               },
               output: { rows: [{ amount: null }], truncated: false },
             },
@@ -525,7 +572,7 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
-                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId LIMIT 0",
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId LIMIT 0",
               },
               output: { rows: [], truncated: false },
             },
@@ -1001,6 +1048,12 @@ describe("assertFinanceChatOutput", () => {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2030年1月の食費データはありません。食費は999999です。" }),
+        { config: { forbidAmounts: true } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
   });
 
   test("normalizes compact yen units for grounded amount checks", () => {
@@ -1075,6 +1128,12 @@ describe("assertFinanceChatOutput", () => {
         {},
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("高リスク") });
+    expect(assertFinanceChatOutput(output({ text: "借金を返済してください。" }), {})).toMatchObject(
+      { pass: true },
+    );
+    expect(
+      assertFinanceChatOutput(output({ text: "投資は慎重に検討してください。" }), {}),
+    ).toMatchObject({ pass: true });
   });
 
   test("rejects malformed provider output", () => {

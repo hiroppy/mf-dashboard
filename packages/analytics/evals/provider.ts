@@ -105,12 +105,14 @@ function getTextLinks(text: string): {
   links: string[];
 } {
   const linkableText = removeHiddenHtmlElements(getLinkableText(text));
-  const markdownLinks = [...linkableText.matchAll(/(?<![!\\])\[([^\]]+)]\(([^)\s]+)\)/g)].map(
-    (match) => ({
-      href: match[2]!,
-      label: match[1]!,
-    }),
-  );
+  const markdownLinks = [
+    ...linkableText.matchAll(
+      /(?<![!\\])\[([^\]]+)]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g,
+    ),
+  ].map((match) => ({
+    href: match[2]!,
+    label: match[1]!,
+  }));
   const htmlLinks = [
     ...linkableText.matchAll(
       /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi,
