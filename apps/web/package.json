@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "predev": "test -s ../../data/demo.db || pnpm --filter @mf-dashboard/db build:demo",
     "dev": "DB_PATH=../../data/demo.db DEMO_MODE=true next dev",
     "dev:prod": "DB_PATH=../../data/moneyforward.db CRAWLER_URL=http://127.0.0.1:8766 ALLOW_LOCAL_AUTH_BYPASS=true next dev --hostname 127.0.0.1",
     "build": "next build",
@@ -13,7 +12,7 @@
     "test:unit": "vitest run --project unit",
     "test:storybook": "vitest run --project storybook",
     "test:watch": "vitest",
-    "pretest:e2e": "(test -s ../../data/demo.db || pnpm --filter @mf-dashboard/db build:demo) && playwright install chromium webkit",
+    "pretest:e2e": "playwright install chromium webkit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "pnpm pretest:e2e && playwright test --ui",
     "typecheck": "next typegen && tsc --noEmit",
