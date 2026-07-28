@@ -127,6 +127,14 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "~~~markdown\n2026年7月の収入は313,235円です。\n~~~",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: '[収入]: x "313,235円"\n[支出]: x "219,894円"\n[収支]: x "93,341円"',
         }),
         {
@@ -414,6 +422,7 @@ describe("assertFinanceChatOutput", () => {
       "category IS NULL",
       "NOT category = '食費'",
       "1 IS NULL",
+      "2 = 3",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -467,6 +476,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND is_internal_transfer = false AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT amount FROM transactions JOIN group_accounts ga ON ga.account_id = transactions.account_id WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND ga.group_id = :groupId",
               },
               output: { rows: [], truncated: false },
@@ -476,6 +500,21 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions JOIN group_accounts ga ON ga.account_id = transactions.transfer_target_account_id WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND ga.group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -705,6 +744,22 @@ describe("assertFinanceChatOutput", () => {
         { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月について確認しました。2029年12月の食費データはありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期間") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -1397,6 +1452,12 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は1万くらいです。" }), {
         config: { forbidAmounts: true },
       }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2030年1月の食費データはありません。食費は1万2345です。" }),
+        { config: { forbidAmounts: true } },
+      ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
     expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は一万円です。" }), {

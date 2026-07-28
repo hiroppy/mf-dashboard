@@ -98,6 +98,7 @@ function hasAffirmedFact(text: string, fact: string): boolean {
 function getFactualText(text: string): string {
   return removeHiddenHtmlElements(text)
     .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .replace(/~~~[\s\S]*?(?:~~~|$)/g, "")
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
@@ -548,7 +549,12 @@ function getDisplayedAmounts(text: string): string[] {
   ]
     .map((match) => {
       const [, currency, marker, openingParenthesis, value, yen] = match;
-      if (!currency && !yen && !/[億万千]\s*$/.test(value!)) return "";
+      const prefix = normalizedText.slice(0, match.index);
+      const followsMonetaryLabel =
+        /(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:合計)?(?:は|が|[:：])$/.test(
+          prefix,
+        );
+      if (!currency && !yen && !/[億万千]\s*$/.test(value!) && !followsMonetaryLabel) return "";
       const sign =
         marker === "-" || marker === "▲" || marker === "△" || openingParenthesis ? -1 : 1;
       return value ? String(parseDigitAmount(value) * sign) : "";
@@ -778,6 +784,25 @@ function contradictsNoDataConclusion(text: string, facts: string[]): boolean {
   );
 }
 
+function hasScopedNoDataStatement(text: string, facts: string[]): boolean {
+  return text.split(/\n\s*\n/).some((paragraph) => {
+    const clauses = paragraph.split(/[。！？]/).filter(Boolean);
+    return clauses.some((clause, index) => {
+      if (!/(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません)/.test(clause)) {
+        return false;
+      }
+      const scope = `${clauses[index - 1] ?? ""}。${clause}`;
+      if (!facts.every((fact) => hasAffirmedFact(scope, fact))) return false;
+
+      const expectedPeriods = facts.filter((fact) => /\d{4}年\d{1,2}月/.test(fact)).map(normalize);
+      const claimedPeriods = [...clause.matchAll(/\d{4}年\d{1,2}月/g)].map((match) =>
+        normalize(match[0]),
+      );
+      return claimedPeriods.every((period) => expectedPeriods.includes(period));
+    });
+  });
+}
+
 function getDisclosedDatabaseTerms(text: string): string[] {
   const patterns = [
     /\b(?:select|from|where|join|sum|count|avg|group_accounts|transactions|amount)\b/gi,
@@ -801,9 +826,7 @@ function hasUnexpectedNoDataJoin(sql: string): boolean {
     joins.some(
       (match) =>
         match[1]!.toLocaleLowerCase() !== "group_accounts" ||
-        !/\b[a-z_][a-z0-9_]*\.account_id\s*=\s*[a-z_][a-z0-9_]*\.(?:account_id|transfer_target_account_id)\b/i.test(
-          match[3]!,
-        ),
+        !/\b[a-z_][a-z0-9_]*\.account_id\s*=\s*[a-z_][a-z0-9_]*\.account_id\b/i.test(match[3]!),
     )
   );
 }
@@ -819,6 +842,32 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   ) {
     return true;
   }
+  const hasFalseConstantComparison = [
+    ...executableSql.matchAll(
+      /(?<![\w.])(-?\d+(?:\.\d+)?)\s*(=|!=|<>|<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)(?![\w.])/g,
+    ),
+  ].some((match) => {
+    const left = Number(match[1]);
+    const right = Number(match[3]);
+    switch (match[2]) {
+      case "=":
+        return left !== right;
+      case "!=":
+      case "<>":
+        return left === right;
+      case "<":
+        return left >= right;
+      case "<=":
+        return left > right;
+      case ">":
+        return left <= right;
+      case ">=":
+        return left < right;
+      default:
+        return false;
+    }
+  });
+  if (hasFalseConstantComparison) return true;
   if (hasUnexpectedNoDataJoin(executableSql)) return true;
   const whereClause = executableSql.match(
     /\bwhere\b([\s\S]*?)(?:\bgroup\s+by\b|\border\s+by\b|$)/i,
@@ -968,16 +1017,7 @@ export default function assertFinanceChatOutput(
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
   }
   const noDataFacts = config.expectedNoDataTextFacts ?? [];
-  if (
-    noDataFacts.length > 0 &&
-    !factualText
-      .split(/\n\s*\n/)
-      .some(
-        (scope) =>
-          /(?:データ|明細|記録|取引)[\s\S]*(?:ありません|ない|見つかりません)/.test(scope) &&
-          noDataFacts.every((fact) => hasAffirmedFact(scope, fact)),
-      )
-  ) {
+  if (noDataFacts.length > 0 && !hasScopedNoDataStatement(factualText, noDataFacts)) {
     return fail("データなし回答の期間または対象が期待と異なります。");
   }
   if (noDataFacts.length > 0 && contradictsNoDataConclusion(factualText, noDataFacts)) {
