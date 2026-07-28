@@ -274,7 +274,7 @@ describe("assertFinanceChatOutput", () => {
       ],
       requiredNoDataQueryPatterns: [
         "\\btransactions\\b",
-        "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01",
+        "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2030-01",
         "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費",
         "\\bgroup_id\\b\\s*=\\s*:groupId",
       ],
@@ -303,6 +303,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND category = '不存在' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2026-07-01' AND '2030-01' = '2030-01' AND category = '食費' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
             },
