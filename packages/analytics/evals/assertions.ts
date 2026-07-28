@@ -110,18 +110,33 @@ function hasUnnegatedScopeFact(text: string, fact: string): boolean {
   );
 }
 
-function getFactualText(text: string): string {
+function removeNonTextMarkup(text: string): string {
   return removeHiddenHtmlElements(text)
-    .replace(/```[\s\S]*?(?:```|$)/g, "")
-    .replace(/~~~[\s\S]*?(?:~~~|$)/g, "")
-    .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
     .replace(/(?<![!\\])\[([^\]]+)]\((?:[^()"']|\([^)]*\)|"[^"]*"|'[^']*')*\)/g, "$1")
     .replace(/(?<![!\\])\[([^\]]+)]\[[^\]]*]/g, "$1")
-    .replace(/(?<!\\)~~(?=\S)([\s\S]*?\S)~~/g, "$1")
     .replace(/`([^`\n]*)`/g, "$1")
     .replace(/<[^>]*>/g, "");
+}
+
+function getFactualText(text: string): string {
+  return removeNonTextMarkup(
+    text
+      .replace(/```[\s\S]*?(?:```|$)/g, "")
+      .replace(/~~~[\s\S]*?(?:~~~|$)/g, "")
+      .replace(/^(?: {4}|\t).+$/gm, "")
+      .replace(/(?<!\\)~~(?=\S)[\s\S]*?\S~~/g, ""),
+  );
+}
+
+function getVisibleClaimText(text: string): string {
+  return removeNonTextMarkup(
+    text
+      .replace(/^\s{0,3}(?:```|~~~)[^\n]*$/gm, "")
+      .replace(/^(?: {4}|\t)(.+)$/gm, "$1")
+      .replace(/(?<!\\)~~(?=\S)([\s\S]*?\S)~~/g, "$1"),
+  );
 }
 
 function getMissingTextPairs(
@@ -1203,6 +1218,7 @@ export default function assertFinanceChatOutput(
   const actual = result.data;
   const config = context.config ?? {};
   const factualText = getFactualText(actual.text);
+  const visibleClaimText = getVisibleClaimText(actual.text);
   const normalizedPolicyText = normalize(actual.text);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
     normalizedPolicyText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
@@ -1232,7 +1248,7 @@ export default function assertFinanceChatOutput(
       `本文のラベルと値が一致しません: ${missingPairs.map((pair) => pair.join("=")).join(", ")}`,
     );
   }
-  if (hasContradictoryBalanceConclusion(factualText, config.expectedTextPairs ?? [])) {
+  if (hasContradictoryBalanceConclusion(visibleClaimText, config.expectedTextPairs ?? [])) {
     return fail("本文の収支金額と黒字・赤字の結論が矛盾しています。");
   }
 
@@ -1256,11 +1272,11 @@ export default function assertFinanceChatOutput(
   if (noDataFacts.length > 0 && !hasScopedNoDataStatement(factualText, noDataFacts)) {
     return fail("データなし回答の期間または対象が期待と異なります。");
   }
-  if (noDataFacts.length > 0 && contradictsNoDataConclusion(factualText, noDataFacts)) {
+  if (noDataFacts.length > 0 && contradictsNoDataConclusion(visibleClaimText, noDataFacts)) {
     return fail("データなし回答と矛盾する記述があります。");
   }
 
-  if (config.forbidAmounts && getDisplayedAmounts(factualText).length > 0) {
+  if (config.forbidAmounts && getDisplayedAmounts(visibleClaimText).length > 0) {
     return fail("データのない回答に金額が含まれています。");
   }
 
@@ -1329,7 +1345,7 @@ export default function assertFinanceChatOutput(
       ...(config.expectedDatabaseValues ?? []).map(normalize),
       ...(config.expectedTextPairs ?? []).map(([, value]) => normalize(value)),
     ]);
-    const unexpectedAmounts = getDisplayedAmounts(factualText).filter(
+    const unexpectedAmounts = getDisplayedAmounts(visibleClaimText).filter(
       (amount) => !allowedAmounts.has(amount),
     );
     if (unexpectedAmounts.length > 0) {
@@ -1341,10 +1357,12 @@ export default function assertFinanceChatOutput(
       values.add(normalize(value));
       amountsByLabel.set(normalize(label), values);
     }
-    const mislabeledClaims = getLabeledAmountClaims(factualText).filter(({ amount, label }) => {
-      const expectedAmounts = amountsByLabel.get(label);
-      return amountsByLabel.size > 0 && !expectedAmounts?.has(amount);
-    });
+    const mislabeledClaims = getLabeledAmountClaims(visibleClaimText).filter(
+      ({ amount, label }) => {
+        const expectedAmounts = amountsByLabel.get(label);
+        return amountsByLabel.size > 0 && !expectedAmounts?.has(amount);
+      },
+    );
     if (mislabeledClaims.length > 0) {
       return fail(
         `本文の金額ラベルに根拠がありません: ${mislabeledClaims
@@ -1373,21 +1391,24 @@ export default function assertFinanceChatOutput(
   }
   if (config.groundPercentagesInCharts) {
     const expectedPercentages = getChartPercentages(actual.charts);
-    const unsupportedPercentages = getDisplayedPercentages(factualText).filter(
+    const unsupportedPercentages = getDisplayedPercentages(visibleClaimText).filter(
       (percentage) =>
         !expectedPercentages.some((expected) => Math.abs(expected - percentage) <= 0.51),
     );
     if (unsupportedPercentages.length > 0) {
       return fail(`本文にchartと一致しない割合があります: ${unsupportedPercentages.join(", ")}`);
     }
-    if (hasInvalidLabeledChartPercentage(factualText, actual.charts)) {
+    if (hasInvalidLabeledChartPercentage(visibleClaimText, actual.charts)) {
       return fail("本文のlabelと割合がchartと一致しません。");
     }
   }
-  if (config.validateChartAmounts && hasInvalidChartAmount(factualText, actual.charts)) {
+  if (config.validateChartAmounts && hasInvalidChartAmount(visibleClaimText, actual.charts)) {
     return fail("本文のlabelと金額がchartと一致しません。");
   }
-  if (config.validateChartComparisons && hasInvalidChartComparison(factualText, actual.charts)) {
+  if (
+    config.validateChartComparisons &&
+    hasInvalidChartComparison(visibleClaimText, actual.charts)
+  ) {
     return fail("本文の最大・最小比較がchartと一致しません。");
   }
 

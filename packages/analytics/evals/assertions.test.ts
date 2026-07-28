@@ -185,7 +185,7 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("収入=313235") });
   });
 
-  test("excludes non-rendered text while retaining visible strikethrough content", () => {
+  test("excludes non-affirmative rendered text from positive evidence", () => {
     const config = {
       expectedTextFacts: ["2026年7月"],
       expectedTextPairs: [["収入", "313235"]] as Array<[string, string]>,
@@ -199,7 +199,7 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(output({ text: "~~2026年7月の収入は313,235円です。~~" }), {
         config,
       }),
-    ).toMatchObject({ pass: true });
+    ).toMatchObject({ pass: false });
     expect(
       assertFinanceChatOutput(
         output({
@@ -2019,6 +2019,30 @@ describe("assertFinanceChatOutput", () => {
         { config: { forbidAmounts: true } },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+  });
+
+  test("checks visible non-affirmative claims for ungrounded amounts", () => {
+    const config = {
+      allowOnlyGroundedAmounts: true,
+      expectedTextFacts: ["2026年7月"],
+      expectedTextPairs: [["収入", "313235"]] as Array<[string, string]>,
+    };
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円です。\n\n```text\n実際の収入は999,999円です。\n```",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円です。~~実際の収入は999,999円です。~~",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
   });
 
   test("normalizes compact yen units for grounded amount checks", () => {
