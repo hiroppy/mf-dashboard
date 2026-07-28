@@ -18,6 +18,7 @@ import {
 } from "../src/chat/prompt";
 import { createFinanceChatTools } from "../src/chat/tools";
 import { getModel, isLLMEnabled } from "../src/config";
+import { removeHiddenHtmlElements } from "./markdown";
 
 interface GeneratedResponse {
   text: string;
@@ -103,7 +104,7 @@ function getTextLinks(text: string): {
   labels: Array<{ href: string; label: string }>;
   links: string[];
 } {
-  const linkableText = getLinkableText(text);
+  const linkableText = removeHiddenHtmlElements(getLinkableText(text));
   const markdownLinks = [...linkableText.matchAll(/(?<![!\\])\[([^\]]+)]\(([^)\s]+)\)/g)].map(
     (match) => ({
       href: match[2]!,

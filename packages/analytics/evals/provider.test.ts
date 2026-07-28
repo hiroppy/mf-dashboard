@@ -210,6 +210,21 @@ describe("toEvaluationOutput", () => {
       }),
     ).toMatchObject({ textLinkLabels: [], textLinks: [] });
   });
+
+  test("does not collect a hidden HTML anchor", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: '<a hidden href="/0/cf/2026-07">2026年7月の収支</a>',
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+  });
 });
 
 describe("FinanceChatProvider", () => {
