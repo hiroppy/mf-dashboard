@@ -99,6 +99,8 @@ function getVisibleText(text: string): string {
 function getLinkableText(text: string): string {
   return text
     .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .replace(/~~~[\s\S]*?(?:~~~|$)/g, "")
+    .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/`[^`\n]*`/g, "")
     .replace(/!?\[[^\]]*]\([^)]*\)/g, (link) => (link.startsWith("![") ? "" : link))
     .replace(/\\\[[^\]]*]\([^)]*\)/g, "");

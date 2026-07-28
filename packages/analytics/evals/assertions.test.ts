@@ -204,6 +204,7 @@ describe("assertFinanceChatOutput", () => {
     for (const sql of [
       "SELECT printf('%d%d', 313, 235) AS income, printf('%d%d', 219, 894) AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
       "SELECT 313 || 235 AS income, 219 || 894 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+      "SELECT 626470 / 2 AS income, 439788 / 2 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -357,6 +358,7 @@ describe("assertFinanceChatOutput", () => {
       "length(substr(date, 1, 7)) < 0",
       "type <> 'expense'",
       "category IS NULL",
+      "NOT category = '食費'",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -389,6 +391,21 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions JOIN group_accounts ga ON ga.account_id = transactions.account_id WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND ga.group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(
         output({
@@ -828,6 +845,16 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           text: ["## 2026年7月", "収入は313,235円、支出は219,894円、収支は93,341円です。"].join(
+            "\n",
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: ["2026年7月", "- 収入は313,235円", "- 支出は219,894円", "- 収支は93,341円"].join(
             "\n",
           ),
         }),

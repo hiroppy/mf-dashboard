@@ -14,12 +14,17 @@
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"
+          - "(?:\\bdate\\b\\s+like\\s*['\"]2026-07%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2026-07|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-08)"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
           - "\\btype\\b[^;]{0,240}['\"]income"
           - "\\btype\\b[^;]{0,240}['\"]expense"
           - "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)"
           - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
+          - "\\btype\\b[^;]{0,240}['\"]transfer"
+          - "\\bgroup_accounts\\b"
+          - "\\baccount_id\\b"
+          - "\\btransfer_target_account_id\\b"
         expectedTextFacts: ["2026年7月"]
         expectedTextPairs:
           - [収入, "313235"]
@@ -54,10 +59,12 @@
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07"
+          - "(?:\\bdate\\b\\s+like\\s*['\"]2026-07%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2026-07|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-08)"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
           - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
+          - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
         expectedTextPairs:
           - [食費, "41837"]
         allowOnlyGroundedAmounts: true
@@ -93,8 +100,11 @@
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2026-07-03"
+          - "(?:\\bdate\\b\\s*=\\s*['\"]?2026-07-03|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-07-04)"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
+          - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
+          - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
         expectedMarkdownRows:
           - ["2026-07-03", サンマルクカフェ, "761"]
         expectedMarkdownHeader: [日付, 内容, 金額]
@@ -139,6 +149,7 @@
         requiredNoDataQueryPatterns:
           - "\\btransactions\\b"
           - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)\\s*['\"]?2030-01"
+          - "(?:\\bdate\\b\\s+like\\s*['\"]2030-01%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2030-01|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2030-02)"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
           - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"

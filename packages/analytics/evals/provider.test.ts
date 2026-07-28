@@ -131,18 +131,18 @@ describe("toEvaluationOutput", () => {
   });
 
   test("does not treat links inside code as rendered links", () => {
-    expect(
-      toEvaluationOutput({
-        text: "unused final text",
-        steps: [
-          {
-            text: "```\n[2026年7月の収支](/0/cf/2026-07)\n``` and `/0/cf/2026-07`",
-            toolCalls: [],
-            toolResults: [],
-          },
-        ],
-      }),
-    ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+    for (const text of [
+      "```\n[2026年7月の収支](/0/cf/2026-07)\n``` and `/0/cf/2026-07`",
+      "~~~markdown\n[2026年7月の収支](/0/cf/2026-07)\n~~~",
+      "    [2026年7月の収支](/0/cf/2026-07)",
+    ]) {
+      expect(
+        toEvaluationOutput({
+          text: "unused final text",
+          steps: [{ text, toolCalls: [], toolResults: [] }],
+        }),
+      ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+    }
   });
 
   test("does not treat escaped Markdown links as rendered links", () => {

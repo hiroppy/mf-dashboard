@@ -173,6 +173,17 @@ function getTextScopes(text: string, fact: string): string[] {
       continue;
     }
 
+    if (index + 1 < lines.length && /^\s*(?:[-*+]|\d+[.)])\s+/.test(lines[index + 1]!)) {
+      const listEnd = lines.findIndex(
+        (candidate, candidateIndex) =>
+          candidateIndex > index &&
+          candidate.trim() !== "" &&
+          !/^\s*(?:[-*+]|\d+[.)])\s+/.test(candidate),
+      );
+      scopes.push(lines.slice(index, listEnd === -1 ? undefined : listEnd).join("\n"));
+      continue;
+    }
+
     scopes.push(
       ...line.split(/[。！？]/).filter((clause) => normalize(clause).includes(normalizedFact)),
     );
@@ -635,11 +646,31 @@ function getDisclosedDatabaseTerms(text: string): string[] {
   ];
 }
 
+function hasUnexpectedNoDataJoin(sql: string): boolean {
+  const joins = [
+    ...sql.matchAll(
+      /\bjoin\s+([a-z_][a-z0-9_]*)(?:\s+(?:as\s+)?((?!on\b)[a-z_][a-z0-9_]*))?\s+on\s+([\s\S]*?)(?=\b(?:join|where|group\s+by|order\s+by|having|limit)\b|$)/gi,
+    ),
+  ];
+  const joinCount = [...sql.matchAll(/\bjoin\b/gi)].length;
+  return (
+    joins.length !== joinCount ||
+    joins.some(
+      (match) =>
+        match[1]!.toLocaleLowerCase() !== "group_accounts" ||
+        !/\b[a-z_][a-z0-9_]*\.account_id\s*=\s*[a-z_][a-z0-9_]*\.(?:account_id|transfer_target_account_id)\b/i.test(
+          match[3]!,
+        ),
+    )
+  );
+}
+
 function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return true;
   const executableSql = getExecutableSql(query.data.sql);
-  if (/\b(?:except|having|intersect|join|limit|offset)\b/i.test(executableSql)) return true;
+  if (/\b(?:except|having|intersect|limit|not|offset)\b/i.test(executableSql)) return true;
+  if (hasUnexpectedNoDataJoin(executableSql)) return true;
   const whereClause = executableSql.match(
     /\bwhere\b([\s\S]*?)(?:\bgroup\s+by\b|\border\s+by\b|$)/i,
   );
@@ -820,6 +851,7 @@ export default function assertFinanceChatOutput(
           "\\bcast\\s*\\(\\s*['\"]?[+-]?\\d",
           "\\b(?:char|concat|concat_ws|format|hex|printf|quote|unicode|unhex)\\s*\\(",
           "\\|\\|",
+          "\\bselect\\b[^;]*?\\d[\\d_]*(?:\\.\\d+)?\\s*(?:/|%|\\*|<<|>>|&|\\|)\\s*\\d[^;]*?\\bfrom\\b",
           "\\b[a-z_][a-z0-9_.]*\\s*\\*\\s*0\\b",
           "\\b0\\s*\\*\\s*[a-z_][a-z0-9_.]*\\b",
           "\\bselect\\b[^;]*?(?:\\+|-)\\s*\\d+(?:\\.\\d+)?[^;]*?\\bfrom\\b",
