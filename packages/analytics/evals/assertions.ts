@@ -79,16 +79,32 @@ function normalize(value: string): string {
   return value.normalize("NFKC").replace(/[,\s*_`]/g, "");
 }
 
+function getFactualText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .replace(/^(?: {4}|\t).+$/gm, "")
+    .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
+    .replace(/(?<!\\)~~(?=\S)[\s\S]*?\S~~/g, "")
+    .replace(/`[^`\n]*`/g, "");
+}
+
 function getMissingTextPairs(
   text: string,
   expectedPairs: Array<[string, string]>,
 ): Array<[string, string]> {
   const normalizedText = normalize(text);
   const labels = expectedPairs.map(([label]) => normalize(label));
+  const tables = getMarkdownTables(text);
 
   return expectedPairs.filter(([, value], pairIndex) => {
     const normalizedLabel = labels[pairIndex]!;
     const normalizedValue = normalize(value);
+    const hasTableValue = tables.some(({ header, rows }) => {
+      const columnIndex = header.indexOf(normalizedLabel);
+      if (columnIndex === -1) return false;
+      return rows.some((row) => row[columnIndex] === normalizedValue);
+    });
+    if (hasTableValue) return false;
     let labelIndex = normalizedText.indexOf(normalizedLabel);
 
     while (labelIndex !== -1) {
@@ -491,7 +507,13 @@ function hasNoDataEvidence(
       return false;
     }
 
-    return result.data.rows.length === 0;
+    if (result.data.rows.length === 0) return true;
+    if (result.data.rows.length !== 1) return false;
+    const query = databaseQueryInputSchema.safeParse(input);
+    if (!query.success || !/\bcount\s*\(/i.test(getExecutableSql(query.data.sql))) return false;
+    return Object.entries(result.data.rows[0]!).some(
+      ([key, value]) => /(?:count|件数|total)/i.test(key) && Number(value) === 0,
+    );
   });
 }
 
@@ -511,9 +533,11 @@ export default function assertFinanceChatOutput(
 
   const actual = result.data;
   const config = context.config ?? {};
-  const normalizedText = normalize(actual.text);
+  const factualText = getFactualText(actual.text);
+  const normalizedText = normalize(factualText);
+  const normalizedPolicyText = normalize(actual.text);
   const forbiddenTerms = (config.forbiddenTextTerms ?? []).filter((term) =>
-    normalizedText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
+    normalizedPolicyText.toLocaleLowerCase().includes(normalize(term).toLocaleLowerCase()),
   );
   if (forbiddenTerms.length > 0) {
     return fail(`本文に禁止用語があります: ${forbiddenTerms.join(", ")}`);
@@ -533,7 +557,7 @@ export default function assertFinanceChatOutput(
     return fail(`本文に期待する事実がありません: ${missingFacts.join(", ")}`);
   }
 
-  const missingPairs = getMissingTextPairs(actual.text, config.expectedTextPairs ?? []);
+  const missingPairs = getMissingTextPairs(factualText, config.expectedTextPairs ?? []);
   if (missingPairs.length > 0) {
     return fail(
       `本文のラベルと値が一致しません: ${missingPairs.map((pair) => pair.join("=")).join(", ")}`,
@@ -543,7 +567,7 @@ export default function assertFinanceChatOutput(
   const scopedPairs = config.expectedScopedTextPairs;
   if (
     scopedPairs &&
-    !getTextScopes(actual.text, scopedPairs.scopeFact).some(
+    !getTextScopes(factualText, scopedPairs.scopeFact).some(
       (scope) => getMissingTextPairs(scope, scopedPairs.pairs).length === 0,
     )
   ) {
@@ -551,13 +575,13 @@ export default function assertFinanceChatOutput(
   }
 
   const missingPatterns = (config.expectedTextPatterns ?? []).filter(
-    (pattern) => !new RegExp(pattern, "s").test(actual.text),
+    (pattern) => !new RegExp(pattern, "s").test(factualText),
   );
   if (missingPatterns.length > 0) {
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
   }
 
-  if (config.forbidAmounts && getDisplayedAmounts(actual.text).length > 0) {
+  if (config.forbidAmounts && getDisplayedAmounts(factualText).length > 0) {
     return fail("データのない回答に金額が含まれています。");
   }
 
@@ -575,6 +599,8 @@ export default function assertFinanceChatOutput(
           "\\bcast\\s*\\(\\s*['\"]?[+-]?\\d",
           "\\b[a-z_][a-z0-9_.]*\\s*\\*\\s*0\\b",
           "\\b0\\s*\\*\\s*[a-z_][a-z0-9_.]*\\b",
+          "\\bselect\\b[^;]*?(?:\\+|-)\\s*\\d+(?:\\.\\d+)?[^;]*?\\bfrom\\b",
+          "\\bselect\\b[^;]*?\\bsum\\s*\\(([^)]*)\\)\\s*-\\s*sum\\s*\\(\\1\\)[^;]*?\\bfrom\\b",
         ];
   const databaseRows = getDatabaseRows(
     actual.databaseQueries,
@@ -609,7 +635,7 @@ export default function assertFinanceChatOutput(
       ...(config.expectedDatabaseValues ?? []).map(normalize),
       ...(config.expectedTextPairs ?? []).map(([, value]) => normalize(value)),
     ]);
-    const unexpectedAmounts = getDisplayedAmounts(actual.text).filter(
+    const unexpectedAmounts = getDisplayedAmounts(factualText).filter(
       (amount) => !allowedAmounts.has(amount),
     );
     if (unexpectedAmounts.length > 0) {
@@ -636,25 +662,25 @@ export default function assertFinanceChatOutput(
   }
   if (config.groundPercentagesInCharts) {
     const expectedPercentages = getChartPercentages(actual.charts);
-    const unsupportedPercentages = getDisplayedPercentages(actual.text).filter(
+    const unsupportedPercentages = getDisplayedPercentages(factualText).filter(
       (percentage) =>
         !expectedPercentages.some((expected) => Math.abs(expected - percentage) <= 0.51),
     );
     if (unsupportedPercentages.length > 0) {
       return fail(`本文にchartと一致しない割合があります: ${unsupportedPercentages.join(", ")}`);
     }
-    if (hasInvalidLabeledChartPercentage(actual.text, actual.charts)) {
+    if (hasInvalidLabeledChartPercentage(factualText, actual.charts)) {
       return fail("本文のlabelと割合がchartと一致しません。");
     }
   }
-  if (config.validateChartAmounts && hasInvalidChartAmount(actual.text, actual.charts)) {
+  if (config.validateChartAmounts && hasInvalidChartAmount(factualText, actual.charts)) {
     return fail("本文のlabelと金額がchartと一致しません。");
   }
-  if (config.validateChartComparisons && hasInvalidChartComparison(actual.text, actual.charts)) {
+  if (config.validateChartComparisons && hasInvalidChartComparison(factualText, actual.charts)) {
     return fail("本文の最大・最小比較がchartと一致しません。");
   }
 
-  const markdownTables = getMarkdownTables(actual.text);
+  const markdownTables = getMarkdownTables(factualText);
   const markdownRows = markdownTables.flatMap(({ rows }) => rows);
   const expectedMarkdownRows = config.expectedMarkdownRows ?? [];
   const missingRows = expectedMarkdownRows.filter(

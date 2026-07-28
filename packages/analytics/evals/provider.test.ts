@@ -144,6 +144,21 @@ describe("toEvaluationOutput", () => {
       }),
     ).toMatchObject({ textLinkLabels: [], textLinks: [] });
   });
+
+  test("does not treat escaped Markdown links as rendered links", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: String.raw`\[2026年7月の収支](/0/cf/2026-07)`,
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+  });
 });
 
 describe("FinanceChatProvider", () => {

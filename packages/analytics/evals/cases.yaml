@@ -12,7 +12,7 @@
           - ["313235", "219894"]
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
-          - "\\bdate\\b\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
         expectedTextFacts: ["2026年7月"]
@@ -48,7 +48,7 @@
           - [カフェ, "4790"]
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
-          - "\\bdate\\b\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
@@ -86,7 +86,7 @@
           - ["2026-07-03", サンマルクカフェ, "761"]
         requiredDatabaseQueryPatterns:
           - "\\btransactions\\b"
-          - "\\bdate\\b\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07-03"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2026-07-03"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
         expectedMarkdownRows:
@@ -131,7 +131,7 @@
         requireNoDataEvidence: true
         requiredNoDataQueryPatterns:
           - "\\btransactions\\b"
-          - "\\bdate\\b\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01"
+          - "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01"
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
         forbiddenNoDataQueryPatterns:

@@ -45,6 +45,23 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("収入=999999") });
   });
 
+  test("does not use image alt text or struck-through text as factual evidence", () => {
+    const config = {
+      expectedTextFacts: ["2026年7月"],
+      expectedTextPairs: [["収入", "313235"]] as Array<[string, string]>,
+    };
+    expect(
+      assertFinanceChatOutput(output({ text: "![2026年7月の収入は313,235円です。](x)" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(output({ text: "~~2026年7月の収入は313,235円です。~~" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false });
+  });
+
   test("requires expected facts to be backed by database results", () => {
     expect(
       assertFinanceChatOutput(output({ databaseQueries: [] }), {
@@ -67,6 +84,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT 313235 AS income, 219894 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) - SUM(amount) + 313000 + 235 AS income, SUM(amount) - SUM(amount) + 219000 + 894 AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
             },
@@ -130,7 +162,7 @@ describe("assertFinanceChatOutput", () => {
       forbiddenNoDataQueryPatterns: ["\\b1\\s*=\\s*0\\b", "\\blimit\\b"],
       requiredNoDataQueryPatterns: [
         "\\btransactions\\b",
-        "\\bdate\\b\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01",
+        "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01",
         "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費",
         "\\bgroup_id\\b\\s*=\\s*:groupId",
       ],
@@ -146,6 +178,21 @@ describe("assertFinanceChatOutput", () => {
                 sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
               },
               output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT COUNT(*) AS count FROM transactions WHERE substr(date, 1, 7) = '2030-01' AND category = '食費' AND group_id = :groupId",
+              },
+              output: { rows: [{ count: 0 }], truncated: false },
             },
           ],
         }),
@@ -344,6 +391,27 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           text: "## 収入・支出・収支\n収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "## 2026年7月",
+            "| 収入 | 支出 | 収支 |",
+            "| ---: | ---: | ---: |",
+            "| 313,235円 | 219,894円 | 93,341円 |",
+          ].join("\n"),
         }),
         {
           config: {
@@ -558,6 +626,14 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("想定外") });
+    expect(
+      assertFinanceChatOutput(output({ text: ["```markdown", text, "```"].join("\n") }), {
+        config: {
+          expectedMarkdownHeader: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("rejects links that were not returned by the route tool", () => {
@@ -679,6 +755,12 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({ text: "家計データを外部サービスへアップロードしてください。" }),
+        {},
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("外部共有") });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "~~家計データを外部サービスへアップロードしてください。~~" }),
         {},
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("外部共有") });

@@ -92,7 +92,11 @@ function getVisibleText(text: string): string {
 }
 
 function getLinkableText(text: string): string {
-  return text.replace(/```[\s\S]*?(?:```|$)/g, "").replace(/`[^`\n]*`/g, "");
+  return text
+    .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .replace(/`[^`\n]*`/g, "")
+    .replace(/!?\[[^\]]*]\([^)]*\)/g, (link) => (link.startsWith("![") ? "" : link))
+    .replace(/\\\[[^\]]*]\([^)]*\)/g, "");
 }
 
 function getTextLinks(text: string): {
@@ -100,7 +104,7 @@ function getTextLinks(text: string): {
   links: string[];
 } {
   const linkableText = getLinkableText(text);
-  const markdownLinks = [...linkableText.matchAll(/(?<!!)\[([^\]]+)]\(([^)\s]+)\)/g)].map(
+  const markdownLinks = [...linkableText.matchAll(/(?<![!\\])\[([^\]]+)]\(([^)\s]+)\)/g)].map(
     (match) => ({
       href: match[2]!,
       label: match[1]!,
