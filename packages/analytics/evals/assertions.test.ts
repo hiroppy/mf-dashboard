@@ -53,14 +53,20 @@ describe("assertFinanceChatOutput", () => {
   });
 
   test("requires no-data answers to be backed by an empty database result", () => {
-    const config = { requireNoDataEvidence: true };
+    const config = {
+      forbiddenNoDataQueryPatterns: ["\\b1\\s*=\\s*0\\b"],
+      requiredNoDataQueryPatterns: ["transactions", "2030-01", "食費", ":groupId"],
+      requireNoDataEvidence: true,
+    };
 
     expect(
       assertFinanceChatOutput(
         output({
           databaseQueries: [
             {
-              input: { sql: "SELECT amount FROM transactions" },
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+              },
               output: { rows: [], truncated: false },
             },
           ],
@@ -72,6 +78,19 @@ describe("assertFinanceChatOutput", () => {
       pass: false,
       reason: expect.stringContaining("データなし"),
     });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: { sql: "SELECT * FROM accounts WHERE 1 = 0" },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
   });
 
   test("does not bind a value to a neighboring label", () => {
@@ -276,6 +295,22 @@ describe("assertFinanceChatOutput", () => {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+  });
+
+  test("accepts natural no-data wording while rejecting internal terms", () => {
+    const config = {
+      expectedTextPatterns: ["(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません)"],
+      forbiddenTextTerms: ["transactions"],
+    };
+
+    expect(
+      assertFinanceChatOutput(output({ text: "該当する食費の記録はありません。" }), { config }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "transactionsテーブルにデータはありません。" }), {
+        config,
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
   });
 
   test("rejects malformed provider output", () => {

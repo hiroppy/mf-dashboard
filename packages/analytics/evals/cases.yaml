@@ -95,9 +95,19 @@
       value: file://./assertions.ts
       config:
         expectedTextPatterns:
-          - "(?:データ|明細).*(?:ありません|ない|見つかりません)"
+          - "(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません)"
         forbidAmounts: true
         requireNoDataEvidence: true
+        requiredNoDataQueryPatterns:
+          - "\\btransactions\\b"
+          - "2030-01"
+          - "食費"
+          - ":groupId"
+        forbiddenNoDataQueryPatterns:
+          - "\\b1\\s*=\\s*0\\b"
+          - "\\b0\\s*=\\s*1\\b"
+          - "\\bfalse\\b"
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
+        forbiddenTextTerms: [transactions, is_transfer, is_excluded_from_calculation, ":groupId"]

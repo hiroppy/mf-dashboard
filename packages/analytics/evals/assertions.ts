@@ -26,8 +26,10 @@ interface AssertionContext {
     expectedTextPairs?: Array<[string, string]>;
     expectedTextPatterns?: string[];
     expectedToolRoutes?: string[];
+    forbiddenNoDataQueryPatterns?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    requiredNoDataQueryPatterns?: string[];
     requireExactMarkdownRows?: boolean;
     requireNoDataEvidence?: boolean;
   };
@@ -49,6 +51,10 @@ const evaluationOutputSchema = z.object({
 
 const databaseResultSchema = z.object({
   rows: z.array(z.record(z.string(), z.unknown())),
+});
+
+const databaseQueryInputSchema = z.object({
+  sql: z.string(),
 });
 
 function fail(reason: string): AssertionResult {
@@ -201,6 +207,26 @@ function getDisplayedAmounts(text: string): string[] {
     .filter(Boolean);
 }
 
+function hasNoDataEvidence(
+  queries: Array<{ input: unknown; output: unknown }>,
+  requiredPatterns: string[],
+  forbiddenPatterns: string[],
+): boolean {
+  return queries.some(({ input, output }) => {
+    const query = databaseQueryInputSchema.safeParse(input);
+    const result = databaseResultSchema.safeParse(output);
+    if (!query.success || !result.success) return false;
+
+    const matches = (pattern: string) => new RegExp(pattern, "i").test(query.data.sql);
+    const hasExpectedScope = requiredPatterns.every(matches);
+    const hasForbiddenScope = forbiddenPatterns.some(matches);
+    const isEmpty =
+      result.data.rows.length === 0 ||
+      result.data.rows.every((row) => Object.values(row).every((value) => value === null));
+    return hasExpectedScope && !hasForbiddenScope && isEmpty;
+  });
+}
+
 export default function assertFinanceChatOutput(
   output: string,
   context: AssertionContext,
@@ -284,14 +310,11 @@ export default function assertFinanceChatOutput(
   }
   if (
     config.requireNoDataEvidence &&
-    !actual.databaseQueries.some(({ output }) => {
-      const result = databaseResultSchema.safeParse(output);
-      return (
-        result.success &&
-        (result.data.rows.length === 0 ||
-          result.data.rows.every((row) => Object.values(row).every((value) => value === null)))
-      );
-    })
+    !hasNoDataEvidence(
+      actual.databaseQueries,
+      config.requiredNoDataQueryPatterns ?? [],
+      config.forbiddenNoDataQueryPatterns ?? [],
+    )
   ) {
     return fail("データなし回答を裏付けるDB結果がありません。");
   }
