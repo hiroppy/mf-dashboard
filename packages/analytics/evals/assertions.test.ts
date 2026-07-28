@@ -95,6 +95,14 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "<span hidden><span>無視</span>2026年7月の収入は313,235円です。</span>",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: "<script>2026年7月の収入は313,235円です。</script>",
         }),
         { config },

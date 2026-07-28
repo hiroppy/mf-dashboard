@@ -244,6 +244,21 @@ describe("toEvaluationOutput", () => {
     ).toMatchObject({ textLinkLabels: [], textLinks: [] });
   });
 
+  test("does not collect a link after a nested same-name tag in a hidden subtree", () => {
+    expect(
+      toEvaluationOutput({
+        text: "",
+        steps: [
+          {
+            text: '<span hidden><span>無視</span><a href="/0/cf/2026-07">収支</a></span>',
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+      }),
+    ).toMatchObject({ textLinkLabels: [], textLinks: [] });
+  });
+
   test("collects an inline Markdown link with a title", () => {
     expect(
       toEvaluationOutput({
