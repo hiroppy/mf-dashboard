@@ -13,6 +13,13 @@
           - [収入, "313235"]
           - [支出, "219894"]
           - [収支, "93341"]
+        expectedScopedTextPairs:
+          scopeFact: "2026年7月"
+          pairs:
+            - [収入, "313235"]
+            - [支出, "219894"]
+            - [収支, "93341"]
+        allowOnlyGroundedAmounts: true
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []
@@ -30,8 +37,10 @@
         expectedDatabaseValues: ["24833", "12214", "4790"]
         expectedTextPairs:
           - [食費, "41837"]
+        allowOnlyGroundedAmounts: true
         expectedCharts:
           - chartType: pie
+            title: "2026年7月の食費"
             unit: currency
             series:
               - { name: 支出, amountType: expense }
@@ -55,6 +64,8 @@
         expectedDatabaseValues: ["2026-07-03", サンマルクカフェ, "761"]
         expectedMarkdownRows:
           - ["2026-07-03", サンマルクカフェ, "761"]
+        requireExactMarkdownRows: true
+        allowOnlyGroundedAmounts: true
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []

@@ -90,6 +90,87 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("binds monthly values to the requested period", () => {
+    const config = {
+      expectedScopedTextPairs: {
+        scopeFact: "2026年7月",
+        pairs: [
+          ["収入", "313235"],
+          ["支出", "219894"],
+          ["収支", "93341"],
+        ] as Array<[string, string]>,
+      },
+    };
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月について確認しました。2026年6月の収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: ["## 2026年7月", "収入は313,235円、支出は219,894円、収支は93,341円です。"].join(
+            "\n",
+          ),
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("accepts a value after a repeated heading label", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "## 収入・支出・収支\n収入は313,235円、支出は219,894円、収支は93,341円です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
+  test("rejects displayed amounts that are not expected or database-backed", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収入は313,235円、支出は219,894円、収支は93,341円、予算は999,999円です。",
+          databaseQueries: [
+            {
+              input: { sql: "SELECT 999999 AS budget" },
+              output: {
+                rows: [{ budget: 999_999, expense: 219_894, income: 313_235 }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        {
+          config: {
+            allowOnlyGroundedAmounts: true,
+            expectedDatabaseValues: ["313235", "219894"],
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
+  });
+
   test("compares chart values by label without requiring data order", () => {
     const chart = {
       title: "2026年7月の食費",
@@ -107,6 +188,7 @@ describe("assertFinanceChatOutput", () => {
         config: {
           expectedCharts: [
             {
+              title: "2026年7月の食費",
               chartType: "pie",
               unit: "currency",
               series: [{ name: "支出", amountType: "expense" }],
@@ -119,6 +201,21 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ charts: [{ ...chart, title: "2025年6月の食費" }] }), {
+        config: {
+          expectedCharts: [
+            {
+              title: "2026年7月の食費",
+              chartType: "pie",
+              unit: "currency",
+              series: [{ name: "支出", amountType: "expense" }],
+              data: chart.data,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -135,9 +232,25 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: true });
     expect(
       assertFinanceChatOutput(output({ text }), {
-        config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "999"]] },
+        config: {
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "999"]],
+          requireExactMarkdownRows: true,
+        },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: `${text}\n| 2026-07-04 | 架空店舗 | 999円 |`,
+        }),
+        {
+          config: {
+            expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+            requireExactMarkdownRows: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("想定外") });
   });
 
   test("rejects links that were not returned by the route tool", () => {

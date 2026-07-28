@@ -5,14 +5,22 @@ interface ChartExpectation {
   chartType: FinanceChart["chartType"];
   data: FinanceChart["data"];
   series: FinanceChart["series"];
+  title?: string;
   unit?: FinanceChart["unit"];
+}
+
+interface ScopedTextPairsExpectation {
+  pairs: Array<[string, string]>;
+  scopeFact: string;
 }
 
 interface AssertionContext {
   config?: {
+    allowOnlyGroundedAmounts?: boolean;
     expectedCharts?: ChartExpectation[];
     expectedDatabaseValues?: string[];
     expectedMarkdownRows?: string[][];
+    expectedScopedTextPairs?: ScopedTextPairsExpectation;
     expectedTextFacts?: string[];
     expectedTextLinks?: string[];
     expectedTextPairs?: Array<[string, string]>;
@@ -20,6 +28,7 @@ interface AssertionContext {
     expectedToolRoutes?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    requireExactMarkdownRows?: boolean;
     requireNoDataEvidence?: boolean;
   };
 }
@@ -59,40 +68,100 @@ function getMissingTextPairs(
 
   return expectedPairs.filter(([, value], pairIndex) => {
     const normalizedLabel = labels[pairIndex]!;
-    const labelIndex = normalizedText.indexOf(normalizedLabel);
-    if (labelIndex === -1) return true;
-
-    const valueStart = labelIndex + normalizedLabel.length;
-    const valueEnd = labels.reduce((nearest, candidate) => {
-      const candidateIndex = normalizedText.indexOf(candidate, valueStart);
-      return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
-    }, normalizedText.length);
-    const segment = normalizedText.slice(valueStart, valueEnd);
     const normalizedValue = normalize(value);
-    if (!/^\d+$/.test(normalizedValue)) return !segment.includes(normalizedValue);
+    let labelIndex = normalizedText.indexOf(normalizedLabel);
 
-    return !new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment);
+    while (labelIndex !== -1) {
+      const valueStart = labelIndex + normalizedLabel.length;
+      const valueEnd = labels.reduce((nearest, candidate) => {
+        const candidateIndex = normalizedText.indexOf(candidate, valueStart);
+        return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
+      }, normalizedText.length);
+      const segment = normalizedText.slice(valueStart, valueEnd);
+      const hasValue = /^\d+$/.test(normalizedValue)
+        ? new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment)
+        : segment.includes(normalizedValue);
+      if (hasValue) return false;
+
+      labelIndex = normalizedText.indexOf(normalizedLabel, valueStart);
+    }
+
+    return true;
   });
 }
 
-function getMarkdownRows(text: string): string[][] {
-  return text
-    .split("\n")
-    .filter((line) => line.includes("|"))
-    .map((line) =>
-      line
-        .replace(/^\s*\||\|\s*$/g, "")
-        .split("|")
-        .map((cell) => normalize(cell).replace(/円$/, "")),
-    )
-    .filter((row) => !row.every((cell) => /^:?-{3,}:?$/.test(cell)));
+function getTextScopes(text: string, fact: string): string[] {
+  const normalizedFact = normalize(fact);
+  const lines = text.split("\n");
+  const scopes: string[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    if (!normalize(line).includes(normalizedFact)) continue;
+
+    if (/^\s{0,3}#{1,6}\s/.test(line)) {
+      const nextHeading = lines.findIndex(
+        (candidate, candidateIndex) => candidateIndex > index && /^\s{0,3}#{1,6}\s/.test(candidate),
+      );
+      scopes.push(lines.slice(index, nextHeading === -1 ? undefined : nextHeading).join("\n"));
+      continue;
+    }
+
+    scopes.push(
+      ...line.split(/[。！？]/).filter((clause) => normalize(clause).includes(normalizedFact)),
+    );
+  }
+
+  return scopes;
 }
 
-function hasExpectedRow(actualRows: string[][], expectedRow: string[]): boolean {
+function parseMarkdownRow(line: string): string[] | null {
+  if (!line.includes("|")) return null;
+
+  return line
+    .replace(/^\s*\||\|\s*$/g, "")
+    .split("|")
+    .map((cell) => normalize(cell).replace(/円$/, ""));
+}
+
+function getMarkdownBodyRows(text: string): string[][] {
+  const lines = text.split("\n");
+  const rows: string[][] = [];
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const header = parseMarkdownRow(lines[index]!);
+    const separator = parseMarkdownRow(lines[index + 1]!);
+    if (
+      !header ||
+      !separator ||
+      header.length !== separator.length ||
+      !separator.every((cell) => /^:?-{3,}:?$/.test(cell))
+    ) {
+      continue;
+    }
+
+    let bodyIndex = index + 2;
+    while (bodyIndex < lines.length) {
+      const row = parseMarkdownRow(lines[bodyIndex]!);
+      if (!row || row.length !== header.length) break;
+      rows.push(row);
+      bodyIndex += 1;
+    }
+    index = bodyIndex - 1;
+  }
+
+  return rows;
+}
+
+function hasExpectedRow(
+  actualRows: string[][],
+  expectedRow: string[],
+  requireExactMatch: boolean,
+): boolean {
   const expectedCells = expectedRow.map((cell) => normalize(cell).replace(/円$/, ""));
-  return actualRows.some((row) =>
-    expectedCells.every((expectedCell) => row.includes(expectedCell)),
-  );
+  return actualRows.some((row) => {
+    if (requireExactMatch) return JSON.stringify(row) === JSON.stringify(expectedCells);
+    return expectedCells.every((expectedCell) => row.includes(expectedCell));
+  });
 }
 
 function sortChartData(data: FinanceChart["data"]): FinanceChart["data"] {
@@ -102,6 +171,7 @@ function sortChartData(data: FinanceChart["data"]): FinanceChart["data"] {
 function validateChart(actual: FinanceChart, expected: ChartExpectation): boolean {
   return (
     actual.chartType === expected.chartType &&
+    (expected.title === undefined || actual.title === expected.title) &&
     actual.unit === expected.unit &&
     JSON.stringify(actual.series) === JSON.stringify(expected.series) &&
     JSON.stringify(sortChartData(actual.data)) === JSON.stringify(sortChartData(expected.data))
@@ -119,6 +189,16 @@ function getDatabaseRows(queries: Array<{ output: unknown }>): Array<Record<stri
     const result = databaseResultSchema.safeParse(output);
     return result.success ? result.data.rows : [];
   });
+}
+
+function getDisplayedAmounts(text: string): string[] {
+  return [
+    ...text
+      .normalize("NFKC")
+      .matchAll(/(?:¥\s*(-?\d[\d,]*(?:\.\d+)?)|(-?\d[\d,]*(?:\.\d+)?)\s*円)/g),
+  ]
+    .map((match) => normalize(match[1] ?? match[2] ?? ""))
+    .filter(Boolean);
 }
 
 export default function assertFinanceChatOutput(
@@ -159,6 +239,16 @@ export default function assertFinanceChatOutput(
     );
   }
 
+  const scopedPairs = config.expectedScopedTextPairs;
+  if (
+    scopedPairs &&
+    !getTextScopes(actual.text, scopedPairs.scopeFact).some(
+      (scope) => getMissingTextPairs(scope, scopedPairs.pairs).length === 0,
+    )
+  ) {
+    return fail(`本文の${scopedPairs.scopeFact}と期待する値が同じ範囲にありません。`);
+  }
+
   const missingPatterns = (config.expectedTextPatterns ?? []).filter(
     (pattern) => !new RegExp(pattern, "s").test(actual.text),
   );
@@ -179,6 +269,18 @@ export default function assertFinanceChatOutput(
   );
   if (missingDatabaseValues.length > 0) {
     return fail(`DB結果に期待する値がありません: ${missingDatabaseValues.join(", ")}`);
+  }
+  if (config.allowOnlyGroundedAmounts) {
+    const allowedAmounts = new Set([
+      ...(config.expectedDatabaseValues ?? []).map(normalize),
+      ...(config.expectedTextPairs ?? []).map(([, value]) => normalize(value)),
+    ]);
+    const unexpectedAmounts = getDisplayedAmounts(actual.text).filter(
+      (amount) => !allowedAmounts.has(amount),
+    );
+    if (unexpectedAmounts.length > 0) {
+      return fail(`本文に根拠のない金額があります: ${[...new Set(unexpectedAmounts)].join(", ")}`);
+    }
   }
   if (
     config.requireNoDataEvidence &&
@@ -202,12 +304,16 @@ export default function assertFinanceChatOutput(
     return fail("chartの構造または値が期待と異なります。");
   }
 
-  const markdownRows = getMarkdownRows(actual.text);
-  const missingRows = (config.expectedMarkdownRows ?? []).filter(
-    (row) => !hasExpectedRow(markdownRows, row),
+  const markdownRows = getMarkdownBodyRows(actual.text);
+  const expectedMarkdownRows = config.expectedMarkdownRows ?? [];
+  const missingRows = expectedMarkdownRows.filter(
+    (row) => !hasExpectedRow(markdownRows, row, config.requireExactMarkdownRows ?? false),
   );
   if (missingRows.length > 0) {
     return fail(`Markdown表に期待する行がありません: ${missingRows.join(", ")}`);
+  }
+  if (config.requireExactMarkdownRows && markdownRows.length !== expectedMarkdownRows.length) {
+    return fail("Markdown表に想定外の明細行があります。");
   }
 
   const expectedRoutes = config.expectedToolRoutes ?? [];
