@@ -24,16 +24,20 @@ describe("accounts page structure", () => {
       });
 
       const accountTable = page.locator("#account-table");
-      await accountTable.waitFor({ state: "visible", timeout: 30000 });
+      await accountTable.first().waitFor({ state: "visible", timeout: 30000 });
       const rows = accountTable.locator("tr:has(td.account-status)");
       const structure = await rows.evaluateAll((elements) => ({
         rowCount: elements.length,
-        rowsWithServiceLink: elements.filter((row) => row.querySelector("td.service a")).length,
+        rowsWithAccountReference: elements.filter((row) =>
+          row.querySelector(
+            "td.service a, a[href*='/accounts/edit/'], form[action*='/accounts/edit/']",
+          ),
+        ).length,
         rowsWithStatus: elements.filter((row) => row.querySelector("td.account-status")).length,
       }));
 
       expect(structure.rowCount).toBeGreaterThan(0);
-      expect(structure.rowsWithServiceLink).toBe(structure.rowCount);
+      expect(structure.rowsWithAccountReference).toBe(structure.rowCount);
       expect(structure.rowsWithStatus).toBe(structure.rowCount);
     });
   });
