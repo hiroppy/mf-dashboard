@@ -1,4 +1,5 @@
-import { chromium, type Browser, type Page } from "playwright";
+import { mfUrls } from "@mf-dashboard/meta/urls";
+import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import {
   buildMonthRange,
@@ -18,9 +19,8 @@ describe("buildMonthRange", () => {
   });
 });
 
-describe("scrapeCashFlowMonth", () => {
+describe("scrapeCashFlowHistory", () => {
   let browser: Browser;
-  let page: Page;
 
   beforeAll(async () => {
     browser = await chromium.launch();
@@ -30,60 +30,12 @@ describe("scrapeCashFlowMonth", () => {
     await browser.close();
   });
 
-  test("指定月範囲のURLへ遷移して収支テーブル表示後に抽出する", async () => {
-    page = await browser.newPage();
-    try {
-      let requestedUrl: string | null = null;
-      await page.route("https://moneyforward.com/cf?**", async (route) => {
-        requestedUrl = route.request().url();
-        await route.fulfill({
-          contentType: "text/html",
-          body: `
-<!DOCTYPE html>
-<html>
-  <body>
-    <a href="/cf/csv?year=2024&month=2">CSV</a>
-    <table id="monthly_total_table_kakeibo">
-      <tbody>
-        <tr>
-          <td>¥0</td>
-          <td></td>
-          <td>¥0</td>
-          <td></td>
-          <td>¥0</td>
-        </tr>
-      </tbody>
-    </table>
-    <table id="cf-detail-table">
-      <tbody><tr><td>placeholder</td></tr></tbody>
-    </table>
-  </body>
-</html>
-        `,
-        });
-      });
-
-      const result = await scrapeCashFlowMonth(page, "2024-02");
-
-      expect(requestedUrl).not.toBeNull();
-      expect(requestedUrl).toContain("from=2024%2F02%2F01");
-      expect(requestedUrl).toContain("to=2024%2F02%2F29");
-      expect(result).toEqual({
-        month: "2024-02",
-        totalIncome: 0,
-        totalExpense: 0,
-        balance: 0,
-        items: [],
-      });
-    } finally {
-      await page.close();
-    }
-  });
-
   test("前月 navigation の失敗を対象月の callback に通知する", async () => {
-    page = await browser.newPage();
+    const page = await browser.newPage();
     page.setDefaultTimeout(500);
     try {
+      // A read-only E2E cannot safely and deterministically force the service's
+      // previous-month navigation to fail, so this failure branch uses minimal HTML.
       await page.route("https://moneyforward.com/cf**", async (route) => {
         await route.fulfill({
           contentType: "text/html",
@@ -104,5 +56,68 @@ describe("scrapeCashFlowMonth", () => {
     } finally {
       await page.close();
     }
+  });
+});
+
+describe("scrapeCashFlowMonth", () => {
+  test("指定月範囲へ遷移し、詳細テーブルを待ってから抽出する", async () => {
+    const waitFor = vi.fn<Locator["waitFor"]>().mockResolvedValue(undefined);
+    const detailTable = { waitFor } as unknown as Locator;
+    let csvLink: Locator;
+    const csvFirst = vi.fn<() => Locator>();
+    csvLink = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      first: csvFirst,
+      getAttribute: vi
+        .fn<(name: string) => Promise<string | null>>()
+        .mockResolvedValue("/cf/csv?year=2024&month=2"),
+    } as unknown as Locator;
+    csvFirst.mockReturnValue(csvLink);
+
+    let missing: Locator;
+    const missingFirst = vi.fn<() => Locator>();
+    missing = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+      first: missingFirst,
+    } as unknown as Locator;
+    missingFirst.mockReturnValue(missing);
+
+    const amountCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("0"),
+    } as unknown as Locator;
+    const summaryCells = {
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(amountCell),
+    } as unknown as Locator;
+    const summaryRow = {
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(summaryCells),
+    } as unknown as Locator;
+    const summary = {
+      first: vi.fn<() => Locator>().mockReturnValue(summaryRow),
+    } as unknown as Locator;
+    const detailRows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
+
+    const goto = vi.fn<Page["goto"]>().mockResolvedValue(null);
+    const locator = vi.fn<Page["locator"]>((selector: string) => {
+      if (selector === "#cf-detail-table") return detailTable;
+      if (selector === "a[href*='/cf/csv']") return csvLink;
+      if (selector === "#monthly_total_table_kakeibo tbody tr") return summary;
+      if (selector === "#cf-detail-table tbody tr[id^='js-transaction-']") return detailRows;
+      return missing;
+    });
+    const page = { goto, locator } as unknown as Page;
+
+    await expect(scrapeCashFlowMonth(page, "2024-02")).resolves.toEqual({
+      month: "2024-02",
+      totalIncome: 0,
+      totalExpense: 0,
+      balance: 0,
+      items: [],
+    });
+    expect(goto).toHaveBeenCalledWith(mfUrls.cashFlowWithRange("2024/02/01", "2024/02/29"), {
+      waitUntil: "domcontentloaded",
+    });
+    expect(waitFor).toHaveBeenCalledWith({ state: "visible", timeout: 10000 });
   });
 });

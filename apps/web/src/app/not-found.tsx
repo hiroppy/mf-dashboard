@@ -13,6 +13,7 @@ export default function NotFound() {
             alt="ページが見つかりません"
             width={120}
             height={120}
+            loading="eager"
             className="mx-auto mb-4 rounded-full"
           />
           <h1 className="text-2xl font-bold text-foreground">ページが見つかりません</h1>

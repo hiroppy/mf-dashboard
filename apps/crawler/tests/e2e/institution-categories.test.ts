@@ -1,13 +1,7 @@
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { scrapeInstitutionCategories } from "../../src/scrapers/institution-categories.js";
-import {
-  gotoHome,
-  launchLoggedInContext,
-  saveScreenshot,
-  withErrorScreenshot,
-  withNewPage,
-} from "./helpers.js";
+import { launchLoggedInContext, withNewPage } from "./helpers.js";
 
 let browser: Browser;
 let context: BrowserContext;
@@ -22,44 +16,54 @@ afterAll(async () => {
 });
 
 describe("scrapeInstitutionCategories", () => {
-  test("口座カテゴリが取得できる", async () => {
-    await withNewPage(context, async (page) => {
-      // Debug: Log URL and save screenshot
-      await gotoHome(page);
-      await saveScreenshot(page, "institution-categories-test-before-scrape.png");
-
-      const categoryMap = await withErrorScreenshot(
-        page,
-        "institution-categories-test-error.png",
-        () => scrapeInstitutionCategories(page),
-      );
-      expect(categoryMap.size).toBeGreaterThan(0);
-    });
-  });
-
-  test("カテゴリ名が有効な値", async () => {
+  test("実HTMLの口座一覧構造からカテゴリを取得できる", async () => {
     await withNewPage(context, async (page) => {
       const categoryMap = await scrapeInstitutionCategories(page);
+      const structure = await page.locator(".facilities.accounts-list").evaluateAll((lists) => {
+        let accountCount = 0;
+        let categoryHeadingCount = 0;
+        let extractableLinkCount = 0;
+        const extractableAccountIds = new Set<string>();
 
-      for (const category of categoryMap.values()) {
-        expect(category).toBeTruthy();
-        expect(typeof category).toBe("string");
-        // カテゴリ名は日本語で意味のある文字列
-        expect(category.length).toBeGreaterThan(0);
-        expect(category.length).toBeLessThan(50);
-      }
-    });
-  });
+        for (const list of lists) {
+          let hasCategory = false;
+          accountCount += list.querySelectorAll(":scope > li.account").length;
+          categoryHeadingCount += list.querySelectorAll(":scope > li.heading-category-name").length;
 
-  test("mfIdが有効な形式", async () => {
-    await withNewPage(context, async (page) => {
-      const categoryMap = await scrapeInstitutionCategories(page);
+          for (const child of list.children) {
+            if (child.classList.contains("heading-category-name")) {
+              hasCategory = Boolean(child.textContent?.trim());
+              continue;
+            }
+            if (!hasCategory || !child.classList.contains("account")) continue;
 
-      for (const mfId of categoryMap.keys()) {
-        expect(mfId).toBeTruthy();
-        expect(typeof mfId).toBe("string");
-        expect(mfId.length).toBeGreaterThan(0);
-      }
+            const link = child.querySelector<HTMLAnchorElement>(
+              ".heading-accounts a[href*='/accounts/show'], a[href*='/accounts/edit/']",
+            );
+            const match = link
+              ?.getAttribute("href")
+              ?.match(/\/accounts\/(?:show(?:_manual)?|edit)\/([^/?]+)/);
+            if (match?.[1]) {
+              extractableLinkCount++;
+              extractableAccountIds.add(match[1]);
+            }
+          }
+        }
+
+        return {
+          accountCount,
+          categoryHeadingCount,
+          extractableAccountCount: extractableAccountIds.size,
+          extractableLinkCount,
+          listCount: lists.length,
+        };
+      });
+
+      expect(structure.listCount).toBeGreaterThan(0);
+      expect(structure.accountCount).toBeGreaterThan(0);
+      expect(structure.categoryHeadingCount).toBeGreaterThan(0);
+      expect(structure.extractableLinkCount).toBeGreaterThan(0);
+      expect(categoryMap.size).toBe(structure.extractableAccountCount);
     });
   });
 });

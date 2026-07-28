@@ -250,6 +250,16 @@ test.describe("App flows", () => {
   });
 
   test("handles invalid dynamic routes", async ({ page }) => {
+    const lcpWarnings: string[] = [];
+    page.on("console", (message) => {
+      if (
+        message.type() === "warning" &&
+        message.text().includes("detected as the Largest Contentful Paint")
+      ) {
+        lcpWarnings.push(message.text());
+      }
+    });
+
     const invalidPaths = [
       "/unknown-group",
       "/accounts/unknown-account",
@@ -271,5 +281,7 @@ test.describe("App flows", () => {
         await expect(page.getByText("データがありません").first()).toBeVisible();
       });
     }
+
+    expect(lcpWarnings).toEqual([]);
   });
 });
