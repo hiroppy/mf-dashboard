@@ -106,22 +106,21 @@ export const Default: Story = {
     await expect(screen.queryByText("並び順")).toBeNull();
     await expect(sortSelect).toHaveTextContent("金額順");
 
-    await userEvent.click(sortSelect);
-    await userEvent.click(await screen.findByRole("option", { name: "日付順" }));
-    await waitFor(() => expect(sortSelect).toHaveTextContent("日付順"));
+    const selectSortAndExpectOrder = async (label: string, expectedDescriptions: string[]) => {
+      await userEvent.click(sortSelect);
+      await userEvent.click(await screen.findByRole("option", { name: label }));
 
-    const dateSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
-    await expect(dateSortedDescriptions[0]).toHaveTextContent("店舗 A");
-    await expect(dateSortedDescriptions[1]).toHaveTextContent("店舗 B");
-    await expect(sortSelect).toHaveTextContent("日付順");
+      await waitFor(async () => {
+        await expect(sortSelect).toHaveTextContent(label);
+        await expect(screen.queryAllByRole("option")).toHaveLength(0);
+        await expect(
+          screen.getAllByText(/店舗 [AB]/).map(({ textContent }) => textContent),
+        ).toEqual(expectedDescriptions);
+      });
+    };
 
-    await userEvent.click(sortSelect);
-    await userEvent.click(await screen.findByRole("option", { name: "金額順" }));
-    await waitFor(() => expect(sortSelect).toHaveTextContent("金額順"));
-
-    const amountSortedDescriptions = screen.getAllByText(/店舗 [AB]/);
-    await expect(amountSortedDescriptions[0]).toHaveTextContent("店舗 B");
-    await expect(amountSortedDescriptions[1]).toHaveTextContent("店舗 A");
+    await selectSortAndExpectOrder("日付順", ["店舗 A", "店舗 B"]);
+    await selectSortAndExpectOrder("金額順", ["店舗 B", "店舗 A"]);
 
     await userEvent.click(screen.getByRole("button", { name: "明細を閉じる" }));
 
