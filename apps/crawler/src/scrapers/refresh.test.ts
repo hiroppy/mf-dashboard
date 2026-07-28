@@ -62,6 +62,11 @@ describe("summarizeRefreshRows", () => {
       rows: [{ name: null, statuses: [" 更新中 "] }],
       expected: { incompleteAccounts: [], remainingCount: 1 },
     },
+    {
+      name: "空白のみの名称は除外し更新中行を件数には含める",
+      rows: [{ name: " \t ", statuses: ["更新中"] }],
+      expected: { incompleteAccounts: [], remainingCount: 1 },
+    },
   ])("$name", ({ rows, expected }) => {
     expect(summarizeRefreshRows(rows)).toEqual(expected);
   });

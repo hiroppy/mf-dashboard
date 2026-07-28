@@ -72,8 +72,9 @@ export function summarizeRefreshRows(rows: readonly RefreshStatusRow[]): {
     }
 
     remainingCount++;
-    if (row.name) {
-      incompleteAccounts.push(row.name.trim());
+    const accountName = row.name?.trim();
+    if (accountName) {
+      incompleteAccounts.push(accountName);
     }
   }
 
