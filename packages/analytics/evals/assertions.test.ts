@@ -67,6 +67,31 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS total_income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS total_expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: {
+                rows: [{ total_income: 313_235, total_expense: 219_894 }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        {
+          config: {
+            expectedDatabaseRows: [{ income: "313235", expense: "219894" }],
+            expectedDatabaseValues: ["313235", "219894"],
+            requiredDatabaseAggregateAliases: ["income", "expense"],
+            requiredDatabaseQueryPatterns: ["transactions", "2026-07", ":groupId", "\\bsum\\s*\\("],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
           text: "食費合計は41,837円です。内訳は食料品24,833円、外食12,214円、カフェ4,790円です。",
         }),
         { config: { expectedTextPairs: [["食費", "41837"]] } },
@@ -766,6 +791,22 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "2030年1月の食費について、該当する取引は確認できませんでした。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
           databaseQueries: [
             {
               input: {
@@ -1281,6 +1322,23 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true });
+    for (const title of ["2026年7月の食費内訳", "食費の内訳（2026年7月）"]) {
+      expect(
+        assertFinanceChatOutput(output({ charts: [{ ...chart, title }] }), {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+          },
+        }),
+      ).toMatchObject({ pass: true });
+    }
     expect(
       assertFinanceChatOutput(output({ charts: [{ ...chart, title: "2025年6月の食費" }] }), {
         config: {
@@ -1356,6 +1414,25 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({ charts: [chart], text: "食費は41,837円で、外食は24,833円です。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            validateChartAmounts: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円で、交通費は24,833円です。" }),
         {
           config: {
             expectedCharts: [
