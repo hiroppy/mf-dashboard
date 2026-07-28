@@ -88,7 +88,7 @@ describe("toEvaluationOutput", () => {
     });
   });
 
-  test("collects text shown across every generation step", () => {
+  test("grades only the final model response text", () => {
     expect(
       toEvaluationOutput({
         text: "最終回答",
@@ -97,13 +97,13 @@ describe("toEvaluationOutput", () => {
           { text: "最終回答", toolCalls: [], toolResults: [] },
         ],
       }).text,
-    ).toBe("途中の表示。最終回答");
+    ).toBe("最終回答");
   });
 
   test("does not treat a bare dashboard route as a rendered link", () => {
     expect(
       toEvaluationOutput({
-        text: "unused final text",
+        text: "2026年7月の収支は /0/cf/2026-07 で確認できます。",
         steps: [
           {
             text: "2026年7月の収支は /0/cf/2026-07 で確認できます。",
@@ -118,7 +118,7 @@ describe("toEvaluationOutput", () => {
   test("removes text and links hidden in HTML comments", () => {
     expect(
       toEvaluationOutput({
-        text: "unused final text",
+        text: "<!-- 2026年7月 [2026年7月の収支](/0/cf/2026-07) -->",
         steps: [
           {
             text: "<!-- 2026年7月 [2026年7月の収支](/0/cf/2026-07) -->",
@@ -139,7 +139,7 @@ describe("toEvaluationOutput", () => {
     ]) {
       expect(
         toEvaluationOutput({
-          text: "unused final text",
+          text,
           steps: [{ text, toolCalls: [], toolResults: [] }],
         }),
       ).toMatchObject({ textLinkLabels: [], textLinks: [] });
@@ -149,7 +149,7 @@ describe("toEvaluationOutput", () => {
   test("does not treat escaped Markdown links as rendered links", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: String.raw`\[2026年7月の収支](/0/cf/2026-07)`,
         steps: [
           {
             text: String.raw`\[2026年7月の収支](/0/cf/2026-07)`,
@@ -164,7 +164,7 @@ describe("toEvaluationOutput", () => {
   test("collects rendered HTML anchor links", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: '<a href="/0/cf/2026-07">2026年7月の収支</a>',
         steps: [
           {
             text: '<a href="/0/cf/2026-07">2026年7月の収支</a>',
@@ -182,7 +182,7 @@ describe("toEvaluationOutput", () => {
   test("collects rendered reference-style links", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: "[2026年7月の収支][target]\n\n[target]: /0/cf/2026-07",
         steps: [
           {
             text: "[2026年7月の収支][target]\n\n[target]: /0/cf/2026-07",
@@ -200,7 +200,7 @@ describe("toEvaluationOutput", () => {
   test("collects a shortcut reference link", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: "[2026年7月の収支]\n\n[2026年7月の収支]: /0/cf/2026-07",
         steps: [
           {
             text: "[2026年7月の収支]\n\n[2026年7月の収支]: /0/cf/2026-07",
@@ -218,7 +218,7 @@ describe("toEvaluationOutput", () => {
   test("does not collect an unused reference definition", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: "[unused]: /0/cf/2026-07",
         steps: [
           {
             text: "[unused]: /0/cf/2026-07",
@@ -233,7 +233,7 @@ describe("toEvaluationOutput", () => {
   test("does not collect a hidden HTML anchor", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: '<a hidden href="/0/cf/2026-07">2026年7月の収支</a>',
         steps: [
           {
             text: '<a hidden href="/0/cf/2026-07">2026年7月の収支</a>',
@@ -248,7 +248,7 @@ describe("toEvaluationOutput", () => {
   test("does not collect an anchor hidden by an unquoted style", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: '<span style=display:none><a href="/0/cf/2026-07">収支</a></span>',
         steps: [
           {
             text: '<span style=display:none><a href="/0/cf/2026-07">収支</a></span>',
@@ -263,7 +263,7 @@ describe("toEvaluationOutput", () => {
   test("does not collect a link after a nested same-name tag in a hidden subtree", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: '<span hidden><span>無視</span><a href="/0/cf/2026-07">収支</a></span>',
         steps: [
           {
             text: '<span hidden><span>無視</span><a href="/0/cf/2026-07">収支</a></span>',
@@ -278,7 +278,7 @@ describe("toEvaluationOutput", () => {
   test("collects an inline Markdown link with a title", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: '[2026年7月の収支](/0/cf/2026-07 "収支画面")',
         steps: [
           {
             text: '[2026年7月の収支](/0/cf/2026-07 "収支画面")',
@@ -296,7 +296,7 @@ describe("toEvaluationOutput", () => {
   test("unwraps an angle-bracket inline Markdown destination", () => {
     expect(
       toEvaluationOutput({
-        text: "",
+        text: "[2026年7月の収支](</0/cf/2026-07>)",
         steps: [
           {
             text: "[2026年7月の収支](</0/cf/2026-07>)",
@@ -396,6 +396,27 @@ describe("FinanceChatProvider", () => {
       }),
     ).resolves.toMatchObject({ error: expect.stringContaining("有効な日時") });
     expect(deps.generate).not.toHaveBeenCalled();
+  });
+
+  test("closes a cached database before opening the evaluation database", async () => {
+    const calls: string[] = [];
+    const deps = dependencies({
+      closeDb: vi.fn<ProviderDependencies["closeDb"]>(() => {
+        calls.push("close");
+      }),
+      getDb: () => {
+        calls.push("open");
+        return {} as Db;
+      },
+    });
+    const provider = new FinanceChatProvider({}, deps);
+
+    await provider.callApi("質問", {
+      prompt: {} as never,
+      vars: { evaluationDate: "2026-07-31T03:00:00.000Z" },
+    });
+
+    expect(calls).toEqual(["close", "open"]);
   });
 
   test("returns the evaluation date error when context vars are missing", async () => {

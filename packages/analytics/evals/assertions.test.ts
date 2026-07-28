@@ -532,6 +532,31 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false });
   });
 
+  test("accepts equivalent false predicates in database evidence", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE is_excluded_from_calculation IS FALSE",
+              },
+              output: { rows: [{ amount: 761 }], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            expectedDatabaseValues: ["761"],
+            requiredDatabaseQueryPatterns: [
+              "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)",
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
+  });
+
   test("requires no-data answers to be backed by an empty database result", () => {
     const config = {
       forbiddenNoDataQueryPatterns: [
@@ -1305,6 +1330,14 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextPairs: [["収支", "93341"]] } },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月の収支は93,341円です。家計は赤字です。",
+        }),
+        { config: { expectedTextPairs: [["収支", "93341"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
   });
 
   test("binds monthly values to the requested period", () => {
@@ -1543,6 +1576,23 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+    for (const title of ["2026年7月ではない食費", "2026年7月以外の食費"]) {
+      expect(
+        assertFinanceChatOutput(output({ charts: [{ ...chart, title }] }), {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+          },
+        }),
+      ).toMatchObject({ pass: false });
+    }
     expect(
       assertFinanceChatOutput(
         output({ charts: [chart], text: "食費は41,837円で、外食は99%です。" }),

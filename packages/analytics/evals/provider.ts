@@ -168,8 +168,7 @@ function getTextLinks(text: string): {
 }
 
 export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
-  const generatedText = response.steps.map((step) => step.text).join("") || response.text;
-  const text = getVisibleText(generatedText);
+  const text = getVisibleText(response.text);
   const toolResults = response.steps.flatMap((step) => step.toolResults);
   const databaseQueries = response.steps.flatMap((step) =>
     step.toolCalls.flatMap((call) => {
@@ -265,6 +264,7 @@ export default class FinanceChatProvider implements ApiProvider {
         return { error: "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。" };
       }
 
+      this.dependencies.closeDb();
       const db = this.dependencies.getDb();
       const group = await this.dependencies.getCurrentGroup(db);
       if (!group) return { error: "評価用demo.dbに現在のグループがありません。" };

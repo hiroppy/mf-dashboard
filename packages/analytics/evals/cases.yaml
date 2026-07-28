@@ -18,8 +18,8 @@
           - "(?:\\bdate\\b\\s+like\\s*['\"]2026-07%|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\)\\s*=\\s*['\"]?2026-07|\\bdate\\b\\s*(?:<|<=)\\s*['\"]?2026-08)"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
-          - "\\bis_internal_transfer\\b\\s*=\\s*(?:0|false)"
-          - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
+          - "(?:\\bis_internal_transfer\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_internal_transfer\\b)"
+          - "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)"
           - "\\btype\\b[^;]{0,240}['\"]transfer"
           - "\\bgroup_accounts\\b"
           - "\\baccount_id\\b"
@@ -63,7 +63,7 @@
           - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
           - "\\bsum\\s*\\("
-          - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
+          - "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)"
         expectedTextPairs:
           - [食費, "41837"]
         expectedScopedTextPairs:
@@ -107,7 +107,7 @@
           - "\\bcategory\\b\\s*(?:=|like|in)[^;]{0,80}食費"
           - "\\btype\\b\\s*=\\s*['\"]?expense"
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
-          - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
+          - "(?:\\bis_excluded_from_calculation\\b\\s*(?:=\\s*(?:0|false)|is\\s+(?:false|not\\s+true))|\\bnot\\s+\\bis_excluded_from_calculation\\b)"
         expectedMarkdownRows:
           - ["2026-07-03", サンマルクカフェ, "761"]
         expectedMarkdownHeader: [日付, 内容, 金額]

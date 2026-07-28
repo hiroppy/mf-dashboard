@@ -203,7 +203,7 @@ function hasContradictoryBalanceConclusion(
     .split(/[。！？\n]/)
     .some(
       (clause) =>
-        /(?:全体|収支|差額|結果)(?:では|は|が|として)?/.test(clause) &&
+        /(?:全体|収支|差額|結果|家計|今月)(?:では|は|が|として)?/.test(clause) &&
         contradictoryTerms.some((term) => hasAffirmedFact(clause, term)),
     );
 }
@@ -320,7 +320,10 @@ function hasEquivalentChartTitle(actual: string, expected: string): boolean {
     .replace(/(?:の|内訳|推移|グラフ|チャート|比較)/g, "");
   const normalizedActual = normalize(actual);
   return (
-    periods.every((period) => normalizedActual.includes(normalize(period))) &&
+    periods.every(
+      (period) =>
+        hasAffirmedFact(actual, period) && !normalizedActual.includes(`${normalize(period)}以外`),
+    ) &&
     subject.length > 0 &&
     normalizedActual.includes(subject)
   );
