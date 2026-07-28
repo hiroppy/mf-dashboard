@@ -345,6 +345,32 @@ function sameValues(actual: string[], expected: string[]): boolean {
   return JSON.stringify(sortedActual) === JSON.stringify(sortedExpected);
 }
 
+function getTopLevelSelectStatement(sql: string): string {
+  let depth = 0;
+  let inString = false;
+  let selectIndex = -1;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index]!;
+    if (character === "'") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    if (
+      depth === 0 &&
+      /^select\b/i.test(sql.slice(index)) &&
+      !/[a-z0-9_]/i.test(sql[index - 1] ?? "")
+    ) {
+      selectIndex = index;
+    }
+  }
+
+  return selectIndex === -1 ? sql : sql.slice(selectIndex);
+}
+
 function matchesDatabaseQuery(
   input: unknown,
   requiredPatterns: string[],
@@ -381,8 +407,14 @@ function matchesDatabaseQuery(
       }
     }
   }
-  const matches = (pattern: string) => new RegExp(pattern, "i").test(executableSql);
-  return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
+  const topLevelSelect = getTopLevelSelectStatement(executableSql);
+  const requiredPatternSource = /\b(?:from|join)\s+transactions\b/i.test(topLevelSelect)
+    ? topLevelSelect
+    : executableSql;
+  return (
+    requiredPatterns.every((pattern) => new RegExp(pattern, "i").test(requiredPatternSource)) &&
+    !forbiddenPatterns.some((pattern) => new RegExp(pattern, "i").test(executableSql))
+  );
 }
 
 function getAggregateResultKeys(sql: string, classification: string): string[] {
@@ -593,6 +625,7 @@ function getDatabaseRows(
   requiredAggregateAliases: string[] = [],
 ): Array<Record<string, unknown>> {
   const matchedAliases = new Set<string>();
+  const aggregateEvidenceRows: Array<Record<string, unknown>> = [];
   const rows = queries.flatMap(({ input, output }) => {
     if (!matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) return [];
     const query = databaseQueryInputSchema.safeParse(input);
@@ -606,10 +639,9 @@ function getDatabaseRows(
     );
     const aliases = requiredAggregateAliases.filter((alias) => resultKeys.get(alias)!.length > 0);
     if (requiredAggregateAliases.length > 0 && aliases.length === 0) return [];
-    aliases.forEach((alias) => matchedAliases.add(alias));
     const result = databaseResultSchema.safeParse(output);
     if (!result.success || result.data.truncated === true) return [];
-    return result.data.rows.map((row) => {
+    const canonicalRows = result.data.rows.map((row) => {
       const canonical = { ...row };
       for (const [alias, keys] of resultKeys) {
         const entry = Object.entries(row).find(([key]) =>
@@ -619,9 +651,23 @@ function getDatabaseRows(
       }
       return canonical;
     });
+    const onlyRow = canonicalRows.length === 1 ? canonicalRows[0] : undefined;
+    if (onlyRow) {
+      const evidence: Record<string, unknown> = {};
+      for (const alias of aliases) {
+        if (alias in onlyRow) {
+          evidence[alias] = onlyRow[alias];
+          matchedAliases.add(alias);
+        }
+      }
+      if (Object.keys(evidence).length > 0) aggregateEvidenceRows.push(evidence);
+    }
+    return canonicalRows;
   });
   if (requiredAggregateAliases.some((alias) => !matchedAliases.has(alias))) return [];
-  return rows.length > 1 ? [...rows, Object.assign({}, ...rows)] : rows;
+  return aggregateEvidenceRows.length > 1
+    ? [...rows, Object.assign({}, ...aggregateEvidenceRows)]
+    : rows;
 }
 
 function getDisplayedAmounts(text: string): string[] {

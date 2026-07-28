@@ -414,6 +414,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "WITH scoped AS (SELECT amount FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId) SELECT SUM(income) AS income, SUM(expense) AS expense FROM transactions",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId UNION ALL SELECT SUM(income), SUM(expense) FROM transactions",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
@@ -556,6 +571,30 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT category, amount FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: {
+                rows: [{ category: "食料品" }, { amount: 24_833 }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        {
+          config: {
+            expectedDatabaseRows: [["食料品", "24833"]],
+            expectedDatabaseValues: ["食料品", "24833"],
+            requiredDatabaseQueryPatterns: ["transactions", "2026-07", ":groupId"],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
   });
 
   test("accepts equivalent false predicates in database evidence", () => {
