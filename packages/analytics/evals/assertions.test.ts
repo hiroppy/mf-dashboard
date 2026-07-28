@@ -547,6 +547,11 @@ describe("assertFinanceChatOutput", () => {
       "is_transfer = 1",
       "is_internal_transfer = 1",
       "is_excluded_from_calculation = true",
+      "is_internal_transfer <> 0",
+      "is_transfer IS TRUE",
+      "is_excluded_from_calculation != 0",
+      "is_internal_transfer > 0",
+      "is_transfer IS NOT FALSE",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -1225,6 +1230,16 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "2026年6月の食費合計は41,837円です。" }), {
+        config: {
+          expectedScopedTextPairs: {
+            scopeFact: "2026年7月",
+            pairs: [["食費", "41837"]],
+          },
+        },
+      }),
+    ).toMatchObject({ pass: false });
   });
 
   test("accepts a value after a repeated heading label", () => {

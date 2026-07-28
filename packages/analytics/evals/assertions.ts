@@ -1024,7 +1024,7 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   const allowedDateFunctions = new Set(["strftime", "substr"]);
   const whereSql = whereClause[1]!;
   if (
-    /\b(?:is_transfer|is_internal_transfer|is_excluded_from_calculation)\b\s*=\s*(?:1|true)\b/i.test(
+    /\b(?:is_transfer|is_internal_transfer|is_excluded_from_calculation)\b\s*(?:(?:=|\bis\b)\s*(?:1|true)\b|(?:!=|<>)\s*(?:0|false)\b|(?:>=|>)\s*0\b|\bis\s+not\s+(?:0|false)\b)/i.test(
       whereSql,
     )
   ) {

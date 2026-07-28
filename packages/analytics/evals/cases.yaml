@@ -66,6 +66,10 @@
           - "\\bis_excluded_from_calculation\\b\\s*=\\s*(?:0|false)"
         expectedTextPairs:
           - [食費, "41837"]
+        expectedScopedTextPairs:
+          scopeFact: "2026年7月"
+          pairs:
+            - [食費, "41837"]
         allowOnlyGroundedAmounts: true
         groundPercentagesInCharts: true
         validateChartAmounts: true
