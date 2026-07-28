@@ -86,7 +86,8 @@ function getFactualText(text: string): string {
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
     .replace(/(?<!\\)~~(?=\S)[\s\S]*?\S~~/g, "")
-    .replace(/`[^`\n]*`/g, "");
+    .replace(/`[^`\n]*`/g, "")
+    .replace(/<[^>]*>/g, "");
 }
 
 function getMissingTextPairs(
@@ -251,13 +252,20 @@ function matchesDatabaseQuery(
 }
 
 function hasContradictoryEqualityPredicates(sql: string): boolean {
-  const valuesByColumn = new Map<string, Set<string>>();
-  for (const match of sql.matchAll(/\b([a-z_][a-z0-9_.]*)\s*=\s*'([^']*)'/gi)) {
-    const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
-    const values = valuesByColumn.get(column) ?? new Set<string>();
-    values.add(match[2]!);
-    if (values.size > 1) return true;
-    valuesByColumn.set(column, values);
+  const clauses = [
+    ...sql.matchAll(
+      /\b(?:where|having)\b([\s\S]*?)(?=\b(?:group\s+by|order\s+by|limit|union|where|having)\b|$)/gi,
+    ),
+  ].map((match) => match[1]!);
+  for (const branch of clauses.flatMap((clause) => clause.split(/\bor\b/i))) {
+    const valuesByColumn = new Map<string, Set<string>>();
+    for (const match of branch.matchAll(/\b([a-z_][a-z0-9_.]*)\s*=\s*'([^']*)'/gi)) {
+      const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
+      const values = valuesByColumn.get(column) ?? new Set<string>();
+      values.add(match[2]!);
+      if (values.size > 1) return true;
+      valuesByColumn.set(column, values);
+    }
   }
   return false;
 }
@@ -352,7 +360,15 @@ function getDisplayedAmounts(text: string): string[] {
     .map((match) => parseKanjiNumber(match[1]!))
     .filter((value) => value > 0)
     .map(String);
-  return [...digitAmounts, ...kanjiAmounts];
+  const bareAmounts = [
+    ...normalizedText.matchAll(
+      /(?:収入|支出|収支|予算|目安|残高|金額|資産|負債|費用|所得)(?:は|が|[:：])?\s*([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)(?![\d,.])(?!\s*(?:円|億|万|千|件|回|%|パーセント|年|月|日))/g,
+    ),
+  ].map((match) => {
+    const sign = match[1] === "-" || match[1] === "▲" || match[1] === "△" || match[2] ? -1 : 1;
+    return String(Number(match[3]!.replaceAll(",", "")) * sign);
+  });
+  return [...digitAmounts, ...kanjiAmounts, ...bareAmounts];
 }
 
 function parseKanjiNumber(value: string): number {

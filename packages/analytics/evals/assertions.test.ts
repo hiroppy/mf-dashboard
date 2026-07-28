@@ -60,6 +60,14 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: '<span title="2026年7月の収入は313,235円です。"></span>',
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("requires expected facts to be backed by database results", () => {
@@ -144,6 +152,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT SUM(income), SUM(expense) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income, SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
             },
@@ -529,6 +552,14 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収入は313,235円、予算は999999です。" }), {
+        config: {
+          allowOnlyGroundedAmounts: true,
+          expectedTextPairs: [["収入", "313235"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("999999") });
   });
 
   test("compares chart values by label without requiring data order", () => {
@@ -770,6 +801,11 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
     expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は一万円です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は999999です。" }), {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
