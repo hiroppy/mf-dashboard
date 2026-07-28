@@ -1233,6 +1233,22 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円、支出は219,894円、収支は93,341円です。全体では赤字です。",
+        }),
+        { config: { expectedTextPairs: [["収支", "93341"]] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収支は93,341円です。全体では赤字ではなく黒字です。",
+        }),
+        { config: { expectedTextPairs: [["収支", "93341"]] } },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("binds monthly values to the requested period", () => {

@@ -190,6 +190,24 @@ function getMissingTextPairs(
   });
 }
 
+function hasContradictoryBalanceConclusion(
+  text: string,
+  expectedPairs: Array<[string, string]>,
+): boolean {
+  const balance = expectedPairs.find(([label]) => normalize(label) === "収支");
+  if (!balance) return false;
+  const value = Number(normalize(balance[1]));
+  if (!Number.isFinite(value) || value === 0) return false;
+  const contradictoryTerms = value > 0 ? ["赤字", "マイナス"] : ["黒字", "プラス"];
+  return text
+    .split(/[。！？\n]/)
+    .some(
+      (clause) =>
+        /(?:全体|収支|差額|結果)(?:では|は|が|として)?/.test(clause) &&
+        contradictoryTerms.some((term) => hasAffirmedFact(clause, term)),
+    );
+}
+
 function getTextScopes(text: string, fact: string): string[] {
   const normalizedFact = normalize(fact);
   const lines = text.split("\n");
@@ -1155,6 +1173,9 @@ export default function assertFinanceChatOutput(
     return fail(
       `本文のラベルと値が一致しません: ${missingPairs.map((pair) => pair.join("=")).join(", ")}`,
     );
+  }
+  if (hasContradictoryBalanceConclusion(factualText, config.expectedTextPairs ?? [])) {
+    return fail("本文の収支金額と黒字・赤字の結論が矛盾しています。");
   }
 
   const scopedPairs = config.expectedScopedTextPairs;
