@@ -89,7 +89,13 @@ function hasAffirmedFact(text: string, fact: string): boolean {
   let factIndex = normalizedText.indexOf(normalizedFact);
   while (factIndex !== -1) {
     const suffix = normalizedText.slice(factIndex + normalizedFact.length);
-    if (!/^(?:ではなく|ではありません|でない|じゃない)/.test(suffix)) return true;
+    if (
+      !/^(?:(?:の|についての)?(?:結果|対象|期間|データ|内容))?(?:ではなく|ではありません|でない|じゃない)/.test(
+        suffix,
+      )
+    ) {
+      return true;
+    }
     factIndex = normalizedText.indexOf(normalizedFact, factIndex + normalizedFact.length);
   }
   return false;
@@ -102,6 +108,8 @@ function getFactualText(text: string): string {
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/^\s*\[[^\]]+]:\s*\S+.*$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
+    .replace(/(?<![!\\])\[([^\]]+)]\((?:[^()"']|\([^)]*\)|"[^"]*"|'[^']*')*\)/g, "$1")
+    .replace(/(?<![!\\])\[([^\]]+)]\[[^\]]*]/g, "$1")
     .replace(/(?<!\\)~~(?=\S)([\s\S]*?\S)~~/g, "$1")
     .replace(/`([^`\n]*)`/g, "$1")
     .replace(/<[^>]*>/g, "");
@@ -289,7 +297,6 @@ function matchesDatabaseQuery(
   input: unknown,
   requiredPatterns: string[],
   forbiddenPatterns: string[],
-  requiredAggregateAliases: string[] = [],
 ): boolean {
   const query = databaseQueryInputSchema.safeParse(input);
   if (!query.success) return false;
@@ -297,11 +304,7 @@ function matchesDatabaseQuery(
   const executableSql = getExecutableSql(query.data.sql).replace(/(?<=\d)_(?=\d)/g, "");
   if (hasContradictoryEqualityPredicates(executableSql)) return false;
   const matches = (pattern: string) => new RegExp(pattern, "i").test(executableSql);
-  return (
-    requiredPatterns.every(matches) &&
-    !forbiddenPatterns.some(matches) &&
-    hasRequiredAggregateAliases(executableSql, requiredAggregateAliases)
-  );
+  return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
 }
 
 function hasRequiredAggregateAliases(sql: string, aliases: string[]): boolean {
@@ -339,6 +342,15 @@ function hasRequiredAggregateAliases(sql: string, aliases: string[]): boolean {
         )
       );
     }),
+  );
+}
+
+function hasAggregateAliasEvidence(sql: string, alias: string): boolean {
+  if (!hasRequiredAggregateAliases(sql, [alias])) return false;
+  const quotedAlias = `(?:"${alias}"|\`${alias}\`|\\[${alias}\\]|${alias})`;
+  return (
+    new RegExp(`\\bsum\\s*\\(\\s*(?:[a-z_][a-z0-9_]*\\.)?${quotedAlias}\\s*\\)`, "i").test(sql) ||
+    new RegExp(`\\btype\\b[^;]{0,240}['"]${alias}`, "i").test(sql)
   );
 }
 
@@ -517,15 +529,22 @@ function getDatabaseRows(
   forbiddenPatterns: string[],
   requiredAggregateAliases: string[] = [],
 ): Array<Record<string, unknown>> {
-  return queries.flatMap(({ input, output }) => {
-    if (
-      !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns, requiredAggregateAliases)
-    ) {
-      return [];
-    }
+  const matchedAliases = new Set<string>();
+  const rows = queries.flatMap(({ input, output }) => {
+    if (!matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) return [];
+    const query = databaseQueryInputSchema.safeParse(input);
+    if (!query.success) return [];
+    const executableSql = getExecutableSql(query.data.sql);
+    const aliases = requiredAggregateAliases.filter((alias) =>
+      hasAggregateAliasEvidence(executableSql, alias),
+    );
+    if (requiredAggregateAliases.length > 0 && aliases.length === 0) return [];
+    aliases.forEach((alias) => matchedAliases.add(alias));
     const result = databaseResultSchema.safeParse(output);
     return result.success && result.data.truncated !== true ? result.data.rows : [];
   });
+  if (requiredAggregateAliases.some((alias) => !matchedAliases.has(alias))) return [];
+  return rows.length > 1 ? [...rows, Object.assign({}, ...rows)] : rows;
 }
 
 function getDisplayedAmounts(text: string): string[] {
@@ -544,11 +563,11 @@ function getDisplayedAmounts(text: string): string[] {
   const normalizedText = text.normalize("NFKC");
   const digitAmounts = [
     ...normalizedText.matchAll(
-      /(¥\s*)?([▲△+-]?)(\(?)((?:\d[\d,]*(?:\.\d+)?\s*(?:億|万|千)\s*)*\d[\d,]*(?:\.\d+)?(?:\s*(?:億|万|千))?)\)?\s*(円)?/g,
+      /(?:(マイナス|赤字)\s*)?(¥\s*)?([▲△+-]?)(\(?)((?:\d[\d,]*(?:\.\d+)?\s*(?:億|万|千)\s*)*\d[\d,]*(?:\.\d+)?(?:\s*(?:億|万|千))?)\)?\s*(円)?/g,
     ),
   ]
     .map((match) => {
-      const [, currency, marker, openingParenthesis, value, yen] = match;
+      const [, textualSign, currency, marker, openingParenthesis, value, yen] = match;
       const prefix = normalizedText.slice(0, match.index);
       const followsMonetaryLabel =
         /(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:合計)?(?:は|が|[:：])$/.test(
@@ -556,7 +575,9 @@ function getDisplayedAmounts(text: string): string[] {
         );
       if (!currency && !yen && !/[億万千]\s*$/.test(value!) && !followsMonetaryLabel) return "";
       const sign =
-        marker === "-" || marker === "▲" || marker === "△" || openingParenthesis ? -1 : 1;
+        textualSign || marker === "-" || marker === "▲" || marker === "△" || openingParenthesis
+          ? -1
+          : 1;
       return value ? String(parseDigitAmount(value) * sign) : "";
     })
     .filter(Boolean);
@@ -567,11 +588,12 @@ function getDisplayedAmounts(text: string): string[] {
     .map(String);
   const bareAmounts = [
     ...normalizedText.matchAll(
-      /(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:は|が|[:：])?\s*([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)(?![\d,.])(?!\s*(?:円|億|万|千|件|回|%|パーセント|年|月|日))/g,
+      /(?:収入|支出|収支|食費|予算|目安|残高|金額|資産|負債|費用|所得)(?:は|が|[:：])?\s*(?:(マイナス|赤字)\s*)?([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)(?![\d,.])(?!\s*(?:円|億|万|千|件|回|%|パーセント|年|月|日))/g,
     ),
   ].map((match) => {
-    const sign = match[1] === "-" || match[1] === "▲" || match[1] === "△" || match[2] ? -1 : 1;
-    return String(Number(match[3]!.replaceAll(",", "")) * sign);
+    const sign =
+      match[1] || match[2] === "-" || match[2] === "▲" || match[2] === "△" || match[3] ? -1 : 1;
+    return String(Number(match[4]!.replaceAll(",", "")) * sign);
   });
   return [...digitAmounts, ...kanjiAmounts, ...bareAmounts];
 }
@@ -734,7 +756,7 @@ function hasInvalidChartComparison(text: string, charts: FinanceChart[]): boolea
     const maximum = Math.max(...values);
     const minimum = Math.min(...values);
 
-    return chart.data.some(({ label }, index) => {
+    const hasInvalidExtremum = chart.data.some(({ label }, index) => {
       const escapedLabel = normalize(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const maximumClaim = new RegExp(
         `${escapedLabel}(?:が|は)(?:(?:最も|一番)(?:多い|大きい|高い)|最多|最大)`,
@@ -753,6 +775,25 @@ function hasInvalidChartComparison(text: string, charts: FinanceChart[]): boolea
         ((minimumClaim || comparisonFirstMinimum) && values[index] !== minimum)
       );
     });
+    if (hasInvalidExtremum) return true;
+
+    return chart.data.some(({ label, values: leftValues }, leftIndex) =>
+      chart.data.some(({ label: rightLabel, values: rightValues }, rightIndex) => {
+        if (leftIndex === rightIndex) return false;
+        const left = normalize(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const right = normalize(rightLabel).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const greater = new RegExp(`${left}(?:が|は)${right}より(?:多い|大きい|高い)`).test(
+          normalizedText,
+        );
+        const lesser = new RegExp(`${left}(?:が|は)${right}より(?:少ない|小さい|低い)`).test(
+          normalizedText,
+        );
+        return (
+          (greater && (leftValues[0] ?? 0) <= (rightValues[0] ?? 0)) ||
+          (lesser && (leftValues[0] ?? 0) >= (rightValues[0] ?? 0))
+        );
+      }),
+    );
   });
 }
 
@@ -773,7 +814,7 @@ function contradictsNoDataConclusion(text: string, facts: string[]): boolean {
   const positiveClauses = text
     .split(/[。！？\n]/)
     .filter((clause) =>
-      /(?:データ|明細|記録|取引)[^。！？\n]{0,20}(?:あります|存在します|見つかりました|確認できました)/.test(
+      /(?:データ|明細|記録|取引|支出|収入|金額|残高)[^。！？\n]{0,20}(?:あります|ありました|存在します|存在しました|見つかりました|確認できました)/.test(
         clause,
       ),
     );

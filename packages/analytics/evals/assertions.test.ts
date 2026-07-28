@@ -44,6 +44,11 @@ describe("assertFinanceChatOutput", () => {
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("事実") });
     expect(
+      assertFinanceChatOutput(output({ text: "# 2026年7月の結果ではありません" }), {
+        config: { expectedTextFacts: ["2026年7月"] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("事実") });
+    expect(
       assertFinanceChatOutput(
         output({
           text: "収入は `313,235円`、支出は `219,894円`、収支は `93,341円`です。",
@@ -104,6 +109,14 @@ describe("assertFinanceChatOutput", () => {
       assertFinanceChatOutput(
         output({
           text: "<span hidden>2026年7月の収入は313,235円です。</span>",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: '[結果を見る](https://example.com/2026年7月 "収入は313,235円")',
         }),
         { config },
       ),
@@ -255,6 +268,27 @@ describe("assertFinanceChatOutput", () => {
                 sql: "SELECT SUM(income), SUM(expense) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS income FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId AND type = 'income'",
+              },
+              output: { rows: [{ income: 313_235 }], truncated: false },
+            },
+            {
+              input: {
+                sql: "SELECT SUM(amount) AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId AND type = 'expense'",
+              },
+              output: { rows: [{ expense: 219_894 }], truncated: false },
             },
           ],
         }),
@@ -1297,6 +1331,25 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("比較") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円で、外食は食料品より多いです。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            validateChartComparisons: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("比較") });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -1508,6 +1561,16 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: true });
     expect(
+      assertFinanceChatOutput(output({ text: "収支はマイナス93,341円です。" }), {
+        config: { expectedTextPairs: [["収支", "93341"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("収支=93341") });
+    expect(
+      assertFinanceChatOutput(output({ text: "収支は赤字93,341円です。" }), {
+        config: { expectedTextPairs: [["収支", "93341"]] },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("収支=93341") });
+    expect(
       assertFinanceChatOutput(output({ text: "資産は1億2,500万円です。" }), {
         config: {
           allowOnlyGroundedAmounts: true,
@@ -1531,6 +1594,12 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "2030年1月の食費データはありません。しかし、食費の支出がありました。" }),
+        { config: { expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
   });
 
   test("rejects advice to share household data externally", () => {

@@ -100,7 +100,7 @@ describe("toEvaluationOutput", () => {
     ).toBe("途中の表示。最終回答");
   });
 
-  test("collects a visible bare dashboard route", () => {
+  test("does not treat a bare dashboard route as a rendered link", () => {
     expect(
       toEvaluationOutput({
         text: "unused final text",
@@ -112,7 +112,7 @@ describe("toEvaluationOutput", () => {
           },
         ],
       }).textLinks,
-    ).toEqual(["/0/cf/2026-07"]);
+    ).toEqual([]);
   });
 
   test("removes text and links hidden in HTML comments", () => {

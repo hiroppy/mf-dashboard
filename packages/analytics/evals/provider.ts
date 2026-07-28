@@ -154,10 +154,6 @@ function getTextLinks(text: string): {
   const rawUrls = [...scannableText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  const routeText = scannableText.replace(/<[^>]*>/g, "");
-  const bareRoutes = [...routeText.matchAll(/(?<![:\w])\/[^\s<>()\]]+/g)]
-    .map((match) => match[0].replace(/[.,。、!?！？]+$/, ""))
-    .filter((route) => financeChatHrefSchema.safeParse(route).success);
   return {
     labels: [...markdownLinks, ...htmlLinks, ...referenceLinks, ...shortcutReferenceLinks],
     links: unique([
@@ -167,7 +163,6 @@ function getTextLinks(text: string): {
       ...shortcutReferenceLinks.map(({ href }) => href),
       ...autoLinks,
       ...rawUrls,
-      ...bareRoutes,
     ]),
   };
 }
