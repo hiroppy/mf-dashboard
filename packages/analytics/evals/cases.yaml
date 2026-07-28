@@ -145,7 +145,7 @@
       value: file://./assertions.ts
       config:
         expectedTextPatterns:
-          - "(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません|確認できませんでした)"
+          - "(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません|確認できません(?:でした)?)"
         expectedNoDataTextFacts: ["2030年1月", 食費]
         forbidAmounts: true
         requireNoDataEvidence: true

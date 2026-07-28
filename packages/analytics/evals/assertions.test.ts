@@ -582,6 +582,7 @@ describe("assertFinanceChatOutput", () => {
       "is_excluded_from_calculation != 0",
       "is_internal_transfer > 0",
       "is_transfer IS NOT FALSE",
+      "substr(date, 1, 7) = '2026-07'",
     ]) {
       expect(
         assertFinanceChatOutput(
@@ -892,6 +893,38 @@ describe("assertFinanceChatOutput", () => {
         { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
       ),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月の食費データは確認できません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月と2030年1月の食費について。データはありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND type = 'expense' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期間") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -1653,6 +1686,15 @@ describe("assertFinanceChatOutput", () => {
         config: {
           expectedMarkdownHeader: ["日付", "内容", "金額"],
           expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: text.replace("2026-07-03", "2026年7月3日") }), {
+        config: {
+          expectedMarkdownHeader: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+          requireExactMarkdownRows: true,
         },
       }),
     ).toMatchObject({ pass: true });

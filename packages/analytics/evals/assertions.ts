@@ -243,13 +243,21 @@ function getTextScopes(text: string, fact: string): string[] {
   return scopes;
 }
 
+function normalizeMarkdownCell(cell: string): string {
+  return normalize(cell)
+    .replace(/円$/, "")
+    .replace(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/, (_, year, month, day) =>
+      [year, month.padStart(2, "0"), day.padStart(2, "0")].join("-"),
+    );
+}
+
 function parseMarkdownRow(line: string): string[] | null {
   if (!line.includes("|")) return null;
 
   return line
     .replace(/^\s*\||\|\s*$/g, "")
     .split("|")
-    .map((cell) => normalize(cell).replace(/円$/, ""));
+    .map(normalizeMarkdownCell);
 }
 
 interface MarkdownTable {
@@ -293,7 +301,7 @@ function hasExpectedRow(
   expectedRow: string[],
   requireExactMatch: boolean,
 ): boolean {
-  const expectedCells = expectedRow.map((cell) => normalize(cell).replace(/円$/, ""));
+  const expectedCells = expectedRow.map(normalizeMarkdownCell);
   return actualRows.some((row) => {
     if (requireExactMatch) return JSON.stringify(row) === JSON.stringify(expectedCells);
     return expectedCells.every((expectedCell) => row.includes(expectedCell));
@@ -932,7 +940,7 @@ function hasScopedNoDataStatement(text: string, facts: string[]): boolean {
     const clauses = paragraph.split(/[。！？]/).filter(Boolean);
     return clauses.some((clause, index) => {
       if (
-        !/(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません|確認できませんでした)/.test(
+        !/(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません|確認できません(?:でした)?)/.test(
           clause,
         )
       ) {
@@ -949,7 +957,7 @@ function hasScopedNoDataStatement(text: string, facts: string[]): boolean {
       if (!facts.every((fact) => hasUnnegatedScopeFact(scope, fact))) return false;
 
       const expectedPeriods = facts.filter((fact) => /\d{4}年\d{1,2}月/.test(fact)).map(normalize);
-      const claimedPeriods = [...clause.matchAll(/\d{4}年\d{1,2}月/g)].map((match) =>
+      const claimedPeriods = [...scope.matchAll(/\d{4}年\d{1,2}月/g)].map((match) =>
         normalize(match[0]),
       );
       return claimedPeriods.every((period) => expectedPeriods.includes(period));
@@ -1046,6 +1054,19 @@ function hasUnexpectedNoDataPredicate(input: unknown): boolean {
   ]);
   const allowedDateFunctions = new Set(["strftime", "substr"]);
   const whereSql = whereClause[1]!;
+  const directMonths = new Set(
+    [...whereSql.matchAll(/\bdate\b\s*(?:>=|>|=|like|between)\s*['"](\d{4}-\d{2})/gi)].map(
+      (match) => match[1]!,
+    ),
+  );
+  const functionMonths = [
+    ...whereSql.matchAll(
+      /\b(?:substr|strftime)\s*\([^)]*\bdate\b[^)]*\)\s*=\s*['"](\d{4}-\d{2})['"]/gi,
+    ),
+  ].map((match) => match[1]!);
+  if (directMonths.size > 0 && functionMonths.some((month) => !directMonths.has(month))) {
+    return true;
+  }
   if (
     /\b(?:is_transfer|is_internal_transfer|is_excluded_from_calculation)\b\s*(?:(?:=|\bis\b)\s*(?:1|true)\b|(?:!=|<>)\s*(?:0|false)\b|(?:>=|>)\s*0\b|\bis\s+not\s+(?:0|false)\b)/i.test(
       whereSql,
