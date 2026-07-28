@@ -142,6 +142,7 @@
           - "\\bfalse\\b"
           - "\\blimit\\b"
           - "\\b(?:where|and)\\s+(?:0|null|false)\\b"
+          - "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)"
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []

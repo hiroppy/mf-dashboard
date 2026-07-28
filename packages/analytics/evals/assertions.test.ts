@@ -84,6 +84,14 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "<span hidden>2026年7月の収入は313,235円です。</span>",
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("requires expected facts to be backed by database results", () => {
@@ -243,7 +251,11 @@ describe("assertFinanceChatOutput", () => {
 
   test("requires no-data answers to be backed by an empty database result", () => {
     const config = {
-      forbiddenNoDataQueryPatterns: ["\\b1\\s*=\\s*0\\b", "\\blimit\\b"],
+      forbiddenNoDataQueryPatterns: [
+        "\\b1\\s*=\\s*0\\b",
+        "\\blimit\\b",
+        "\\bamount\\b\\s*(?:<=|<|=|>|>=|between|in|like)",
+      ],
       requiredNoDataQueryPatterns: [
         "\\btransactions\\b",
         "(?:\\bdate\\b|\\b(?:substr|strftime)\\s*\\([^)]*\\bdate\\b[^)]*\\))\\s*(?:>=|>|=|like|between)[^;]{0,80}2030-01",
@@ -275,6 +287,21 @@ describe("assertFinanceChatOutput", () => {
             {
               input: {
                 sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND category = '不存在' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId AND amount < 0",
               },
               output: { rows: [], truncated: false },
             },
