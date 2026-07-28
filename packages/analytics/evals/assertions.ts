@@ -297,12 +297,11 @@ function getDisplayedAmounts(text: string): string[] {
     return 1;
   };
 
-  return [
-    ...text
-      .normalize("NFKC")
-      .matchAll(
-        /(?:(?:¥\s*)?([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?\s*((?:億|万|千)?円)|¥\s*([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?)/g,
-      ),
+  const normalizedText = text.normalize("NFKC");
+  const digitAmounts = [
+    ...normalizedText.matchAll(
+      /(?:(?:¥\s*)?([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?\s*((?:億|万|千)円?|円)|¥\s*([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?)/g,
+    ),
   ]
     .map((match) => {
       const marker = match[1] ?? match[5];
@@ -314,6 +313,52 @@ function getDisplayedAmounts(text: string): string[] {
       return value ? String(Number(value.replaceAll(",", "")) * factor * sign) : "";
     })
     .filter(Boolean);
+  const kanjiAmounts = [
+    ...normalizedText.matchAll(/(?<![\d.])([〇一二三四五六七八九十百千万億]+)円/g),
+  ]
+    .map((match) => parseKanjiNumber(match[1]!))
+    .filter((value) => value > 0)
+    .map(String);
+  return [...digitAmounts, ...kanjiAmounts];
+}
+
+function parseKanjiNumber(value: string): number {
+  const digits: Record<string, number> = {
+    〇: 0,
+    一: 1,
+    二: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+  };
+  const smallUnits: Record<string, number> = { 十: 10, 百: 100, 千: 1_000 };
+  const largeUnits: Record<string, number> = { 万: 10_000, 億: 100_000_000 };
+  let total = 0;
+  let section = 0;
+  let digit = 0;
+
+  for (const character of value) {
+    if (character in digits) {
+      digit = digits[character]!;
+      continue;
+    }
+    if (character in smallUnits) {
+      section += (digit || 1) * smallUnits[character]!;
+      digit = 0;
+      continue;
+    }
+    if (character in largeUnits) {
+      total += (section + digit || 1) * largeUnits[character]!;
+      section = 0;
+      digit = 0;
+    }
+  }
+
+  return total + section + digit;
 }
 
 function getDisplayedPercentages(text: string): number[] {

@@ -612,6 +612,16 @@ describe("assertFinanceChatOutput", () => {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は1万くらいです。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は一万円です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
   });
 
   test("normalizes compact yen units for grounded amount checks", () => {
