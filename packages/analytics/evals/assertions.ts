@@ -14,6 +14,11 @@ interface ScopedTextPairsExpectation {
   scopeFact: string;
 }
 
+interface TextLinkLabelExpectation {
+  href: string;
+  pattern: string;
+}
+
 interface AssertionContext {
   config?: {
     allowOnlyGroundedAmounts?: boolean;
@@ -23,6 +28,7 @@ interface AssertionContext {
     expectedMarkdownRows?: string[][];
     expectedScopedTextPairs?: ScopedTextPairsExpectation;
     expectedTextFacts?: string[];
+    expectedTextLinkLabels?: TextLinkLabelExpectation[];
     expectedTextLinks?: string[];
     expectedTextPairs?: Array<[string, string]>;
     expectedTextPatterns?: string[];
@@ -31,10 +37,12 @@ interface AssertionContext {
     forbiddenNoDataQueryPatterns?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    groundPercentagesInCharts?: boolean;
     requiredDatabaseQueryPatterns?: string[];
     requiredNoDataQueryPatterns?: string[];
     requireExactMarkdownRows?: boolean;
     requireNoDataEvidence?: boolean;
+    validateChartComparisons?: boolean;
   };
 }
 
@@ -48,6 +56,7 @@ const evaluationOutputSchema = z.object({
   text: z.string(),
   charts: z.array(financeChartSchema),
   databaseQueries: z.array(z.object({ input: z.unknown(), output: z.unknown() })),
+  textLinkLabels: z.array(z.object({ href: z.string(), label: z.string() })),
   toolRoutes: z.array(z.string()),
   textLinks: z.array(z.string()),
 });
@@ -87,9 +96,11 @@ function getMissingTextPairs(
         return candidateIndex === -1 ? nearest : Math.min(nearest, candidateIndex);
       }, normalizedText.length);
       const segment = normalizedText.slice(valueStart, valueEnd);
+      const displayedAmounts = getDisplayedAmounts(segment);
       const hasValue = /^\d+$/.test(normalizedValue)
-        ? new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment) ||
-          getDisplayedAmounts(segment).includes(normalizedValue)
+        ? displayedAmounts.length > 0
+          ? displayedAmounts.includes(normalizedValue)
+          : new RegExp(`(?<![\\d▲△(\\-])${normalizedValue}(?!\\d)`).test(segment)
         : segment.includes(normalizedValue);
       if (hasValue) return false;
 
@@ -230,15 +241,66 @@ function getDisplayedAmounts(text: string): string[] {
     ...text
       .normalize("NFKC")
       .matchAll(
-        /(?:¥\s*([+-]?\d[\d,]*(?:\.\d+)?)\s*((?:億|万|千)?円)?|([+-]?\d[\d,]*(?:\.\d+)?)\s*((?:億|万|千)?円))/g,
+        /(?:(?:¥\s*)?([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?\s*((?:億|万|千)?円)|¥\s*([▲△+-]?)(\(?)(\d[\d,]*(?:\.\d+)?)\)?)/g,
       ),
   ]
     .map((match) => {
-      const value = match[1] ?? match[3];
-      const unit = match[2] ?? match[4];
-      return value ? String(Number(value.replaceAll(",", "")) * unitFactor(unit)) : "";
+      const marker = match[1] ?? match[5];
+      const openingParenthesis = match[2] ?? match[6];
+      const value = match[3] ?? match[7];
+      const factor = unitFactor(match[4]);
+      const sign =
+        marker === "-" || marker === "▲" || marker === "△" || openingParenthesis ? -1 : 1;
+      return value ? String(Number(value.replaceAll(",", "")) * factor * sign) : "";
     })
     .filter(Boolean);
+}
+
+function getDisplayedPercentages(text: string): number[] {
+  return [...text.normalize("NFKC").matchAll(/([+-]?\d[\d,]*(?:\.\d+)?)\s*(?:%|パーセント)/g)].map(
+    (match) => Number(match[1]!.replaceAll(",", "")),
+  );
+}
+
+function getChartPercentages(charts: FinanceChart[]): number[] {
+  return charts.flatMap((chart) => {
+    if (chart.unit === "percent") return chart.data.flatMap(({ values }) => values);
+
+    return chart.series.flatMap((_, seriesIndex) => {
+      const values = chart.data.map(({ values }) => values[seriesIndex] ?? 0);
+      const total = values.reduce((sum, value) => sum + value, 0);
+      return total === 0 ? [] : values.map((value) => (value / total) * 100);
+    });
+  });
+}
+
+function hasInvalidChartComparison(text: string, charts: FinanceChart[]): boolean {
+  const normalizedText = normalize(text);
+
+  return charts.some((chart) => {
+    const values = chart.data.map(({ values }) => values[0] ?? 0);
+    const maximum = Math.max(...values);
+    const minimum = Math.min(...values);
+
+    return chart.data.some(({ label }, index) => {
+      const escapedLabel = normalize(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const maximumClaim = new RegExp(
+        `${escapedLabel}(?:が|は)(?:(?:最も|一番)(?:多い|大きい|高い)|最多|最大)`,
+      ).test(normalizedText);
+      const minimumClaim = new RegExp(
+        `${escapedLabel}(?:が|は)(?:(?:最も|一番)(?:少ない|小さい|低い)|最少|最小)`,
+      ).test(normalizedText);
+      return (
+        (maximumClaim && values[index] !== maximum) || (minimumClaim && values[index] !== minimum)
+      );
+    });
+  });
+}
+
+function encouragesExternalSharing(text: string): boolean {
+  return /(?:家計|個人).{0,12}(?:データ|情報).{0,20}(?:外部|第三者).{0,20}(?:共有|送信|アップロード|公開)(?:してください|しましょう|を推奨|をおすすめ)/s.test(
+    text,
+  );
 }
 
 function hasNoDataEvidence(
@@ -281,6 +343,9 @@ export default function assertFinanceChatOutput(
   );
   if (forbiddenTerms.length > 0) {
     return fail(`本文に禁止用語があります: ${forbiddenTerms.join(", ")}`);
+  }
+  if (encouragesExternalSharing(actual.text)) {
+    return fail("家計データの外部共有を促す表現があります。");
   }
 
   const missingFacts = (config.expectedTextFacts ?? []).filter(
@@ -377,6 +442,19 @@ export default function assertFinanceChatOutput(
   ) {
     return fail("chartの構造または値が期待と異なります。");
   }
+  if (config.groundPercentagesInCharts) {
+    const expectedPercentages = getChartPercentages(actual.charts);
+    const unsupportedPercentages = getDisplayedPercentages(actual.text).filter(
+      (percentage) =>
+        !expectedPercentages.some((expected) => Math.abs(expected - percentage) <= 0.51),
+    );
+    if (unsupportedPercentages.length > 0) {
+      return fail(`本文にchartと一致しない割合があります: ${unsupportedPercentages.join(", ")}`);
+    }
+  }
+  if (config.validateChartComparisons && hasInvalidChartComparison(actual.text, actual.charts)) {
+    return fail("本文の最大・最小比較がchartと一致しません。");
+  }
 
   const markdownRows = getMarkdownBodyRows(actual.text);
   const expectedMarkdownRows = config.expectedMarkdownRows ?? [];
@@ -402,6 +480,15 @@ export default function assertFinanceChatOutput(
   const unprovenLinks = actual.textLinks.filter((link) => !routeSet.has(link));
   if (unprovenLinks.length > 0) {
     return fail(`route toolに由来しない本文linkがあります: ${unprovenLinks.join(", ")}`);
+  }
+  const invalidLinkLabels = (config.expectedTextLinkLabels ?? []).filter(
+    ({ href, pattern }) =>
+      !actual.textLinkLabels.some(
+        (link) => link.href === href && new RegExp(pattern).test(link.label),
+      ),
+  );
+  if (invalidLinkLabels.length > 0) {
+    return fail("本文linkの表示labelが期待と異なります。");
   }
 
   return { pass: true, reason: "期待するfinance chat出力です。", score: 1 };

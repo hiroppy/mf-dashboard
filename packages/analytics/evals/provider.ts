@@ -22,6 +22,7 @@ import { getModel, isLLMEnabled } from "../src/config";
 interface GeneratedResponse {
   text: string;
   steps: ReadonlyArray<{
+    text: string;
     toolCalls: ReadonlyArray<{
       input: unknown;
       toolCallId: string;
@@ -51,6 +52,7 @@ export interface EvaluationOutput {
   text: string;
   charts: FinanceChart[];
   databaseQueries: Array<{ input: unknown; output: unknown }>;
+  textLinkLabels: Array<{ href: string; label: string }>;
   toolRoutes: string[];
   textLinks: string[];
 }
@@ -85,20 +87,28 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-function getTextLinks(text: string): string[] {
-  const markdownLinks = [...text.matchAll(/(?<!!)\[[^\]]+]\(([^)\s]+)\)/g)].map(
-    (match) => match[1]!,
-  );
+function getTextLinks(text: string): {
+  labels: Array<{ href: string; label: string }>;
+  links: string[];
+} {
+  const markdownLinks = [...text.matchAll(/(?<!!)\[([^\]]+)]\(([^)\s]+)\)/g)].map((match) => ({
+    href: match[2]!,
+    label: match[1]!,
+  }));
   const autoLinks = [...text.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
     (match) => match[1]!,
   );
   const rawUrls = [...text.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  return unique([...markdownLinks, ...autoLinks, ...rawUrls]);
+  return {
+    labels: markdownLinks,
+    links: unique([...markdownLinks.map(({ href }) => href), ...autoLinks, ...rawUrls]),
+  };
 }
 
 export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutput {
+  const text = response.steps.map((step) => step.text).join("") || response.text;
   const toolResults = response.steps.flatMap((step) => step.toolResults);
   const databaseQueries = response.steps.flatMap((step) =>
     step.toolCalls.flatMap((call) => {
@@ -128,12 +138,14 @@ export function toEvaluationOutput(response: GeneratedResponse): EvaluationOutpu
     return route.success ? [route.data] : [];
   });
 
+  const textLinks = getTextLinks(text);
   return {
-    text: response.text,
+    text,
     charts,
     databaseQueries,
+    textLinkLabels: textLinks.labels,
     toolRoutes: unique(toolRoutes),
-    textLinks: getTextLinks(response.text),
+    textLinks: textLinks.links,
   };
 }
 

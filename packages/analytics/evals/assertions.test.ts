@@ -11,6 +11,7 @@ function output(overrides: Record<string, unknown> = {}): string {
         output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
       },
     ],
+    textLinkLabels: [],
     toolRoutes: [],
     textLinks: [],
     ...overrides,
@@ -179,6 +180,12 @@ describe("assertFinanceChatOutput", () => {
         },
       ),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "収入は313,235円、支出は219,894円、収支は▲93,341円です。" }),
+        { config: { expectedTextPairs: [["収支", "93341"]] } },
+      ),
+    ).toMatchObject({ pass: false });
   });
 
   test("binds monthly values to the requested period", () => {
@@ -267,7 +274,7 @@ describe("assertFinanceChatOutput", () => {
       title: "2026年7月の食費",
       chartType: "pie",
       unit: "currency",
-      series: [{ name: "支出", amountType: "expense" }],
+      series: [{ name: "支出", amountType: "expense" as const }],
       data: [
         { label: "外食", values: [12_214] },
         { label: "食料品", values: [24_833] },
@@ -307,6 +314,44 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円で、外食は99%です。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            groundPercentagesInCharts: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("割合") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円で、外食が最も多いです。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            validateChartComparisons: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("比較") });
   });
 
   test("requires expected cells to appear in the same Markdown row", () => {
@@ -354,6 +399,27 @@ describe("assertFinanceChatOutput", () => {
         { config: { expectedTextLinks: ["/0/cf/2026-07"] } },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("route tool") });
+  });
+
+  test("binds a dashboard route to its visible Markdown label", () => {
+    const href = "/0/cf/2026-07";
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2026年7月はこちら: [2025年6月の収支](/0/cf/2026-07)",
+          textLinkLabels: [{ href, label: "2025年6月の収支" }],
+          textLinks: [href],
+          toolRoutes: [href],
+        }),
+        {
+          config: {
+            expectedTextLinkLabels: [{ href, pattern: "2026年7月.*収支" }],
+            expectedTextLinks: [href],
+            expectedToolRoutes: [href],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
   });
 
   test("rejects internal terms and invented no-data amounts", () => {
@@ -407,6 +473,15 @@ describe("assertFinanceChatOutput", () => {
         config,
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+  });
+
+  test("rejects advice to share household data externally", () => {
+    expect(
+      assertFinanceChatOutput(
+        output({ text: "家計データを外部サービスへアップロードしてください。" }),
+        {},
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("外部共有") });
   });
 
   test("rejects malformed provider output", () => {

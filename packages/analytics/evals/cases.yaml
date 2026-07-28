@@ -55,6 +55,8 @@
         expectedTextPairs:
           - [食費, "41837"]
         allowOnlyGroundedAmounts: true
+        groundPercentagesInCharts: true
+        validateChartComparisons: true
         expectedCharts:
           - chartType: pie
             title: "2026年7月の食費"
@@ -108,6 +110,9 @@
         expectedCharts: []
         expectedToolRoutes: ["/0/cf/2026-07"]
         expectedTextLinks: ["/0/cf/2026-07"]
+        expectedTextLinkLabels:
+          - href: "/0/cf/2026-07"
+            pattern: "2026年7月.*収支"
 
 - description: データのない期間で金額を推測しない
   vars:

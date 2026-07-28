@@ -44,6 +44,7 @@ describe("toEvaluationOutput", () => {
         text: "[収支を見る](/0/cf/2026-07)",
         steps: [
           {
+            text: "[収支を見る](/0/cf/2026-07)",
             toolCalls: [
               {
                 input: { sql: "SELECT amount FROM transactions" },
@@ -81,9 +82,22 @@ describe("toEvaluationOutput", () => {
           output: { rows: [{ amount: 100 }], truncated: false },
         },
       ],
+      textLinkLabels: [{ href: "/0/cf/2026-07", label: "収支を見る" }],
       toolRoutes: ["/0/cf/2026-07"],
       textLinks: ["/0/cf/2026-07"],
     });
+  });
+
+  test("collects text shown across every generation step", () => {
+    expect(
+      toEvaluationOutput({
+        text: "最終回答",
+        steps: [
+          { text: "途中の表示。", toolCalls: [], toolResults: [] },
+          { text: "最終回答", toolCalls: [], toolResults: [] },
+        ],
+      }).text,
+    ).toBe("途中の表示。最終回答");
   });
 });
 
