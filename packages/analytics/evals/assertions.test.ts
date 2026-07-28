@@ -35,6 +35,22 @@ describe("assertFinanceChatOutput", () => {
         },
       }),
     ).toMatchObject({ pass: true, score: 1 });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は `313,235円`、支出は `219,894円`、収支は `93,341円`です。",
+        }),
+        {
+          config: {
+            expectedTextPairs: [
+              ["収入", "313235"],
+              ["支出", "219894"],
+              ["収支", "93341"],
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: true });
   });
 
   test("rejects a missing label/value pair", () => {
@@ -267,6 +283,53 @@ describe("assertFinanceChatOutput", () => {
         { config },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND date < '2030-01-01' AND category = '食費' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2030年1月の食費データはありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "2029年12月の住宅費データはありません。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("期間") });
     expect(
       assertFinanceChatOutput(
         output({
@@ -647,6 +710,25 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
     expect(
       assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円です。24,833円は外食です。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            validateChartAmounts: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
+    expect(
+      assertFinanceChatOutput(
         output({ charts: [chart], text: "食費は41,837円で、外食は24,833円です。" }),
         {
           config: {
@@ -739,6 +821,27 @@ describe("assertFinanceChatOutput", () => {
           expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
         },
       }),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: [
+            "| 日付 | 内容 | 金額 |",
+            "| --- | --- | --- |",
+            "",
+            "| 金額 | 内容 | 日付 |",
+            "| --- | --- | --- |",
+            "| 761円 | サンマルクカフェ | 2026-07-03 |",
+          ].join("\n"),
+        }),
+        {
+          config: {
+            expectedMarkdownHeader: ["日付", "内容", "金額"],
+            expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+            requireExactMarkdownRows: true,
+          },
+        },
+      ),
     ).toMatchObject({ pass: false });
   });
 

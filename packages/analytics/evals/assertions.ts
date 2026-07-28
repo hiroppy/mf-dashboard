@@ -28,6 +28,7 @@ interface AssertionContext {
     expectedMarkdownHeader?: string[];
     expectedMarkdownRows?: string[][];
     expectedScopedTextPairs?: ScopedTextPairsExpectation;
+    expectedNoDataTextFacts?: string[];
     expectedTextFacts?: string[];
     expectedTextLinkLabels?: TextLinkLabelExpectation[];
     expectedTextLinks?: string[];
@@ -86,7 +87,7 @@ function getFactualText(text: string): string {
     .replace(/^(?: {4}|\t).+$/gm, "")
     .replace(/!\[[^\]]*](?:\([^)]*\)|\[[^\]]*])?/g, "")
     .replace(/(?<!\\)~~(?=\S)[\s\S]*?\S~~/g, "")
-    .replace(/`[^`\n]*`/g, "")
+    .replace(/`([^`\n]*)`/g, "$1")
     .replace(/<[^>]*>/g, "");
 }
 
@@ -265,6 +266,36 @@ function hasContradictoryEqualityPredicates(sql: string): boolean {
       values.add(match[2]!);
       if (values.size > 1) return true;
       valuesByColumn.set(column, values);
+    }
+    const boundsByColumn = new Map<
+      string,
+      Array<{ inclusive: boolean; kind: "lower" | "upper"; value: string }>
+    >();
+    for (const match of branch.matchAll(/\b([a-z_][a-z0-9_.]*)\s*(>=|>|<=|<)\s*'([^']*)'/gi)) {
+      const column = match[1]!.split(".").at(-1)!.toLocaleLowerCase();
+      const operator = match[2]!;
+      const bounds = boundsByColumn.get(column) ?? [];
+      bounds.push({
+        inclusive: operator.includes("="),
+        kind: operator.startsWith(">") ? "lower" : "upper",
+        value: match[3]!,
+      });
+      boundsByColumn.set(column, bounds);
+    }
+    for (const bounds of boundsByColumn.values()) {
+      const lowers = bounds.filter(({ kind }) => kind === "lower");
+      const uppers = bounds.filter(({ kind }) => kind === "upper");
+      if (
+        lowers.some((lower) =>
+          uppers.some(
+            (upper) =>
+              lower.value > upper.value ||
+              (lower.value === upper.value && (!lower.inclusive || !upper.inclusive)),
+          ),
+        )
+      ) {
+        return true;
+      }
     }
   }
   return false;
@@ -459,10 +490,28 @@ function getLabelSegments(
 function hasInvalidChartAmount(text: string, charts: FinanceChart[]): boolean {
   return charts.some((chart) => {
     const labels = chart.data.map(({ label }) => label);
-    return getLabelSegments(text, labels).some(({ label, segment }) => {
+    const invalidAfterLabel = getLabelSegments(text, labels).some(({ label, segment }) => {
       const data = chart.data.find((candidate) => normalize(candidate.label) === label);
       const expectedAmounts = new Set(data?.values.map(String) ?? []);
       return getDisplayedAmounts(segment).some((amount) => !expectedAmounts.has(amount));
+    });
+    if (invalidAfterLabel) return true;
+
+    const normalizedText = normalize(text);
+    return chart.data.some(({ label, values }) => {
+      const escapedLabel = normalize(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const amountFirstClaims = [
+        ...normalizedText.matchAll(
+          new RegExp(
+            `([▲△+-]?\\(?\\d+(?:\\.\\d+)?(?:億|万|千)?円\\)?)(?:は|が)?${escapedLabel}`,
+            "g",
+          ),
+        ),
+      ];
+      const expectedAmounts = new Set(values.map(String));
+      return amountFirstClaims.some((match) =>
+        getDisplayedAmounts(match[1]!).some((amount) => !expectedAmounts.has(amount)),
+      );
     });
   });
 }
@@ -614,6 +663,19 @@ export default function assertFinanceChatOutput(
   if (missingPatterns.length > 0) {
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
   }
+  const noDataFacts = config.expectedNoDataTextFacts ?? [];
+  if (
+    noDataFacts.length > 0 &&
+    !factualText
+      .split(/[。！？\n]/)
+      .some(
+        (clause) =>
+          /(?:データ|明細|記録|取引).*(?:ありません|ない|見つかりません)/.test(clause) &&
+          noDataFacts.every((fact) => normalize(clause).includes(normalize(fact))),
+      )
+  ) {
+    return fail("データなし回答の期間または対象が期待と異なります。");
+  }
 
   if (config.forbidAmounts && getDisplayedAmounts(factualText).length > 0) {
     return fail("データのない回答に金額が含まれています。");
@@ -726,7 +788,16 @@ export default function assertFinanceChatOutput(
   }
 
   const markdownTables = getMarkdownTables(factualText);
-  const markdownRows = markdownTables.flatMap(({ rows }) => rows);
+  const expectedMarkdownHeader = config.expectedMarkdownHeader;
+  const eligibleMarkdownTables = expectedMarkdownHeader
+    ? markdownTables.filter(
+        ({ header }) => JSON.stringify(header) === JSON.stringify(expectedMarkdownHeader),
+      )
+    : markdownTables;
+  if (expectedMarkdownHeader && eligibleMarkdownTables.length === 0) {
+    return fail("Markdown表のheaderが期待と異なります。");
+  }
+  const markdownRows = eligibleMarkdownTables.flatMap(({ rows }) => rows);
   const expectedMarkdownRows = config.expectedMarkdownRows ?? [];
   const missingRows = expectedMarkdownRows.filter(
     (row) => !hasExpectedRow(markdownRows, row, config.requireExactMarkdownRows ?? false),
@@ -737,15 +808,6 @@ export default function assertFinanceChatOutput(
   if (config.requireExactMarkdownRows && markdownRows.length !== expectedMarkdownRows.length) {
     return fail("Markdown表に想定外の明細行があります。");
   }
-  if (
-    config.expectedMarkdownHeader &&
-    !markdownTables.some(
-      ({ header }) => JSON.stringify(header) === JSON.stringify(config.expectedMarkdownHeader),
-    )
-  ) {
-    return fail("Markdown表のheaderが期待と異なります。");
-  }
-
   const expectedRoutes = config.expectedToolRoutes ?? [];
   if (!sameValues(actual.toolRoutes, expectedRoutes)) {
     return fail("route tool結果が期待と異なります。");
