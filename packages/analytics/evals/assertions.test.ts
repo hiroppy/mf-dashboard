@@ -406,6 +406,22 @@ describe("assertFinanceChatOutput", () => {
     expect(
       assertFinanceChatOutput(
         output({
+          text: "2030年1月の食費データはありません。ただし実際には取引があります。",
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config: { ...config, expectedNoDataTextFacts: ["2030年1月", "食費"] } },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("矛盾") });
+    expect(
+      assertFinanceChatOutput(
+        output({
           databaseQueries: [
             {
               input: {
@@ -1051,6 +1067,14 @@ describe("assertFinanceChatOutput", () => {
         {},
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("外部共有") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          text: "収入は313,235円、支出は219,894円、収支は93,341円です。全財産を株式へ投入してください。",
+        }),
+        {},
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("高リスク") });
   });
 
   test("rejects malformed provider output", () => {
