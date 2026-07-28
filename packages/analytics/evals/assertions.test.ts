@@ -81,6 +81,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: {
+                sql: "SELECT SUM(amount * 0 + 0x4C793) AS income, 0x35AF6 AS expense FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
                 sql: "SELECT SUM(income), SUM(expense) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
               },
               output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
@@ -152,6 +167,29 @@ describe("assertFinanceChatOutput", () => {
           ],
         }),
         { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId AND 0",
+              },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        {
+          config: {
+            ...config,
+            forbiddenNoDataQueryPatterns: [
+              ...config.forbiddenNoDataQueryPatterns,
+              "\\b(?:where|and)\\s+(?:0|null|false)\\b",
+            ],
+          },
+        },
       ),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
     expect(
@@ -416,6 +454,44 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("割合") });
     expect(
       assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円で、外食は67%です。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            groundPercentagesInCharts: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
+    expect(
+      assertFinanceChatOutput(
+        output({ charts: [chart], text: "食費は41,837円で、外食は24,833円です。" }),
+        {
+          config: {
+            expectedCharts: [
+              {
+                title: "2026年7月の食費",
+                chartType: "pie",
+                unit: "currency",
+                series: chart.series,
+                data: chart.data,
+              },
+            ],
+            validateChartAmounts: true,
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("label") });
+    expect(
+      assertFinanceChatOutput(
         output({ charts: [chart], text: "食費は41,837円で、外食が最も多いです。" }),
         {
           config: {
@@ -444,9 +520,23 @@ describe("assertFinanceChatOutput", () => {
 
     expect(
       assertFinanceChatOutput(output({ text }), {
-        config: { expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]] },
+        config: {
+          expectedMarkdownHeader: ["日付", "内容", "金額"],
+          expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+        },
       }),
     ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({ text: text.replace("| 日付 | 内容 | 金額 |", "| 金額 | 内容 | 日付 |") }),
+        {
+          config: {
+            expectedMarkdownHeader: ["日付", "内容", "金額"],
+            expectedMarkdownRows: [["2026-07-03", "サンマルクカフェ", "761"]],
+          },
+        },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("header") });
     expect(
       assertFinanceChatOutput(output({ text }), {
         config: {
@@ -509,6 +599,9 @@ describe("assertFinanceChatOutput", () => {
         config: { forbiddenTextTerms: ["transactions"] },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("禁止用語") });
+    expect(
+      assertFinanceChatOutput(output({ text: "amountカラムをSUMしました。" }), {}),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("DB内部用語") });
     expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、1,000円です。" }), {
         config: { forbidAmounts: true },

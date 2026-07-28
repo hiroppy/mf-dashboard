@@ -56,6 +56,7 @@
           - [食費, "41837"]
         allowOnlyGroundedAmounts: true
         groundPercentagesInCharts: true
+        validateChartAmounts: true
         validateChartComparisons: true
         expectedCharts:
           - chartType: pie
@@ -90,6 +91,7 @@
           - "\\bgroup_id\\b\\s*=\\s*:groupId"
         expectedMarkdownRows:
           - ["2026-07-03", サンマルクカフェ, "761"]
+        expectedMarkdownHeader: [日付, 内容, 金額]
         requireExactMarkdownRows: true
         allowOnlyGroundedAmounts: true
         expectedCharts: []
@@ -137,6 +139,7 @@
           - "\\b0\\s*=\\s*1\\b"
           - "\\bfalse\\b"
           - "\\blimit\\b"
+          - "\\b(?:where|and)\\s+(?:0|null|false)\\b"
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []

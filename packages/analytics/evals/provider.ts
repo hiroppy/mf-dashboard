@@ -91,21 +91,28 @@ function getVisibleText(text: string): string {
   return text.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
 }
 
+function getLinkableText(text: string): string {
+  return text.replace(/```[\s\S]*?(?:```|$)/g, "").replace(/`[^`\n]*`/g, "");
+}
+
 function getTextLinks(text: string): {
   labels: Array<{ href: string; label: string }>;
   links: string[];
 } {
-  const markdownLinks = [...text.matchAll(/(?<!!)\[([^\]]+)]\(([^)\s]+)\)/g)].map((match) => ({
-    href: match[2]!,
-    label: match[1]!,
-  }));
-  const autoLinks = [...text.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
+  const linkableText = getLinkableText(text);
+  const markdownLinks = [...linkableText.matchAll(/(?<!!)\[([^\]]+)]\(([^)\s]+)\)/g)].map(
+    (match) => ({
+      href: match[2]!,
+      label: match[1]!,
+    }),
+  );
+  const autoLinks = [...linkableText.matchAll(/<(https?:\/\/[^>\s]+|\/[^>\s]+)>/g)].map(
     (match) => match[1]!,
   );
-  const rawUrls = [...text.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
+  const rawUrls = [...linkableText.matchAll(/https?:\/\/[^\s<>)]+/g)].map((match) =>
     match[0].replace(/[.,。、!?！？]+$/, ""),
   );
-  const bareRoutes = [...text.matchAll(/(?<![:\w])\/[^\s<>()\]]+/g)]
+  const bareRoutes = [...linkableText.matchAll(/(?<![:\w])\/[^\s<>()\]]+/g)]
     .map((match) => match[0].replace(/[.,。、!?！？]+$/, ""))
     .filter((route) => financeChatHrefSchema.safeParse(route).success);
   return {
