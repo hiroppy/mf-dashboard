@@ -52,9 +52,66 @@ describe("assertFinanceChatOutput", () => {
     ).toMatchObject({ pass: false, reason: expect.stringContaining("DB結果") });
   });
 
+  test("binds database facts to a scoped query and the same result row", () => {
+    const config = {
+      expectedDatabaseRows: [["313235", "219894"]],
+      expectedDatabaseValues: ["313235", "219894"],
+      requiredDatabaseQueryPatterns: ["transactions", "2026-07", ":groupId", "\\bsum\\s*\\("],
+    };
+
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT 313235 AS income, 219894 AS expense, SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(income), SUM(expense) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: { rows: [{ income: 313_235, expense: 219_894 }], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT SUM(amount) FROM transactions WHERE date LIKE '2026-07%' AND group_id = :groupId",
+              },
+              output: {
+                rows: [{ income: 313_235 }, { expense: 219_894 }],
+                truncated: false,
+              },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false });
+  });
+
   test("requires no-data answers to be backed by an empty database result", () => {
     const config = {
-      forbiddenNoDataQueryPatterns: ["\\b1\\s*=\\s*0\\b"],
+      forbiddenNoDataQueryPatterns: ["\\b1\\s*=\\s*0\\b", "\\blimit\\b"],
       requiredNoDataQueryPatterns: ["transactions", "2030-01", "食費", ":groupId"],
       requireNoDataEvidence: true,
     };
@@ -84,6 +141,21 @@ describe("assertFinanceChatOutput", () => {
           databaseQueries: [
             {
               input: { sql: "SELECT * FROM accounts WHERE 1 = 0" },
+              output: { rows: [], truncated: false },
+            },
+          ],
+        }),
+        { config },
+      ),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("データなし") });
+    expect(
+      assertFinanceChatOutput(
+        output({
+          databaseQueries: [
+            {
+              input: {
+                sql: "SELECT amount FROM transactions WHERE date >= '2030-01-01' AND category = '食費' AND group_id = :groupId LIMIT 0",
+              },
               output: { rows: [], truncated: false },
             },
           ],
@@ -295,6 +367,30 @@ describe("assertFinanceChatOutput", () => {
         config: { forbidAmounts: true },
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、食費は-1.5万円程度です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+  });
+
+  test("normalizes compact yen units for grounded amount checks", () => {
+    expect(
+      assertFinanceChatOutput(output({ text: "食費は1.5万円です。" }), {
+        config: {
+          allowOnlyGroundedAmounts: true,
+          expectedTextPairs: [["食費", "15000"]],
+        },
+      }),
+    ).toMatchObject({ pass: true });
+    expect(
+      assertFinanceChatOutput(output({ text: "食費は1.5万円、予算は2万円です。" }), {
+        config: {
+          allowOnlyGroundedAmounts: true,
+          expectedTextPairs: [["食費", "15000"]],
+        },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("20000") });
   });
 
   test("accepts natural no-data wording while rejecting internal terms", () => {

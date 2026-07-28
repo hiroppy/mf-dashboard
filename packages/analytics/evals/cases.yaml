@@ -8,6 +8,13 @@
       value: file://./assertions.ts
       config:
         expectedDatabaseValues: ["313235", "219894"]
+        expectedDatabaseRows:
+          - ["313235", "219894"]
+        requiredDatabaseQueryPatterns:
+          - "\\btransactions\\b"
+          - "2026-07"
+          - ":groupId"
+          - "\\bsum\\s*\\("
         expectedTextFacts: ["2026年7月"]
         expectedTextPairs:
           - [収入, "313235"]
@@ -35,6 +42,16 @@
       value: file://./assertions.ts
       config:
         expectedDatabaseValues: ["24833", "12214", "4790"]
+        expectedDatabaseRows:
+          - [食料品, "24833"]
+          - [外食, "12214"]
+          - [カフェ, "4790"]
+        requiredDatabaseQueryPatterns:
+          - "\\btransactions\\b"
+          - "2026-07"
+          - "食費"
+          - ":groupId"
+          - "\\bsum\\s*\\("
         expectedTextPairs:
           - [食費, "41837"]
         allowOnlyGroundedAmounts: true
@@ -62,6 +79,13 @@
       value: file://./assertions.ts
       config:
         expectedDatabaseValues: ["2026-07-03", サンマルクカフェ, "761"]
+        expectedDatabaseRows:
+          - ["2026-07-03", サンマルクカフェ, "761"]
+        requiredDatabaseQueryPatterns:
+          - "\\btransactions\\b"
+          - "2026-07-03"
+          - "食費"
+          - ":groupId"
         expectedMarkdownRows:
           - ["2026-07-03", サンマルクカフェ, "761"]
         requireExactMarkdownRows: true
@@ -107,6 +131,7 @@
           - "\\b1\\s*=\\s*0\\b"
           - "\\b0\\s*=\\s*1\\b"
           - "\\bfalse\\b"
+          - "\\blimit\\b"
         expectedCharts: []
         expectedToolRoutes: []
         expectedTextLinks: []

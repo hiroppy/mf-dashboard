@@ -18,6 +18,7 @@ interface AssertionContext {
   config?: {
     allowOnlyGroundedAmounts?: boolean;
     expectedCharts?: ChartExpectation[];
+    expectedDatabaseRows?: string[][];
     expectedDatabaseValues?: string[];
     expectedMarkdownRows?: string[][];
     expectedScopedTextPairs?: ScopedTextPairsExpectation;
@@ -26,9 +27,11 @@ interface AssertionContext {
     expectedTextPairs?: Array<[string, string]>;
     expectedTextPatterns?: string[];
     expectedToolRoutes?: string[];
+    forbiddenDatabaseQueryPatterns?: string[];
     forbiddenNoDataQueryPatterns?: string[];
     forbiddenTextTerms?: string[];
     forbidAmounts?: boolean;
+    requiredDatabaseQueryPatterns?: string[];
     requiredNoDataQueryPatterns?: string[];
     requireExactMarkdownRows?: boolean;
     requireNoDataEvidence?: boolean;
@@ -85,7 +88,8 @@ function getMissingTextPairs(
       }, normalizedText.length);
       const segment = normalizedText.slice(valueStart, valueEnd);
       const hasValue = /^\d+$/.test(normalizedValue)
-        ? new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment)
+        ? new RegExp(`(?<!\\d)${normalizedValue}(?!\\d)`).test(segment) ||
+          getDisplayedAmounts(segment).includes(normalizedValue)
         : segment.includes(normalizedValue);
       if (hasValue) return false;
 
@@ -190,20 +194,50 @@ function sameValues(actual: string[], expected: string[]): boolean {
   return JSON.stringify(sortedActual) === JSON.stringify(sortedExpected);
 }
 
-function getDatabaseRows(queries: Array<{ output: unknown }>): Array<Record<string, unknown>> {
-  return queries.flatMap(({ output }) => {
+function matchesDatabaseQuery(
+  input: unknown,
+  requiredPatterns: string[],
+  forbiddenPatterns: string[],
+): boolean {
+  const query = databaseQueryInputSchema.safeParse(input);
+  if (!query.success) return false;
+
+  const matches = (pattern: string) => new RegExp(pattern, "i").test(query.data.sql);
+  return requiredPatterns.every(matches) && !forbiddenPatterns.some(matches);
+}
+
+function getDatabaseRows(
+  queries: Array<{ input: unknown; output: unknown }>,
+  requiredPatterns: string[],
+  forbiddenPatterns: string[],
+): Array<Record<string, unknown>> {
+  return queries.flatMap(({ input, output }) => {
+    if (!matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) return [];
     const result = databaseResultSchema.safeParse(output);
     return result.success ? result.data.rows : [];
   });
 }
 
 function getDisplayedAmounts(text: string): string[] {
+  const unitFactor = (unit: string | undefined): number => {
+    if (unit?.startsWith("億")) return 100_000_000;
+    if (unit?.startsWith("万")) return 10_000;
+    if (unit?.startsWith("千")) return 1_000;
+    return 1;
+  };
+
   return [
     ...text
       .normalize("NFKC")
-      .matchAll(/(?:¥\s*(-?\d[\d,]*(?:\.\d+)?)|(-?\d[\d,]*(?:\.\d+)?)\s*円)/g),
+      .matchAll(
+        /(?:¥\s*([+-]?\d[\d,]*(?:\.\d+)?)\s*((?:億|万|千)?円)?|([+-]?\d[\d,]*(?:\.\d+)?)\s*((?:億|万|千)?円))/g,
+      ),
   ]
-    .map((match) => normalize(match[1] ?? match[2] ?? ""))
+    .map((match) => {
+      const value = match[1] ?? match[3];
+      const unit = match[2] ?? match[4];
+      return value ? String(Number(value.replaceAll(",", "")) * unitFactor(unit)) : "";
+    })
     .filter(Boolean);
 }
 
@@ -213,17 +247,15 @@ function hasNoDataEvidence(
   forbiddenPatterns: string[],
 ): boolean {
   return queries.some(({ input, output }) => {
-    const query = databaseQueryInputSchema.safeParse(input);
     const result = databaseResultSchema.safeParse(output);
-    if (!query.success || !result.success) return false;
+    if (!result.success || !matchesDatabaseQuery(input, requiredPatterns, forbiddenPatterns)) {
+      return false;
+    }
 
-    const matches = (pattern: string) => new RegExp(pattern, "i").test(query.data.sql);
-    const hasExpectedScope = requiredPatterns.every(matches);
-    const hasForbiddenScope = forbiddenPatterns.some(matches);
     const isEmpty =
       result.data.rows.length === 0 ||
       result.data.rows.every((row) => Object.values(row).every((value) => value === null));
-    return hasExpectedScope && !hasForbiddenScope && isEmpty;
+    return isEmpty;
   });
 }
 
@@ -282,19 +314,38 @@ export default function assertFinanceChatOutput(
     return fail(`本文が期待する表現に一致しません: ${missingPatterns.join(", ")}`);
   }
 
-  if (config.forbidAmounts && /(?:[¥￥]\s*\d|\d[\d,.]*\s*円)/.test(actual.text.normalize("NFKC"))) {
+  if (config.forbidAmounts && getDisplayedAmounts(actual.text).length > 0) {
     return fail("データのない回答に金額が含まれています。");
   }
 
-  const databaseRows = getDatabaseRows(actual.databaseQueries);
+  const expectedDatabaseValues = config.expectedDatabaseValues ?? [];
+  const expectedNumericLiteralPatterns = expectedDatabaseValues
+    .map(normalize)
+    .filter((value) => /^\d+$/.test(value))
+    .map((value) => `(?<!\\d)${value}(?!\\d)`);
+  const databaseRows = getDatabaseRows(
+    actual.databaseQueries,
+    config.requiredDatabaseQueryPatterns ?? [],
+    [...(config.forbiddenDatabaseQueryPatterns ?? []), ...expectedNumericLiteralPatterns],
+  );
   const databaseValues = new Set(
     databaseRows.flatMap((row) => Object.values(row)).map((value) => normalize(String(value))),
   );
-  const missingDatabaseValues = (config.expectedDatabaseValues ?? []).filter(
+  const missingDatabaseValues = expectedDatabaseValues.filter(
     (value) => !databaseValues.has(normalize(value)),
   );
   if (missingDatabaseValues.length > 0) {
     return fail(`DB結果に期待する値がありません: ${missingDatabaseValues.join(", ")}`);
+  }
+  const missingDatabaseRows = (config.expectedDatabaseRows ?? []).filter((expectedRow) => {
+    const expectedValues = expectedRow.map(normalize);
+    return !databaseRows.some((row) => {
+      const values = Object.values(row).map((value) => normalize(String(value)));
+      return expectedValues.every((value) => values.includes(value));
+    });
+  });
+  if (missingDatabaseRows.length > 0) {
+    return fail(`DB結果に期待する行がありません: ${missingDatabaseRows.join(", ")}`);
   }
   if (config.allowOnlyGroundedAmounts) {
     const allowedAmounts = new Set([
