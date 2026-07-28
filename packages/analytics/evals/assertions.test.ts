@@ -1273,6 +1273,11 @@ describe("assertFinanceChatOutput", () => {
       }),
     ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
     expect(
+      assertFinanceChatOutput(output({ text: "データはありませんが、目安は〇円です。" }), {
+        config: { forbidAmounts: true },
+      }),
+    ).toMatchObject({ pass: false, reason: expect.stringContaining("金額") });
+    expect(
       assertFinanceChatOutput(output({ text: "データはありませんが、目安は999999です。" }), {
         config: { forbidAmounts: true },
       }),

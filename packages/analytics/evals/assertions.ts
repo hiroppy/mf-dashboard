@@ -494,7 +494,6 @@ function getDisplayedAmounts(text: string): string[] {
     ...normalizedText.matchAll(/(?<![\d.])([〇一二三四五六七八九十百千万億]+)円/g),
   ]
     .map((match) => parseKanjiNumber(match[1]!))
-    .filter((value) => value > 0)
     .map(String);
   const bareAmounts = [
     ...normalizedText.matchAll(
