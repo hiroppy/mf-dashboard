@@ -68,7 +68,7 @@ flowchart TD
     T --> W[web]
     W -->|手動更新| C[crawler]
     S[supercronic<br/>6:30 / 15:30 JST] --> C
-    O[1Password<br/>認証情報とOTP] --> C
+    O[1Passwordまたは.env<br/>認証情報] --> C
     C --> M[Money Forward ME]
     M --> C
     C -->|保存| D[(SQLite)]

@@ -57,6 +57,7 @@ describe("credentials", () => {
       expect(result).toEqual({
         username: "test-user@example.com",
         password: "test-password",
+        requiresOtp: true,
       });
       expect(mockResolve).toHaveBeenCalledWith("op://test-vault/test-item/username");
       expect(mockResolve).toHaveBeenCalledWith("op://test-vault/test-item/password");
@@ -73,6 +74,41 @@ describe("credentials", () => {
       _resetOpClient();
 
       await expect(getCredentials()).rejects.toThrow("process.exit called");
+    });
+
+    test("returns Basic credentials without initializing 1Password", async () => {
+      process.env.MF_AUTH_METHOD = "basic";
+      process.env.MF_USERNAME = "user-a@example.com";
+      process.env.MF_PASSWORD = "test-password";
+
+      await expect(getCredentials()).resolves.toEqual({
+        username: "user-a@example.com",
+        password: "test-password",
+        requiresOtp: false,
+      });
+      expect(mockCreateClient).not.toHaveBeenCalled();
+    });
+
+    test.each(["MF_USERNAME", "MF_PASSWORD"] as const)(
+      "throws when Basic credential %s is not set",
+      async (key) => {
+        process.env.MF_AUTH_METHOD = "basic";
+        process.env.MF_USERNAME = "user-a@example.com";
+        process.env.MF_PASSWORD = "test-password";
+        delete process.env[key];
+
+        await expect(getCredentials()).rejects.toThrow(
+          "Basic 認証には MF_USERNAME と MF_PASSWORD が必要です",
+        );
+        expect(mockCreateClient).not.toHaveBeenCalled();
+      },
+    );
+
+    test("throws when the authentication method is unsupported", async () => {
+      process.env.MF_AUTH_METHOD = "unsupported";
+
+      await expect(getCredentials()).rejects.toThrow("未対応の MF_AUTH_METHOD です: unsupported");
+      expect(mockCreateClient).not.toHaveBeenCalled();
     });
   });
 

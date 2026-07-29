@@ -4,7 +4,7 @@
 
 セットアップは次の順番で進める。
 
-1. Money Forward MEと1Passwordを準備する
+1. Money Forward MEの認証情報を準備する
 2. Cloudflare Zero TrustとGoogle OAuthを準備する
 3. アプリとインフラの設定ファイルを作成する
 4. Terraformを適用する
@@ -13,7 +13,7 @@
 ## 必須要件
 
 - [Money Forward ME](https://moneyforward.com/)
-- [1Password](https://1password.com/jp)（Service Account）
+- [1Password](https://1password.com/jp)（Service Account、1Password認証を使う場合）
 - [Cloudflare](https://www.cloudflare.com/ja-jp/)アカウント（Zero Trustを有効化済み）
 - 公開先FQDNのゾーンをCloudflareで管理していること
 - ローカルPCが常時起動できる環境
@@ -30,12 +30,23 @@ git clone https://github.com/hiroppy/mf-dashboard.git
 cd mf-dashboard
 ```
 
-## 1. Money Forward MEと1Passwordの準備
+## 1. Money Forward MEの認証情報を準備
+
+認証方式は次のいずれかを選ぶ。
+
+- `1password`（既定）: 1Passwordからユーザー名、パスワード、ワンタイムパスワードを取得する
+- `basic`: `.env`のユーザー名とパスワードを使用する。この方式ではMoney Forward MEの2段階認証を無効にする
+
+### 1Password認証
 
 - Money Forward MEでワンタイムパスワードを設定する（[設定方法](https://support.me.moneyforward.com/hc/ja/articles/7359917171481-%E4%BA%8C%E6%AE%B5%E9%9A%8E%E8%AA%8D%E8%A8%BC%E3%81%AE%E8%A8%AD%E5%AE%9A%E6%96%B9%E6%B3%95)）
 - 1PasswordでService Accountを発行する（[設定方法](https://developer.1password.com/docs/service-accounts/get-started#create-a-service-account)）
   - Private、Personal、Familyなど、最初から用意されている保管庫へService Accountはアクセスできない。Money Forward MEのアカウントを自分で作成した保管庫へ移し、Service Accountへアクセス権を付与する。
   - Money Forward MEのログイン項目に、標準の`username`と`password`フィールド、およびワンタイムパスワードのフィールドを用意する。crawlerはこれらのフィールドを1Password SDKから読み取る。
+
+### Basic認証
+
+Money Forward MEの2段階認証を無効にし、ログイン用のメールアドレスとパスワードを用意する。資格情報はGitへ追加せず、手順3.1で作成する`.env`だけに設定する。
 
 ## 2. Cloudflare Zero Trustの準備
 
@@ -99,6 +110,7 @@ openssl rand -hex 32
 この時点では、次の値を`.env`へ設定する。
 
 ```dotenv
+MF_AUTH_METHOD=1password
 OP_SERVICE_ACCOUNT_TOKEN=<1Password Service Accountのトークン>
 OP_VAULT=<保管庫名またはUUID>
 OP_ITEM=<項目名またはUUID>
@@ -112,14 +124,24 @@ DASHBOARD_URL=https://dashboard.example.com
 
 `CLOUDFLARE_ACCESS_AUD`はまだ空のままでよい。Access Applicationの作成後に確定するため、Terraform適用後の手順3.3で設定する。
 
+Basic認証を使う場合は、上記の`MF_AUTH_METHOD`と`OP_`で始まる4項目を次の設定へ置き換える。
+
+```dotenv
+MF_AUTH_METHOD=basic
+MF_USERNAME=user-a@example.com
+MF_PASSWORD=<Money Forward MEのパスワード>
+```
+
 | `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                             |
 | -------------------------------------------- | ---- | -------------------- | -------------------------------------------------------------------------------- |
 | `REFRESH_TOKEN`                              | 必須 | Terraform適用前      | crawlerとwebが共有する内部API用Bearerトークン                                    |
 | `CLOUDFLARE_ACCESS_TEAM_DOMAIN`              | 必須 | Terraform適用前      | Access JWTの発行者となる`<team-name>.cloudflareaccess.com`                       |
 | `CLOUDFLARE_ACCESS_AUD`                      | 必須 | Terraform適用後      | Terraformが作成したAccess ApplicationのAUD                                       |
 | `DASHBOARD_URL`                              | 必須 | Terraform適用前      | Open Graph / Twitter metadataと通知に使う公開ダッシュボードURL                   |
-| `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                              |
-| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                           |
+| `MF_AUTH_METHOD`                             | 必須 | Terraform適用前      | `1password`（既定）または`basic`                                                 |
+| `OP_SERVICE_ACCOUNT_TOKEN`                   | 条件 | Terraform適用前      | 1Password認証で必須。Service Accountのトークン                                   |
+| `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 条件 | Terraform適用前      | 1Password認証で必須。Money Forward MEの保管先                                    |
+| `MF_USERNAME` / `MF_PASSWORD`                | 条件 | Terraform適用前      | Basic認証で必須。Money Forward MEのログイン情報（2段階認証は無効化）             |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |

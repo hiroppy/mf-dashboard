@@ -4,10 +4,22 @@ import { debug, error } from "../logger.js";
 interface Credentials {
   username: string;
   password: string;
+  requiresOtp: boolean;
 }
+
+type AuthMethod = "1password" | "basic";
 
 // 1Password SDK client (singleton)
 let _opClient: Client | null = null;
+
+function getAuthMethod(): AuthMethod {
+  const authMethod = process.env.MF_AUTH_METHOD || "1password";
+  if (authMethod === "1password" || authMethod === "basic") {
+    return authMethod;
+  }
+
+  throw new Error(`未対応の MF_AUTH_METHOD です: ${authMethod}`);
+}
 
 /**
  * 1Password SDK クライアントを取得する
@@ -34,6 +46,17 @@ async function getOpClient(): Promise<Client> {
 }
 
 export async function getCredentials(): Promise<Credentials> {
+  if (getAuthMethod() === "basic") {
+    const username = process.env.MF_USERNAME || "";
+    const password = process.env.MF_PASSWORD || "";
+
+    if (!username || !password) {
+      throw new Error("Basic 認証には MF_USERNAME と MF_PASSWORD が必要です");
+    }
+
+    return { username, password, requiresOtp: false };
+  }
+
   const vault = process.env.OP_VAULT || "";
   const item = process.env.OP_ITEM || "";
 
@@ -49,7 +72,7 @@ export async function getCredentials(): Promise<Credentials> {
     throw new Error("Failed to get credentials from 1Password");
   }
 
-  return { username, password };
+  return { username, password, requiresOtp: true };
 }
 
 export async function getOTP(): Promise<string> {

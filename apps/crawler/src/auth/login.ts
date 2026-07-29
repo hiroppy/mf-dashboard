@@ -133,7 +133,7 @@ export async function loginWithAuthState(page: Page, context: BrowserContext): P
 }
 
 export async function login(page: Page): Promise<void> {
-  const { username, password } = await getCredentials();
+  const { username, password, requiresOtp } = await getCredentials();
 
   debug("Navigating to login page...");
   await page.goto(mfUrls.auth.signIn, {
@@ -162,11 +162,13 @@ export async function login(page: Page): Promise<void> {
   await page.locator(SELECTORS.mfidSubmit).click();
 
   // Check if OTP is required
-  await maybeHandleOtp(page, {
-    inputSelector: SELECTORS.mfidOtpInput,
-    submitSelector: SELECTORS.mfidOtpSubmit,
-    label: "MFID",
-  });
+  if (requiresOtp) {
+    await maybeHandleOtp(page, {
+      inputSelector: SELECTORS.mfidOtpInput,
+      submitSelector: SELECTORS.mfidOtpSubmit,
+      label: "MFID",
+    });
+  }
 
   // Wait for redirect after login
   debug("Waiting for login to complete...");
