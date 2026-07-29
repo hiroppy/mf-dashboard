@@ -46,6 +46,16 @@ describe("credentials", () => {
   });
 
   describe("getCredentials", () => {
+    test("defaults to 1Password when MF_AUTH_METHOD is not set", async () => {
+      delete process.env.MF_AUTH_METHOD;
+      mockResolve.mockResolvedValue("test-value");
+
+      await expect(getCredentials()).resolves.toMatchObject({
+        requiresOtp: true,
+      });
+      expect(mockCreateClient).toHaveBeenCalledOnce();
+    });
+
     test("returns credentials from 1Password", async () => {
       mockResolve.mockImplementation((path: string) => {
         if (path.includes("username")) return Promise.resolve("test-user@example.com");
