@@ -19,11 +19,11 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.23",
-    "@ai-sdk/google": "4.0.26",
-    "@ai-sdk/openai": "4.0.22",
+    "@ai-sdk/google": "4.0.27",
+    "@ai-sdk/openai": "4.0.23",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "7.0.40",
+    "ai": "7.0.41",
     "zod": "4.4.3"
   },
   "devDependencies": {
