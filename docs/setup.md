@@ -128,11 +128,17 @@ Basic認証を使う場合は、上記の`MF_AUTH_METHOD`と`OP_`で始まる4�
 
 ```dotenv
 MF_AUTH_METHOD=basic
-MF_USERNAME=user-a@example.com
+MF_EMAIL=user-a@example.com
 MF_PASSWORD='<Money Forward MEのパスワード>'
 ```
 
 `.env`では単一引用符で囲んだ値はそのまま扱われる。パスワードに`$`が含まれる場合の意図しない環境変数展開を防ぐため、`MF_PASSWORD`は単一引用符で囲む。パスワード自体に単一引用符が含まれる場合は`\'`と記述する。
+
+Basic認証のサインインだけを実サービスへ対して確認する場合は、上記の`.env`を設定して次を実行する。このE2Eは保存済みの認証状態を使わず、新しいブラウザーコンテキストでサインインを行い、Money Forward MEへ到達したことだけを確認する。
+
+```sh
+pnpm test:e2e:crawler:basic-signin
+```
 
 | `.env`のキー                                 | 必須 | 設定タイミング       | 内容                                                                             |
 | -------------------------------------------- | ---- | -------------------- | -------------------------------------------------------------------------------- |
@@ -143,7 +149,7 @@ MF_PASSWORD='<Money Forward MEのパスワード>'
 | `MF_AUTH_METHOD`                             | 必須 | Terraform適用前      | `1password`（既定）または`basic`                                                 |
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 条件 | Terraform適用前      | 1Password認証で必須。Service Accountのトークン                                   |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 条件 | Terraform適用前      | 1Password認証で必須。Money Forward MEの保管先                                    |
-| `MF_USERNAME` / `MF_PASSWORD`                | 条件 | Terraform適用前      | Basic認証で必須。Money Forward MEのログイン情報（2段階認証は無効化）             |
+| `MF_EMAIL` / `MF_PASSWORD`                   | 条件 | Terraform適用前      | Basic認証で必須。Money Forward MEのログイン情報（2段階認証は無効化）             |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |

@@ -159,7 +159,14 @@ export async function login(page: Page): Promise<void> {
   debug("Entering password...");
   await passwordInput.fill(password);
   debug("Clicking Sign in button...");
-  await page.locator(SELECTORS.mfidSubmit).click();
+  const passwordPageUrl = new URL(mfUrls.auth.password);
+  await Promise.all([
+    page.waitForURL(
+      (url) => url.origin !== passwordPageUrl.origin || url.pathname !== passwordPageUrl.pathname,
+      { timeout: TIMEOUTS.login },
+    ),
+    page.locator(SELECTORS.mfidSubmit).click(),
+  ]);
 
   // Check if OTP is required
   if (requiresOtp) {
@@ -169,12 +176,6 @@ export async function login(page: Page): Promise<void> {
       label: "MFID",
     });
   }
-
-  // Wait for redirect after login
-  debug("Waiting for login to complete...");
-  await page.waitForURL(/https:\/\/(id\.)?moneyforward\.com\/.*/, {
-    timeout: TIMEOUTS.login,
-  });
 
   // Navigate to Money Forward ME - will redirect to MFID for auth
   debug("Navigating to Money Forward ME...");

@@ -89,7 +89,7 @@ describe("credentials", () => {
 
     test("returns Basic credentials without initializing 1Password", async () => {
       process.env.MF_AUTH_METHOD = "basic";
-      process.env.MF_USERNAME = "user-a@example.com";
+      process.env.MF_EMAIL = "user-a@example.com";
       process.env.MF_PASSWORD = "test-password";
 
       await expect(getCredentials()).resolves.toEqual({
@@ -100,16 +100,16 @@ describe("credentials", () => {
       expect(mockCreateClient).not.toHaveBeenCalled();
     });
 
-    test.each(["MF_USERNAME", "MF_PASSWORD"] as const)(
+    test.each(["MF_EMAIL", "MF_PASSWORD"] as const)(
       "throws when Basic credential %s is not set",
       async (key) => {
         process.env.MF_AUTH_METHOD = "basic";
-        process.env.MF_USERNAME = "user-a@example.com";
+        process.env.MF_EMAIL = "user-a@example.com";
         process.env.MF_PASSWORD = "test-password";
         delete process.env[key];
 
         await expect(getCredentials()).rejects.toThrow(
-          "Basic 認証には MF_USERNAME と MF_PASSWORD が必要です",
+          "Basic 認証には MF_EMAIL と MF_PASSWORD が必要です",
         );
         expect(mockCreateClient).not.toHaveBeenCalled();
       },

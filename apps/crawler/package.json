@@ -20,6 +20,7 @@
     "start": "tsx src/index.ts",
     "test": "vitest run --project unit",
     "test:e2e": "vitest run --project e2e",
+    "test:e2e:basic-signin": "vitest run --project e2e-basic-signin",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

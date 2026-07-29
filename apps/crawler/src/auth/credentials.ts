@@ -47,11 +47,11 @@ async function getOpClient(): Promise<Client> {
 
 export async function getCredentials(): Promise<Credentials> {
   if (getAuthMethod() === "basic") {
-    const username = process.env.MF_USERNAME || "";
+    const username = process.env.MF_EMAIL || "";
     const password = process.env.MF_PASSWORD || "";
 
     if (!username || !password) {
-      throw new Error("Basic 認証には MF_USERNAME と MF_PASSWORD が必要です");
+      throw new Error("Basic 認証には MF_EMAIL と MF_PASSWORD が必要です");
     }
 
     return { username, password, requiresOtp: false };
