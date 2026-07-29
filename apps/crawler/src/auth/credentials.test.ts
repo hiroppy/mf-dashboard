@@ -33,6 +33,7 @@ describe("credentials", () => {
     _resetOpClient();
     process.env = {
       ...originalEnv,
+      MF_AUTH_METHOD: "1password",
       OP_SERVICE_ACCOUNT_TOKEN: "test-token",
       OP_VAULT: "test-vault",
       OP_ITEM: "test-item",
