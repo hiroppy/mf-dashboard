@@ -55,7 +55,7 @@
     "@vitejs/plugin-react": "6.0.4",
     "@vitest/browser-playwright": "catalog:",
     "babel-plugin-react-compiler": "1.0.0",
-    "jsdom": "30.0.0",
+    "jsdom": "30.0.1",
     "playwright": "catalog:",
     "playwright-core": "catalog:",
     "storybook": "10.5.5",
