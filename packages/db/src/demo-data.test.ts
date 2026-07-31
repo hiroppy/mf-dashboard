@@ -209,6 +209,19 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   });
 
   describe("資産整合性", () => {
+    test("含み益と含み損の保有資産が存在する", async () => {
+      const gains = (
+        await db
+          .select({ unrealizedGain: schema.holdingValues.unrealizedGain })
+          .from(schema.holdingValues)
+          .where(isNotNull(schema.holdingValues.unrealizedGain))
+          .all()
+      ).map(({ unrealizedGain }) => unrealizedGain!);
+
+      expect(gains.some((gain) => gain > 0)).toBe(true);
+      expect(gains.some((gain) => gain < 0)).toBe(true);
+    });
+
     test("暗号資産アカウントと保有資産が存在する", async () => {
       const cryptoAccounts = await db
         .select({ id: schema.accounts.id, name: schema.accounts.name })

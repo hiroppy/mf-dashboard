@@ -17,6 +17,8 @@ interface HoldingData {
   categoryName: string | null;
 }
 
+export type GainFilter = "all" | "gain" | "loss";
+
 interface FilterOption {
   value: string;
   label: string;
@@ -71,6 +73,29 @@ function groupSmallHoldings(
 }
 
 const ALL_FILTER = "__all__";
+const GAIN_FILTER_OPTIONS: Array<{ value: GainFilter; label: string }> = [
+  { value: "all", label: "すべて" },
+  { value: "gain", label: "含み益" },
+  { value: "loss", label: "含み損" },
+];
+
+export function filterHoldings(
+  holdings: HoldingData[],
+  gainFilter: GainFilter,
+  institutionFilter: string,
+): HoldingData[] {
+  return holdings.filter((holding) => {
+    if (gainFilter === "gain" && holding.unrealizedGain <= 0) return false;
+    if (gainFilter === "loss" && holding.unrealizedGain >= 0) return false;
+
+    if (institutionFilter === ALL_FILTER) return true;
+    if (institutionFilter.includes("|")) {
+      const [institution, categoryName] = institutionFilter.split("|");
+      return holding.institution === institution && holding.categoryName === categoryName;
+    }
+    return holding.institution === institutionFilter;
+  });
+}
 
 interface HoldingsFilterContextValue {
   selectedFilter: string;
@@ -124,6 +149,7 @@ export function UnrealizedGainCardClient({
   const [localFilter, setLocalFilter] = useState(ALL_FILTER);
   const selectedFilter = sharedFilter?.selectedFilter ?? localFilter;
   const setSelectedFilter = sharedFilter?.setSelectedFilter ?? setLocalFilter;
+  const [gainFilter, setGainFilter] = useState<GainFilter>("all");
 
   useEffect(() => {
     if (
@@ -134,20 +160,10 @@ export function UnrealizedGainCardClient({
     }
   }, [filterOptions, selectedFilter, setSelectedFilter]);
 
-  const filteredHoldings = useMemo(() => {
-    if (selectedFilter === ALL_FILTER) {
-      return holdings;
-    }
-    // "金融機関|種別" の形式かどうかをチェック
-    if (selectedFilter.includes("|")) {
-      const [institution, categoryName] = selectedFilter.split("|");
-      return holdings.filter(
-        (h) => h.institution === institution && h.categoryName === categoryName,
-      );
-    }
-    // 金融機関のみ
-    return holdings.filter((h) => h.institution === selectedFilter);
-  }, [holdings, selectedFilter]);
+  const filteredHoldings = useMemo(
+    () => filterHoldings(holdings, gainFilter, selectedFilter),
+    [gainFilter, holdings, selectedFilter],
+  );
 
   const totalGain = filteredHoldings.reduce((sum, h) => sum + h.unrealizedGain, 0);
   const totalMarketValue = filteredHoldings.reduce((sum, h) => sum + h.amount, 0);
@@ -168,16 +184,27 @@ export function UnrealizedGainCardClient({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
           <CardTitle icon={TrendingUp}>含み損益</CardTitle>
-          {!hideFilter && filterOptions.length > 1 && (
-            <Select
-              options={selectOptions}
-              value={selectedFilter}
-              onChange={setSelectedFilter}
-              className="w-auto min-w-[140px] h-8 text-xs"
-              aria-label="フィルターを選択"
-            />
+          {!hideFilter && (
+            <div className="flex items-center gap-2">
+              <Select
+                options={GAIN_FILTER_OPTIONS}
+                value={gainFilter}
+                onChange={(value) => setGainFilter(value as GainFilter)}
+                className="w-auto min-w-[100px] h-8 text-xs"
+                aria-label="損益を選択"
+              />
+              {filterOptions.length > 1 && (
+                <Select
+                  options={selectOptions}
+                  value={selectedFilter}
+                  onChange={setSelectedFilter}
+                  className="w-auto min-w-[140px] h-8 text-xs"
+                  aria-label="金融機関を選択"
+                />
+              )}
+            </div>
           )}
         </div>
       </CardHeader>

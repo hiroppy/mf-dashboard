@@ -77,10 +77,10 @@ export const holdingDefs: HoldingDef[] = [
     amount: 369521,
     quantity: 152.8842,
     unitPrice: 2417,
-    avgCostPrice: 2158,
+    avgCostPrice: 2800,
     dailyChange: -3200,
-    unrealizedGain: 39597,
-    unrealizedGainPct: 12,
+    unrealizedGain: -58555,
+    unrealizedGainPct: -13.68,
   },
   {
     accountName: "SBI証券",

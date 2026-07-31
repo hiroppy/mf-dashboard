@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { filterCategories, HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
 import {
+  filterHoldings,
   HoldingsFilterProvider,
   HoldingsFilterReset,
   UnrealizedGainCardClient,
@@ -203,6 +204,67 @@ describe("HoldingsTableClient", () => {
 });
 
 describe("UnrealizedGainCardClient", () => {
+  const filterHoldingsData = [
+    {
+      name: "含み益銘柄",
+      amount: 110,
+      unrealizedGain: 10,
+      unrealizedGainPct: 10,
+      institution: "金融機関 A",
+      categoryName: "株式(現物)",
+    },
+    {
+      name: "損益なし銘柄",
+      amount: 100,
+      unrealizedGain: 0,
+      unrealizedGainPct: 0,
+      institution: "金融機関 A",
+      categoryName: "投資信託",
+    },
+    {
+      name: "含み損銘柄",
+      amount: 90,
+      unrealizedGain: -10,
+      unrealizedGainPct: -10,
+      institution: "金融機関 B",
+      categoryName: "株式(現物)",
+    },
+  ];
+
+  it.each([
+    ["すべて", "all" as const, ["含み益銘柄", "損益なし銘柄", "含み損銘柄"]],
+    ["含み益", "gain" as const, ["含み益銘柄"]],
+    ["含み損", "loss" as const, ["含み損銘柄"]],
+  ])("%sで損益を絞り込む", (_label, gainFilter, expectedNames) => {
+    expect(
+      filterHoldings(filterHoldingsData, gainFilter, "__all__").map(({ name }) => name),
+    ).toEqual(expectedNames);
+  });
+
+  it("損益区分と金融機関・種別を同時に絞り込む", () => {
+    expect(filterHoldings(filterHoldingsData, "gain", "金融機関 A|株式(現物)")).toEqual([
+      filterHoldingsData[0],
+    ]);
+    expect(filterHoldings(filterHoldingsData, "loss", "金融機関 A")).toEqual([]);
+  });
+
+  it("損益区分を金融機関の左に表示する", () => {
+    render(
+      <UnrealizedGainCardClient
+        holdings={filterHoldingsData}
+        filterOptions={[
+          { value: "金融機関 A", label: "金融機関 A" },
+          { value: "金融機関 B", label: "金融機関 B" },
+        ]}
+      />,
+    );
+
+    const selects = screen.getAllByRole("combobox");
+    expect(selects).toHaveLength(2);
+    expect(selects[0].getAttribute("aria-label")).toBe("損益を選択");
+    expect(selects[1].getAttribute("aria-label")).toBe("金融機関を選択");
+  });
+
   it("更新後の選択肢にない共有フィルターを全件へ戻す", async () => {
     const holdings = [
       {
