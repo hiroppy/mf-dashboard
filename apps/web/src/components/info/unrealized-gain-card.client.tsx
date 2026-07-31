@@ -79,14 +79,19 @@ const GAIN_FILTER_OPTIONS: Array<{ value: GainFilter; label: string }> = [
   { value: "loss", label: "含み損" },
 ];
 
+export function matchesGainFilter(gain: number | null, gainFilter: GainFilter): boolean {
+  if (gainFilter === "all") return true;
+  if (gain === null) return false;
+  return gainFilter === "gain" ? gain > 0 : gain < 0;
+}
+
 export function filterHoldings(
   holdings: HoldingData[],
   gainFilter: GainFilter,
   institutionFilter: string,
 ): HoldingData[] {
   return holdings.filter((holding) => {
-    if (gainFilter === "gain" && holding.unrealizedGain <= 0) return false;
-    if (gainFilter === "loss" && holding.unrealizedGain >= 0) return false;
+    if (!matchesGainFilter(holding.unrealizedGain, gainFilter)) return false;
 
     if (institutionFilter === ALL_FILTER) return true;
     if (institutionFilter.includes("|")) {
@@ -100,6 +105,8 @@ export function filterHoldings(
 interface HoldingsFilterContextValue {
   selectedFilter: string;
   setSelectedFilter: (value: string) => void;
+  gainFilter: GainFilter;
+  setGainFilter: (value: GainFilter) => void;
 }
 
 const HoldingsFilterContext = createContext<HoldingsFilterContextValue | null>(null);
@@ -112,15 +119,17 @@ export function HoldingsFilterProvider({
   filterAvailable?: boolean;
 }) {
   const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
+  const [gainFilter, setGainFilter] = useState<GainFilter>("all");
 
   useEffect(() => {
     if (!filterAvailable) {
       setSelectedFilter(ALL_FILTER);
+      setGainFilter("all");
     }
   }, [filterAvailable]);
 
   return (
-    <HoldingsFilterContext value={{ selectedFilter, setSelectedFilter }}>
+    <HoldingsFilterContext value={{ selectedFilter, setSelectedFilter, gainFilter, setGainFilter }}>
       {children}
     </HoldingsFilterContext>
   );
@@ -132,10 +141,12 @@ export function useHoldingsFilter() {
 
 export function HoldingsFilterReset() {
   const setSelectedFilter = useHoldingsFilter()?.setSelectedFilter;
+  const setGainFilter = useHoldingsFilter()?.setGainFilter;
 
   useEffect(() => {
     setSelectedFilter?.(ALL_FILTER);
-  }, [setSelectedFilter]);
+    setGainFilter?.("all");
+  }, [setGainFilter, setSelectedFilter]);
 
   return null;
 }
@@ -149,7 +160,9 @@ export function UnrealizedGainCardClient({
   const [localFilter, setLocalFilter] = useState(ALL_FILTER);
   const selectedFilter = sharedFilter?.selectedFilter ?? localFilter;
   const setSelectedFilter = sharedFilter?.setSelectedFilter ?? setLocalFilter;
-  const [gainFilter, setGainFilter] = useState<GainFilter>("all");
+  const [localGainFilter, setLocalGainFilter] = useState<GainFilter>("all");
+  const gainFilter = sharedFilter?.gainFilter ?? localGainFilter;
+  const setGainFilter = sharedFilter?.setGainFilter ?? setLocalGainFilter;
 
   useEffect(() => {
     if (

@@ -85,6 +85,21 @@ function FilterButton({ value, children }: { value: string; children: ReactNode 
   );
 }
 
+function GainFilterButton({
+  value,
+  children,
+}: {
+  value: "all" | "gain" | "loss";
+  children: ReactNode;
+}) {
+  const filter = useHoldingsFilter();
+  return (
+    <button type="button" onClick={() => filter?.setGainFilter(value)}>
+      {children}
+    </button>
+  );
+}
+
 function SelectedFilter() {
   return <output aria-label="選択中フィルター">{useHoldingsFilter()?.selectedFilter}</output>;
 }
@@ -142,6 +157,17 @@ describe("filterCategories", () => {
   it("該当する保有資産がなければ空配列を返す", () => {
     expect(filterCategories(categories, "金融機関 C")).toEqual([]);
   });
+
+  it.each([
+    ["含み益", "gain" as const, ["銘柄 B", "銘柄 A", "投資信託 A"]],
+    ["含み損", "loss" as const, []],
+  ])("%sで保有資産を絞り込む", (_label, gainFilter, expectedNames) => {
+    expect(
+      filterCategories(categories, "__all__", gainFilter).flatMap(({ items }) =>
+        items.map(({ name }) => name),
+      ),
+    ).toEqual(expectedNames);
+  });
 });
 
 describe("HoldingsTableTotal", () => {
@@ -161,9 +187,56 @@ describe("HoldingsTableTotal", () => {
 
     expect(screen.getByText(expected)).not.toBeNull();
   });
+
+  it("共有された損益区分に一致する保有資産の合計を表示する", () => {
+    const mixedCategories = categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => ({
+        ...item,
+        unrealizedGain: item.name === "銘柄 A" ? -10 : 10,
+      })),
+    }));
+
+    render(
+      <HoldingsFilterProvider>
+        <GainFilterButton value="loss">含み損に絞る</GainFilterButton>
+        <HoldingsTableTotal categories={mixedCategories} total={800} enableSharedFilter />
+      </HoldingsFilterProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "含み損に絞る" }));
+
+    expect(screen.getByText("100円")).not.toBeNull();
+  });
 });
 
 describe("HoldingsTableClient", () => {
+  it("共有された損益区分で保有資産表を絞り込む", () => {
+    const mixedCategories = [
+      {
+        ...categories[0],
+        items: [
+          { ...categories[0].items[0], unrealizedGain: -10 },
+          { ...categories[0].items[1], unrealizedGain: 0 },
+        ],
+      },
+      categories[1],
+    ];
+
+    render(
+      <HoldingsFilterProvider>
+        <GainFilterButton value="loss">含み損に絞る</GainFilterButton>
+        <HoldingsTableClient categories={mixedCategories} enableSharedFilter />
+      </HoldingsFilterProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "含み損に絞る" }));
+
+    expect(screen.getByText("銘柄 A")).not.toBeNull();
+    expect(screen.queryByText("銘柄 B")).toBeNull();
+    expect(screen.queryByText("投資信託 A")).toBeNull();
+  });
+
   it("後方ページの表示中に絞り込んでも該当する保有資産を表示する", async () => {
     const institutionAItems = Array.from({ length: 11 }, (_, index) => ({
       ...categories[0].items[0],

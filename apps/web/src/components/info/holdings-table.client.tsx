@@ -12,7 +12,11 @@ import { chartTooltipStyle } from "../charts/chart-tooltip";
 import { AmountDisplay, getAmountColorClass } from "../ui/amount-display";
 import { CardContent } from "../ui/card";
 import { Pagination } from "../ui/pagination";
-import { useHoldingsFilter } from "./unrealized-gain-card.client";
+import {
+  type GainFilter,
+  matchesGainFilter,
+  useHoldingsFilter,
+} from "./unrealized-gain-card.client";
 
 const PAGE_SIZE = 10;
 
@@ -58,17 +62,28 @@ function sortCategoryGroups(categories: readonly CategoryGroup[]): CategoryGroup
   );
 }
 
-export function filterCategories(categories: CategoryGroup[], selectedFilter?: string) {
-  if (!selectedFilter || selectedFilter === "__all__") return sortCategoryGroups(categories);
+function matchesInstitutionFilter(item: HoldingItem, selectedFilter?: string): boolean {
+  if (!selectedFilter || selectedFilter === "__all__") return true;
 
   const [institution, categoryName] = selectedFilter.split("|");
+  return (
+    item.institution === institution &&
+    (categoryName === undefined || item.categoryName === categoryName)
+  );
+}
+
+export function filterCategories(
+  categories: CategoryGroup[],
+  selectedFilter?: string,
+  gainFilter: GainFilter = "all",
+) {
   return sortCategoryGroups(
     categories
       .map((group) => {
         const items = group.items.filter(
           (item) =>
-            item.institution === institution &&
-            (categoryName === undefined || item.categoryName === categoryName),
+            matchesInstitutionFilter(item, selectedFilter) &&
+            matchesGainFilter(item.unrealizedGain, gainFilter),
         );
         return {
           ...group,
@@ -93,11 +108,15 @@ export function HoldingsTableTotal({
   const filteredCategories = filterCategories(
     categories,
     enableSharedFilter ? filter?.selectedFilter : undefined,
+    enableSharedFilter ? filter?.gainFilter : undefined,
   );
-  const filteredTotal =
-    enableSharedFilter && filter?.selectedFilter !== "__all__"
-      ? filteredCategories.reduce((sum, category) => sum + category.total, 0)
-      : total;
+  const hasActiveSharedFilter =
+    enableSharedFilter &&
+    filter !== null &&
+    (filter.selectedFilter !== "__all__" || filter.gainFilter !== "all");
+  const filteredTotal = hasActiveSharedFilter
+    ? filteredCategories.reduce((sum, category) => sum + category.total, 0)
+    : total;
 
   return <AmountDisplay amount={filteredTotal} size="lg" weight="bold" />;
 }
@@ -111,6 +130,7 @@ export function HoldingsTableClient({
   const filteredCategories = filterCategories(
     categories,
     enableSharedFilter ? filter?.selectedFilter : undefined,
+    enableSharedFilter ? filter?.gainFilter : undefined,
   );
 
   return (
