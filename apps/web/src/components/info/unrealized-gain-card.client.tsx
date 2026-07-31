@@ -85,6 +85,10 @@ export function matchesGainFilter(gain: number | null, gainFilter: GainFilter): 
   return gainFilter === "gain" ? gain > 0 : gain < 0;
 }
 
+export function getRankingLimit(gainFilter: GainFilter, institutionFilter: string): number {
+  return gainFilter === "all" && institutionFilter === ALL_FILTER ? 3 : 6;
+}
+
 export function filterHoldings(
   holdings: HoldingData[],
   gainFilter: GainFilter,
@@ -185,13 +189,14 @@ export function UnrealizedGainCardClient({
   const treemapData = groupSmallHoldings(filteredHoldings, totalMarketValue);
 
   const selectOptions = [{ value: ALL_FILTER, label: "金融機関すべて" }, ...filterOptions];
+  const rankingLimit = getRankingLimit(gainFilter, selectedFilter);
 
   // Sort by gain for top/bottom lists
   const sortedByGain = [...filteredHoldings].sort((a, b) => b.unrealizedGain - a.unrealizedGain);
-  const topGainers = sortedByGain.filter((h) => h.unrealizedGain > 0).slice(0, 3);
+  const topGainers = sortedByGain.filter((h) => h.unrealizedGain > 0).slice(0, rankingLimit);
   const topLosers = sortedByGain
     .filter((h) => h.unrealizedGain < 0)
-    .slice(-3)
+    .slice(-rankingLimit)
     .reverse();
 
   return (

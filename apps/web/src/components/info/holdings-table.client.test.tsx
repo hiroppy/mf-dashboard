@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { filterCategories, HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
 import {
   filterHoldings,
+  getRankingLimit,
   HoldingsFilterProvider,
   HoldingsFilterReset,
   UnrealizedGainCardClient,
@@ -319,6 +320,15 @@ describe("UnrealizedGainCardClient", () => {
       filterHoldingsData[0],
     ]);
     expect(filterHoldings(filterHoldingsData, "loss", "金融機関 A")).toEqual([]);
+  });
+
+  it.each([
+    ["フィルターなし", "all" as const, "__all__", 3],
+    ["損益区分あり", "gain" as const, "__all__", 6],
+    ["金融機関あり", "all" as const, "金融機関 A", 6],
+    ["両方あり", "loss" as const, "金融機関 B", 6],
+  ])("%sではランキング上限を切り替える", (_label, gainFilter, institutionFilter, expected) => {
+    expect(getRankingLimit(gainFilter, institutionFilter)).toBe(expected);
   });
 
   it("損益区分を金融機関の左に表示する", () => {
