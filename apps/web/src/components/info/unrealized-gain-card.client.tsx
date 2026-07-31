@@ -74,7 +74,7 @@ function groupSmallHoldings(
 
 const ALL_FILTER = "__all__";
 const GAIN_FILTER_OPTIONS: Array<{ value: GainFilter; label: string }> = [
-  { value: "all", label: "すべて" },
+  { value: "all", label: "損益すべて" },
   { value: "gain", label: "含み益" },
   { value: "loss", label: "含み損" },
 ];
@@ -184,7 +184,7 @@ export function UnrealizedGainCardClient({
 
   const treemapData = groupSmallHoldings(filteredHoldings, totalMarketValue);
 
-  const selectOptions = [{ value: ALL_FILTER, label: "すべて" }, ...filterOptions];
+  const selectOptions = [{ value: ALL_FILTER, label: "金融機関すべて" }, ...filterOptions];
 
   // Sort by gain for top/bottom lists
   const sortedByGain = [...filteredHoldings].sort((a, b) => b.unrealizedGain - a.unrealizedGain);

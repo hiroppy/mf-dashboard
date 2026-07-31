@@ -335,7 +335,9 @@ describe("UnrealizedGainCardClient", () => {
     const selects = screen.getAllByRole("combobox");
     expect(selects).toHaveLength(2);
     expect(selects[0].getAttribute("aria-label")).toBe("損益を選択");
+    expect(selects[0].textContent).toBe("損益すべて");
     expect(selects[1].getAttribute("aria-label")).toBe("金融機関を選択");
+    expect(selects[1].textContent).toBe("金融機関すべて");
   });
 
   it("更新後の選択肢にない共有フィルターを全件へ戻す", async () => {
