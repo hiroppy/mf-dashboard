@@ -205,7 +205,7 @@ export function UnrealizedGainCardClient({
         <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
           <CardTitle icon={TrendingUp}>含み損益</CardTitle>
           {!hideFilter && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               <Select
                 options={GAIN_FILTER_OPTIONS}
                 value={gainFilter}

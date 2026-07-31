@@ -348,6 +348,8 @@ describe("UnrealizedGainCardClient", () => {
     expect(selects[0].textContent).toBe("損益すべて");
     expect(selects[1].getAttribute("aria-label")).toBe("金融機関を選択");
     expect(selects[1].textContent).toBe("金融機関すべて");
+    expect(selects[0].parentElement?.classList.contains("self-end")).toBe(true);
+    expect(selects[0].parentElement?.classList.contains("sm:self-auto")).toBe(true);
   });
 
   it("更新後の選択肢にない共有フィルターを全件へ戻す", async () => {
