@@ -46,7 +46,7 @@ jobs:
   e2e-web:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.62.0-noble
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
     env:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
