@@ -18,10 +18,15 @@ async function gotoPage(page: Page, url: string, pathname: string): Promise<void
   expect(new URL(page.url()).pathname).toBe(pathname);
 }
 
-async function expectMinimumCellCount(rows: Locator, minimum: number): Promise<void> {
+async function expectOptionalRowsHaveMinimumCellCount(
+  rows: Locator,
+  minimum: number,
+): Promise<void> {
   const cellCounts = await rows.evaluateAll((elements) =>
     elements.map((row) => row.querySelectorAll("td").length),
   );
+  if (cellCounts.length === 0) return;
+
   expect(cellCounts.every((count) => count >= minimum)).toBe(true);
 }
 
@@ -85,8 +90,11 @@ describe("crawler page structures", () => {
       await liabilityTables.first().waitFor({ state: "visible", timeout: 10000 });
       expect(await liabilityTables.count()).toBeGreaterThan(0);
 
-      await expectMinimumCellCount(page.locator("table.table-det tbody tr"), 4);
-      await expectMinimumCellCount(page.locator("table.table-bordered tbody tr"), 2);
+      await expectOptionalRowsHaveMinimumCellCount(page.locator("table.table-det tbody tr"), 4);
+      await expectOptionalRowsHaveMinimumCellCount(
+        page.locator("table.table-bordered tbody tr"),
+        2,
+      );
     });
   });
 
@@ -103,7 +111,7 @@ describe("crawler page structures", () => {
       expect(await summaryCells.count()).toBeGreaterThanOrEqual(5);
 
       const detailRows = detailTable.locator("tbody tr[id^='js-transaction-']");
-      await expectMinimumCellCount(detailRows, 7);
+      await expectOptionalRowsHaveMinimumCellCount(detailRows, 7);
     });
   });
 
