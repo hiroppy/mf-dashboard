@@ -6,6 +6,8 @@ export const mfUrls = {
   home: `${BASE_URL}/`,
   /** 家計簿（収支詳細） */
   cashFlow: `${BASE_URL}/cf`,
+  /** 家計簿（月次収支） */
+  monthlyCashFlow: `${BASE_URL}/cf/monthly`,
   /** 資産推移 */
   assetHistory: `${BASE_URL}/bs/history`,
   /** ポートフォリオ */
