@@ -45,6 +45,8 @@ jobs:
       - run: docker compose build ${{ matrix.app }}
   build-e2e-web:
     runs-on: ubuntu-latest
+    env:
+      DASHBOARD_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v7.0.1
         with:
