@@ -43,7 +43,25 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - run: cp .env.example .env
       - run: docker compose build ${{ matrix.app }}
+  build-e2e-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - run: DEMO_MODE=false pnpm --filter @mf-dashboard/web build
+      - run: |
+          cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
+          cp -R apps/web/public apps/web/.next/standalone/apps/web/public
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: e2e-web-build
+          path: apps/web/.next/standalone/
+          include-hidden-files: true
+          retention-days: 1
   e2e-web:
+    needs: build-e2e-web
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -59,6 +77,10 @@ jobs:
           persist-credentials: false
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: ./.github/actions/setup-node
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: e2e-web-build
+          path: apps/web/.next/standalone
       - run: pnpm test:e2e:web -- --shard=${{ matrix.shard }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7.0.1
