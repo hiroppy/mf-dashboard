@@ -81,6 +81,10 @@ describe("crawler page structures", () => {
       await heading.waitFor({ state: "visible", timeout: 10000 });
       expect(await heading.isVisible()).toBe(true);
 
+      const liabilityTables = page.locator("table.table-det, table.table-bordered");
+      await liabilityTables.first().waitFor({ state: "visible", timeout: 10000 });
+      expect(await liabilityTables.count()).toBeGreaterThan(0);
+
       await expectMinimumCellCount(page.locator("table.table-det tbody tr"), 4);
       await expectMinimumCellCount(page.locator("table.table-bordered tbody tr"), 2);
     });
