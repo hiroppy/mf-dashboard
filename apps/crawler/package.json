@@ -23,7 +23,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@1password/sdk": "0.4.0",
+    "@1password/sdk": "0.4.1",
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
