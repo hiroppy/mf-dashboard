@@ -56,11 +56,11 @@ jobs:
       - run: |
           cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
           cp -R apps/web/public apps/web/.next/standalone/apps/web/public
+          tar -czf e2e-web-build.tar.gz -C apps/web/.next/standalone .
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: e2e-web-build
-          path: apps/web/.next/standalone/
-          include-hidden-files: true
+          path: e2e-web-build.tar.gz
           retention-days: 1
   e2e-web:
     needs: build-e2e-web
@@ -82,7 +82,10 @@ jobs:
       - uses: actions/download-artifact@v8.0.1
         with:
           name: e2e-web-build
-          path: apps/web/.next/standalone
+          path: .artifacts
+      - run: |
+          mkdir -p apps/web/.next/standalone
+          tar -xzf .artifacts/e2e-web-build.tar.gz -C apps/web/.next/standalone
       - run: pnpm test:e2e:web -- --shard=${{ matrix.shard }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7.0.1
