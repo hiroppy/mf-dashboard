@@ -46,9 +46,8 @@ describe("crawler page structures", () => {
 
       const totalAssets = page.locator(".heading-radius-box, .total-assets").first();
       await totalAssets.waitFor({ state: "visible", timeout: 10000 });
-      expect(await page.locator("table.pfm-sheet-table tbody tr").count()).toBeGreaterThanOrEqual(
-        2,
-      );
+      const changeRows = page.locator("table.pfm-sheet-table").first().locator("tbody tr");
+      expect(await changeRows.count()).toBeGreaterThanOrEqual(2);
     });
   });
 
