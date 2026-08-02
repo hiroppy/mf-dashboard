@@ -8,8 +8,8 @@ import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-d
 import {
   hasCashFlowPeriod,
   saveTransactionsForMonths,
+  type TransactionPeriodReplacement,
 } from "@mf-dashboard/db/repository/transactions";
-import type { CashFlowItem } from "@mf-dashboard/db/types";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
@@ -196,12 +196,7 @@ export async function runSavePhase(
   page: Page,
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
-  historyMonths: Array<{
-    dateRange?: { from: string; to: string };
-    isComplete?: boolean;
-    items: CashFlowItem[];
-    month: string;
-  }> = [],
+  historyMonths: TransactionPeriodReplacement[] = [],
   cleanupGroupIds?: string[],
   institutionCategories?: ReadonlyMap<string, string>,
 ): Promise<number[]> {
@@ -265,14 +260,9 @@ export async function runCashFlowHistoryPhase(
   config: Pick<CrawlerConfig, "isHistoryMode"> & { activeAccountingMonth?: string },
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
-  publishHistory: (
-    months: Array<{
-      dateRange?: { from: string; to: string };
-      isComplete?: boolean;
-      items: CashFlowItem[];
-      month: string;
-    }>,
-  ) => Promise<number[]> = async (months) => {
+  publishHistory: (months: TransactionPeriodReplacement[]) => Promise<number[]> = async (
+    months,
+  ) => {
     const accountIdMap = await buildAccountIdMap(db);
     return saveTransactionsForMonths(db, months, accountIdMap);
   },
@@ -349,13 +339,7 @@ export async function runCashFlowHistoryPhase(
       },
     });
 
-    const preparedMonths: Array<{
-      dateRange?: { from: string; to: string };
-      isComplete?: boolean;
-      items: CashFlowItem[];
-      month: string;
-      stepId?: string;
-    }> = [];
+    const preparedMonths: Array<TransactionPeriodReplacement & { stepId?: string }> = [];
     for (const { month, progressMonth = month, data: monthData } of historyResults) {
       let stepId = monthSteps.get(progressMonth);
       if (progress && !stepId) {

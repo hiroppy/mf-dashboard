@@ -11,63 +11,23 @@ export interface TransactionDateRange {
   to: string;
 }
 
+export interface TransactionPeriodReplacement {
+  dateRange?: TransactionDateRange;
+  isComplete?: boolean;
+  items: CashFlowItem[];
+  month: string;
+}
+
 export async function saveTransaction(
   db: DbExecutor,
   item: CashFlowItem,
   accountIdMap?: Map<string, number>,
 ): Promise<void> {
-  // Skip items without valid mfId
   if (!item.mfId || item.mfId.startsWith("unknown")) {
     return;
   }
 
-  // 日付をISO形式に変換
-  const isoDate = convertToIsoDate(item.date);
-
-  // accountName から account_id をルックアップ
-  let accountId: number | null = null;
-  if (accountIdMap && item.accountName) {
-    // 完全一致を試行
-    accountId = accountIdMap.get(item.accountName) ?? null;
-    // 完全一致しない場合、キーがaccountNameで始まるものを部分一致で探す
-    if (!accountId) {
-      for (const [key, id] of accountIdMap) {
-        if (key.startsWith(item.accountName)) {
-          accountId = id;
-          break;
-        }
-      }
-    }
-  }
-
-  // transferTarget から transfer_target_account_id をルックアップ
-  let transferTargetAccountId: number | null = null;
-  if (accountIdMap && item.transferTarget) {
-    transferTargetAccountId = accountIdMap.get(item.transferTarget) ?? null;
-    if (!transferTargetAccountId) {
-      for (const [key, id] of accountIdMap) {
-        if (key.startsWith(item.transferTarget)) {
-          transferTargetAccountId = id;
-          break;
-        }
-      }
-    }
-  }
-
-  const data = {
-    mfId: item.mfId,
-    date: isoDate,
-    accountId,
-    category: item.category,
-    subCategory: item.subCategory ?? null,
-    description: item.description,
-    amount: item.amount,
-    type: item.type,
-    isTransfer: item.isTransfer,
-    isExcludedFromCalculation: item.isExcludedFromCalculation ?? false,
-    transferTarget: item.transferTarget ?? null,
-    transferTargetAccountId,
-  };
+  const data = prepareTransactionData(item, accountIdMap);
 
   await upsertById(db, schema.transactions, eq(schema.transactions.mfId, item.mfId), data, data);
 }
@@ -168,20 +128,18 @@ function resolveTransactionDateRange(
 }
 
 export function assertNonOverlappingTransactionRanges(
-  months: Array<{ dateRange?: TransactionDateRange; month: string }>,
+  months: TransactionPeriodReplacement[],
 ): void {
-  const ranges = months.map(({ dateRange, month }) =>
-    resolveTransactionDateRange(month, dateRange),
-  );
+  const ranges = months
+    .map(({ dateRange, month }) => resolveTransactionDateRange(month, dateRange))
+    .sort((left, right) => left.from.localeCompare(right.from));
 
-  for (let index = 0; index < ranges.length; index++) {
-    const range = ranges[index]!;
-    for (let previousIndex = 0; previousIndex < index; previousIndex++) {
-      const previousRange = ranges[previousIndex]!;
-      if (range.from <= previousRange.to && previousRange.from <= range.to) {
-        throw new Error("Overlapping transaction date ranges");
-      }
+  let latestEnd = "";
+  for (const range of ranges) {
+    if (range.from <= latestEnd) {
+      throw new Error("Overlapping transaction date ranges");
     }
+    latestEnd = range.to;
   }
 }
 
@@ -350,12 +308,7 @@ export async function replaceTransactionsForMonth(
 
 export async function saveTransactionsForMonths(
   db: Db,
-  months: Array<{
-    dateRange?: TransactionDateRange;
-    isComplete?: boolean;
-    items: CashFlowItem[];
-    month: string;
-  }>,
+  months: TransactionPeriodReplacement[],
   accountIdMap?: Map<string, number>,
 ): Promise<number[]> {
   assertNonOverlappingTransactionRanges(months);

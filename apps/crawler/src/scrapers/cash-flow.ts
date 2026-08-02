@@ -1,29 +1,17 @@
 import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
-import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
+import type { CashFlowSummary } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { debug } from "../logger.js";
-import { parseJapaneseNumber } from "../parsers.js";
 import {
-  SUMMARY_COLUMNS,
-  isSupportedCashFlowAmount,
+  extractCashFlowFromPage,
   parseCashFlowMonthCsvHref,
   parseCashFlowMonthHeader,
-  parseDetailRow,
   resolveCashFlowPeriod,
-  verifyCashFlowRowsComplete,
   waitForCashFlowFetchApplied,
 } from "./cash-flow-history.js";
 
 export { parseCashFlowMonthCsvHref, parseCashFlowMonthHeader };
-
-async function getRequiredText(locator: ReturnType<Page["locator"]>): Promise<string> {
-  try {
-    return (await locator.textContent({ timeout: 3000 }))?.trim() ?? "";
-  } catch {
-    throw new Error("Could not verify the complete cash flow summary");
-  }
-}
 
 async function getDisplayedCashFlowState(
   page: Page,
@@ -92,53 +80,6 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   await page.locator("#cf-detail-table").waitFor({ state: "visible", timeout: 10000 });
 
   const displayedState = await ensureCurrentCashFlowView(page);
-  const { month } = displayedState;
-
-  // Get totals from summary table (並列取得)
-  const summaryRow = page.locator("#monthly_total_table_kakeibo tbody tr").first();
-  const summaryCells = summaryRow.locator("td");
-
-  const [incomeText, expenseText, balanceText] = await Promise.all([
-    getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.INCOME)),
-    getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.EXPENSE)),
-    getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.BALANCE)),
-  ]);
-
-  if (![incomeText, expenseText, balanceText].every(isSupportedCashFlowAmount)) {
-    throw new Error("Could not verify the complete cash flow summary");
-  }
-
-  const totalIncome = parseJapaneseNumber(incomeText || "0");
-  const totalExpense = parseJapaneseNumber(expenseText || "0");
-  const balance = parseJapaneseNumber(balanceText || "0");
-
-  debug(`Detected month: ${month}`);
-
-  const currentYear = parseInt(month.substring(0, 4), 10);
-
-  // Parse detail items
-  const detailRows = page.locator("#cf-detail-table tbody > tr");
-  const detailCount = await detailRows.count();
-  await verifyCashFlowRowsComplete(page, detailCount, [totalIncome, totalExpense, balance]);
-  const items: CashFlowItem[] = [];
-
-  for (let i = 0; i < detailCount; i++) {
-    items.push(
-      await parseDetailRow(detailRows.nth(i), currentYear, {
-        periodStart: displayedState.periodStart,
-        periodEnd: displayedState.periodEnd,
-      }),
-    );
-  }
-
-  return {
-    month,
-    periodStart: displayedState.periodStart,
-    periodEnd: displayedState.periodEnd,
-    isComplete: true,
-    totalIncome,
-    totalExpense,
-    balance,
-    items,
-  };
+  debug(`Detected month: ${displayedState.month}`);
+  return extractCashFlowFromPage(page, displayedState);
 }

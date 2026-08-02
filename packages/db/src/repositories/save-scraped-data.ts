@@ -2,13 +2,7 @@ import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type {
-  CashFlowItem,
-  Portfolio,
-  PortfolioItem,
-  RegisteredAccounts,
-  ScrapedData,
-} from "../types";
+import type { Portfolio, PortfolioItem, RegisteredAccounts, ScrapedData } from "../types";
 import { now } from "../utils";
 import {
   upsertAccounts,
@@ -28,7 +22,11 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { assertNonOverlappingTransactionRanges, replaceTransactionsForMonth } from "./transactions";
+import {
+  assertNonOverlappingTransactionRanges,
+  replaceTransactionsForMonth,
+  type TransactionPeriodReplacement,
+} from "./transactions";
 
 const isCI = process.env.CI === "true";
 const DEPOSIT_ASSET_CATEGORY = "預金・現金";
@@ -138,12 +136,7 @@ export async function saveScrapedDataBatch(
     cleanupGroupIds?: string[];
     fullData?: ScrapedData;
     groupOnlyData: ScrapedData[];
-    historyMonths?: Array<{
-      dateRange?: { from: string; to: string };
-      isComplete?: boolean;
-      items: CashFlowItem[];
-      month: string;
-    }>;
+    historyMonths?: TransactionPeriodReplacement[];
     institutionCategories?: ReadonlyMap<string, string>;
   },
 ): Promise<number[]> {

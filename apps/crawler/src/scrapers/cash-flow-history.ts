@@ -224,7 +224,7 @@ export function resolveCashFlowDate(
 
 async function detectMonth(
   page: Page,
-): Promise<{ year: number; month: number; periodStart: string; periodEnd: string }> {
+): Promise<{ month: string; periodStart: string; periodEnd: string }> {
   const today = getJstDateParts();
   let year = today.year;
   let month = today.month;
@@ -235,22 +235,12 @@ async function detectMonth(
   const csvLink = await getOptionalAttribute(page.locator("a[href*='/cf/csv']").first(), "href");
   const csvMonth = parseCashFlowMonthCsvHref(csvLink);
   if (csvMonth) {
-    const [year, month] = csvMonth.split("-").map(Number);
-    return {
-      year: year!,
-      month: month!,
-      ...resolveCashFlowPeriod(headerTitle, csvMonth),
-    };
+    return { month: csvMonth, ...resolveCashFlowPeriod(headerTitle, csvMonth) };
   }
 
   const headerMonth = parseCashFlowMonthHeader(headerTitle);
   if (headerMonth) {
-    const [headerYear, headerMonthNumber] = headerMonth.split("-").map(Number);
-    return {
-      year: headerYear!,
-      month: headerMonthNumber!,
-      ...resolveCashFlowPeriod(headerTitle, headerMonth),
-    };
+    return { month: headerMonth, ...resolveCashFlowPeriod(headerTitle, headerMonth) };
   }
 
   const pageText = await getOptionalText(
@@ -264,7 +254,7 @@ async function detectMonth(
   }
 
   const detectedMonth = `${year}-${String(month).padStart(2, "0")}`;
-  return { year, month, ...resolveCashFlowPeriod(headerTitle, detectedMonth) };
+  return { month: detectedMonth, ...resolveCashFlowPeriod(headerTitle, detectedMonth) };
 }
 
 /**
@@ -382,9 +372,12 @@ export async function parseDetailRow(
 /**
  * 現在表示中のページから家計簿データを取得
  */
-export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSummary> {
-  const { year, month: monthNum, periodStart, periodEnd } = await detectMonth(page);
-  const month = `${year}-${String(monthNum).padStart(2, "0")}`;
+export async function extractCashFlowFromPage(
+  page: Page,
+  displayedPeriod?: { month: string; periodStart: string; periodEnd: string },
+): Promise<CashFlowSummary> {
+  const { month, periodStart, periodEnd } = displayedPeriod ?? (await detectMonth(page));
+  const year = Number(month.slice(0, 4));
   debug(`  Extracting data for ${month}...`);
 
   // Get totals from summary table (並列取得)
@@ -455,8 +448,7 @@ async function getMonthFromCsvLink(page: Page): Promise<string | null> {
 async function getDisplayedCashFlowMonth(page: Page): Promise<string> {
   const csvMonth = await getMonthFromCsvLink(page);
   if (csvMonth) return csvMonth;
-  const { year, month } = await detectMonth(page);
-  return `${year}-${String(month).padStart(2, "0")}`;
+  return (await detectMonth(page)).month;
 }
 
 /**
