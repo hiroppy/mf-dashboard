@@ -144,6 +144,19 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium" });
   });
 
+  it("falls back to fuzzy groups when exact-label amount candidates do not match", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 20_000, "ACME UTILITY"),
+        transaction("2026-06-20", 20_000, "XACME UTILITY"),
+        transaction("2026-07-10", 20_000, "XACME UTILITY"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-10" });
+  });
+
   it("preserves fuzzy-matching labels that recur in parallel", () => {
     const result = generateRecurringCandidates(
       ["2026-01-10", "2026-02-10", "2026-03-10"].flatMap((date) => [

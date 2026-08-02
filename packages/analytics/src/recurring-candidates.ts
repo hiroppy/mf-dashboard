@@ -387,20 +387,21 @@ function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore):
   );
 }
 
-function getIndexedGroups(
+function getOptimizedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
   if (exactRecurringGroup) return [exactRecurringGroup];
-  const amountIndexedGroups = getAmountIndexedGroups(
-    partition,
-    transaction,
-    options.amountToleranceRatio,
-  );
-  if (amountIndexedGroups.length > 0) return amountIndexedGroups;
-  const similarityThreshold = options.descriptionSimilarityThreshold;
+  return getAmountIndexedGroups(partition, transaction, options.amountToleranceRatio);
+}
+
+function getFuzzyIndexedGroups(
+  partition: GroupPartition,
+  transaction: NormalizedTransaction,
+  similarityThreshold: number,
+): TransactionGroup[] {
   if (similarityThreshold === 0) return partition.groups;
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
@@ -422,6 +423,21 @@ function getIndexedGroups(
       return (2 * overlap) / (transactionBigrams.size + anchorBigramCount) >= similarityThreshold;
     })
     .map(([group]) => group);
+}
+
+function findBestGroup(
+  transaction: NormalizedTransaction,
+  groups: TransactionGroup[],
+  options: Required<GenerateRecurringCandidatesOptions>,
+): TransactionGroup | undefined {
+  let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
+  for (const group of groups) {
+    const score = getGroupMatchScore(transaction, group, options);
+    if (score && (!bestMatch || compareGroupMatchScores(score, bestMatch.score) < 0)) {
+      bestMatch = { group, score };
+    }
+  }
+  return bestMatch?.group;
 }
 
 function lowerBound(values: number[], target: number): number {
@@ -553,15 +569,14 @@ function groupTransactions(
       latestMonths: new Map(),
     };
     const transactionBigrams = getBigrams(transaction.normalizedDescription);
-    const candidateGroups = getIndexedGroups(partition, transaction, options);
-    let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
-    for (const group of candidateGroups) {
-      const score = getGroupMatchScore(transaction, group, options);
-      if (score && (!bestMatch || compareGroupMatchScores(score, bestMatch.score) < 0)) {
-        bestMatch = { group, score };
-      }
-    }
-    const existingGroup = bestMatch?.group;
+    const optimizedGroups = getOptimizedGroups(partition, transaction, options);
+    const existingGroup =
+      findBestGroup(transaction, optimizedGroups, options) ??
+      findBestGroup(
+        transaction,
+        getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold),
+        options,
+      );
     if (existingGroup) {
       moveGroupToMonth(partition, existingGroup, transaction.month);
       existingGroup.transactions.push(transaction);
