@@ -7,6 +7,7 @@ import { parseJapaneseNumber } from "../parsers.js";
 import {
   SUMMARY_COLUMNS,
   parseDetailRow,
+  resolveCashFlowPeriod,
   waitForCashFlowFetchApplied,
 } from "./cash-flow-history.js";
 
@@ -35,7 +36,9 @@ export function parseCashFlowMonthCsvHref(href: string | null): string | null {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-async function getDisplayedCashFlowMonth(page: Page): Promise<string | null> {
+async function getDisplayedCashFlowState(
+  page: Page,
+): Promise<{ month: string; periodStart: string; periodEnd: string } | null> {
   const monthHeader = page.locator(".fc-header-title h2").first();
   const csvLink = page.locator("a[href*='/cf/csv']").first();
   const [hasMonthHeader, hasCsvLink] = await Promise.all([
@@ -47,7 +50,8 @@ async function getDisplayedCashFlowMonth(page: Page): Promise<string | null> {
     hasCsvLink ? csvLink.getAttribute("href", { timeout: 3000 }).catch(() => null) : null,
   ]);
 
-  return parseCashFlowMonthCsvHref(csvHref) ?? parseCashFlowMonthHeader(headerText);
+  const month = parseCashFlowMonthCsvHref(csvHref) ?? parseCashFlowMonthHeader(headerText);
+  return month ? { month, ...resolveCashFlowPeriod(headerText, month) } : null;
 }
 
 export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
@@ -58,10 +62,11 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   await page.locator("#cf-detail-table").waitFor({ state: "visible", timeout: 10000 });
 
   const currentMonth = getJstYearMonthKey();
-  let month = await getDisplayedCashFlowMonth(page);
-  if (!month) {
+  let displayedState = await getDisplayedCashFlowState(page);
+  if (!displayedState) {
     throw new Error("Could not determine the displayed cash flow month");
   }
+  let { month } = displayedState;
 
   // When a previous month is displayed, the service loads the current month's rows
   // asynchronously. Waiting for the full response and month transition prevents treating the
@@ -102,9 +107,10 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
       return csvMonth ? csvMonth === expectedMonth : headerMonth === expectedMonth;
     }, currentMonth);
 
-    month = await getDisplayedCashFlowMonth(page);
-    if (month !== currentMonth) {
-      throw new Error(`Cash flow remained on ${month ?? "an unknown month"}`);
+    displayedState = await getDisplayedCashFlowState(page);
+    month = displayedState?.month ?? "";
+    if (!displayedState || month !== currentMonth) {
+      throw new Error(`Cash flow remained on ${month || "an unknown month"}`);
     }
   }
 
@@ -141,8 +147,21 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {
-    items.push(await parseDetailRow(detailRows.nth(i), currentYear));
+    items.push(
+      await parseDetailRow(detailRows.nth(i), currentYear, {
+        periodStart: displayedState.periodStart,
+        periodEnd: displayedState.periodEnd,
+      }),
+    );
   }
 
-  return { month, totalIncome, totalExpense, balance, items };
+  return {
+    month,
+    periodStart: displayedState.periodStart,
+    periodEnd: displayedState.periodEnd,
+    totalIncome,
+    totalExpense,
+    balance,
+    items,
+  };
 }

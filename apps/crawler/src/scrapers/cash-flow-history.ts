@@ -138,10 +138,56 @@ async function parseAccountCell(
 /**
  * ページから表示中の月を検出する
  */
-async function detectMonth(page: Page): Promise<{ year: number; month: number }> {
+function toIsoDate(year: string, month: string, day: string): string | null {
+  const value = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null;
+}
+
+export function resolveCashFlowPeriod(
+  headerText: string | null,
+  month: string,
+): { periodStart: string; periodEnd: string } {
+  const rangeMatch = headerText?.match(
+    /(\d{4})\/(\d{1,2})\/(\d{1,2})\s*-\s*(\d{4})\/(\d{1,2})\/(\d{1,2})/,
+  );
+  if (rangeMatch) {
+    const periodStart = toIsoDate(rangeMatch[1], rangeMatch[2], rangeMatch[3]);
+    const periodEnd = toIsoDate(rangeMatch[4], rangeMatch[5], rangeMatch[6]);
+    if (periodStart && periodEnd && periodStart <= periodEnd) return { periodStart, periodEnd };
+  }
+
+  const range = buildMonthRange(month);
+  return { periodStart: range.from.replaceAll("/", "-"), periodEnd: range.to.replaceAll("/", "-") };
+}
+
+export function resolveCashFlowDate(
+  dateText: string,
+  fallbackYear: number,
+  period?: { periodStart: string; periodEnd: string },
+): string {
+  if (period) {
+    const candidateYears = new Set([
+      Number(period.periodStart.slice(0, 4)),
+      Number(period.periodEnd.slice(0, 4)),
+      fallbackYear,
+    ]);
+    for (const year of candidateYears) {
+      const candidate = convertDateToIso(dateText, year);
+      if (candidate >= period.periodStart && candidate <= period.periodEnd) return candidate;
+    }
+  }
+  return convertDateToIso(dateText, fallbackYear);
+}
+
+async function detectMonth(
+  page: Page,
+): Promise<{ year: number; month: number; periodStart: string; periodEnd: string }> {
   const today = getJstDateParts();
   let year = today.year;
   let month = today.month;
+
+  const headerTitle = await getOptionalText(page.locator(".fc-header-title h2"), SUMMARY_TIMEOUT);
 
   // Prefer the CSV period because range headers can start in the previous calendar month.
   const csvLink = await getOptionalAttribute(page.locator("a[href*='/cf/csv']").first(), "href");
@@ -149,11 +195,15 @@ async function detectMonth(page: Page): Promise<{ year: number; month: number }>
   const csvMonth = csvLink?.match(/[?&]month=(\d{1,2})/)?.[1];
   const csvMonthNumber = Number(csvMonth);
   if (csvYear && csvMonth && csvMonthNumber >= 1 && csvMonthNumber <= 12) {
-    return { year: Number(csvYear), month: csvMonthNumber };
+    const detectedMonth = `${csvYear}-${String(csvMonthNumber).padStart(2, "0")}`;
+    return {
+      year: Number(csvYear),
+      month: csvMonthNumber,
+      ...resolveCashFlowPeriod(headerTitle, detectedMonth),
+    };
   }
 
   // Try 1: fc-header-title (FullCalendar style)
-  const headerTitle = await getOptionalText(page.locator(".fc-header-title h2"), SUMMARY_TIMEOUT);
   let match = headerTitle?.match(/(\d{4})年(\d{1,2})月/);
 
   // Try 2: Look for date display in other formats
@@ -169,7 +219,8 @@ async function detectMonth(page: Page): Promise<{ year: number; month: number }>
     month = parseInt(match[2]);
   }
 
-  return { year, month };
+  const detectedMonth = `${year}-${String(month).padStart(2, "0")}`;
+  return { year, month, ...resolveCashFlowPeriod(headerTitle, detectedMonth) };
 }
 
 /**
@@ -205,6 +256,7 @@ async function detectTransactionType(
 export async function parseDetailRow(
   row: ReturnType<Page["locator"]>,
   year: number,
+  period?: { periodStart: string; periodEnd: string },
 ): Promise<CashFlowItem> {
   const cells = row.locator("td");
 
@@ -218,7 +270,7 @@ export async function parseDetailRow(
   ]);
 
   const mfId = rowId?.startsWith("js-transaction-") ? rowId.slice("js-transaction-".length) : "";
-  const date = convertDateToIso(dateText || "", year);
+  const date = resolveCashFlowDate(dateText || "", year, period);
   const parsedDate = new Date(`${date}T00:00:00Z`);
   const isValidDate =
     /^\d{4}-\d{2}-\d{2}$/.test(date) &&
@@ -282,7 +334,7 @@ export async function parseDetailRow(
  * 現在表示中のページから家計簿データを取得
  */
 export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSummary> {
-  const { year, month: monthNum } = await detectMonth(page);
+  const { year, month: monthNum, periodStart, periodEnd } = await detectMonth(page);
   const month = `${year}-${String(monthNum).padStart(2, "0")}`;
   debug(`  Extracting data for ${month}...`);
 
@@ -306,10 +358,10 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {
-    items.push(await parseDetailRow(detailRows.nth(i), year));
+    items.push(await parseDetailRow(detailRows.nth(i), year, { periodStart, periodEnd }));
   }
 
-  return { month, totalIncome, totalExpense, balance, items };
+  return { month, periodStart, periodEnd, totalIncome, totalExpense, balance, items };
 }
 
 export function buildMonthRange(month: string): { from: string; to: string } {

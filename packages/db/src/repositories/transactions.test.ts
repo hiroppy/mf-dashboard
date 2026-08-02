@@ -10,6 +10,7 @@ import {
   hasTransactionsForMonth,
   deleteTransactionsForMonth,
   saveTransactionsForMonth,
+  saveTransactionsForMonths,
   findExistingTransactionMfIds,
 } from "./transactions";
 
@@ -565,5 +566,88 @@ describe("saveTransactionsForMonth", () => {
     const result = await db.select().from(schema.transactions).all();
     expect(result).toHaveLength(1);
     expect(result[0].date).toBe("2025-12-31");
+  });
+
+  test("月跨ぎ期間の置換で隣接期間の取引を削除しない", async () => {
+    await saveTransactionsForMonths(db, [
+      {
+        month: "2026-09",
+        dateRange: { from: "2026-08-26", to: "2026-09-25" },
+        items: [
+          {
+            mfId: "period-september",
+            date: "2026-08-31",
+            category: "Category A",
+            subCategory: null,
+            description: "Transaction A",
+            amount: 1_000,
+            type: "expense",
+            isTransfer: false,
+            isExcludedFromCalculation: false,
+          },
+        ],
+      },
+      {
+        month: "2026-08",
+        dateRange: { from: "2026-07-26", to: "2026-08-25" },
+        items: [
+          {
+            mfId: "period-august",
+            date: "2026-08-01",
+            category: "Category B",
+            subCategory: null,
+            description: "Transaction B",
+            amount: 2_000,
+            type: "expense",
+            isTransfer: false,
+            isExcludedFromCalculation: false,
+          },
+        ],
+      },
+    ]);
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId).sort()).toEqual(["period-august", "period-september"]);
+  });
+
+  test("置換範囲外の取引があれば既存データを削除しない", async () => {
+    await saveTransactionsForMonth(db, "2026-08", [
+      {
+        mfId: "existing-transaction",
+        date: "2026-08-01",
+        category: "Category A",
+        subCategory: null,
+        description: "Existing Transaction",
+        amount: 1_000,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      },
+    ]);
+
+    await expect(
+      saveTransactionsForMonth(
+        db,
+        "2026-08",
+        [
+          {
+            mfId: "outside-transaction",
+            date: "2026-08-26",
+            category: "Category B",
+            subCategory: null,
+            description: "Outside Transaction",
+            amount: 2_000,
+            type: "expense",
+            isTransfer: false,
+            isExcludedFromCalculation: false,
+          },
+        ],
+        undefined,
+        { from: "2026-07-26", to: "2026-08-25" },
+      ),
+    ).rejects.toThrow("Invalid transactions: item falls outside replacement date range");
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId)).toEqual(["existing-transaction"]);
   });
 });

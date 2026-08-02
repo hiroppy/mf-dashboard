@@ -1,10 +1,15 @@
-import { eq, inArray, like, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, like, lte, sql } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { CashFlowItem } from "../types";
 import { convertToIsoDate, now, upsertById } from "../utils";
 
 const BATCH_SIZE = 500;
+
+export interface TransactionDateRange {
+  from: string;
+  to: string;
+}
 
 export async function saveTransaction(
   db: DbExecutor,
@@ -112,6 +117,38 @@ export async function deleteTransactionsForMonth(db: DbExecutor, month: string):
   return result.rowsAffected;
 }
 
+async function deleteTransactionsForDateRange(
+  db: DbExecutor,
+  range: TransactionDateRange,
+): Promise<number> {
+  const result = await db
+    .delete(schema.transactions)
+    .where(and(gte(schema.transactions.date, range.from), lte(schema.transactions.date, range.to)))
+    .run();
+  return result.rowsAffected;
+}
+
+function resolveTransactionDateRange(
+  month: string,
+  range?: TransactionDateRange,
+): TransactionDateRange {
+  if (range) {
+    const isValidDate = (value: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const date = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    };
+    if (!isValidDate(range.from) || !isValidDate(range.to) || range.from > range.to) {
+      throw new Error("Invalid transaction date range");
+    }
+    return range;
+  }
+
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(year, monthNumber, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
+
 /**
  * accountName から account_id をルックアップ
  */
@@ -183,32 +220,38 @@ export async function replaceTransactionsForMonth(
   month: string,
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
+  dateRange?: TransactionDateRange,
 ): Promise<number> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
     throw new Error("Invalid transaction month");
   }
 
-  // 既存データを削除
-  const deleted = await deleteTransactionsForMonth(db, month);
-  if (deleted > 0) {
-    console.log(`  Deleted ${deleted} existing transactions for ${month}`);
-  }
-
   // 有効なトランザクションのみフィルタリング
   const validItems = items.filter((item) => item.mfId && !item.mfId.startsWith("unknown"));
+  const currentYear = parseInt(month.slice(0, 4), 10);
+  const replacementRange = resolveTransactionDateRange(month, dateRange);
+  const records = validItems.map((item) => prepareTransactionData(item, accountIdMap, currentYear));
 
-  if (validItems.length === 0) {
-    return 0;
+  if (records.some(({ date }) => date < replacementRange.from || date > replacementRange.to)) {
+    throw new Error("Invalid transactions: item falls outside replacement date range");
   }
+
+  // Validate the complete replacement before deleting existing data.
+  const deleted = await deleteTransactionsForDateRange(db, replacementRange);
+  if (deleted > 0) {
+    console.log(
+      `  Deleted ${deleted} existing transactions for ${replacementRange.from} to ${replacementRange.to}`,
+    );
+  }
+
+  if (records.length === 0) return 0;
 
   // バルクinsert（BATCH_SIZE単位）
   const timestamp = now();
-  const currentYear = parseInt(month.slice(0, 4), 10);
 
-  for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
-    const batch = validItems.slice(i, i + BATCH_SIZE);
-    const records = batch.map((item) => {
-      const data = prepareTransactionData(item, accountIdMap, currentYear);
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const recordsWithTimestamps = batch.map((data) => {
       return {
         ...data,
         createdAt: timestamp,
@@ -218,7 +261,7 @@ export async function replaceTransactionsForMonth(
 
     await db
       .insert(schema.transactions)
-      .values(records)
+      .values(recordsWithTimestamps)
       .onConflictDoUpdate({
         target: schema.transactions.mfId,
         set: {
@@ -244,13 +287,19 @@ export async function replaceTransactionsForMonth(
 
 export async function saveTransactionsForMonths(
   db: Db,
-  months: Array<{ items: CashFlowItem[]; month: string }>,
+  months: Array<{
+    dateRange?: TransactionDateRange;
+    items: CashFlowItem[];
+    month: string;
+  }>,
   accountIdMap?: Map<string, number>,
 ): Promise<number[]> {
   return db.transaction(async (transaction) => {
     const savedCounts: number[] = [];
-    for (const { items, month } of months) {
-      savedCounts.push(await replaceTransactionsForMonth(transaction, month, items, accountIdMap));
+    for (const { dateRange, items, month } of months) {
+      savedCounts.push(
+        await replaceTransactionsForMonth(transaction, month, items, accountIdMap, dateRange),
+      );
     }
     return savedCounts;
   });
@@ -261,7 +310,12 @@ export async function saveTransactionsForMonth(
   month: string,
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
+  dateRange?: TransactionDateRange,
 ): Promise<number> {
-  const [savedCount = 0] = await saveTransactionsForMonths(db, [{ items, month }], accountIdMap);
+  const [savedCount = 0] = await saveTransactionsForMonths(
+    db,
+    [{ dateRange, items, month }],
+    accountIdMap,
+  );
   return savedCount;
 }

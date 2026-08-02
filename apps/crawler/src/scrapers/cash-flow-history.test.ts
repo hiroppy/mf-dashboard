@@ -6,6 +6,8 @@ import {
   extractCashFlowFromPage,
   isSupportedCashFlowAmount,
   parseDetailRow,
+  resolveCashFlowDate,
+  resolveCashFlowPeriod,
   scrapeCashFlowHistory,
   scrapeCashFlowMonth,
 } from "./cash-flow-history.js";
@@ -19,6 +21,33 @@ describe("buildMonthRange", () => {
     ["2023-12", { from: "2023/12/01", to: "2023/12/31" }],
   ])("%s の月初/月末範囲を返す", (month, expected) => {
     expect(buildMonthRange(month)).toEqual(expected);
+  });
+});
+
+describe("resolveCashFlowPeriod", () => {
+  test("月跨ぎの表示範囲を保持する", () => {
+    expect(resolveCashFlowPeriod("2026/7/26 - 2026/8/25", "2026-08")).toEqual({
+      periodStart: "2026-07-26",
+      periodEnd: "2026-08-25",
+    });
+  });
+
+  test("表示範囲がなければ対象月の月初月末を使う", () => {
+    expect(resolveCashFlowPeriod("2026年8月", "2026-08")).toEqual({
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-31",
+    });
+  });
+});
+
+describe("resolveCashFlowDate", () => {
+  const period = { periodStart: "2026-12-26", periodEnd: "2027-01-25" };
+
+  test.each([
+    ["12/31", "2026-12-31"],
+    ["01/01", "2027-01-01"],
+  ])("年跨ぎ期間の %s を %s として解釈する", (dateText, expected) => {
+    expect(resolveCashFlowDate(dateText, 2027, period)).toBe(expected);
   });
 });
 
@@ -342,6 +371,8 @@ describe("scrapeCashFlowMonth", () => {
 
     await expect(scrapeCashFlowMonth(page, "2024-02")).resolves.toEqual({
       month: "2024-02",
+      periodStart: "2024-02-01",
+      periodEnd: "2024-02-29",
       totalIncome: 0,
       totalExpense: 0,
       balance: 0,

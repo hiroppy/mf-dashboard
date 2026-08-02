@@ -257,7 +257,11 @@ export async function runCashFlowHistoryPhase(
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
   publishHistory: (
-    months: Array<{ items: CashFlowItem[]; month: string }>,
+    months: Array<{
+      dateRange?: { from: string; to: string };
+      items: CashFlowItem[];
+      month: string;
+    }>,
   ) => Promise<number[]> = async (months) => {
     const accountIdMap = await buildAccountIdMap(db);
     return saveTransactionsForMonths(db, months, accountIdMap);
@@ -337,6 +341,7 @@ export async function runCashFlowHistoryPhase(
     });
 
     const preparedMonths: Array<{
+      dateRange?: { from: string; to: string };
       items: CashFlowItem[];
       month: string;
       stepId?: string;
@@ -358,6 +363,10 @@ export async function runCashFlowHistoryPhase(
           })
         : monthData;
       preparedMonths.push({
+        dateRange:
+          categorizedMonthData.periodStart && categorizedMonthData.periodEnd
+            ? { from: categorizedMonthData.periodStart, to: categorizedMonthData.periodEnd }
+            : undefined,
         items: categorizedMonthData.items,
         month,
         stepId,
@@ -365,7 +374,7 @@ export async function runCashFlowHistoryPhase(
     }
 
     const savedCounts = await publishHistory(
-      preparedMonths.map(({ items, month }) => ({ items, month })),
+      preparedMonths.map(({ dateRange, items, month }) => ({ dateRange, items, month })),
     );
     for (const [index, { month, stepId }] of preparedMonths.entries()) {
       log(`  ${month}: saved ${savedCounts[index] ?? 0} transactions`);
