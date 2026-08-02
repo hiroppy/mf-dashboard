@@ -56,9 +56,9 @@ describe("scrapeCashFlowHistory", () => {
       const { data } = results[0];
 
       for (const item of data.items) {
-        expect(item.mfId).toBeTruthy();
-        expect(item.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-        expect(item.description).toBeTruthy();
+        expect(Boolean(item.mfId)).toBe(true);
+        expect(/^\d{4}-\d{2}-\d{2}$/.test(item.date)).toBe(true);
+        expect(Boolean(item.description)).toBe(true);
         expect(typeof item.amount).toBe("number");
         expect(["income", "expense", "transfer"]).toContain(item.type);
       }

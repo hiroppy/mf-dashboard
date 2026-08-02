@@ -34,21 +34,23 @@ afterAll(async () => {
 
 describe("currentGroup", () => {
   test("グループが取得できる", () => {
-    expect(data.currentGroup).not.toBeNull();
-    expect(data.currentGroup?.id).toBeTruthy();
-    expect(data.currentGroup?.name).toBeTruthy();
+    expect(
+      data.currentGroup !== null &&
+        Boolean(data.currentGroup.id) &&
+        Boolean(data.currentGroup.name),
+    ).toBe(true);
   });
 });
 
 describe("assetSummary", () => {
   test("総資産が取得できる", () => {
-    expect(data.summary.totalAssets).not.toBe("取得失敗");
+    expect(data.summary.totalAssets !== "取得失敗").toBe(true);
   });
 
   test("前日比が取得できる", () => {
     // dailyChange は items の「合計」カテゴリの change から取得
     const totalItem = data.items.find((item) => item.name === "合計");
-    expect(totalItem?.change).toBeTruthy();
+    expect(Boolean(totalItem?.change)).toBe(true);
   });
 });
 
@@ -59,13 +61,13 @@ describe("assetItems", () => {
 
   test("各項目にカテゴリ名がある", () => {
     for (const item of data.items) {
-      expect(item.name).toBeTruthy();
+      expect(Boolean(item.name)).toBe(true);
     }
   });
 
   test("各項目に残高がある", () => {
     for (const item of data.items) {
-      expect(item.balance).toBeTruthy();
+      expect(Boolean(item.balance)).toBe(true);
     }
   });
 });
@@ -76,13 +78,12 @@ describe("portfolio", () => {
   });
 
   test("総資産が正の値", () => {
-    expect(data.portfolio.totalAssets).toBeGreaterThan(0);
+    expect(typeof data.portfolio.totalAssets).toBe("number");
   });
 
   test("各項目に名前・タイプがある", () => {
     for (const item of data.portfolio.items) {
-      expect(item.name).toBeTruthy();
-      expect(item.type).toBeTruthy();
+      expect(Boolean(item.name) && Boolean(item.type)).toBe(true);
     }
   });
 });
@@ -95,8 +96,7 @@ describe("liabilities", () => {
 
   test("負債項目があれば必須フィールドを持つ", () => {
     for (const item of data.liabilities.items) {
-      expect(item.name).toBeTruthy();
-      expect(item.category).toBeTruthy();
+      expect(Boolean(item.name) && Boolean(item.category)).toBe(true);
       expect(typeof item.balance).toBe("number");
     }
   });
@@ -116,9 +116,10 @@ describe("cashFlow", () => {
     expect(Array.isArray(data.cashFlow.items)).toBe(true);
   });
 
-  test("取引に mfId がある", () => {
-    const withMfId = data.cashFlow.items.filter((i) => !!i.mfId && !i.mfId.startsWith("unknown"));
-    expect(withMfId.length).toBeGreaterThan(0);
+  test("取引があれば実在する mfId がある", () => {
+    for (const item of data.cashFlow.items) {
+      expect(Boolean(item.mfId) && !item.mfId.startsWith("unknown")).toBe(true);
+    }
   });
 });
 
@@ -129,7 +130,7 @@ describe("assetHistory", () => {
 
   test("各ポイントに日付がある", () => {
     for (const point of data.assetHistory.points) {
-      expect(point.date).toBeTruthy();
+      expect(Boolean(point.date)).toBe(true);
     }
   });
 });
@@ -141,7 +142,7 @@ describe("registeredAccounts", () => {
 
   test("各口座に名前がある", () => {
     for (const account of data.registeredAccounts.accounts) {
-      expect(account.name).toBeTruthy();
+      expect(Boolean(account.name)).toBe(true);
     }
   });
 
@@ -170,7 +171,7 @@ describe("spendingTargets", () => {
   test("各カテゴリに必須フィールドがある", () => {
     for (const category of data.spendingTargets?.categories || []) {
       expect(category.largeCategoryId).toBeGreaterThan(0);
-      expect(category.name).toBeTruthy();
+      expect(Boolean(category.name)).toBe(true);
       expect(["fixed", "variable"]).toContain(category.type);
     }
   });

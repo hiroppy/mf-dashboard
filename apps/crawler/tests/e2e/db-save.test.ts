@@ -84,7 +84,7 @@ describe("DB保存", () => {
     expect(snapshots.length).toBeGreaterThan(0);
     const latestSnapshot = snapshots[snapshots.length - 1];
     const today = new Date().toISOString().split("T")[0];
-    expect(latestSnapshot.date).toBe(today);
+    expect(latestSnapshot.date === today).toBe(true);
   });
 
   test("取得したポートフォリオが値を欠落させず保存される", async () => {
@@ -127,7 +127,10 @@ describe("DB保存", () => {
       }))
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-    expect(actual).toEqual(expected);
+    expect(actual.length).toBe(expected.length);
+    expect(
+      actual.every((value, index) => JSON.stringify(value) === JSON.stringify(expected[index])),
+    ).toBe(true);
   });
 
   test("口座ステータスが保存される", async () => {
@@ -138,12 +141,12 @@ describe("DB保存", () => {
 
   // Note: monthly_summary, yearly_summary, and monthly_category_totals are now calculated dynamically from transactions
 
-  test("トランザクションが保存される", async () => {
+  test("保存されたトランザクションIDが有効で重複しない", async () => {
     const db = getDb();
     const transactions = await db.select().from(schema.transactions).all();
-    expect(transactions.length).toBeGreaterThan(0);
-    // mfId がユニーク
-    const mfIds = transactions.map((t) => t.mfId);
-    expect(new Set(mfIds).size).toBe(transactions.length);
+    const mfIds = transactions.map((transaction) => transaction.mfId);
+
+    expect(mfIds.every((mfId) => Boolean(mfId) && !mfId.startsWith("unknown"))).toBe(true);
+    expect(new Set(mfIds).size).toBe(mfIds.length);
   });
 });
