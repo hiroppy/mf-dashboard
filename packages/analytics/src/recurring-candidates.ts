@@ -161,6 +161,7 @@ function normalizeDescription(value: string | null | undefined): string {
       /\b(invoice|authorization|auth|reference|ref)\s*(?:no\.?|number|#)?\s*[0-9]+\b/gu,
       "$1",
     )
+    .replace(/(?<=[0-9])[\p{Punctuation}\p{Separator}\p{Symbol}]+(?=[0-9])/gu, " numsep ")
     .replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
 }
 
@@ -228,8 +229,40 @@ function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTrans
   const [earlier, later] = left.date <= right.date ? [left, right] : [right, left];
   if (earlier.month === later.month || earlier.day <= later.day) return directDistance;
 
+  const crossesRecognizedBoundary =
+    daysFromMonthEnd(earlier) <= MONTH_BOUNDARY_WINDOW_DAYS &&
+    later.day <= MONTH_BOUNDARY_WINDOW_DAYS;
+  if (!crossesRecognizedBoundary) return directDistance;
+
   const boundaryDistance = daysFromMonthEnd(earlier) + later.day;
   return Math.min(directDistance, boundaryDistance);
+}
+
+function boundaryPosition(
+  transaction: NormalizedTransaction,
+): { occurrenceMonth: string; side: "start" | "end" } | null {
+  if (transaction.day <= MONTH_BOUNDARY_WINDOW_DAYS) {
+    return { occurrenceMonth: shiftYearMonthKey(transaction.month, -1), side: "start" };
+  }
+  if (daysFromMonthEnd(transaction) <= MONTH_BOUNDARY_WINDOW_DAYS) {
+    return { occurrenceMonth: transaction.month, side: "end" };
+  }
+  return null;
+}
+
+function conflictsWithBoundaryOccurrence(
+  transaction: NormalizedTransaction,
+  transactions: NormalizedTransaction[],
+): boolean {
+  const position = boundaryPosition(transaction);
+  if (!position) return false;
+  return transactions.some((existing) => {
+    const existingPosition = boundaryPosition(existing);
+    return (
+      existingPosition?.occurrenceMonth === position.occurrenceMonth &&
+      existingPosition.side !== position.side
+    );
+  });
 }
 
 function normalizeGroupingText(transaction: RecurringTransaction): string {
@@ -256,13 +289,20 @@ function belongsToGroup(
   ) {
     return false;
   }
+  if (conflictsWithBoundaryOccurrence(transaction, monthlyTransactions)) return false;
 
-  const nearestDayDistance = Math.min(
-    ...monthlyTransactions.map((existing) => calendarDayDistance(transaction, existing)),
+  const dayDistances = monthlyTransactions.map((existing) =>
+    calendarDayDistance(transaction, existing),
   );
+  const allWithinBoundaryWindow = [transaction, ...monthlyTransactions].every(
+    (item) => boundaryPosition(item) !== null,
+  );
+  const groupDayDistance = allWithinBoundaryWindow
+    ? Math.min(...dayDistances)
+    : median(dayDistances);
   const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
   return (
-    nearestDayDistance <= options.dateDriftDays &&
+    groupDayDistance <= options.dateDriftDays &&
     isWithinAmountTolerance(transaction.amount, medianAmount, options.amountToleranceRatio) &&
     haveMatchingNumericTokens(
       transaction.normalizedDescription,
@@ -327,9 +367,8 @@ function isMonthBoundaryPattern(occurrences: NormalizedTransaction[]): boolean {
 }
 
 function getOccurrenceMonth(transaction: NormalizedTransaction, boundaryPattern: boolean): string {
-  return boundaryPattern && transaction.day <= MONTH_BOUNDARY_WINDOW_DAYS
-    ? shiftYearMonthKey(transaction.month, -1)
-    : transaction.month;
+  if (!boundaryPattern) return transaction.month;
+  return boundaryPosition(transaction)?.occurrenceMonth ?? transaction.month;
 }
 
 function deduplicateOccurrences(

@@ -220,6 +220,24 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("keeps interleaved month-start and month-end streams separate", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-31", 80_000, "定期支払"),
+        transaction("2026-02-02", 80_000, "定期支払"),
+        transaction("2026-02-28", 80_000, "定期支払"),
+        transaction("2026-03-02", 80_000, "定期支払"),
+        transaction("2026-03-31", 80_000, "定期支払"),
+        transaction("2026-04-02", 80_000, "定期支払"),
+        transaction("2026-04-30", 80_000, "定期支払"),
+      ],
+      "2026-05",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-05-02", "2026-05-31"]);
+  });
+
   it("does not force ordinary dates to month-end with a large drift option", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-06-15", 80_000, "家賃"), transaction("2026-07-15", 80_000, "家賃")],
@@ -228,6 +246,31 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]?.predictedDate).toBe("2026-08-15");
+  });
+
+  it("does not group cross-boundary dates outside the boundary window", () => {
+    expect(
+      generateRecurringCandidates(
+        [transaction("2026-06-30", 80_000, "家賃"), transaction("2026-07-04", 80_000, "家賃")],
+        "2026-08",
+        { dateDriftDays: 5 },
+      ),
+    ).toEqual([]);
+  });
+
+  it("bounds incremental drift around a stable group center", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-01", 20_000, "定期支払"),
+        transaction("2026-02-04", 20_000, "定期支払"),
+        transaction("2026-03-07", 20_000, "定期支払"),
+        transaction("2026-04-10", 20_000, "定期支払"),
+      ],
+      "2026-05",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-05-09" });
   });
 
   it("does not merge inverse month-start and month-end schedules", () => {
@@ -370,6 +413,20 @@ describe("generateRecurringCandidates", () => {
         transaction("2026-07-05", 40_000, "EXAMPLE MEMBERSHIP CARD 1"),
         transaction("2026-06-05", 40_000, "EXAMPLE MEMBERSHIP CARD 2"),
         transaction("2026-07-05", 40_000, "EXAMPLE MEMBERSHIP CARD 2"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
+  it("preserves boundaries between stable numeric tokens", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 40_000, "CARD 1-23"),
+        transaction("2026-07-05", 40_000, "CARD 1-23"),
+        transaction("2026-06-05", 40_000, "CARD 12-3"),
+        transaction("2026-07-05", 40_000, "CARD 12-3"),
       ],
       "2026-08",
     );
