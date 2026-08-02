@@ -212,6 +212,22 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("selects same-day monthly representatives independently of input order", () => {
+    const history = [
+      transaction("2026-06-10", 100_000, "予定納税"),
+      transaction("2026-06-10", 110_000, "予定納税"),
+      transaction("2026-07-10", 110_000, "予定納税"),
+    ];
+
+    const forward = generateRecurringCandidates(history, "2026-08");
+    const reversed = generateRecurringCandidates([...history].reverse(), "2026-08");
+    expect(forward).toEqual(reversed);
+    expect(forward[0]).toMatchObject({
+      predictedAmount: 105_000,
+      evidence: { amountRange: { min: 100_000, max: 110_000 } },
+    });
+  });
+
   it("keeps accounts and materially different patterns separate", () => {
     const result = generateRecurringCandidates(
       [
@@ -250,6 +266,16 @@ describe("generateRecurringCandidates", () => {
         transaction("2026-07-02", 99_999, "単発入金", "income"),
         transaction("2026-06-03", 200_000, "以前の単発入金", "income"),
         { ...transaction("2026-07-04", 200_000, "口座振替", "income"), type: "transfer" },
+        {
+          ...transaction("2026-06-05", 80_000, "家賃"),
+          isExcludedFromCalculation: true,
+        },
+        {
+          ...transaction("2026-07-05", 80_000, "家賃"),
+          isExcludedFromCalculation: true,
+        },
+        { ...transaction("2026-06-06", 20_000, "ローン"), isTransfer: true },
+        { ...transaction("2026-07-06", 20_000, "ローン"), isTransfer: true },
       ],
       "2026-08",
     );

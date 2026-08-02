@@ -25,6 +25,8 @@ export interface RecurringTransaction {
   subCategory?: string | null;
   amount: number;
   type: "income" | "expense" | "transfer";
+  isTransfer?: boolean;
+  isExcludedFromCalculation?: boolean;
 }
 
 export interface RecurringCandidateEvidence {
@@ -272,8 +274,16 @@ function getConfidence(
   return null;
 }
 
+function compareTextKeys(keys: Array<[string, string]>): number {
+  for (const [left, right] of keys) {
+    const result = left.localeCompare(right);
+    if (result !== 0) return result;
+  }
+  return 0;
+}
+
 function compareCandidates(left: RecurringCandidate, right: RecurringCandidate): number {
-  const textKeys: Array<[string, string]> = [
+  const textResult = compareTextKeys([
     [left.predictedDate, right.predictedDate],
     [String(left.accountId), String(right.accountId)],
     [left.description ?? "", right.description ?? ""],
@@ -282,11 +292,8 @@ function compareCandidates(left: RecurringCandidate, right: RecurringCandidate):
     [left.confidence, right.confidence],
     [left.evidence.dateRange.from, right.evidence.dateRange.from],
     [left.evidence.dateRange.to, right.evidence.dateRange.to],
-  ];
-  for (const [leftKey, rightKey] of textKeys) {
-    const result = leftKey.localeCompare(rightKey);
-    if (result !== 0) return result;
-  }
+  ]);
+  if (textResult !== 0) return textResult;
 
   return (
     left.predictedAmount - right.predictedAmount ||
@@ -294,6 +301,20 @@ function compareCandidates(left: RecurringCandidate, right: RecurringCandidate):
     left.evidence.amountRange.max - right.evidence.amountRange.max ||
     left.evidence.occurrenceCount - right.evidence.occurrenceCount
   );
+}
+
+function compareTransactions(left: NormalizedTransaction, right: NormalizedTransaction): number {
+  const textResult = compareTextKeys([
+    [left.date, right.date],
+    [String(left.accountId), String(right.accountId)],
+    [left.type, right.type],
+    [left.classification, right.classification],
+    [left.normalizedDescription, right.normalizedDescription],
+    [left.description ?? "", right.description ?? ""],
+    [left.category ?? "", right.category ?? ""],
+    [left.subCategory ?? "", right.subCategory ?? ""],
+  ]);
+  return textResult || left.amount - right.amount;
 }
 
 function createCandidate(
@@ -351,7 +372,14 @@ export function generateRecurringCandidates(
   const firstHistoryMonth = shiftYearMonthKey(targetMonth, -options.lookbackMonths);
 
   const history = transactions
-    .filter(({ type, amount }) => type !== "transfer" && Number.isFinite(amount) && amount !== 0)
+    .filter(
+      ({ type, amount, isTransfer, isExcludedFromCalculation }) =>
+        type !== "transfer" &&
+        !isTransfer &&
+        !isExcludedFromCalculation &&
+        Number.isFinite(amount) &&
+        amount !== 0,
+    )
     .map((transaction): NormalizedTransaction => {
       const { day } = parseIsoDateKey(transaction.date);
       return {
@@ -364,7 +392,7 @@ export function generateRecurringCandidates(
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)
-    .sort((left, right) => left.date.localeCompare(right.date));
+    .sort(compareTransactions);
 
   return groupTransactions(history, options)
     .map((group) => createCandidate(group, targetMonth, options))
