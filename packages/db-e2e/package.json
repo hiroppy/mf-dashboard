@@ -4,13 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "e2e:real": "vitest run",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mf-dashboard/crawler": "workspace:*",
-    "@mf-dashboard/db": "workspace:*",
-    "playwright": "catalog:"
+    "@mf-dashboard/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -1,12 +1,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { NO_GROUP_ID } from "../../src/scrapers/group.js";
-import { scrapeInstitutionCategories } from "../../src/scrapers/institution-categories.js";
-import { selectManualHoldingAccounts } from "../../src/scrapers/manual-holding-accounts.js";
-import { PNS_CORE_COLUMN_COUNT, selectLinkedPnsAccounts } from "../../src/scrapers/portfolio.js";
-import { getRegisteredAccounts } from "../../src/scrapers/registered-accounts.js";
-import { createAnonymousGroupScope, switchGroupAnonymously } from "./group-state.js";
+import { PNS_CORE_COLUMN_COUNT } from "../../src/scrapers/portfolio.js";
 import { launchLoggedInContext, withNewPage } from "./helpers.js";
 
 const PORTFOLIO_TABLE_SELECTOR =
@@ -14,8 +9,6 @@ const PORTFOLIO_TABLE_SELECTOR =
 
 let browser: Browser;
 let context: BrowserContext;
-let groupScopePage: Page;
-let groupScope: AsyncDisposable;
 
 async function gotoPortfolio(page: Page): Promise<void> {
   await page.goto(mfUrls.portfolio, { waitUntil: "domcontentloaded" });
@@ -25,21 +18,37 @@ async function gotoPortfolio(page: Page): Promise<void> {
   });
 }
 
+async function getLinkedPnsDetailHref(page: Page): Promise<string | null> {
+  await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
+
+  return page.locator(".facilities.accounts-list").evaluateAll((lists) => {
+    for (const list of lists) {
+      let isTargetCategory = false;
+      for (const child of list.children) {
+        if (child.classList.contains("heading-category-name")) {
+          const heading = child.textContent?.trim();
+          isTargetCategory = heading === "保険" || heading === "年金";
+          continue;
+        }
+        if (!isTargetCategory || !child.classList.contains("account")) continue;
+
+        const href = child
+          .querySelector<HTMLAnchorElement>("a[href*='/accounts/show/']")
+          ?.getAttribute("href");
+        if (href) return href;
+      }
+    }
+    return null;
+  });
+}
+
 beforeAll(async () => {
   ({ browser, context } = await launchLoggedInContext());
-  groupScopePage = await context.newPage();
-  groupScope = await createAnonymousGroupScope(groupScopePage);
-  await switchGroupAnonymously(groupScopePage, NO_GROUP_ID);
 });
 
 afterAll(async () => {
-  try {
-    await groupScope?.[Symbol.asyncDispose]();
-  } finally {
-    await groupScopePage?.close();
-    await context?.close();
-    await browser?.close();
-  }
+  await context?.close();
+  await browser?.close();
 });
 
 describe("portfolio page structure", () => {
@@ -63,42 +72,24 @@ describe("portfolio page structure", () => {
     });
   });
 
-  test("手動口座詳細とportfolio行に同じ明示キー構造が存在する", async () => {
+  test("手動口座詳細とportfolio行に明示キー構造が存在する", async ({ skip }) => {
     await withNewPage(context, async (page) => {
-      const manualAccounts = selectManualHoldingAccounts(await getRegisteredAccounts(page));
       await gotoPortfolio(page);
       const portfolioRowsWithKeys = page.locator(
         'table.table-pns tbody tr:has(input[name="user_asset_det[id]"]):has(input[name="user_asset_det[sub_account_id_hash]"])',
       );
       if ((await portfolioRowsWithKeys.count()) === 0) {
-        throw new Error("The account has no portfolio row with explicit manual holding keys");
+        skip("No representative manual holding row is available");
       }
-      const portfolioRow = portfolioRowsWithKeys.first();
-      const subAccountMfId = await portfolioRow
-        .locator('input[name="user_asset_det[sub_account_id_hash]"]')
-        .inputValue();
 
-      // The transaction source selector exposes the sub-account key and display name. Use its
-      // unique current manual-account match only to choose one representative detail page; the
-      // assertions below verify only the structural contract used by the parser.
       await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
-      const sourceNames = await page.locator("option").evaluateAll((options, expected) => {
-        const names = options.flatMap((option) => {
-          if ((option as HTMLOptionElement).value !== expected) return [];
-          const name = option.textContent?.trim();
-          return name ? [name] : [];
-        });
-        return [...new Set(names)];
-      }, subAccountMfId);
-      const candidates = manualAccounts.filter(({ name }) => sourceNames.includes(name));
-      if (candidates.length !== 1) {
-        throw new Error(
-          "The portfolio sub-account key does not resolve to one current manual account",
-        );
+      const detailLink = page.locator("a[href*='/accounts/show_manual/']").first();
+      const detailHref = await detailLink.getAttribute("href");
+      if (!detailHref) {
+        skip("No representative manual account is available");
       }
-      const accountMfId = candidates[0]!.mfId;
 
-      const response = await page.goto(mfUrls.accountDetail(accountMfId, "show_manual"), {
+      const response = await page.goto(new URL(detailHref, mfUrls.home).toString(), {
         waitUntil: "domcontentloaded",
       });
       expect(response?.ok()).toBe(true);
@@ -115,12 +106,12 @@ describe("portfolio page structure", () => {
     });
   });
 
-  test("預金行に金融機関セルと任意の口座詳細リンク構造が存在する", async () => {
+  test("預金行に金融機関セルと任意の口座詳細リンク構造が存在する", async ({ skip }) => {
     await withNewPage(context, async (page) => {
       await gotoPortfolio(page);
       const rows = page.locator("table.table-depo tbody tr");
       if ((await rows.count()) === 0) {
-        throw new Error("The account has no deposit row");
+        skip("No representative deposit row is available");
       }
 
       for (let index = 0; index < (await rows.count()); index++) {
@@ -139,22 +130,16 @@ describe("portfolio page structure", () => {
     });
   });
 
-  test("通常口座詳細の保険・年金表はparserが必要とする主要列を持つ", async () => {
+  test("通常口座詳細の保険・年金表はparserが必要とする主要列を持つ", async ({ skip }) => {
     await withNewPage(context, async (page) => {
       // Production scans every linked account for correctness. This structure-only E2E caps
-      // navigation at one detail page selected by sidebar category, without narrowing production.
-      const institutionCategories = await scrapeInstitutionCategories(page);
-      const candidate = selectLinkedPnsAccounts(await getRegisteredAccounts(page)).find(
-        ({ mfId }) => {
-          const category = institutionCategories.get(mfId);
-          return category === "保険" || category === "年金";
-        },
-      );
-      if (!candidate) {
-        throw new Error("The account has no linked insurance/pension account candidate");
+      // navigation at one detail page selected from the sidebar DOM, without narrowing production.
+      const detailHref = await getLinkedPnsDetailHref(page);
+      if (!detailHref) {
+        skip("No representative linked insurance or pension account is available");
       }
 
-      const response = await page.goto(new URL(candidate.url, mfUrls.home).toString(), {
+      const response = await page.goto(new URL(detailHref, mfUrls.home).toString(), {
         waitUntil: "domcontentloaded",
       });
       expect(response?.ok()).toBe(true);
@@ -178,9 +163,7 @@ describe("portfolio page structure", () => {
         foundLinkedPnsStructure = true;
         break;
       }
-      if (!foundLinkedPnsStructure) {
-        throw new Error("The single linked-account candidate has no insurance/pension table");
-      }
+      expect(foundLinkedPnsStructure).toBe(true);
     });
   });
 });

@@ -337,15 +337,9 @@ importers:
 
   packages/db-e2e:
     dependencies:
-      '@mf-dashboard/crawler':
-        specifier: workspace:*
-        version: link:../../apps/crawler
       '@mf-dashboard/db':
         specifier: workspace:*
         version: link:../db
-      playwright:
-        specifier: 'catalog:'
-        version: 1.62.1
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
