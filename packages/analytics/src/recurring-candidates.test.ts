@@ -574,6 +574,23 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "high", predictedDate: "2026-04-14" });
   });
 
+  it("considers compatible amounts on every posting day before ranking", () => {
+    const juneHistory = [
+      transaction("2026-06-11", 10_000, "SERVICE PLAN"),
+      ...Array.from({ length: 7 }, (_, index) =>
+        transaction("2026-06-13", 10_100 + index * 100, "SERVICE PLAN"),
+      ),
+      transaction("2026-06-10", 10_800, "SERVICE PLAN"),
+    ];
+
+    const result = generateRecurringCandidates(
+      [...juneHistory, transaction("2026-07-10", 10_000, "SERVICE PLAN")],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ predictedDate: "2026-08-10", predictedAmount: 10_400 });
+  });
+
   it("compares fuzzy descriptions against the full group history", () => {
     const label = "abcdefghijklmnopqrst";
     const history = Array.from({ length: 9 }, (_, index) =>
@@ -828,6 +845,15 @@ describe("generateRecurringCandidates", () => {
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
   });
 
+  it("handles many same-month boundary labels with distinct amounts", () => {
+    const history: RecurringTransaction[] = Array.from({ length: 2_000 }, (_, index) => ({
+      ...transaction("2026-07-31", 10_000 + index, "Payment"),
+      category: "Utilities",
+    }));
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
   it("handles many prior-month common-label recurring slots", () => {
     const history: RecurringTransaction[] = ["2026-06-10", "2026-07-10"].flatMap((date) =>
       Array.from({ length: 2_000 }, (_, index) => ({
@@ -899,6 +925,17 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("deduplicates identical isolated large incomes", () => {
+    const income: RecurringTransaction = {
+      accountId: accountA,
+      date: "2026-07-10",
+      amount: 150_000,
+      type: "income",
+    };
+
+    expect(generateRecurringCandidates([income, { ...income }], "2026-08")).toHaveLength(1);
+  });
+
   it("does not forecast a recurring stream that stopped before the previous month", () => {
     expect(
       generateRecurringCandidates(
@@ -957,6 +994,20 @@ describe("generateRecurringCandidates", () => {
     expect(generateRecurringCandidates(history, "2026-08")).toEqual(
       generateRecurringCandidates([...history].reverse(), "2026-08"),
     );
+  });
+
+  it("orders locale-sensitive descriptions by Unicode code point", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 20_000, "ä"),
+        transaction("2026-07-10", 20_000, "ä"),
+        transaction("2026-06-10", 20_000, "z"),
+        transaction("2026-07-10", 20_000, "z"),
+      ],
+      "2026-08",
+    );
+
+    expect(result.map(({ description }) => description)).toEqual(["z", "ä"]);
   });
 
   it("returns an empty list for empty input", () => {

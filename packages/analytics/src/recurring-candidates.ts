@@ -74,8 +74,8 @@ interface TransactionGroup {
 }
 
 interface GroupPartition {
-  amountGroupsByDescription: Map<string, Map<number, Set<TransactionGroup>>>;
-  amountKeysByDescription: Map<string, number[]>;
+  amountGroupsByDescriptionAndDay: Map<string, Map<number, Map<number, Set<TransactionGroup>>>>;
+  amountKeysByDescriptionAndDay: Map<string, Map<number, number[]>>;
   anchorBigrams: Map<TransactionGroup, Set<string>>;
   exactOccurrences: Map<string, TransactionGroup>;
   exactRecurringSlots: Map<string, TransactionGroup>;
@@ -406,10 +406,9 @@ function getFuzzyIndexedGroups(
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
   const overlapCounts = new Map<TransactionGroup, number>();
-  const includeCurrentMonth = boundaryPosition(transaction) !== null;
   for (const bigram of transactionBigrams) {
     for (const [month, groups] of partition.groupsByBigramAndMonth.get(bigram) ?? []) {
-      if (month === transaction.month && !includeCurrentMonth) continue;
+      if (month === transaction.month) continue;
       for (const group of groups) {
         overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
       }
@@ -456,34 +455,41 @@ function getAmountIndexedGroups(
   transaction: NormalizedTransaction,
   tolerance: number,
 ): TransactionGroup[] {
-  const amountKeys = partition.amountKeysByDescription.get(transaction.normalizedDescription) ?? [];
-  const groupsByAmount = partition.amountGroupsByDescription.get(transaction.normalizedDescription);
-  if (!groupsByAmount || amountKeys.length === 0) return [];
+  const amountKeysByDay =
+    partition.amountKeysByDescriptionAndDay.get(transaction.normalizedDescription) ?? new Map();
+  const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(
+    transaction.normalizedDescription,
+  );
+  if (!groupsByDay) return [];
 
-  const insertionIndex = lowerBound(amountKeys, transaction.amount);
   const candidates: TransactionGroup[] = [];
-  let leftIndex = insertionIndex - 1;
-  let rightIndex = insertionIndex;
-  let inspectedAmounts = 0;
-  while ((leftIndex >= 0 || rightIndex < amountKeys.length) && inspectedAmounts < 8) {
-    const leftDistance =
-      leftIndex >= 0
-        ? Math.abs(amountKeys[leftIndex] - transaction.amount)
-        : Number.POSITIVE_INFINITY;
-    const rightDistance =
-      rightIndex < amountKeys.length
-        ? Math.abs(amountKeys[rightIndex] - transaction.amount)
-        : Number.POSITIVE_INFINITY;
-    const index = leftDistance <= rightDistance ? leftIndex-- : rightIndex++;
-    const amount = amountKeys[index];
-    inspectedAmounts++;
-    if (Math.abs(amount - transaction.amount) / Math.max(amount, transaction.amount) > tolerance) {
-      break;
-    }
-    for (const group of groupsByAmount.get(amount) ?? []) {
-      const latestMonth = partition.latestMonths.get(group);
-      if (latestMonth !== transaction.month || boundaryPosition(transaction))
-        candidates.push(group);
+  for (const [day, groupsByAmount] of groupsByDay) {
+    const amountKeys = amountKeysByDay.get(day) ?? [];
+    const insertionIndex = lowerBound(amountKeys, transaction.amount);
+    let leftIndex = insertionIndex - 1;
+    let rightIndex = insertionIndex;
+    let inspectedAmounts = 0;
+    while ((leftIndex >= 0 || rightIndex < amountKeys.length) && inspectedAmounts < 8) {
+      const leftDistance =
+        leftIndex >= 0
+          ? Math.abs(amountKeys[leftIndex] - transaction.amount)
+          : Number.POSITIVE_INFINITY;
+      const rightDistance =
+        rightIndex < amountKeys.length
+          ? Math.abs(amountKeys[rightIndex] - transaction.amount)
+          : Number.POSITIVE_INFINITY;
+      const index = leftDistance <= rightDistance ? leftIndex-- : rightIndex++;
+      const amount = amountKeys[index];
+      inspectedAmounts++;
+      if (
+        Math.abs(amount - transaction.amount) / Math.max(amount, transaction.amount) >
+        tolerance
+      ) {
+        break;
+      }
+      for (const group of groupsByAmount.get(amount) ?? []) {
+        if (partition.latestMonths.get(group) !== transaction.month) candidates.push(group);
+      }
     }
   }
   return candidates;
@@ -514,17 +520,21 @@ function indexGroupAmount(
   transaction: NormalizedTransaction,
 ): void {
   const description = transaction.normalizedDescription;
-  const groupsByAmount = partition.amountGroupsByDescription.get(description) ?? new Map();
+  const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description) ?? new Map();
+  const groupsByAmount = groupsByDay.get(transaction.day) ?? new Map();
   const groups = groupsByAmount.get(transaction.amount) ?? new Set();
   groups.add(group);
   groupsByAmount.set(transaction.amount, groups);
-  partition.amountGroupsByDescription.set(description, groupsByAmount);
+  groupsByDay.set(transaction.day, groupsByAmount);
+  partition.amountGroupsByDescriptionAndDay.set(description, groupsByDay);
 
-  const amountKeys = partition.amountKeysByDescription.get(description) ?? [];
+  const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description) ?? new Map();
+  const amountKeys = amountKeysByDay.get(transaction.day) ?? [];
   const insertionIndex = lowerBound(amountKeys, transaction.amount);
   if (amountKeys[insertionIndex] !== transaction.amount)
     amountKeys.splice(insertionIndex, 0, transaction.amount);
-  partition.amountKeysByDescription.set(description, amountKeys);
+  amountKeysByDay.set(transaction.day, amountKeys);
+  partition.amountKeysByDescriptionAndDay.set(description, amountKeysByDay);
 }
 
 function moveGroupToMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
@@ -541,10 +551,19 @@ function groupTransactions(
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const partitions = new Map<string, GroupPartition>();
-  const isolatedGroups: TransactionGroup[] = [];
+  const isolatedGroups = new Map<string, TransactionGroup>();
   for (const transaction of transactions) {
     if (!transaction.normalizedDescription) {
-      isolatedGroups.push({ transactions: [transaction] });
+      const isolatedKey = [
+        accountIdKey(transaction.accountId),
+        transaction.type,
+        transaction.classification,
+        transaction.date,
+        transaction.amount,
+      ].join("\0");
+      const group = isolatedGroups.get(isolatedKey);
+      if (group) group.transactions.push(transaction);
+      else isolatedGroups.set(isolatedKey, { transactions: [transaction] });
       continue;
     }
     const numericTokenKey = (transaction.normalizedDescription.match(/[0-9]+/g) ?? []).join(".");
@@ -559,8 +578,8 @@ function groupTransactions(
       exactDescriptionKey,
     ].join("\0");
     const partition: GroupPartition = partitions.get(partitionKey) ?? {
-      amountGroupsByDescription: new Map(),
-      amountKeysByDescription: new Map(),
+      amountGroupsByDescriptionAndDay: new Map(),
+      amountKeysByDescriptionAndDay: new Map(),
       anchorBigrams: new Map(),
       exactOccurrences: new Map(),
       exactRecurringSlots: new Map(),
@@ -593,7 +612,9 @@ function groupTransactions(
     }
     partitions.set(partitionKey, partition);
   }
-  return [...partitions.values()].flatMap(({ groups }) => groups).concat(isolatedGroups);
+  return [...partitions.values()]
+    .flatMap(({ groups }) => groups)
+    .concat([...isolatedGroups.values()]);
 }
 
 function deduplicateMonths(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
@@ -689,9 +710,8 @@ function compareCodePointStrings(left: string, right: string): number {
 
 function compareTextKeys(keys: Array<[string, string]>): number {
   for (const [left, right] of keys) {
-    const result = left.localeCompare(right);
+    const result = compareCodePointStrings(left, right);
     if (result !== 0) return result;
-    if (left !== right) return compareCodePointStrings(left, right);
   }
   return 0;
 }
