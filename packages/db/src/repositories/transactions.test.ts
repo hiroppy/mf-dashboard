@@ -650,4 +650,41 @@ describe("saveTransactionsForMonth", () => {
     const result = await db.select().from(schema.transactions).all();
     expect(result.map(({ mfId }) => mfId)).toEqual(["existing-transaction"]);
   });
+
+  test("終了日のtimestampを置換対象に含める", async () => {
+    await saveTransaction(db, {
+      mfId: "stale-end-day-transaction",
+      date: "2026-08-25T08:51:00",
+      category: "Category A",
+      subCategory: null,
+      description: "Stale Transaction",
+      amount: 1_000,
+      type: "expense",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+    });
+
+    await saveTransactionsForMonth(
+      db,
+      "2026-08",
+      [
+        {
+          mfId: "current-end-day-transaction",
+          date: "2026-08-25T09:00:00",
+          category: "Category B",
+          subCategory: null,
+          description: "Current Transaction",
+          amount: 2_000,
+          type: "expense",
+          isTransfer: false,
+          isExcludedFromCalculation: false,
+        },
+      ],
+      undefined,
+      { from: "2026-07-26", to: "2026-08-25" },
+    );
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId)).toEqual(["current-end-day-transaction"]);
+  });
 });

@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, like, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, like, lt, sql } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { CashFlowItem } from "../types";
@@ -119,11 +119,16 @@ export async function deleteTransactionsForMonth(db: DbExecutor, month: string):
 
 async function deleteTransactionsForDateRange(
   db: DbExecutor,
-  range: TransactionDateRange,
+  range: TransactionDateRange & { toExclusive: string },
 ): Promise<number> {
   const result = await db
     .delete(schema.transactions)
-    .where(and(gte(schema.transactions.date, range.from), lte(schema.transactions.date, range.to)))
+    .where(
+      and(
+        gte(schema.transactions.date, range.from),
+        lt(schema.transactions.date, range.toExclusive),
+      ),
+    )
     .run();
   return result.rowsAffected;
 }
@@ -147,6 +152,12 @@ function resolveTransactionDateRange(
   const [year, monthNumber] = month.split("-").map(Number);
   const lastDay = new Date(year, monthNumber, 0).getDate();
   return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
+
+function getExclusiveRangeEnd(to: string): string {
+  const nextDay = new Date(`${to}T00:00:00Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  return nextDay.toISOString().slice(0, 10);
 }
 
 /**
@@ -230,14 +241,15 @@ export async function replaceTransactionsForMonth(
   const validItems = items.filter((item) => item.mfId && !item.mfId.startsWith("unknown"));
   const currentYear = parseInt(month.slice(0, 4), 10);
   const replacementRange = resolveTransactionDateRange(month, dateRange);
+  const toExclusive = getExclusiveRangeEnd(replacementRange.to);
   const records = validItems.map((item) => prepareTransactionData(item, accountIdMap, currentYear));
 
-  if (records.some(({ date }) => date < replacementRange.from || date > replacementRange.to)) {
+  if (records.some(({ date }) => date < replacementRange.from || date >= toExclusive)) {
     throw new Error("Invalid transactions: item falls outside replacement date range");
   }
 
   // Validate the complete replacement before deleting existing data.
-  const deleted = await deleteTransactionsForDateRange(db, replacementRange);
+  const deleted = await deleteTransactionsForDateRange(db, { ...replacementRange, toExclusive });
   if (deleted > 0) {
     console.log(
       `  Deleted ${deleted} existing transactions for ${replacementRange.from} to ${replacementRange.to}`,

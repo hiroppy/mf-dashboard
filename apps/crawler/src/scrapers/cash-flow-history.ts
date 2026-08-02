@@ -27,6 +27,10 @@ const CASH_FLOW_AJAX_STATE = "__mfDashboardCashFlowAjax";
 const CASH_FLOW_AMOUNT_PATTERN =
   /^(?:(?:[+\-−▲][¥$]?)|(?:[¥$][+\-−▲]?))?(?:\d{1,3}(?:,\d{3})+|\d+)(?:円)?$/;
 
+function incompleteCashFlowRow(fields: string[]): Error {
+  return new Error(`Incomplete cash flow transaction row (${fields.join(", ")})`);
+}
+
 export function isSupportedCashFlowAmount(value: string): boolean {
   const normalized = value.replace(/\s/g, "").replace(/\(振替\)$/, "");
   return CASH_FLOW_AMOUNT_PATTERN.test(normalized);
@@ -113,7 +117,13 @@ async function parseAccountCell(
   const hasTransferBox = (await transferBox.count()) > 0;
 
   if (hasTransferBox) {
-    const [fullText, toText] = await Promise.all([getText(accountCell), getText(transferBox)]);
+    const [fullText, toText] = await Promise.all([
+      getTextWithFailureSignal(accountCell),
+      getTextWithFailureSignal(transferBox),
+    ]);
+    if (fullText === null || toText === null) {
+      throw incompleteCashFlowRow(["account"]);
+    }
     const accountFrom = fullText.replace(toText, "").trim();
     return {
       hasTransferBox,
@@ -125,8 +135,9 @@ async function parseAccountCell(
   const noformSpan = accountCell.locator("div.noform span");
   const hasNoformSpan = (await noformSpan.count()) > 0;
   const accountFrom = hasNoformSpan
-    ? await getText(noformSpan.first())
-    : await getText(accountCell);
+    ? await getTextWithFailureSignal(noformSpan.first())
+    : await getTextWithFailureSignal(accountCell);
+  if (accountFrom === null) throw incompleteCashFlowRow(["account"]);
 
   return {
     hasTransferBox,
@@ -263,9 +274,9 @@ export async function parseDetailRow(
   // グループ1: 基本情報を並列取得
   const [rowId, rowClass, dateText, description, amountText] = await Promise.all([
     row.getAttribute("id").catch(() => ""),
-    row.getAttribute("class").catch(() => ""),
+    row.getAttribute("class").catch(() => undefined),
     getText(cells.nth(DETAIL_COLUMNS.DATE)),
-    getText(cells.nth(DETAIL_COLUMNS.DESCRIPTION)),
+    getTextWithFailureSignal(cells.nth(DETAIL_COLUMNS.DESCRIPTION)),
     getText(cells.nth(DETAIL_COLUMNS.AMOUNT)),
   ]);
 
@@ -278,9 +289,14 @@ export async function parseDetailRow(
     parsedDate.toISOString().slice(0, 10) === date;
 
   // A monthly replacement is safe only when every rendered transaction row was extracted.
-  if (!mfId || !isValidDate || !description || !isSupportedCashFlowAmount(amountText)) {
-    throw new Error("Incomplete cash flow transaction row");
-  }
+  const incompleteFields = [
+    !mfId ? "id" : null,
+    rowClass === undefined ? "class" : null,
+    !isValidDate ? "date" : null,
+    description === null ? "description" : null,
+    !isSupportedCashFlowAmount(amountText) ? "amount" : null,
+  ].filter((field): field is string => field !== null);
+  if (incompleteFields.length > 0) throw incompleteCashFlowRow(incompleteFields);
 
   // グループ2: カテゴリ情報を並列取得
   const [categoryText, subCategoryText] = await Promise.all([
@@ -289,7 +305,7 @@ export async function parseDetailRow(
   ]);
 
   if (categoryText === null || subCategoryText === null) {
-    throw new Error("Incomplete cash flow transaction row");
+    throw incompleteCashFlowRow(["category"]);
   }
 
   const { accountFrom, accountTo, hasTransferBox } = await parseAccountCell(
@@ -320,7 +336,7 @@ export async function parseDetailRow(
     date,
     category: categoryText || null,
     subCategory: subCategoryText || null,
-    description,
+    description: description ?? "",
     amount: Math.abs(parseJapaneseNumber(amountText)),
     type,
     isTransfer,
@@ -374,17 +390,6 @@ export function buildMonthRange(month: string): { from: string; to: string } {
     from: `${yearText}/${monthText}/01`,
     to: `${yearText}/${monthText}/${String(lastDay).padStart(2, "0")}`,
   };
-}
-
-export async function scrapeCashFlowMonth(page: Page, month: string): Promise<CashFlowSummary> {
-  const range = buildMonthRange(month);
-
-  await page.goto(mfUrls.cashFlowWithRange(range.from, range.to), {
-    waitUntil: "domcontentloaded",
-  });
-  await page.locator("#cf-detail-table").waitFor({ state: "visible", timeout: 10000 });
-
-  return extractCashFlowFromPage(page);
 }
 
 /**
