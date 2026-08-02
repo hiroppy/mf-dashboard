@@ -115,40 +115,61 @@ function resolveOptions(
   return resolved;
 }
 
-const classificationPatterns: ReadonlyArray<{
+const classificationRules: ReadonlyArray<{
   classification: Exclude<RecurringCandidateClassification, "other">;
-  patterns: readonly string[];
+  japanese: readonly string[];
+  english: readonly string[];
 }> = [
   {
     classification: "executive_compensation",
-    patterns: ["役員報酬", "executivecompensation"],
+    japanese: ["役員報酬"],
+    english: ["executive compensation"],
   },
-  { classification: "salary", patterns: ["給与", "給料", "salary", "payroll"] },
-  { classification: "card", patterns: ["カード", "card"] },
-  { classification: "rent", patterns: ["家賃", "賃料", "rent"] },
-  { classification: "loan", patterns: ["ローン", "返済", "loan"] },
-  { classification: "tax", patterns: ["予定納税", "税金", "納税", "tax"] },
+  { classification: "salary", japanese: ["給与", "給料"], english: ["salary", "payroll"] },
+  { classification: "card", japanese: ["カード"], english: ["card"] },
+  { classification: "rent", japanese: ["家賃", "賃料"], english: ["rent"] },
+  { classification: "loan", japanese: ["ローン", "返済"], english: ["loan"] },
+  { classification: "tax", japanese: ["予定納税", "税金", "納税"], english: ["tax"] },
 ];
 
-function normalizeText(value: string | null | undefined): string {
-  return (value ?? "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[\p{Number}\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
+function normalizeCaseAndWidth(value: string | null | undefined): string {
+  return (value ?? "").normalize("NFKC").toLowerCase();
+}
+
+function containsEnglishTerm(text: string, term: string): boolean {
+  const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${escapedTerm}(?=$|[^a-z0-9])`).test(text);
+}
+
+function normalizeDescription(value: string | null | undefined, date: string): string {
+  const { year, month } = parseIsoDateKey(date);
+  const paddedMonth = String(month).padStart(2, "0");
+  const japaneseMonthExpression = new RegExp(`${year}年0?${month}月|0?${month}月`, "gu");
+  const standaloneMonthExpression = new RegExp(
+    `(^|[^a-z0-9])(?:${year}${paddedMonth}|${year}|${paddedMonth}|${month})(?=$|[^a-z0-9])`,
+    "gu",
+  );
+
+  return normalizeCaseAndWidth(value)
+    .replace(japaneseMonthExpression, "")
+    .replace(standaloneMonthExpression, "$1")
+    .replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
 }
 
 export function classifyRecurringTransaction(
   transaction: Pick<RecurringTransaction, "category" | "subCategory" | "description">,
 ): RecurringCandidateClassification {
-  const searchableText = normalizeText(
+  const searchableText = normalizeCaseAndWidth(
     [transaction.category, transaction.subCategory, transaction.description]
       .filter(Boolean)
       .join(" "),
   );
 
   return (
-    classificationPatterns.find(({ patterns }) =>
-      patterns.some((pattern) => searchableText.includes(pattern)),
+    classificationRules.find(
+      ({ japanese, english }) =>
+        japanese.some((term) => searchableText.includes(term)) ||
+        english.some((term) => containsEnglishTerm(searchableText, term)),
     )?.classification ?? "other"
   );
 }
@@ -314,7 +335,7 @@ export function generateRecurringCandidates(
         classification: classifyRecurringTransaction(transaction),
         day,
         month: transaction.date.slice(0, 7),
-        normalizedDescription: normalizeText(transaction.description),
+        normalizedDescription: normalizeDescription(transaction.description, transaction.date),
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)

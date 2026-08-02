@@ -24,7 +24,9 @@ describe("classifyRecurringTransaction", () => {
     ["住宅ローン返済", "loan"],
     ["給与振込", "salary"],
     ["役員報酬", "executive_compensation"],
+    ["Executive compensation", "executive_compensation"],
     ["所得税 予定納税", "tax"],
+    ["Tax payment", "tax"],
     ["定期支払", "other"],
   ] as const)("classifies %s as %s", (description, expected) => {
     expect(classifyRecurringTransaction({ description })).toBe(expected);
@@ -39,6 +41,13 @@ describe("classifyRecurringTransaction", () => {
       }),
     ).toBe("salary");
   });
+
+  it.each(["Taxi fare", "Current account", "Discarded item"])(
+    "does not classify an English keyword substring in %s",
+    (description) => {
+      expect(classifyRecurringTransaction({ description })).toBe("other");
+    },
+  );
 });
 
 describe("generateRecurringCandidates", () => {
@@ -188,13 +197,13 @@ describe("generateRecurringCandidates", () => {
     expect(result.map(({ accountId }) => accountId)).toEqual([accountA, "account-b", accountA]);
   });
 
-  it("does not merge similarly named card payments when their descriptions differ", () => {
+  it("does not merge card payments distinguished by stable numeric identifiers", () => {
     const result = generateRecurringCandidates(
       [
-        transaction("2026-06-05", 40_000, "カード A"),
-        transaction("2026-07-05", 40_000, "カード A"),
-        transaction("2026-06-05", 40_000, "カード B"),
-        transaction("2026-07-05", 40_000, "カード B"),
+        transaction("2026-06-05", 40_000, "CARD 1"),
+        transaction("2026-07-05", 40_000, "CARD 1"),
+        transaction("2026-06-05", 40_000, "CARD 2"),
+        transaction("2026-07-05", 40_000, "CARD 2"),
       ],
       "2026-08",
     );
