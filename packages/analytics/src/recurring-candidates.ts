@@ -706,6 +706,7 @@ function groupTransactions(
       groupsByBigramAndMonth: new Map(),
       latestMonths: new Map(),
     };
+    if (partition.exactOccurrences.has(exactOccurrenceKey(transaction))) continue;
     const transactionBigrams = getBigrams(transaction.normalizedDescription);
     const optimizedMatch = findBestGroupMatch(
       transaction,
@@ -989,13 +990,15 @@ export function generateRecurringCandidates(
     )
     .map((transaction): NormalizedTransaction => {
       const { day } = parseIsoDateKey(transaction.date);
+      const description = transaction.description?.trim() || null;
+      const canonicalTransaction = { ...transaction, description };
       return {
-        ...transaction,
+        ...canonicalTransaction,
         amount: Math.abs(transaction.amount),
-        classification: classifyRecurringTransaction(transaction),
+        classification: classifyRecurringTransaction(canonicalTransaction),
         day,
         month: transaction.date.slice(0, 7),
-        normalizedDescription: normalizeGroupingText(transaction),
+        normalizedDescription: normalizeGroupingText(canonicalTransaction),
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)

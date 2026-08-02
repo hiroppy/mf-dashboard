@@ -1070,6 +1070,16 @@ describe("generateRecurringCandidates", () => {
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
   });
 
+  it("coalesces many exact duplicate labeled occurrences before scoring", () => {
+    const july = transaction("2026-07-10", 20_000, "Utilities");
+    const history = [transaction("2026-06-10", 20_000, "Utilities"), ...Array(5_000).fill(july)];
+
+    expect(generateRecurringCandidates(history, "2026-08")[0]).toMatchObject({
+      confidence: "medium",
+      evidence: { occurrenceCount: 2 },
+    });
+  });
+
   it("handles many prior-month common-label recurring slots", () => {
     const history: RecurringTransaction[] = ["2026-06-10", "2026-07-10"].flatMap((date) =>
       Array.from({ length: 2_000 }, (_, index) => ({
@@ -1150,6 +1160,24 @@ describe("generateRecurringCandidates", () => {
     };
 
     expect(generateRecurringCandidates([income, { ...income }], "2026-08")).toHaveLength(1);
+  });
+
+  it("canonicalizes null and empty descriptions independently of input order", () => {
+    const nullDescription: RecurringTransaction = {
+      accountId: accountA,
+      date: "2026-07-10",
+      amount: 150_000,
+      description: null,
+      type: "income",
+    };
+    const emptyDescription = { ...nullDescription, description: "" };
+    const candidate = (history: RecurringTransaction[]) =>
+      generateRecurringCandidates(history, "2026-08")[0];
+
+    expect(candidate([nullDescription, emptyDescription])).toEqual(
+      candidate([emptyDescription, nullDescription]),
+    );
+    expect(candidate([nullDescription, emptyDescription]).description).toBeNull();
   });
 
   it("preserves isolated large incomes with distinct original descriptions", () => {
