@@ -250,14 +250,13 @@ export async function replaceTransactionsForMonth(
   if (items.some((item) => !item.mfId || item.mfId.startsWith("unknown"))) {
     throw new Error("Invalid transactions: missing transaction ID");
   }
+  if (!isComplete) {
+    throw new Error("Cannot replace an incomplete cash flow period");
+  }
   const currentYear = parseInt(month.slice(0, 4), 10);
   const replacementRange = resolveTransactionDateRange(month, dateRange);
   const toExclusive = getExclusiveRangeEnd(replacementRange.to);
   const records = items.map((item) => prepareTransactionData(item, accountIdMap, currentYear));
-
-  if (items.length === 0 && !isComplete) {
-    throw new Error("Cannot replace an empty cash flow period without completeness proof");
-  }
 
   if (records.some(({ date }) => date < replacementRange.from || date >= toExclusive)) {
     throw new Error("Invalid transactions: item falls outside replacement date range");

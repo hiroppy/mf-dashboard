@@ -73,6 +73,7 @@ describe("getCashFlow", () => {
     let todayButton: Locator;
     todayButton = {
       first: vi.fn<() => Locator>(() => todayButton),
+      waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       isVisible: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
       click: clickToday,
     } as unknown as Locator;
@@ -139,6 +140,7 @@ describe("getCashFlow", () => {
     let todayButton: Locator;
     todayButton = {
       first: vi.fn<() => Locator>(() => todayButton),
+      waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       isVisible: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
       click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     } as unknown as Locator;

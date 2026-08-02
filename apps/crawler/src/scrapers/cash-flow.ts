@@ -59,6 +59,7 @@ export async function ensureCurrentCashFlowView(
   if (isCurrentAccountingPeriod(displayedState)) return displayedState;
 
   const todayButton = page.locator(".fc-button-today").first();
+  await todayButton.waitFor({ state: "visible", timeout: 3000 }).catch(() => undefined);
   if (!(await todayButton.isVisible())) {
     throw new Error(`Could not navigate cash flow from ${displayedState.month} to today`);
   }

@@ -328,16 +328,22 @@ describe("runCashFlowHistoryPhase", () => {
   });
 
   test("history modeでは未取得の最古会計期間まで取得する", async () => {
+    const now = new Date("2026-08-31T14:59:59.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
     vi.mocked(hasCashFlowPeriod).mockResolvedValue(false);
     vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
 
-    await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: true });
-
-    expect(scrapeCashFlowHistory).toHaveBeenCalledWith(
-      {},
-      getHistoryMaxMonths(new Date()),
-      expect.any(Object),
-    );
+    try {
+      await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: true });
+      expect(scrapeCashFlowHistory).toHaveBeenCalledWith(
+        {},
+        getHistoryMaxMonths(now),
+        expect.any(Object),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("初期 navigation 失敗を対象月 step に記録する", async () => {

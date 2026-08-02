@@ -572,10 +572,28 @@ describe("saveTransactionsForMonth", () => {
     await saveTransactionsForMonth(db, "2025-04", items);
 
     await expect(saveTransactionsForMonth(db, "2025-04", [])).rejects.toThrow(
-      "without completeness proof",
+      "incomplete cash flow period",
     );
 
     await expect(db.select().from(schema.transactions).all()).resolves.toHaveLength(2);
+  });
+
+  test("完全性を確認できない非空入力でも既存データを削除しない", async () => {
+    await saveTransactionsForMonth(db, "2025-04", items);
+
+    await expect(
+      saveTransactionsForMonth(
+        db,
+        "2025-04",
+        [{ ...items[0]!, mfId: "partial-item" }],
+        undefined,
+        undefined,
+        false,
+      ),
+    ).rejects.toThrow("incomplete cash flow period");
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId).sort()).toEqual(["tx1", "tx2"]);
   });
 
   test("IDのない入力では既存データを削除しない", async () => {
