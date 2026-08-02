@@ -187,6 +187,24 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 3 } });
   });
 
+  it("ignores stale fuzzy groups before applying the candidate limit", () => {
+    const stale = Array.from({ length: 64 }, (_, index) => {
+      const prefix = String.fromCharCode(97 + Math.floor(index / 26), 97 + (index % 26));
+      return transaction("2026-01-10", 20_000, `${prefix}ACME UTILITY`);
+    });
+    const result = generateRecurringCandidates(
+      [
+        ...stale,
+        transaction("2026-05-10", 20_000, "ACME UTILITY"),
+        transaction("2026-06-10", 20_000, "ACME UTILITY"),
+        transaction("2026-07-10", 20_000, "XACME UTILITY"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 3 } });
+  });
+
   it("prefers a consecutive fuzzy group over a stale exact-description group", () => {
     const result = generateRecurringCandidates(
       [
@@ -1428,6 +1446,18 @@ describe("generateRecurringCandidates", () => {
 
   it("returns an empty list for empty input", () => {
     expect(generateRecurringCandidates([], "2026-08")).toEqual([]);
+  });
+
+  it("computes an even-sized median without overflowing finite amounts", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", Number.MAX_VALUE, "定期支払"),
+        transaction("2026-07-10", Number.MAX_VALUE, "定期支払"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]?.predictedAmount).toBe(Number.MAX_VALUE);
   });
 
   it("supports a shorter lookback without allowing a window over 12 months", () => {

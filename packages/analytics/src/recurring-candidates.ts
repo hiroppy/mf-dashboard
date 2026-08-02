@@ -271,7 +271,8 @@ function median(values: number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) return sorted[middle];
-  return (sorted[middle - 1] + sorted[middle]) / 2;
+  const lower = sorted[middle - 1];
+  return lower + (sorted[middle] - lower) / 2;
 }
 
 function daysFromMonthEnd(transaction: NormalizedTransaction): number {
@@ -547,12 +548,11 @@ function getFuzzyIndexedGroups(
   if (similarityThreshold === 0) return [];
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
+  const previousMonth = shiftYearMonthKey(transaction.month, -1);
   const candidateCounts = new Map(
     [...transactionBigrams].map((bigram) => [
       bigram,
-      [...(partition.groupsByBigramAndMonth.get(bigram)?.entries() ?? [])]
-        .filter(([month]) => month !== transaction.month)
-        .reduce((count, [, groupsByDescription]) => count + groupsByDescription.size, 0),
+      partition.groupsByBigramAndMonth.get(bigram)?.get(previousMonth)?.size ?? 0,
     ]),
   );
   const indexedBigrams = [...transactionBigrams].sort(
@@ -560,14 +560,11 @@ function getFuzzyIndexedGroups(
   );
   const candidates = new Set<TransactionGroup>();
   for (const bigram of indexedBigrams) {
-    for (const [month, groupsByDescription] of partition.groupsByBigramAndMonth.get(bigram) ?? []) {
-      if (month === transaction.month) continue;
-      for (const [description, groups] of groupsByDescription) {
-        if (description === transaction.normalizedDescription) continue;
-        for (const group of groups) {
-          candidates.add(group);
-          if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
-        }
+    const groupsByDescription = partition.groupsByBigramAndMonth.get(bigram)?.get(previousMonth);
+    for (const [description, groups] of groupsByDescription ?? []) {
+      if (description === transaction.normalizedDescription) continue;
+      for (const group of groups) {
+        candidates.add(group);
         if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
       }
       if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
