@@ -163,7 +163,7 @@ function normalizeDescription(value: string | null | undefined): string {
       "",
     )
     .replace(
-      /(^|[^a-z0-9])(?:[0-9]{4}[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:19|20)[0-9]{2}(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
+      /(^|[^a-z0-9])(?:19|20)[0-9]{2}(?:[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
       "$1",
     )
     .replace(
@@ -278,9 +278,8 @@ function normalizeGroupingText(transaction: RecurringTransaction): string {
   const categoryParts = [transaction.category, transaction.subCategory].map(normalizeCategoryPart);
   const category = categoryParts.some(Boolean) ? categoryParts.join("categorysep") : "";
   if (!description) return category;
-  return GENERIC_DESCRIPTIONS.has(description)
-    ? `${description}descriptionsep${category}`
-    : description;
+  if (!GENERIC_DESCRIPTIONS.has(description)) return description;
+  return category ? `${description}descriptionsep${category}` : "";
 }
 
 interface GroupMatchScore {
@@ -504,10 +503,21 @@ function getConfidence(
   return null;
 }
 
+function compareCodePointStrings(left: string, right: string): number {
+  const leftCodePoints = Array.from(left, (character) => character.codePointAt(0) ?? 0);
+  const rightCodePoints = Array.from(right, (character) => character.codePointAt(0) ?? 0);
+  for (let index = 0; index < Math.min(leftCodePoints.length, rightCodePoints.length); index++) {
+    const result = leftCodePoints[index] - rightCodePoints[index];
+    if (result !== 0) return result;
+  }
+  return leftCodePoints.length - rightCodePoints.length;
+}
+
 function compareTextKeys(keys: Array<[string, string]>): number {
   for (const [left, right] of keys) {
     const result = left.localeCompare(right);
     if (result !== 0) return result;
+    if (left !== right) return compareCodePointStrings(left, right);
   }
   return 0;
 }
@@ -628,6 +638,7 @@ export function generateRecurringCandidates(
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)
+    .filter(({ normalizedDescription }) => normalizedDescription.length > 0)
     .sort(compareTransactions);
 
   return groupTransactions(history, options)

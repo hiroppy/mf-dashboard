@@ -559,6 +559,20 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("preserves separated identifiers with implausible years", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 40_000, "CARD 1234-05"),
+        transaction("2026-07-05", 40_000, "CARD 1234-05"),
+        transaction("2026-06-05", 40_000, "CARD 9876-05"),
+        transaction("2026-07-05", 40_000, "CARD 9876-05"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
   it("normalizes recognized volatile numeric references", () => {
     const result = generateRecurringCandidates(
       [
@@ -609,6 +623,29 @@ describe("generateRecurringCandidates", () => {
       { accountId: accountA, date: "2026-06-10", amount: 20_000, type: "expense" },
       { accountId: accountA, date: "2026-07-10", amount: 20_000, type: "expense" },
     ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("does not group a generic description without a category identity", () => {
+    expect(
+      generateRecurringCandidates(
+        [
+          transaction("2026-06-10", 20_000, "Payment"),
+          transaction("2026-07-10", 20_000, "Payment"),
+        ],
+        "2026-08",
+      ),
+    ).toEqual([]);
+  });
+
+  it("skips many unmatchable blank identities", () => {
+    const history: RecurringTransaction[] = Array.from({ length: 2_000 }, (_, index) => ({
+      accountId: accountA,
+      date: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
+      amount: 20_000,
+      type: "expense",
+    }));
 
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
   });
@@ -745,6 +782,18 @@ describe("generateRecurringCandidates", () => {
       generateRecurringCandidates(transactions, "2026-08").map(({ description }) => description);
     expect(descriptions(history)).toEqual([null, "家賃"]);
     expect(descriptions([...history].reverse())).toEqual([null, "家賃"]);
+  });
+
+  it("orders canonically equivalent descriptions independently of input order", () => {
+    const history = [
+      transaction("2026-06-10", 20_000, "é"),
+      transaction("2026-07-10", 20_000, "é"),
+      transaction("2026-07-10", 20_000, "é"),
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual(
+      generateRecurringCandidates([...history].reverse(), "2026-08"),
+    );
   });
 
   it("returns an empty list for empty input", () => {
