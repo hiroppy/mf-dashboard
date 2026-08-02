@@ -277,7 +277,8 @@ function conflictsWithPostingMonthSchedule(
   transactions: NormalizedTransaction[],
 ): boolean {
   return transactions.some((existing) => {
-    if (existing.month !== transaction.month || existing.day === transaction.day) return false;
+    if (existing.month !== transaction.month) return false;
+    if (existing.day === transaction.day) return existing.amount !== transaction.amount;
     const existingPosition = boundaryPosition(existing);
     const transactionPosition = boundaryPosition(transaction);
     return !(

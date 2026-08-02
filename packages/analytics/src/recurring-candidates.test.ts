@@ -466,9 +466,26 @@ describe("generateRecurringCandidates", () => {
     const reversed = generateRecurringCandidates([...history].reverse(), "2026-08");
     expect(forward).toEqual(reversed);
     expect(forward[0]).toMatchObject({
-      predictedAmount: 105_000,
-      evidence: { amountRange: { min: 100_000, max: 110_000 } },
+      predictedAmount: 110_000,
+      evidence: { amountRange: { min: 110_000, max: 110_000 } },
     });
+  });
+
+  it("preserves same-day recurring amount schedules", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-10", 10_000, "SERVICE PLAN"),
+        transaction("2026-01-10", 10_500, "SERVICE PLAN"),
+        transaction("2026-02-10", 10_000, "SERVICE PLAN"),
+        transaction("2026-02-10", 10_500, "SERVICE PLAN"),
+        transaction("2026-03-10", 10_000, "SERVICE PLAN"),
+        transaction("2026-03-10", 10_500, "SERVICE PLAN"),
+      ],
+      "2026-04",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedAmount }) => predictedAmount)).toEqual([10_000, 10_500]);
   });
 
   it("keeps accounts and materially different patterns separate", () => {
