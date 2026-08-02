@@ -414,6 +414,24 @@ describe("generateRecurringCandidates", () => {
     expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-08-11", "2026-08-13"]);
   });
 
+  it("reprocesses displaced occurrences before transactions from later months", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-05-13", 20_000, "SERVICE PLAN"),
+        transaction("2026-06-12", 20_000, "SERVICE PLAN"),
+        transaction("2026-06-13", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-13", 20_000, "SERVICE PLAN"),
+      ],
+      "2026-08",
+      { dateDriftDays: 2 },
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-08-10", "2026-08-13"]);
+  });
+
   it("matches near-end dates by their month-end offsets", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-02-27", 80_000, "家賃")],
@@ -915,6 +933,21 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "medium", evidence: { occurrenceCount: 2 } });
+  });
+
+  it("bounds amount-index work by candidate groups instead of historical keys", () => {
+    const history = Array.from({ length: 8 }, (_, index) =>
+      transaction(`2026-${String(index + 1).padStart(2, "0")}-10`, 100 + index, "Utilities"),
+    );
+    history.push(
+      transaction("2026-09-10", 116, "Utilities"),
+      transaction("2026-10-10", 106, "Utilities"),
+    );
+
+    expect(generateRecurringCandidates(history, "2026-11")[0]).toMatchObject({
+      confidence: "medium",
+      evidence: { occurrenceCount: 2 },
+    });
   });
 
   it("preserves boundaries between stable numeric tokens", () => {

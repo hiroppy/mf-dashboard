@@ -484,15 +484,17 @@ function getOptimizedGroups(
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
+  if (exactRecurringGroup && getGroupMatchScore(transaction, exactRecurringGroup, options)) {
+    return [exactRecurringGroup];
+  }
   const groups = new Set<TransactionGroup>();
-  if (exactRecurringGroup) groups.add(exactRecurringGroup);
   for (const group of getAmountIndexedGroups(
     partition.amountGroupsByDescriptionAndDay.get(transaction.normalizedDescription),
     partition.amountKeysByDescriptionAndDay.get(transaction.normalizedDescription),
     partition,
     transaction,
     options.amountToleranceRatio,
-    Number.POSITIVE_INFINITY,
+    MAX_GROUPS_PER_AMOUNT_BUCKET,
   )) {
     groups.add(group);
   }
@@ -585,18 +587,18 @@ function getAmountIndexedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
   tolerance: number,
-  maxGroupsPerAmount: number,
+  maxCandidateGroups: number,
 ): TransactionGroup[] {
   if (!groupsByDay || !amountKeysByDay) return [];
 
-  const candidates: TransactionGroup[] = [];
+  const candidates = new Set<TransactionGroup>();
   for (const [day, groupsByAmount] of groupsByDay) {
+    let dayCandidateCount = 0;
     const amountKeys = amountKeysByDay.get(day) ?? [];
     const insertionIndex = lowerBound(amountKeys, transaction.amount);
     let leftIndex = insertionIndex - 1;
     let rightIndex = insertionIndex;
-    let inspectedAmounts = 0;
-    while ((leftIndex >= 0 || rightIndex < amountKeys.length) && inspectedAmounts < 8) {
+    while (leftIndex >= 0 || rightIndex < amountKeys.length) {
       const leftRatio =
         leftIndex >= 0
           ? Math.abs(amountKeys[leftIndex] - transaction.amount) /
@@ -609,21 +611,22 @@ function getAmountIndexedGroups(
           : Number.POSITIVE_INFINITY;
       const index = leftRatio <= rightRatio ? leftIndex-- : rightIndex++;
       const amount = amountKeys[index];
-      inspectedAmounts++;
       if (Math.min(leftRatio, rightRatio) > tolerance) break;
-      let inspectedGroups = 0;
       for (const group of groupsByAmount.get(amount) ?? []) {
-        if (inspectedGroups++ >= maxGroupsPerAmount) break;
         if (
           partition.latestMonths.get(group) !== transaction.month ||
           !conflictsWithPostingMonthSchedule(transaction, group.transactions)
         ) {
-          candidates.push(group);
+          const previousSize = candidates.size;
+          candidates.add(group);
+          if (candidates.size > previousSize) dayCandidateCount++;
+          if (dayCandidateCount >= maxCandidateGroups) break;
         }
       }
+      if (dayCandidateCount >= maxCandidateGroups) break;
     }
   }
-  return candidates;
+  return [...candidates];
 }
 
 function exactOccurrenceKey(transaction: NormalizedTransaction): string {
@@ -790,7 +793,7 @@ function groupTransactions(
         ) {
           partition.exactRecurringSlots.delete(exactRecurringSlotKey(replacement));
         }
-        pendingTransactions.push(replacement);
+        pendingTransactions.splice(cursor + 1, 0, replacement);
       }
       existingGroup.transactions.push(transaction);
       indexGroupAmount(partition, existingGroup, transaction);
