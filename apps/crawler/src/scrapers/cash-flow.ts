@@ -4,7 +4,11 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { debug } from "../logger.js";
 import { parseJapaneseNumber } from "../parsers.js";
-import { SUMMARY_COLUMNS, parseDetailRow } from "./cash-flow-history.js";
+import {
+  SUMMARY_COLUMNS,
+  parseDetailRow,
+  waitForCashFlowTableReplacement,
+} from "./cash-flow-history.js";
 
 export function parseCashFlowMonthHeader(headerText: string | null): string | null {
   const match =
@@ -67,13 +71,15 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
     }
 
     debug("Clicking today button to navigate to current month");
-    const [fetchResponse] = await Promise.all([
-      page.waitForResponse(
-        (response) => response.url().includes("/cf/fetch") && response.status() === 200,
-      ),
-      todayButton.click(),
-    ]);
-    await fetchResponse.finished();
+    await waitForCashFlowTableReplacement(page, async () => {
+      const [fetchResponse] = await Promise.all([
+        page.waitForResponse(
+          (response) => response.url().includes("/cf/fetch") && response.status() === 200,
+        ),
+        todayButton.click(),
+      ]);
+      await fetchResponse.finished();
+    });
     await page.waitForFunction((expectedMonth) => {
       const headerText = document.querySelector(".fc-header-title h2")?.textContent ?? "";
       const headerMatch =

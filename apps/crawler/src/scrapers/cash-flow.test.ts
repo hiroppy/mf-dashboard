@@ -1,6 +1,6 @@
 import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
-import { chromium, type Browser } from "playwright";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import type { Locator, Page, Response } from "playwright";
+import { describe, expect, test, vi } from "vitest";
 import { getCashFlow, parseCashFlowMonthHeader } from "./cash-flow.js";
 
 describe("parseCashFlowMonthHeader", () => {
@@ -21,57 +21,97 @@ describe("parseCashFlowMonthHeader", () => {
 });
 
 describe("getCashFlow", () => {
-  let browser: Browser;
-
-  beforeAll(async () => {
-    browser = await chromium.launch();
-  });
-
-  afterAll(async () => {
-    await browser.close();
-  });
-
-  test("当月取得レスポンスと月表示の更新を待ってから結果を返す", async () => {
-    const page = await browser.newPage();
+  test("当月取得レスポンスと取引DOMの置換を待ってから結果を返す", async () => {
     const currentMonth = getJstYearMonthKey();
     const [year, month] = currentMonth.split("-");
-    let fetchRequestCount = 0;
+    const events: string[] = [];
 
-    try {
-      await page.route("https://moneyforward.com/**", async (route) => {
-        if (new URL(route.request().url()).pathname === "/cf/fetch") {
-          fetchRequestCount++;
-          await route.fulfill({ contentType: "application/json", body: "{}" });
-          return;
-        }
+    let monthHeader: Locator;
+    monthHeader = {
+      first: vi.fn<() => Locator>(() => monthHeader),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      textContent: vi
+        .fn<() => Promise<string | null>>()
+        .mockResolvedValueOnce("2000/1/1 - 2000/1/31")
+        .mockResolvedValueOnce(`${year}/${Number(month)}/1 - ${year}/${Number(month)}/28`),
+    } as unknown as Locator;
 
-        await route.fulfill({
-          contentType: "text/html; charset=utf-8",
-          body: `
-            <button class="fc-button-today">今日</button>
-            <a href="/cf/csv?year=2000&month=1">CSV</a>
-            <table id="monthly_total_table_kakeibo"><tbody><tr>
-              <td>0</td><td></td><td>0</td><td></td><td>0</td>
-            </tr></tbody></table>
-            <table id="cf-detail-table" style="display: table; width: 1px; height: 1px">
-              <tbody></tbody>
-            </table>
-            <script>
-              document.querySelector(".fc-button-today").addEventListener("click", async () => {
-                await fetch("/cf/fetch?today=1");
-                setTimeout(() => {
-                  document.querySelector("a[href*='/cf/csv']").href = "/cf/csv?year=${year}&month=${Number(month)}";
-                }, 25);
-              });
-            </script>
-          `,
-        });
+    let csvLink: Locator;
+    csvLink = {
+      first: vi.fn<() => Locator>(() => csvLink),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
+
+    const detailTable = {
+      waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as unknown as Locator;
+    let todayButton: Locator;
+    todayButton = {
+      first: vi.fn<() => Locator>(() => todayButton),
+      isVisible: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+      click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as unknown as Locator;
+
+    const amountCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("0"),
+    } as unknown as Locator;
+    const summaryCells = {
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(amountCell),
+    } as unknown as Locator;
+    const summaryRow = {
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(summaryCells),
+    } as unknown as Locator;
+    const summaryRows = {
+      first: vi.fn<() => Locator>().mockReturnValue(summaryRow),
+    } as unknown as Locator;
+    const detailRows = {
+      count: vi.fn<() => Promise<number>>().mockImplementation(async () => {
+        events.push("detail-read");
+        return 0;
+      }),
+    } as unknown as Locator;
+
+    const fetchResponse = {
+      finished: vi.fn<Response["finished"]>().mockResolvedValue(null),
+    } as unknown as Response;
+    const evaluate = vi
+      .fn<(callback: unknown, argument: string) => Promise<void>>()
+      .mockImplementation(async () => {
+        events.push(evaluate.mock.calls.length === 1 ? "observer-installed" : "observer-cleaned");
       });
+    const waitForFunction = vi
+      .fn<(callback: unknown, argument: string) => Promise<void>>()
+      .mockImplementation(async () => {
+        events.push(waitForFunction.mock.calls.length === 1 ? "table-updated" : "month-updated");
+      });
+    const locator = vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
+      if (selector === "#cf-detail-table") return detailTable;
+      if (selector === ".fc-header-title h2") return monthHeader;
+      if (selector === "a[href*='/cf/csv']") return csvLink;
+      if (selector === ".fc-button-today") return todayButton;
+      if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
+      if (selector === "#cf-detail-table tbody > tr") return detailRows;
+      throw new Error(`Unexpected selector: ${selector}`);
+    });
+    const page = {
+      goto: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+      locator,
+      evaluate,
+      waitForResponse: vi.fn<() => Promise<Response>>().mockResolvedValue(fetchResponse),
+      waitForFunction,
+    } as unknown as Page;
 
-      await expect(getCashFlow(page)).resolves.toMatchObject({ month: currentMonth, items: [] });
-      expect(fetchRequestCount).toBe(1);
-    } finally {
-      await page.close();
-    }
+    await expect(getCashFlow(page)).resolves.toMatchObject({ month: currentMonth, items: [] });
+    expect(waitForFunction.mock.calls.map((call) => call[1])).toEqual([
+      "__mfDashboardCashFlowTableUpdate",
+      currentMonth,
+    ]);
+    expect(events).toEqual([
+      "observer-installed",
+      "table-updated",
+      "observer-cleaned",
+      "month-updated",
+      "detail-read",
+    ]);
   });
 });

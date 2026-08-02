@@ -63,30 +63,62 @@ describe("scrapeCashFlowHistory", () => {
   });
 
   test("IDのない取引行をselectorで除外せず月次抽出を失敗させる", async () => {
-    const page = await browser.newPage();
-    try {
-      // A read-only authenticated E2E cannot safely remove a real transaction ID,
-      // so this selector failure branch uses one minimal transaction-shaped row.
-      await page.setContent(`
-        <div class="fc-header-title"><h2>2026年7月</h2></div>
-        <table id="monthly_total_table_kakeibo"><tbody><tr>
-          <td>0</td><td></td><td>0</td><td></td><td>0</td>
-        </tr></tbody></table>
-        <table id="cf-detail-table"><tbody>
-          <tr class="transaction_list">
-            <td></td><td>07/01</td><td>Transaction A</td><td>1,000</td>
-            <td>Account A</td><td>Category A</td><td>Subcategory A</td>
-            <td></td><td></td><td></td>
-          </tr>
-        </tbody></table>
-      `);
+    let monthHeader: Locator;
+    monthHeader = {
+      first: vi.fn<() => Locator>(() => monthHeader),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("2026年7月"),
+    } as unknown as Locator;
 
-      await expect(extractCashFlowFromPage(page)).rejects.toThrow(
-        "Incomplete cash flow transaction row",
-      );
-    } finally {
-      await page.close();
-    }
+    const amountCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("0"),
+    } as unknown as Locator;
+    const summaryCells = {
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(amountCell),
+    } as unknown as Locator;
+    const summaryRow = {
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(summaryCells),
+    } as unknown as Locator;
+    const summaryRows = {
+      first: vi.fn<() => Locator>().mockReturnValue(summaryRow),
+    } as unknown as Locator;
+
+    const texts = new Map([
+      [1, "07/01"],
+      [2, "Transaction A"],
+      [3, "1,000"],
+    ]);
+    const cells = {
+      nth: vi.fn<(index: number) => Locator>((index) => {
+        return {
+          textContent: vi
+            .fn<() => Promise<string | null>>()
+            .mockResolvedValue(texts.get(index) ?? ""),
+        } as unknown as Locator;
+      }),
+    } as unknown as Locator;
+    const rowWithoutId = {
+      getAttribute: vi.fn<(name: string) => Promise<string | null>>().mockResolvedValue(""),
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
+    } as unknown as Locator;
+    const detailRows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(rowWithoutId),
+    } as unknown as Locator;
+    const page = {
+      locator: vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
+        if (selector === ".fc-header-title h2") return monthHeader;
+        if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
+        if (selector === "#cf-detail-table tbody > tr") return detailRows;
+        return {
+          count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+        } as unknown as Locator;
+      }),
+    } as unknown as Page;
+
+    await expect(extractCashFlowFromPage(page)).rejects.toThrow(
+      "Incomplete cash flow transaction row",
+    );
   });
 });
 
