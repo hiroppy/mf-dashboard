@@ -220,6 +220,16 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]?.predictedDate).toBe("2026-05-31");
   });
 
+  it("matches exact month ends when date drift is zero", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-02-28", 80_000, "家賃"), transaction("2026-03-31", 80_000, "家賃")],
+      "2026-04",
+      { dateDriftDays: 0 },
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
+  });
+
   it("groups holiday drift that crosses a calendar-month boundary", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-03-02", 80_000, "家賃")],
@@ -336,7 +346,7 @@ describe("generateRecurringCandidates", () => {
     const result = generateRecurringCandidates(
       [
         transaction("2025-07-15", 20_000, "ローン"),
-        transaction("2025-08-15", 20_000, "ローン"),
+        transaction("2026-06-15", 20_000, "ローン"),
         transaction("2026-07-15", 20_000, "ローン"),
         transaction("2026-08-15", 20_000, "ローン"),
         transaction("2026-09-15", 20_000, "ローン"),
@@ -348,9 +358,22 @@ describe("generateRecurringCandidates", () => {
       confidence: "medium",
       evidence: {
         occurrenceCount: 2,
-        dateRange: { from: "2025-08-15", to: "2026-07-15" },
+        dateRange: { from: "2026-06-15", to: "2026-07-15" },
       },
     });
+  });
+
+  it("does not forecast a non-monthly cadence in the target month", () => {
+    expect(
+      generateRecurringCandidates(
+        [
+          transaction("2026-01-10", 120_000, "予定納税"),
+          transaction("2026-04-10", 120_000, "予定納税"),
+          transaction("2026-07-10", 120_000, "予定納税"),
+        ],
+        "2026-08",
+      ),
+    ).toEqual([]);
   });
 
   it("does not count multiple matching transactions in one month as recurring months", () => {
@@ -441,7 +464,11 @@ describe("generateRecurringCandidates", () => {
   it("compares fuzzy descriptions against the full group history", () => {
     const label = "abcdefghijklmnopqrst";
     const history = Array.from({ length: 9 }, (_, index) =>
-      transaction(`2026-${String(index + 1).padStart(2, "0")}-10`, 20_000, label.slice(index)),
+      transaction(
+        `2026-${String(index + 1).padStart(2, "0")}-10`,
+        20_000,
+        label.slice(0, label.length - index),
+      ),
     );
 
     const result = generateRecurringCandidates(history, "2026-10");
@@ -550,6 +577,44 @@ describe("generateRecurringCandidates", () => {
         category: "Household",
       },
     ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("preserves category and subcategory tuple boundaries", () => {
+    const history: RecurringTransaction[] = [
+      {
+        ...transaction("2026-06-10", 20_000, "Payment"),
+        category: "A",
+        subCategory: "BC",
+      },
+      {
+        ...transaction("2026-06-10", 20_000, "Payment"),
+        category: "AB",
+        subCategory: "C",
+      },
+      {
+        ...transaction("2026-07-10", 20_000, "Payment"),
+        category: "A",
+        subCategory: "BC",
+      },
+      {
+        ...transaction("2026-07-10", 20_000, "Payment"),
+        category: "AB",
+        subCategory: "C",
+      },
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toHaveLength(2);
+  });
+
+  it("handles many distinct description partitions", () => {
+    const history = Array.from({ length: 2_000 }, (_, index) => {
+      const prefix = Array.from({ length: 4 }, (__, position) =>
+        String.fromCharCode(97 + (Math.floor(index / 26 ** position) % 26)),
+      ).join("");
+      return transaction("2026-07-10", 20_000, `${prefix} merchant`);
+    });
 
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
   });

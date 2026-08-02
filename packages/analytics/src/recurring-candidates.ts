@@ -224,6 +224,7 @@ function daysFromMonthEnd(transaction: NormalizedTransaction): number {
 }
 
 function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTransaction): number {
+  if (daysFromMonthEnd(left) === 0 && daysFromMonthEnd(right) === 0) return 0;
   const directDistance = Math.abs(left.day - right.day);
   const [earlier, later] = left.date <= right.date ? [left, right] : [right, left];
   if (earlier.month === later.month || earlier.day <= later.day) return directDistance;
@@ -266,11 +267,15 @@ function conflictsWithBoundaryOccurrence(
 
 function normalizeGroupingText(transaction: RecurringTransaction): string {
   const description = normalizeDescription(transaction.description);
-  const category = normalizeCaseAndWidth(
-    [transaction.category, transaction.subCategory].filter(Boolean).join(" "),
-  ).replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
+  const normalizeCategoryPart = (value: string | null | undefined) =>
+    normalizeCaseAndWidth(value).replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
+  const category = [transaction.category, transaction.subCategory]
+    .map(normalizeCategoryPart)
+    .join("categorysep");
   if (!description) return category;
-  return GENERIC_DESCRIPTIONS.has(description) ? `${description}${category}` : description;
+  return GENERIC_DESCRIPTIONS.has(description)
+    ? `${description}descriptionsep${category}`
+    : description;
 }
 
 interface GroupMatchScore {
@@ -346,10 +351,17 @@ function groupTransactions(
 ): TransactionGroup[] {
   const partitions = new Map<string, TransactionGroup[]>();
   for (const transaction of transactions) {
+    const numericTokenKey = (transaction.normalizedDescription.match(/[0-9]+/g) ?? []).join(".");
+    const descriptionPrefix = Array.from(transaction.normalizedDescription).slice(0, 4).join("");
+    const descriptionBucket = transaction.normalizedDescription.includes("categorysep")
+      ? transaction.normalizedDescription
+      : descriptionPrefix;
     const partitionKey = [
       accountIdKey(transaction.accountId),
       transaction.type,
       transaction.classification,
+      numericTokenKey,
+      descriptionBucket,
     ].join("\0");
     const groups = partitions.get(partitionKey) ?? [];
     let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
@@ -414,6 +426,20 @@ function deduplicateOccurrences(
       byOccurrenceMonth.set(occurrenceMonth, transaction);
   }
   return [...byOccurrenceMonth.values()];
+}
+
+function getMonthlySuffix(
+  occurrences: NormalizedTransaction[],
+  boundaryPattern: boolean,
+): NormalizedTransaction[] {
+  let suffixStart = occurrences.length - 1;
+  while (suffixStart > 0) {
+    const previousMonth = getOccurrenceMonth(occurrences[suffixStart - 1], boundaryPattern);
+    const currentMonth = getOccurrenceMonth(occurrences[suffixStart], boundaryPattern);
+    if (shiftYearMonthKey(previousMonth, 1) !== currentMonth) break;
+    suffixStart--;
+  }
+  return occurrences.slice(suffixStart);
 }
 
 function getConfidence(
@@ -488,7 +514,10 @@ function createCandidate(
   options: Required<GenerateRecurringCandidatesOptions>,
 ): RecurringCandidate | null {
   const boundaryPattern = isMonthBoundaryPattern(group.transactions);
-  const occurrences = deduplicateOccurrences(group.transactions, boundaryPattern);
+  const occurrences = getMonthlySuffix(
+    deduplicateOccurrences(group.transactions, boundaryPattern),
+    boundaryPattern,
+  );
   const confidence = getConfidence(
     occurrences,
     shiftYearMonthKey(targetMonth, -1),
