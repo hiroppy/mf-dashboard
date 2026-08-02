@@ -152,7 +152,10 @@ function containsEnglishTerm(text: string, term: string): boolean {
 
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
-    .replace(/(?<![0-9])(?:[0-9]{4}年)?(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])/gu, "")
+    .replace(
+      /(?<![0-9])(?:[0-9]{4}年)?(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
+      "",
+    )
     .replace(
       /(^|[^a-z0-9])[0-9]{4}(?:[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
       "$1",
@@ -305,16 +308,18 @@ function getGroupMatchScore(
   const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
   const amountDistance =
     Math.abs(transaction.amount - medianAmount) / Math.max(transaction.amount, medianAmount);
-  const descriptionSimilarity = calculateDescriptionSimilarity(
-    transaction.normalizedDescription,
-    representative.normalizedDescription,
+  const descriptionSimilarities = monthlyTransactions.map((existing) =>
+    calculateDescriptionSimilarity(
+      transaction.normalizedDescription,
+      existing.normalizedDescription,
+    ),
   );
+  const descriptionSimilarity = Math.min(...descriptionSimilarities);
   if (
     groupDayDistance > options.dateDriftDays ||
     amountDistance > options.amountToleranceRatio ||
-    !haveMatchingNumericTokens(
-      transaction.normalizedDescription,
-      representative.normalizedDescription,
+    !monthlyTransactions.every((existing) =>
+      haveMatchingNumericTokens(transaction.normalizedDescription, existing.normalizedDescription),
     ) ||
     descriptionSimilarity < options.descriptionSimilarityThreshold
   ) {

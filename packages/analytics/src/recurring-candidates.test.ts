@@ -169,6 +169,19 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "high" });
   });
 
+  it("normalizes complete Japanese dates including their day suffix", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-30", 20_000, "UTILITY 2026年5月30日"),
+        transaction("2026-06-30", 20_000, "UTILITY 2026年6月30日"),
+        transaction("2026-07-31", 20_000, "UTILITY 2026年7月31日"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high" });
+  });
+
   it("matches complete Japanese month tokens without partial numeric matches", () => {
     const result = generateRecurringCandidates(
       [
@@ -423,6 +436,18 @@ describe("generateRecurringCandidates", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ confidence: "high", predictedDate: "2026-04-14" });
+  });
+
+  it("compares fuzzy descriptions against the full group history", () => {
+    const label = "abcdefghijklmnopqrst";
+    const history = Array.from({ length: 9 }, (_, index) =>
+      transaction(`2026-${String(index + 1).padStart(2, "0")}-10`, 20_000, label.slice(index)),
+    );
+
+    const result = generateRecurringCandidates(history, "2026-10");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ confidence: "medium", evidence: { occurrenceCount: 2 } });
   });
 
   it("orders numeric and string account IDs independently of input order", () => {
