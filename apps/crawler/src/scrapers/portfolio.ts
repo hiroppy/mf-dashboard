@@ -13,6 +13,7 @@ const UNKNOWN_CATEGORY = "不明";
 const INSURANCE_CATEGORY = "保険";
 const PENSION_CATEGORY = "年金";
 const LINKED_PNS_CATEGORIES = new Set([INSURANCE_CATEGORY, PENSION_CATEGORY]);
+const ASSET_CATEGORY_SET = new Set<string>(ASSET_CATEGORIES);
 export const PNS_CORE_COLUMN_COUNT = 6;
 
 // Column indices for each table type
@@ -536,8 +537,7 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
 // Get category from section title (h1.heading-normal before the table)
 // Returns the title if it's a valid asset category, otherwise returns "不明"
 export function identifyTableTypeFromTitle(titleText: string): string {
-  const validCategories = new Set(ASSET_CATEGORIES);
-  if (validCategories.has(titleText as (typeof ASSET_CATEGORIES)[number])) {
+  if (ASSET_CATEGORY_SET.has(titleText)) {
     return titleText;
   }
   return UNKNOWN_CATEGORY;

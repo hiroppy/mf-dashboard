@@ -16,6 +16,18 @@ import { clickRefreshButton } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
 
+const loggerMocks = vi.hoisted(() => ({
+  error: vi.fn<(...args: unknown[]) => void>(),
+  log: vi.fn<(...args: unknown[]) => void>(),
+  phase: vi.fn<(title: string) => void>(),
+  warn: vi.fn<(...args: unknown[]) => void>(),
+}));
+
+vi.mock("./logger.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./logger.js")>()),
+  ...loggerMocks,
+}));
+
 vi.mock("./scrapers/asset-history.js", () => ({ getAssetHistory: vi.fn<() => void>() }));
 vi.mock("./scrapers/asset-items.js", () => ({ getAssetItems: vi.fn<() => void>() }));
 vi.mock("./scrapers/asset-summary.js", () => ({ getAssetSummary: vi.fn<() => void>() }));
@@ -90,6 +102,54 @@ afterEach(async () => {
 });
 
 describe("scraper progress", () => {
+  test("scrape logsにgroup名や残高を含めない", async () => {
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(getCurrentGroup).mockResolvedValue({
+      id: "private-group-id",
+      name: "private-group-name",
+      isCurrent: true,
+    });
+    vi.mocked(getAllGroups).mockResolvedValue([
+      { id: "private-group-id", name: "private-group-name", isCurrent: true },
+    ]);
+    vi.mocked(getAssetSummary).mockResolvedValue({
+      totalAssets: "private-balance",
+      dailyChange: "0",
+      dailyChangePercent: "0%",
+      monthlyChange: "0",
+      monthlyChangePercent: "0%",
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    try {
+      await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress, {
+        skipRefresh: true,
+      });
+      const diagnostics = JSON.stringify([
+        ...consoleLog.mock.calls,
+        ...consoleWarn.mock.calls,
+        ...consoleError.mock.calls,
+        ...loggerMocks.log.mock.calls,
+        ...loggerMocks.warn.mock.calls,
+        ...loggerMocks.error.mock.calls,
+        ...loggerMocks.phase.mock.calls,
+      ]);
+      expect(diagnostics).not.toContain("private-group-id");
+      expect(diagnostics).not.toContain("private-group-name");
+      expect(diagnostics).not.toContain("private-balance");
+    } finally {
+      consoleLog.mockRestore();
+      consoleWarn.mockRestore();
+      consoleError.mockRestore();
+    }
+  });
+
   test("group discovery 失敗をグループ一覧 step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",

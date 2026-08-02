@@ -5,6 +5,14 @@ import type {
 } from "./analyzer-types.js";
 import { calcAverage, calcLinearSlope, calcStdDev } from "./analyzer-utils.js";
 
+const SEVERITY_ORDER = { anomalous: 0, elevated: 1, normal: 2 } as const;
+
+function sumExpensesForMonth(expenses: CategoryTotal[], month: string): number {
+  return expenses
+    .filter((expense) => expense.month === month)
+    .reduce((sum, expense) => sum + expense.totalAmount, 0);
+}
+
 export function analyzeSpendingComparison(
   monthlyCategoryTotals: CategoryTotal[],
   latestMonth: string,
@@ -25,11 +33,11 @@ export function analyzeSpendingComparison(
     };
   }
 
-  // Group by category
   const byCategory = new Map<string, Map<string, number>>();
-  for (const e of expenses) {
-    if (!byCategory.has(e.category)) byCategory.set(e.category, new Map());
-    byCategory.get(e.category)!.set(e.month, e.totalAmount);
+  for (const expense of expenses) {
+    const monthData = byCategory.get(expense.category) ?? new Map<string, number>();
+    monthData.set(expense.month, expense.totalAmount);
+    byCategory.set(expense.category, monthData);
   }
 
   const allMonths = [...new Set(expenses.map((e) => e.month))].sort();
@@ -37,14 +45,9 @@ export function analyzeSpendingComparison(
   const previousMonth =
     previousMonths.length > 0 ? previousMonths[previousMonths.length - 1] : null;
 
-  // Total current expense
-  const totalCurrentExpense = expenses
-    .filter((e) => e.month === latestMonth)
-    .reduce((s, e) => s + e.totalAmount, 0);
-
-  // Total previous month expense
+  const totalCurrentExpense = sumExpensesForMonth(expenses, latestMonth);
   const totalPreviousMonthExpense = previousMonth
-    ? expenses.filter((e) => e.month === previousMonth).reduce((s, e) => s + e.totalAmount, 0)
+    ? sumExpensesForMonth(expenses, previousMonth)
     : null;
 
   const totalChangeRate =
@@ -57,20 +60,17 @@ export function analyzeSpendingComparison(
 
   for (const [category, monthData] of byCategory) {
     const currentAmount = monthData.get(latestMonth) ?? 0;
-    const prevMonthsForCat = allMonths.filter((m) => m < latestMonth);
-    const hasPreviousAmount = prevMonthsForCat.some((m) => (monthData.get(m) ?? 0) > 0);
+    const hasPreviousAmount = previousMonths.some((month) => (monthData.get(month) ?? 0) > 0);
 
     if (!hasPreviousAmount && currentAmount > 0) {
       newCategories.push(category);
     }
 
-    // 3-month average
-    const prev3Months = prevMonthsForCat.slice(-3);
+    const prev3Months = previousMonths.slice(-3);
     const prev3Values = prev3Months.map((m) => monthData.get(m) ?? 0);
     const threeMonthAvg = prev3Values.length >= 3 ? calcAverage(prev3Values) : null;
 
-    // 6-month average
-    const prev6Months = prevMonthsForCat.slice(-6);
+    const prev6Months = previousMonths.slice(-6);
     const prev6Values = prev6Months.map((m) => monthData.get(m) ?? 0);
     const sixMonthAvg = prev6Values.length >= 6 ? calcAverage(prev6Values) : null;
 
@@ -139,8 +139,7 @@ export function analyzeSpendingComparison(
   }
 
   categories.sort((a, b) => {
-    const severityOrder = { anomalous: 0, elevated: 1, normal: 2 };
-    const diff = severityOrder[a.severity] - severityOrder[b.severity];
+    const diff = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
     if (diff !== 0) return diff;
     return Math.abs(b.deviationFromThreeMonth ?? 0) - Math.abs(a.deviationFromThreeMonth ?? 0);
   });

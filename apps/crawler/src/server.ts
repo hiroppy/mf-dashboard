@@ -61,6 +61,7 @@ async function watchCrawlerState(
 ): Promise<() => void> {
   const statePath = process.env.CRAWLER_STATE_PATH ?? getCrawlerRunStatePath();
   const lockPath = getCrawlerRunLockPath();
+  const lockFilename = path.basename(lockPath);
   const watchedPaths = [statePath, lockPath];
   const targetsByDirectory = new Map<string, string[]>();
   for (const filePath of watchedPaths) {
@@ -84,7 +85,6 @@ async function watchCrawlerState(
   try {
     for (const [directory, targets] of targetsByDirectory) {
       const filenames = new Set(targets.map((target) => path.basename(target)));
-      const lockFilename = path.basename(lockPath);
       const watcher = watch(directory, (_event, filename) => {
         const changedFilename = filename?.toString();
         if (

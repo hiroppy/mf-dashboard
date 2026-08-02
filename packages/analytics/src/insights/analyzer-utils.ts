@@ -16,14 +16,16 @@ export function calcStreak(values: number[]): {
 
   for (let i = values.length - 1; i > 0; i--) {
     const diff = values[i] - values[i - 1];
-    const currentDir = diff > 0 ? "increasing" : diff < 0 ? "decreasing" : "none";
+    let currentDirection: "increasing" | "decreasing" | "none" = "none";
+    if (diff > 0) currentDirection = "increasing";
+    else if (diff < 0) currentDirection = "decreasing";
 
-    if (currentDir === "none") break;
+    if (currentDirection === "none") break;
 
     if (direction === "none") {
-      direction = currentDir;
+      direction = currentDirection;
       count = 1;
-    } else if (currentDir === direction) {
+    } else if (currentDirection === direction) {
       count++;
     } else {
       break;

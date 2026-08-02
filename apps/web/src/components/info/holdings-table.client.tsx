@@ -20,7 +20,7 @@ import {
 
 const PAGE_SIZE = 10;
 
-interface HoldingItem {
+export interface HoldingItem {
   id: number;
   name: string;
   accountName: string | null;
@@ -35,7 +35,7 @@ interface HoldingItem {
   unitPrice: number | null;
 }
 
-interface CategoryGroup {
+export interface CategoryGroup {
   category: string;
   items: HoldingItem[];
   total: number;

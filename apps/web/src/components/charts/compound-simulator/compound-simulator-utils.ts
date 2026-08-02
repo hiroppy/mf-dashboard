@@ -70,9 +70,8 @@ export function computeMcDrawdownEndValue(
   yearlyData: MonteCarloYearData[],
   percentile: "p10" | "p25" | "p50" | "p75" | "p90",
 ): number | undefined {
-  return withdrawalYears > 0
-    ? yearlyData.filter((d) => d.isWithdrawing).at(-1)?.[percentile]
-    : undefined;
+  if (withdrawalYears <= 0) return undefined;
+  return yearlyData.findLast((data) => data.isWithdrawing)?.[percentile];
 }
 
 export function computeTotalWithdrawalAmount(

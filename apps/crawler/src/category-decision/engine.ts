@@ -21,16 +21,15 @@ export function selectTransactionsForCategorization(
   transactions: TransactionForCategorization[],
   existingMfIds: Set<string>,
 ): TransactionForCategorization[] {
-  return transactions.filter((transaction) => {
-    return (
+  return transactions.filter(
+    (transaction) =>
       transaction.mfId.length > 0 &&
       !transaction.mfId.startsWith("unknown") &&
       !existingMfIds.has(transaction.mfId) &&
       transaction.category === "未分類" &&
       !transaction.isTransfer &&
-      !transaction.isExcludedFromCalculation
-    );
-  });
+      !transaction.isExcludedFromCalculation,
+  );
 }
 
 function candidateTypeMatches(

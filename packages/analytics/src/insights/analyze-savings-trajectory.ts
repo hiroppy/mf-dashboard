@@ -7,6 +7,7 @@ export function analyzeSavingsTrajectory(
 ): SavingsTrajectoryResult {
   const currentFundMonths = currentMetrics.emergencyFundMonths;
   const sorted = [...monthlySummaries].sort((a, b) => a.month.localeCompare(b.month));
+  const previousSummary = sorted.at(-2);
 
   // Savings rate history
   const savingsRateHistory = sorted.map((m) => ({
@@ -38,8 +39,8 @@ export function analyzeSavingsTrajectory(
   // Emergency fund change estimation
   let previousEmergencyFundMonths: number | null = null;
   let emergencyFundChange: number | null = null;
-  if (sorted.length >= 2) {
-    const previousMonthExpense = sorted[sorted.length - 2].totalExpense;
+  if (previousSummary) {
+    const previousMonthExpense = previousSummary.totalExpense;
     if (previousMonthExpense > 0) {
       previousEmergencyFundMonths = currentMetrics.liquidAssets / previousMonthExpense;
       emergencyFundChange = currentFundMonths - previousEmergencyFundMonths;
@@ -55,8 +56,8 @@ export function analyzeSavingsTrajectory(
 
   // Primary factor
   let primaryFactor: SavingsTrajectoryResult["primaryFactor"] = "mixed";
-  if (sorted.length >= 2) {
-    const prevExpense = sorted[sorted.length - 2].totalExpense;
+  if (previousSummary) {
+    const prevExpense = previousSummary.totalExpense;
     const expenseChanged =
       prevExpense > 0 &&
       Math.abs(currentMetrics.monthlyExpenseAvg - prevExpense) / prevExpense > 0.05;

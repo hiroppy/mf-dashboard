@@ -119,9 +119,9 @@ export async function getAssetHistory(
     .orderBy(desc(schema.assetHistory.date));
 
   if (options?.limit) {
-    return await query.limit(options.limit).all();
+    return query.limit(options.limit).all();
   }
-  return await query.all();
+  return query.all();
 }
 
 /**
@@ -134,14 +134,14 @@ export async function getAssetHistoryWithCategories(
   const groupId = await resolveGroupId(db, options?.groupId);
   if (!groupId) return [];
 
-  const historyEntries = await (async () => {
-    const query = db
-      .select()
-      .from(schema.assetHistory)
-      .where(eq(schema.assetHistory.groupId, groupId))
-      .orderBy(desc(schema.assetHistory.date));
-    return options?.limit ? await query.limit(options.limit).all() : await query.all();
-  })();
+  const query = db
+    .select()
+    .from(schema.assetHistory)
+    .where(eq(schema.assetHistory.groupId, groupId))
+    .orderBy(desc(schema.assetHistory.date));
+  const historyEntries = options?.limit
+    ? await query.limit(options.limit).all()
+    : await query.all();
 
   const results = [];
   for (const entry of historyEntries) {
@@ -226,12 +226,11 @@ export function calculateCategoryChanges(
   const allCategoryNames = new Set([...latestMap.keys(), ...previousMap.keys()]);
 
   return [...allCategoryNames]
-    .map((name) => ({
-      name,
-      current: latestMap.get(name) ?? 0,
-      previous: previousMap.get(name) ?? 0,
-      change: (latestMap.get(name) ?? 0) - (previousMap.get(name) ?? 0),
-    }))
+    .map((name) => {
+      const current = latestMap.get(name) ?? 0;
+      const previous = previousMap.get(name) ?? 0;
+      return { name, current, previous, change: current - previous };
+    })
     .filter((cat) => cat.current > 0 || cat.previous > 0);
 }
 

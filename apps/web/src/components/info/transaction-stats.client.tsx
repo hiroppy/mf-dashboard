@@ -50,17 +50,9 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
   );
   const [sortBy, setSortBy] = useState<TransactionSort>("amount");
 
-  const selectedBreakdown = selection
-    ? (selection.type === "income" ? income : expense).find(
-        (breakdown) => breakdown.name === selection.name,
-      )
-    : undefined;
-  const selectedTotal = selection
-    ? (selection.type === "income" ? income : expense).reduce(
-        (sum, breakdown) => sum + breakdown.value,
-        0,
-      )
-    : 0;
+  const selectedData = selection ? (selection.type === "income" ? income : expense) : [];
+  const selectedBreakdown = selectedData.find((breakdown) => breakdown.name === selection?.name);
+  const selectedTotal = selectedData.reduce((sum, breakdown) => sum + breakdown.value, 0);
   const selectedTransactions = selectedBreakdown
     ? sortCategoryTransactions(selectedBreakdown.transactions, sortBy)
     : [];

@@ -68,8 +68,12 @@ export function AssetBreakdownChartClient({
 
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
-  const periodData =
-    period === "daily" ? dailyChanges : period === "weekly" ? weeklyChanges : monthlyChanges;
+  const changesByPeriod: Record<ComparisonPeriod, PeriodChanges | null> = {
+    daily: dailyChanges,
+    weekly: weeklyChanges,
+    monthly: monthlyChanges,
+  };
+  const periodData = changesByPeriod[period];
 
   // Build a map of category changes for quick lookup
   const changeMap = new Map(periodData?.categories.map((c) => [c.name, c]) ?? []);

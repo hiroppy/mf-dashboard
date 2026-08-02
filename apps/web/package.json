@@ -20,7 +20,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/react": "4.0.47",
+    "@ai-sdk/react": "4.0.50",
     "@base-ui/react": "1.6.0",
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/date-utils": "workspace:*",
@@ -28,11 +28,11 @@
     "@mf-dashboard/meta": "workspace:*",
     "@nivo/sankey": "0.99.0",
     "@streamdown/cjk": "1.0.3",
-    "ai": "7.0.44",
+    "ai": "7.0.47",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
-    "jose": "6.2.5",
+    "jose": "6.2.6",
     "lucide-react": "1.28.0",
     "next": "16.2.12",
     "react": "19.2.8",

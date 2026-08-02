@@ -48,6 +48,10 @@ export function MonteCarloChart({
   onVolatilityChange,
   copyData,
 }: MonteCarloChartProps) {
+  let taxDescription = "";
+  if (taxFree) taxDescription = "・非課税";
+  else if (withdrawalYears > 0) taxDescription = "・切り崩し税引後";
+
   return (
     <div className="space-y-4 border-t pt-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -55,7 +59,7 @@ export function MonteCarloChart({
           <h3 className="text-sm font-semibold">モンテカルロ・シミュレーション</h3>
           <p className="text-xs text-muted-foreground">
             5,000通りのランダムなシナリオに基づく将来予測。インフレを差し引いた実質値（今の貨幣価値に換算
-            {taxFree ? "・非課税" : withdrawalYears > 0 ? "・切り崩し税引後" : ""}
+            {taxDescription}
             ）で表示しています。
             <br />
             薄い帯が全シナリオの80%、その内側の濃い帯が中央50%を示します（残り20%は帯の外側）
