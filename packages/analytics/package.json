@@ -10,6 +10,7 @@
     "./chat/tools": "./src/chat/tools.ts",
     "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
+    "./recurring-candidates": "./src/recurring-candidates.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {
