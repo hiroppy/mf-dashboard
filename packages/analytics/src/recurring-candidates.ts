@@ -147,17 +147,10 @@ function containsEnglishTerm(text: string, term: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${escapedTerm}(?=$|[^a-z0-9])`).test(text);
 }
 
-function normalizeDescription(value: string | null | undefined, date: string): string {
-  const { year, month } = parseIsoDateKey(date);
-  const japaneseMonthExpression = new RegExp(`${year}年0?${month}月|0?${month}月`, "gu");
-  const yearMonthExpression = new RegExp(
-    `(^|[^a-z0-9])${year}[-/.]?0?${month}(?=$|[^a-z0-9])`,
-    "gu",
-  );
-
+function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
-    .replace(japaneseMonthExpression, "")
-    .replace(yearMonthExpression, "$1")
+    .replace(/(?<![0-9])(?:[0-9]{4}年)?(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])/gu, "")
+    .replace(/(^|[^a-z0-9])[0-9]{4}[-/.]?(?:0[1-9]|1[0-2])(?=$|[^a-z0-9])/gu, "$1")
     .replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
 }
 
@@ -396,7 +389,7 @@ export function generateRecurringCandidates(
         classification: classifyRecurringTransaction(transaction),
         day,
         month: transaction.date.slice(0, 7),
-        normalizedDescription: normalizeDescription(transaction.description, transaction.date),
+        normalizedDescription: normalizeDescription(transaction.description),
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)

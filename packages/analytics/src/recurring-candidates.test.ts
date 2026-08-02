@@ -131,6 +131,30 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("normalizes an explicit billing month that lags the posting month", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-30", 50_000, "カード利用代金 5月分"),
+        transaction("2026-07-31", 50_000, "カード利用代金 6月分"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
+  });
+
+  it("matches complete Japanese month tokens without partial numeric matches", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-10", 20_000, "11月会費"),
+        transaction("2026-02-10", 20_000, "11月会費"),
+      ],
+      "2026-03",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-10" });
+  });
+
   it("clips a month-end prediction to the target month's last day", () => {
     const result = generateRecurringCandidates(
       [
