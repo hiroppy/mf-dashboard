@@ -157,6 +157,19 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-10" });
   });
 
+  it("ranks fuzzy and exact-description candidates by their complete match score", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 20_000, "ACME UTILITY"),
+        transaction("2026-06-11", 20_000, "XACME UTILITY"),
+        transaction("2026-07-10", 20_000, "XACME UTILITY"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-10" });
+  });
+
   it("preserves fuzzy-matching labels that recur in parallel", () => {
     const result = generateRecurringCandidates(
       ["2026-01-10", "2026-02-10", "2026-03-10"].flatMap((date) => [
@@ -178,6 +191,21 @@ describe("generateRecurringCandidates", () => {
       "2026-08",
     );
 
+    expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
+  });
+
+  it("normalizes valid compact full dates but preserves invalid numeric identifiers", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-30", 50_000, "CARD 20260630"),
+        transaction("2026-07-31", 50_000, "CARD 20260731"),
+        transaction("2026-06-10", 20_000, "SERVICE 20260230"),
+        transaction("2026-07-10", 20_000, "SERVICE 20260231"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
   });
 
@@ -316,6 +344,23 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
+  });
+
+  it("retains separate boundary occurrences posted in the same calendar month", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-30", 80_000, "家賃"),
+        transaction("2026-03-02", 80_000, "家賃"),
+        transaction("2026-03-31", 80_000, "家賃"),
+      ],
+      "2026-04",
+    );
+
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      predictedDate: "2026-04-30",
+      evidence: { occurrenceCount: 3 },
+    });
   });
 
   it("counts delayed boundary postings as separate scheduled occurrences", () => {
@@ -664,6 +709,21 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("bounds grouping work when description similarity is disabled", () => {
+    const history = Array.from({ length: 2_000 }, (_, index) => {
+      const identity = Array.from({ length: 4 }, (__, position) =>
+        String.fromCharCode(97 + (Math.floor(index / 26 ** position) % 26)),
+      ).join("");
+      return transaction("2026-07-10", 10_000 + index, `${identity} merchant`);
+    });
+
+    expect(
+      generateRecurringCandidates(history, "2026-08", {
+        descriptionSimilarityThreshold: 0,
+      }),
+    ).toEqual([]);
+  });
+
   it("preserves boundaries between stable numeric tokens", () => {
     const result = generateRecurringCandidates(
       [
@@ -934,6 +994,15 @@ describe("generateRecurringCandidates", () => {
     };
 
     expect(generateRecurringCandidates([income, { ...income }], "2026-08")).toHaveLength(1);
+  });
+
+  it("preserves isolated large incomes with distinct original descriptions", () => {
+    const history = [
+      transaction("2026-07-10", 150_000, "Payment", "income"),
+      transaction("2026-07-10", 150_000, "振込", "income"),
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toHaveLength(2);
   });
 
   it("does not forecast a recurring stream that stopped before the previous month", () => {

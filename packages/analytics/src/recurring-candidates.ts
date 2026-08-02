@@ -73,9 +73,14 @@ interface TransactionGroup {
   transactions: NormalizedTransaction[];
 }
 
+type AmountGroupsByDay = Map<number, Map<number, Set<TransactionGroup>>>;
+type AmountKeysByDay = Map<number, number[]>;
+
 interface GroupPartition {
-  amountGroupsByDescriptionAndDay: Map<string, Map<number, Map<number, Set<TransactionGroup>>>>;
-  amountKeysByDescriptionAndDay: Map<string, Map<number, number[]>>;
+  amountGroupsByDay: AmountGroupsByDay;
+  amountGroupsByDescriptionAndDay: Map<string, AmountGroupsByDay>;
+  amountKeysByDay: AmountKeysByDay;
+  amountKeysByDescriptionAndDay: Map<string, AmountKeysByDay>;
   anchorBigrams: Map<TransactionGroup, Set<string>>;
   exactOccurrences: Map<string, TransactionGroup>;
   exactRecurringSlots: Map<string, TransactionGroup>;
@@ -163,6 +168,11 @@ function containsEnglishTerm(text: string, term: string): boolean {
 
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
+    .replace(
+      /(^|[^a-z0-9])((?:19|20)[0-9]{2})(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
+      (match, prefix: string, yearText: string, monthText: string, dayText: string) =>
+        Number(dayText) <= getDaysInMonth(Number(yearText), Number(monthText)) ? prefix : match,
+    )
     .replace(
       /(?<![0-9])(?:(?:19|20)[0-9]{2}年)?(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
       "",
@@ -393,8 +403,27 @@ function getOptimizedGroups(
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
-  if (exactRecurringGroup) return [exactRecurringGroup];
-  return getAmountIndexedGroups(partition, transaction, options.amountToleranceRatio);
+  const groups = new Set<TransactionGroup>();
+  if (exactRecurringGroup) groups.add(exactRecurringGroup);
+  for (const group of getAmountIndexedGroups(
+    partition.amountGroupsByDescriptionAndDay.get(transaction.normalizedDescription),
+    partition.amountKeysByDescriptionAndDay.get(transaction.normalizedDescription),
+    partition,
+    transaction,
+    options.amountToleranceRatio,
+  )) {
+    groups.add(group);
+  }
+  for (const group of getAmountIndexedGroups(
+    partition.amountGroupsByDay,
+    partition.amountKeysByDay,
+    partition,
+    transaction,
+    options.amountToleranceRatio,
+  )) {
+    groups.add(group);
+  }
+  return [...groups];
 }
 
 function getFuzzyIndexedGroups(
@@ -402,7 +431,7 @@ function getFuzzyIndexedGroups(
   transaction: NormalizedTransaction,
   similarityThreshold: number,
 ): TransactionGroup[] {
-  if (similarityThreshold === 0) return partition.groups;
+  if (similarityThreshold === 0) return [];
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
   const overlapCounts = new Map<TransactionGroup, number>();
@@ -451,16 +480,13 @@ function lowerBound(values: number[], target: number): number {
 }
 
 function getAmountIndexedGroups(
+  groupsByDay: AmountGroupsByDay | undefined,
+  amountKeysByDay: AmountKeysByDay | undefined,
   partition: GroupPartition,
   transaction: NormalizedTransaction,
   tolerance: number,
 ): TransactionGroup[] {
-  const amountKeysByDay =
-    partition.amountKeysByDescriptionAndDay.get(transaction.normalizedDescription) ?? new Map();
-  const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(
-    transaction.normalizedDescription,
-  );
-  if (!groupsByDay) return [];
+  if (!groupsByDay || !amountKeysByDay) return [];
 
   const candidates: TransactionGroup[] = [];
   for (const [day, groupsByAmount] of groupsByDay) {
@@ -488,7 +514,12 @@ function getAmountIndexedGroups(
         break;
       }
       for (const group of groupsByAmount.get(amount) ?? []) {
-        if (partition.latestMonths.get(group) !== transaction.month) candidates.push(group);
+        if (
+          partition.latestMonths.get(group) !== transaction.month ||
+          !conflictsWithPostingMonthSchedule(transaction, group.transactions)
+        ) {
+          candidates.push(group);
+        }
       }
     }
   }
@@ -521,20 +552,36 @@ function indexGroupAmount(
 ): void {
   const description = transaction.normalizedDescription;
   const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description) ?? new Map();
+  const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description) ?? new Map();
+  indexGroupByDayAndAmount(groupsByDay, amountKeysByDay, group, transaction);
+  partition.amountGroupsByDescriptionAndDay.set(description, groupsByDay);
+  partition.amountKeysByDescriptionAndDay.set(description, amountKeysByDay);
+
+  indexGroupByDayAndAmount(
+    partition.amountGroupsByDay,
+    partition.amountKeysByDay,
+    group,
+    transaction,
+  );
+}
+
+function indexGroupByDayAndAmount(
+  groupsByDay: AmountGroupsByDay,
+  amountKeysByDay: AmountKeysByDay,
+  group: TransactionGroup,
+  transaction: NormalizedTransaction,
+): void {
   const groupsByAmount = groupsByDay.get(transaction.day) ?? new Map();
   const groups = groupsByAmount.get(transaction.amount) ?? new Set();
   groups.add(group);
   groupsByAmount.set(transaction.amount, groups);
   groupsByDay.set(transaction.day, groupsByAmount);
-  partition.amountGroupsByDescriptionAndDay.set(description, groupsByDay);
 
-  const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description) ?? new Map();
   const amountKeys = amountKeysByDay.get(transaction.day) ?? [];
   const insertionIndex = lowerBound(amountKeys, transaction.amount);
   if (amountKeys[insertionIndex] !== transaction.amount)
     amountKeys.splice(insertionIndex, 0, transaction.amount);
   amountKeysByDay.set(transaction.day, amountKeys);
-  partition.amountKeysByDescriptionAndDay.set(description, amountKeysByDay);
 }
 
 function moveGroupToMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
@@ -560,6 +607,9 @@ function groupTransactions(
         transaction.classification,
         transaction.date,
         transaction.amount,
+        normalizeCaseAndWidth(transaction.description),
+        normalizeCaseAndWidth(transaction.category),
+        normalizeCaseAndWidth(transaction.subCategory),
       ].join("\0");
       const group = isolatedGroups.get(isolatedKey);
       if (group) group.transactions.push(transaction);
@@ -578,7 +628,9 @@ function groupTransactions(
       exactDescriptionKey,
     ].join("\0");
     const partition: GroupPartition = partitions.get(partitionKey) ?? {
+      amountGroupsByDay: new Map(),
       amountGroupsByDescriptionAndDay: new Map(),
+      amountKeysByDay: new Map(),
       amountKeysByDescriptionAndDay: new Map(),
       anchorBigrams: new Map(),
       exactOccurrences: new Map(),
