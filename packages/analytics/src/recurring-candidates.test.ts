@@ -113,9 +113,9 @@ describe("generateRecurringCandidates", () => {
   it("absorbs date drift, description variants, and amounts within the configured band", () => {
     const result = generateRecurringCandidates(
       [
-        transaction("2026-05-31", 50_000, "Example CARD 05"),
-        transaction("2026-06-30", 52_000, "example-card-06"),
-        transaction("2026-07-29", 49_000, "ＥＸＡＭＰＬＥ ＣＡＲＤ ０７"),
+        transaction("2026-05-31", 50_000, "Example CARD 2026-05"),
+        transaction("2026-06-30", 52_000, "example-card-2026-06"),
+        transaction("2026-07-29", 49_000, "ＥＸＡＭＰＬＥ ＣＡＲＤ ２０２６－０７"),
       ],
       "2026-08",
     );
@@ -140,6 +140,19 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]?.predictedDate).toBe("2026-02-28");
+  });
+
+  it("preserves an end-of-month schedule when the target month is longer", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-02-28", 80_000, "家賃"),
+        transaction("2026-03-31", 80_000, "家賃"),
+        transaction("2026-04-30", 80_000, "家賃"),
+      ],
+      "2026-05",
+    );
+
+    expect(result[0]?.predictedDate).toBe("2026-05-31");
   });
 
   it("uses only the preceding 12 months and ignores the target month and future", () => {
@@ -180,6 +193,25 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("weights each month once when grouping around the median day", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-10", 120_000, "予定納税"),
+        transaction("2026-06-13", 120_000, "予定納税"),
+        transaction("2026-06-13", 120_000, "予定納税"),
+        transaction("2026-06-13", 120_000, "予定納税"),
+        transaction("2026-07-09", 120_000, "予定納税"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      predictedDate: "2026-08-10",
+      evidence: { occurrenceCount: 3 },
+    });
+  });
+
   it("keeps accounts and materially different patterns separate", () => {
     const result = generateRecurringCandidates(
       [
@@ -200,10 +232,10 @@ describe("generateRecurringCandidates", () => {
   it("does not merge card payments distinguished by stable numeric identifiers", () => {
     const result = generateRecurringCandidates(
       [
-        transaction("2026-06-05", 40_000, "CARD 1"),
-        transaction("2026-07-05", 40_000, "CARD 1"),
-        transaction("2026-06-05", 40_000, "CARD 2"),
-        transaction("2026-07-05", 40_000, "CARD 2"),
+        transaction("2026-06-05", 40_000, "CARD 6"),
+        transaction("2026-07-05", 40_000, "CARD 6"),
+        transaction("2026-06-05", 40_000, "CARD 7"),
+        transaction("2026-07-05", 40_000, "CARD 7"),
       ],
       "2026-08",
     );
@@ -232,6 +264,29 @@ describe("generateRecurringCandidates", () => {
         "2026-08",
       )[0],
     ).toMatchObject({ classification: "salary", confidence: "low" });
+  });
+
+  it("does not forecast a recurring stream that stopped before the previous month", () => {
+    expect(
+      generateRecurringCandidates(
+        [transaction("2025-09-10", 80_000, "家賃"), transaction("2025-10-10", 80_000, "家賃")],
+        "2026-08",
+      ),
+    ).toEqual([]);
+  });
+
+  it("orders null and non-null descriptions deterministically", () => {
+    const history: RecurringTransaction[] = [
+      { accountId: accountA, date: "2026-06-10", amount: 20_000, type: "expense" },
+      transaction("2026-06-10", 20_000, "家賃"),
+      { accountId: accountA, date: "2026-07-10", amount: 20_000, type: "expense" },
+      transaction("2026-07-10", 20_000, "家賃"),
+    ];
+
+    const descriptions = (transactions: RecurringTransaction[]) =>
+      generateRecurringCandidates(transactions, "2026-08").map(({ description }) => description);
+    expect(descriptions(history)).toEqual([null, "家賃"]);
+    expect(descriptions([...history].reverse())).toEqual([null, "家賃"]);
   });
 
   it("returns an empty list for empty input", () => {

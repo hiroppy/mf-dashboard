@@ -143,16 +143,15 @@ function containsEnglishTerm(text: string, term: string): boolean {
 
 function normalizeDescription(value: string | null | undefined, date: string): string {
   const { year, month } = parseIsoDateKey(date);
-  const paddedMonth = String(month).padStart(2, "0");
   const japaneseMonthExpression = new RegExp(`${year}年0?${month}月|0?${month}月`, "gu");
-  const standaloneMonthExpression = new RegExp(
-    `(^|[^a-z0-9])(?:${year}${paddedMonth}|${year}|${paddedMonth}|${month})(?=$|[^a-z0-9])`,
+  const yearMonthExpression = new RegExp(
+    `(^|[^a-z0-9])${year}[-/.]?0?${month}(?=$|[^a-z0-9])`,
     "gu",
   );
 
   return normalizeCaseAndWidth(value)
     .replace(japaneseMonthExpression, "")
-    .replace(standaloneMonthExpression, "$1")
+    .replace(yearMonthExpression, "$1")
     .replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
 }
 
@@ -210,7 +209,8 @@ function belongsToGroup(
   group: TransactionGroup,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): boolean {
-  const representative = group.transactions.at(-1);
+  const monthlyTransactions = deduplicateMonths(group.transactions);
+  const representative = monthlyTransactions.at(-1);
   if (!representative) return false;
   if (
     transaction.accountId !== representative.accountId ||
@@ -220,8 +220,8 @@ function belongsToGroup(
     return false;
   }
 
-  const medianDay = median(group.transactions.map(({ day }) => day));
-  const medianAmount = median(group.transactions.map(({ amount }) => amount));
+  const medianDay = median(monthlyTransactions.map(({ day }) => day));
+  const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
   return (
     Math.abs(transaction.day - medianDay) <= options.dateDriftDays &&
     isWithinAmountTolerance(transaction.amount, medianAmount, options.amountToleranceRatio) &&
@@ -261,18 +261,39 @@ function getConfidence(
   previousMonth: string,
   largeIncomeThreshold: number,
 ): RecurringCandidateConfidence | null {
+  const latest = occurrences.at(-1);
+  if (latest?.month !== previousMonth) return null;
   if (occurrences.length >= 3) return "high";
   if (occurrences.length === 2) return "medium";
 
-  const [transaction] = occurrences;
-  if (
-    transaction?.type === "income" &&
-    transaction.month === previousMonth &&
-    transaction.amount >= largeIncomeThreshold
-  ) {
+  if (latest.type === "income" && latest.amount >= largeIncomeThreshold) {
     return "low";
   }
   return null;
+}
+
+function compareCandidates(left: RecurringCandidate, right: RecurringCandidate): number {
+  const textKeys: Array<[string, string]> = [
+    [left.predictedDate, right.predictedDate],
+    [String(left.accountId), String(right.accountId)],
+    [left.description ?? "", right.description ?? ""],
+    [left.type, right.type],
+    [left.classification, right.classification],
+    [left.confidence, right.confidence],
+    [left.evidence.dateRange.from, right.evidence.dateRange.from],
+    [left.evidence.dateRange.to, right.evidence.dateRange.to],
+  ];
+  for (const [leftKey, rightKey] of textKeys) {
+    const result = leftKey.localeCompare(rightKey);
+    if (result !== 0) return result;
+  }
+
+  return (
+    left.predictedAmount - right.predictedAmount ||
+    left.evidence.amountRange.min - right.evidence.amountRange.min ||
+    left.evidence.amountRange.max - right.evidence.amountRange.max ||
+    left.evidence.occurrenceCount - right.evidence.occurrenceCount
+  );
 }
 
 function createCandidate(
@@ -292,10 +313,14 @@ function createCandidate(
   if (!latest || latest.type === "transfer") return null;
 
   const { year, month } = parseYearMonthKey(targetMonth);
-  const predictedDay = Math.min(
-    Math.round(median(occurrences.map(({ day }) => day))),
-    getDaysInMonth(year, month),
-  );
+  const targetMonthDays = getDaysInMonth(year, month);
+  const isEndOfMonthPattern = occurrences.every(({ date, day }) => {
+    const parts = parseIsoDateKey(date);
+    return day === getDaysInMonth(parts.year, parts.month);
+  });
+  const predictedDay = isEndOfMonthPattern
+    ? targetMonthDays
+    : Math.min(Math.round(median(occurrences.map(({ day }) => day))), targetMonthDays);
   const dates = occurrences.map(({ date }) => date).sort();
   const amounts = occurrences.map(({ amount }) => amount);
 
@@ -344,11 +369,5 @@ export function generateRecurringCandidates(
   return groupTransactions(history, options)
     .map((group) => createCandidate(group, targetMonth, options))
     .filter((candidate): candidate is RecurringCandidate => candidate !== null)
-    .sort(
-      (left, right) =>
-        left.predictedDate.localeCompare(right.predictedDate) ||
-        String(left.accountId).localeCompare(String(right.accountId)) ||
-        left.description?.localeCompare(right.description ?? "") ||
-        0,
-    );
+    .sort(compareCandidates);
 }
