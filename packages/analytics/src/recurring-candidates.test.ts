@@ -545,6 +545,20 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("preserves standalone six-digit identifiers", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 40_000, "CARD 123405"),
+        transaction("2026-07-05", 40_000, "CARD 123405"),
+        transaction("2026-06-05", 40_000, "CARD 987605"),
+        transaction("2026-07-05", 40_000, "CARD 987605"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
   it("normalizes recognized volatile numeric references", () => {
     const result = generateRecurringCandidates(
       [
@@ -573,6 +587,15 @@ describe("generateRecurringCandidates", () => {
         type: "expense",
         category: "Household",
       },
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("does not group transactions with entirely blank identities", () => {
+    const history: RecurringTransaction[] = [
+      { accountId: accountA, date: "2026-06-10", amount: 20_000, type: "expense" },
+      { accountId: accountA, date: "2026-07-10", amount: 20_000, type: "expense" },
     ];
 
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);

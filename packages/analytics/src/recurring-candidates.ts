@@ -163,7 +163,7 @@ function normalizeDescription(value: string | null | undefined): string {
       "",
     )
     .replace(
-      /(^|[^a-z0-9])[0-9]{4}(?:[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
+      /(^|[^a-z0-9])(?:[0-9]{4}[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:19|20)[0-9]{2}(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
       "$1",
     )
     .replace(
@@ -275,9 +275,8 @@ function normalizeGroupingText(transaction: RecurringTransaction): string {
   const description = normalizeDescription(transaction.description);
   const normalizeCategoryPart = (value: string | null | undefined) =>
     normalizeCaseAndWidth(value).replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
-  const category = [transaction.category, transaction.subCategory]
-    .map(normalizeCategoryPart)
-    .join("categorysep");
+  const categoryParts = [transaction.category, transaction.subCategory].map(normalizeCategoryPart);
+  const category = categoryParts.some(Boolean) ? categoryParts.join("categorysep") : "";
   if (!description) return category;
   return GENERIC_DESCRIPTIONS.has(description)
     ? `${description}descriptionsep${category}`
@@ -298,6 +297,7 @@ function getGroupMatchScore(
   const monthlyTransactions = deduplicateMonths(group.transactions);
   const representative = monthlyTransactions.at(-1);
   if (!representative) return null;
+  if (!transaction.normalizedDescription || !representative.normalizedDescription) return null;
   if (
     transaction.accountId !== representative.accountId ||
     transaction.type !== representative.type ||
