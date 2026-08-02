@@ -15,11 +15,11 @@ async function getVisibleGroupSelector(page: Page) {
   return selector;
 }
 
-export async function getSelectedGroupId(page: Page): Promise<string | null> {
+export async function getSelectedGroupId(page: Page): Promise<string> {
   try {
     return await (await getVisibleGroupSelector(page)).inputValue();
   } catch {
-    return null;
+    throw new Error("Anonymous group capture failed");
   }
 }
 
@@ -44,8 +44,6 @@ export async function createAnonymousGroupScope(page: Page): Promise<AsyncDispos
 
   return {
     [Symbol.asyncDispose]: async () => {
-      if (originalGroupId === null) return;
-
       for (let attempt = 1; attempt <= MAX_RESTORE_ATTEMPTS; attempt++) {
         try {
           await switchGroupAnonymously(page, originalGroupId);
