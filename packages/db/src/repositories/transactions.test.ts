@@ -518,6 +518,15 @@ describe("saveTransactionsForMonth", () => {
     expect(result[0].mfId).toBe("tx3");
   });
 
+  test("空の月次入力は既存データを削除して0件として保存する", async () => {
+    await saveTransactionsForMonth(db, "2025-04", items);
+
+    const savedCount = await saveTransactionsForMonth(db, "2025-04", []);
+
+    expect(savedCount).toBe(0);
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+  });
+
   test("MM/DD形式の日付は保存対象月の年で保存される", async () => {
     const savedCount = await saveTransactionsForMonth(db, "2025-12", [
       {

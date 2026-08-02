@@ -138,12 +138,18 @@ describe("DB保存", () => {
 
   // Note: monthly_summary, yearly_summary, and monthly_category_totals are now calculated dynamically from transactions
 
-  test("トランザクションが保存される", async () => {
+  test("取得した有効なトランザクションが重複なく保存される", async () => {
     const db = getDb();
     const transactions = await db.select().from(schema.transactions).all();
-    expect(transactions.length).toBeGreaterThan(0);
-    // mfId がユニーク
-    const mfIds = transactions.map((t) => t.mfId);
-    expect(new Set(mfIds).size).toBe(transactions.length);
+    const expectedMfIds = [
+      ...new Set(
+        scrapedData.cashFlow.items
+          .map((item) => item.mfId)
+          .filter((mfId) => mfId && !mfId.startsWith("unknown")),
+      ),
+    ].sort();
+    const actualMfIds = transactions.map((transaction) => transaction.mfId).sort();
+
+    expect(actualMfIds).toEqual(expectedMfIds);
   });
 });
