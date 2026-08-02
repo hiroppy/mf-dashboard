@@ -232,7 +232,7 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   const balance = parseJapaneseNumber(balanceText || "0");
 
   // Parse detail items
-  const detailRows = page.locator("#cf-detail-table tbody tr[id^='js-transaction-']");
+  const detailRows = page.locator("#cf-detail-table tbody > tr");
   const detailCount = await detailRows.count();
   const items: CashFlowItem[] = [];
 

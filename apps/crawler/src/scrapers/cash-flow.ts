@@ -127,7 +127,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   const currentYear = parseInt(month.substring(0, 4), 10);
 
   // Parse detail items
-  const detailRows = page.locator("#cf-detail-table tbody tr[id^='js-transaction-']");
+  const detailRows = page.locator("#cf-detail-table tbody > tr");
   const detailCount = await detailRows.count();
   const items: CashFlowItem[] = [];
 

@@ -3,6 +3,7 @@ import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import {
   buildMonthRange,
+  extractCashFlowFromPage,
   parseDetailRow,
   scrapeCashFlowHistory,
   scrapeCashFlowMonth,
@@ -46,7 +47,9 @@ describe("scrapeCashFlowHistory", () => {
             <table id="monthly_total_table_kakeibo"><tbody><tr>
               <td>¥0</td><td></td><td>¥0</td><td></td><td>¥0</td>
             </tr></tbody></table>
-            <table id="cf-detail-table"><tbody><tr><td>placeholder</td></tr></tbody></table>
+            <table id="cf-detail-table" style="display: table; width: 1px; height: 1px">
+              <tbody></tbody>
+            </table>
           `,
         });
       });
@@ -54,6 +57,33 @@ describe("scrapeCashFlowHistory", () => {
 
       await expect(scrapeCashFlowHistory(page, 2, { onMonthFailure })).rejects.toThrow(/Timeout/);
       expect(onMonthFailure).toHaveBeenCalledWith("2026-07", expect.any(Error));
+    } finally {
+      await page.close();
+    }
+  });
+
+  test("IDのない取引行をselectorで除外せず月次抽出を失敗させる", async () => {
+    const page = await browser.newPage();
+    try {
+      // A read-only authenticated E2E cannot safely remove a real transaction ID,
+      // so this selector failure branch uses one minimal transaction-shaped row.
+      await page.setContent(`
+        <div class="fc-header-title"><h2>2026年7月</h2></div>
+        <table id="monthly_total_table_kakeibo"><tbody><tr>
+          <td>0</td><td></td><td>0</td><td></td><td>0</td>
+        </tr></tbody></table>
+        <table id="cf-detail-table"><tbody>
+          <tr class="transaction_list">
+            <td></td><td>07/01</td><td>Transaction A</td><td>1,000</td>
+            <td>Account A</td><td>Category A</td><td>Subcategory A</td>
+            <td></td><td></td><td></td>
+          </tr>
+        </tbody></table>
+      `);
+
+      await expect(extractCashFlowFromPage(page)).rejects.toThrow(
+        "Incomplete cash flow transaction row",
+      );
     } finally {
       await page.close();
     }
@@ -170,7 +200,7 @@ describe("scrapeCashFlowMonth", () => {
       if (selector === "#cf-detail-table") return detailTable;
       if (selector === "a[href*='/cf/csv']") return csvLink;
       if (selector === "#monthly_total_table_kakeibo tbody tr") return summary;
-      if (selector === "#cf-detail-table tbody tr[id^='js-transaction-']") return detailRows;
+      if (selector === "#cf-detail-table tbody > tr") return detailRows;
       return missing;
     });
     const page = { goto, locator } as unknown as Page;

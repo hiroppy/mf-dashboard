@@ -53,7 +53,9 @@ describe("getCashFlow", () => {
             <table id="monthly_total_table_kakeibo"><tbody><tr>
               <td>0</td><td></td><td>0</td><td></td><td>0</td>
             </tr></tbody></table>
-            <table id="cf-detail-table"><tbody><tr><td>placeholder</td></tr></tbody></table>
+            <table id="cf-detail-table" style="display: table; width: 1px; height: 1px">
+              <tbody></tbody>
+            </table>
             <script>
               document.querySelector(".fc-button-today").addEventListener("click", async () => {
                 await fetch("/cf/fetch?today=1");
