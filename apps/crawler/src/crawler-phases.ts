@@ -6,7 +6,7 @@ import { initDb, type Db } from "@mf-dashboard/db";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
-  hasTransactionsForMonth,
+  hasCashFlowPeriod,
   saveTransactionsForMonths,
 } from "@mf-dashboard/db/repository/transactions";
 import type { CashFlowItem } from "@mf-dashboard/db/types";
@@ -192,7 +192,7 @@ export async function runSavePhase(
   page: Page,
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
-  historyMonths: Array<{ items: CashFlowItem[]; month: string }> = [],
+  historyMonths: Array<{ isComplete?: boolean; items: CashFlowItem[]; month: string }> = [],
   cleanupGroupIds?: string[],
   institutionCategories?: ReadonlyMap<string, string>,
 ): Promise<number[]> {
@@ -203,7 +203,7 @@ export async function runSavePhase(
   if (noGroupData) {
     info("Saving full data for no-group view");
     let globalData = scrapeResult.globalData;
-    if (categoryDecision.config) {
+    if (categoryDecision.config && historyMonths.length === 0) {
       await switchGroup(page, NO_GROUP_ID);
       globalData = {
         ...globalData,
@@ -259,6 +259,7 @@ export async function runCashFlowHistoryPhase(
   publishHistory: (
     months: Array<{
       dateRange?: { from: string; to: string };
+      isComplete?: boolean;
       items: CashFlowItem[];
       month: string;
     }>,
@@ -269,20 +270,18 @@ export async function runCashFlowHistoryPhase(
 ): Promise<void> {
   phase("Cash Flow History");
 
-  if (!config.isHistoryMode) {
-    log("Skipping cash flow history (SCRAPE_MODE is not history)");
-    await publishHistory([]);
-    return;
-  }
-
   const now = new Date();
   const maxMonths = getHistoryMaxMonths(now);
 
-  let monthsToFetch = 1;
-  for (let i = 1; i < maxMonths; i++) {
-    const month = getHistoryMonth(now, i);
-    if (!(await hasTransactionsForMonth(db, month))) {
-      monthsToFetch = i + 1;
+  // Always refresh the current and previous periods so transactions posted late by an
+  // institution are incorporated. History mode extends that window to the oldest gap.
+  let monthsToFetch = Math.min(2, maxMonths);
+  if (config.isHistoryMode) {
+    for (let i = 2; i < maxMonths; i++) {
+      const month = getHistoryMonth(now, i);
+      if (!(await hasCashFlowPeriod(db, month))) {
+        monthsToFetch = i + 1;
+      }
     }
   }
 
@@ -342,6 +341,7 @@ export async function runCashFlowHistoryPhase(
 
     const preparedMonths: Array<{
       dateRange?: { from: string; to: string };
+      isComplete?: boolean;
       items: CashFlowItem[];
       month: string;
       stepId?: string;
@@ -367,6 +367,7 @@ export async function runCashFlowHistoryPhase(
           categorizedMonthData.periodStart && categorizedMonthData.periodEnd
             ? { from: categorizedMonthData.periodStart, to: categorizedMonthData.periodEnd }
             : undefined,
+        isComplete: categorizedMonthData.isComplete,
         items: categorizedMonthData.items,
         month,
         stepId,
@@ -374,7 +375,12 @@ export async function runCashFlowHistoryPhase(
     }
 
     const savedCounts = await publishHistory(
-      preparedMonths.map(({ dateRange, items, month }) => ({ dateRange, items, month })),
+      preparedMonths.map(({ dateRange, isComplete, items, month }) => ({
+        dateRange,
+        isComplete,
+        items,
+        month,
+      })),
     );
     for (const [index, { month, stepId }] of preparedMonths.entries()) {
       log(`  ${month}: saved ${savedCounts[index] ?? 0} transactions`);

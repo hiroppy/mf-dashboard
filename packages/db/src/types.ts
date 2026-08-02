@@ -51,6 +51,8 @@ export interface CashFlowSummary {
   month: string;
   periodStart?: string;
   periodEnd?: string;
+  /** True only after the scraper verified the complete rendered period, including a valid empty one. */
+  isComplete?: boolean;
   totalIncome: number;
   totalExpense: number;
   balance: number;

@@ -140,6 +140,7 @@ export async function saveScrapedDataBatch(
     groupOnlyData: ScrapedData[];
     historyMonths?: Array<{
       dateRange?: { from: string; to: string };
+      isComplete?: boolean;
       items: CashFlowItem[];
       month: string;
     }>;
@@ -169,9 +170,16 @@ export async function saveScrapedDataBatch(
     const savedCounts: number[] = [];
     if (data.historyMonths?.length) {
       const accountIdMap = await buildAccountIdMap(transaction);
-      for (const { dateRange, items, month } of data.historyMonths) {
+      for (const { dateRange, isComplete, items, month } of data.historyMonths) {
         savedCounts.push(
-          await replaceTransactionsForMonth(transaction, month, items, accountIdMap, dateRange),
+          await replaceTransactionsForMonth(
+            transaction,
+            month,
+            items,
+            accountIdMap,
+            dateRange,
+            isComplete,
+          ),
         );
       }
     }
@@ -318,6 +326,7 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
     data.cashFlow.periodStart && data.cashFlow.periodEnd
       ? { from: data.cashFlow.periodStart, to: data.cashFlow.periodEnd }
       : undefined,
+    data.cashFlow.isComplete,
   );
   log(`  - Transactions: ${savedCount}/${data.cashFlow.items.length}`);
 

@@ -44,6 +44,7 @@ function createScrapedData(): ScrapedData {
     items: [],
     cashFlow: {
       month: "2026-07",
+      isComplete: true,
       totalIncome: 0,
       totalExpense: 0,
       balance: 0,

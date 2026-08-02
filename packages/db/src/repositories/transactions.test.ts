@@ -7,6 +7,7 @@ import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
 import type { CashFlowItem } from "../types";
 import {
   saveTransaction,
+  hasCashFlowPeriod,
   hasTransactionsForMonth,
   deleteTransactionsForMonth,
   saveTransactionsForMonth,
@@ -538,13 +539,53 @@ describe("saveTransactionsForMonth", () => {
     expect(result[0].mfId).toBe("tx3");
   });
 
+  test("直前期間に遅延反映された明細を再取得時に追加する", async () => {
+    await saveTransactionsForMonth(db, "2025-04", [items[0]!]);
+
+    await saveTransactionsForMonth(db, "2025-04", items);
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId).sort()).toEqual(["tx1", "tx2"]);
+    await expect(db.select().from(schema.cashFlowPeriods).all()).resolves.toEqual([
+      expect.objectContaining({ month: "2025-04", transactionCount: 2 }),
+    ]);
+  });
+
   test("空の月次入力は既存データを削除して0件として保存する", async () => {
     await saveTransactionsForMonth(db, "2025-04", items);
 
-    const savedCount = await saveTransactionsForMonth(db, "2025-04", []);
+    const savedCount = await saveTransactionsForMonth(
+      db,
+      "2025-04",
+      [],
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(savedCount).toBe(0);
     await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+    await expect(hasCashFlowPeriod(db, "2025-04")).resolves.toBe(true);
+  });
+
+  test("完全性を確認できない空入力では既存データを削除しない", async () => {
+    await saveTransactionsForMonth(db, "2025-04", items);
+
+    await expect(saveTransactionsForMonth(db, "2025-04", [])).rejects.toThrow(
+      "without completeness proof",
+    );
+
+    await expect(db.select().from(schema.transactions).all()).resolves.toHaveLength(2);
+  });
+
+  test("IDのない入力では既存データを削除しない", async () => {
+    await saveTransactionsForMonth(db, "2025-04", items);
+
+    await expect(
+      saveTransactionsForMonth(db, "2025-04", [{ ...items[0]!, mfId: "" }]),
+    ).rejects.toThrow("missing transaction ID");
+
+    await expect(db.select().from(schema.transactions).all()).resolves.toHaveLength(2);
   });
 
   test("MM/DD形式の日付は保存対象月の年で保存される", async () => {

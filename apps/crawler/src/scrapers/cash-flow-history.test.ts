@@ -128,6 +128,61 @@ describe("scrapeCashFlowHistory", () => {
     expect(onMonthFailure).toHaveBeenCalledWith("2026-07", expect.any(Error));
   });
 
+  test("前月レスポンス本文の受信失敗を履歴末尾として扱わない", async () => {
+    const self = <T extends object>(value: T): T & { first: () => T } =>
+      Object.assign(value, { first: () => value });
+    const csvLink = self({
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      getAttribute: vi
+        .fn<() => Promise<string | null>>()
+        .mockResolvedValue("/cf/csv?year=2026&month=7"),
+    });
+    const monthHeader = self({
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("2026年7月"),
+    });
+    const amountCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("0"),
+    };
+    const summaryRows = self({
+      locator: vi
+        .fn<(selector: string) => unknown>()
+        .mockReturnValue({ nth: vi.fn<(index: number) => unknown>().mockReturnValue(amountCell) }),
+    });
+    const previousButton = self({
+      click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    });
+    const page = {
+      goto: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+      evaluate: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      waitForFunction: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      waitForResponse: vi.fn<() => Promise<unknown>>().mockResolvedValue({
+        finished: vi
+          .fn<() => Promise<Error>>()
+          .mockResolvedValue(new Error("response body failed")),
+      }),
+      locator: vi.fn<(selector: string) => unknown>((selector) => {
+        if (selector === "#cf-detail-table") {
+          return { waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined) };
+        }
+        if (selector === "a[href*='/cf/csv']") return csvLink;
+        if (selector === ".fc-header-title h2") return monthHeader;
+        if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
+        if (selector === "#cf-detail-table tbody > tr") {
+          return { count: vi.fn<() => Promise<number>>().mockResolvedValue(0) };
+        }
+        if (selector === "button.fc-button-prev, span.fc-button-prev") return previousButton;
+        return self({ count: vi.fn<() => Promise<number>>().mockResolvedValue(0) });
+      }),
+    } as unknown as Page;
+    const onMonthFailure = vi.fn<(month: string, error: unknown) => void>();
+
+    await expect(scrapeCashFlowHistory(page, 2, { onMonthFailure })).rejects.toThrow(
+      "response body failed",
+    );
+    expect(onMonthFailure).toHaveBeenCalledWith("2026-07", expect.any(Error));
+  });
+
   test("IDのない取引行をselectorで除外せず月次抽出を失敗させる", async () => {
     let monthHeader: Locator;
     monthHeader = {

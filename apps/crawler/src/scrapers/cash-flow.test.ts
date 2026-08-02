@@ -8,6 +8,7 @@ describe("parseCashFlowMonthHeader", () => {
     ["2026年8月", "2026-08"],
     [" 2025年12月 ", "2025-12"],
     ["2026/8/1 - 2026/8/31", "2026-08"],
+    ["2026/7/26 - 2026/8/25", "2026-08"],
   ])("%j から対象月を取得する", (header, expected) => {
     expect(parseCashFlowMonthHeader(header)).toBe(expected);
   });

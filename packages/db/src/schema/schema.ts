@@ -198,6 +198,20 @@ export const transactions = sqliteTable(
   ],
 );
 
+export const cashFlowPeriods = sqliteTable(
+  "cash_flow_periods",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    month: text("month").notNull(),
+    periodStart: text("period_start").notNull(),
+    periodEnd: text("period_end").notNull(),
+    transactionCount: integer("transaction_count").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("cash_flow_periods_month_idx").on(table.month)],
+);
+
 // ============================================================================
 // 資産履歴系
 // ============================================================================

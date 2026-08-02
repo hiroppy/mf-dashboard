@@ -36,6 +36,24 @@ export function isSupportedCashFlowAmount(value: string): boolean {
   return CASH_FLOW_AMOUNT_PATTERN.test(normalized);
 }
 
+export function parseCashFlowMonthHeader(headerText: string | null): string | null {
+  const match =
+    headerText?.match(/(\d{4})年(\d{1,2})月/) ??
+    headerText?.match(/\d{4}\/\d{1,2}\/\d{1,2}\s*-\s*(\d{4})\/(\d{1,2})\/\d{1,2}/);
+  if (!match) return null;
+
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return `${match[1]}-${String(month).padStart(2, "0")}`;
+}
+
+export function parseCashFlowMonthCsvHref(href: string | null): string | null {
+  const year = href?.match(/[?&]year=(\d{4})/)?.[1];
+  const month = Number(href?.match(/[?&]month=(\d{1,2})/)?.[1]);
+  if (!year || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
 export async function waitForCashFlowFetchApplied(
   page: Page,
   navigate: () => Promise<void>,
@@ -202,28 +220,30 @@ async function detectMonth(
 
   // Prefer the CSV period because range headers can start in the previous calendar month.
   const csvLink = await getOptionalAttribute(page.locator("a[href*='/cf/csv']").first(), "href");
-  const csvYear = csvLink?.match(/[?&]year=(\d{4})/)?.[1];
-  const csvMonth = csvLink?.match(/[?&]month=(\d{1,2})/)?.[1];
-  const csvMonthNumber = Number(csvMonth);
-  if (csvYear && csvMonth && csvMonthNumber >= 1 && csvMonthNumber <= 12) {
-    const detectedMonth = `${csvYear}-${String(csvMonthNumber).padStart(2, "0")}`;
+  const csvMonth = parseCashFlowMonthCsvHref(csvLink);
+  if (csvMonth) {
+    const [year, month] = csvMonth.split("-").map(Number);
     return {
-      year: Number(csvYear),
-      month: csvMonthNumber,
-      ...resolveCashFlowPeriod(headerTitle, detectedMonth),
+      year: year!,
+      month: month!,
+      ...resolveCashFlowPeriod(headerTitle, csvMonth),
     };
   }
 
-  // Try 1: fc-header-title (FullCalendar style)
-  let match = headerTitle?.match(/(\d{4})年(\d{1,2})月/);
-
-  // Try 2: Look for date display in other formats
-  if (!match) {
-    const pageText = await getOptionalText(
-      page.locator(".heading-small, .month-title, [class*='month']").first(),
-    );
-    match = pageText?.match(/(\d{4})年(\d{1,2})月/) || pageText?.match(/(\d{4})\/(\d{1,2})/);
+  const headerMonth = parseCashFlowMonthHeader(headerTitle);
+  if (headerMonth) {
+    const [headerYear, headerMonthNumber] = headerMonth.split("-").map(Number);
+    return {
+      year: headerYear!,
+      month: headerMonthNumber!,
+      ...resolveCashFlowPeriod(headerTitle, headerMonth),
+    };
   }
+
+  const pageText = await getOptionalText(
+    page.locator(".heading-small, .month-title, [class*='month']").first(),
+  );
+  const match = pageText?.match(/(\d{4})年(\d{1,2})月/) || pageText?.match(/(\d{4})\/(\d{1,2})/);
 
   if (match) {
     year = parseInt(match[1]);
@@ -359,10 +379,14 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   const summaryCells = summaryRow.locator("td");
 
   const [incomeText, expenseText, balanceText] = await Promise.all([
-    getText(summaryCells.nth(SUMMARY_COLUMNS.INCOME), SUMMARY_TIMEOUT),
-    getText(summaryCells.nth(SUMMARY_COLUMNS.EXPENSE), SUMMARY_TIMEOUT),
-    getText(summaryCells.nth(SUMMARY_COLUMNS.BALANCE), SUMMARY_TIMEOUT),
+    getTextWithFailureSignal(summaryCells.nth(SUMMARY_COLUMNS.INCOME), SUMMARY_TIMEOUT),
+    getTextWithFailureSignal(summaryCells.nth(SUMMARY_COLUMNS.EXPENSE), SUMMARY_TIMEOUT),
+    getTextWithFailureSignal(summaryCells.nth(SUMMARY_COLUMNS.BALANCE), SUMMARY_TIMEOUT),
   ]);
+
+  if (incomeText === null || expenseText === null || balanceText === null) {
+    throw new Error("Could not verify the complete cash flow summary");
+  }
 
   const totalIncome = parseJapaneseNumber(incomeText || "0");
   const totalExpense = parseJapaneseNumber(expenseText || "0");
@@ -377,7 +401,16 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
     items.push(await parseDetailRow(detailRows.nth(i), year, { periodStart, periodEnd }));
   }
 
-  return { month, periodStart, periodEnd, totalIncome, totalExpense, balance, items };
+  return {
+    month,
+    periodStart,
+    periodEnd,
+    isComplete: true,
+    totalIncome,
+    totalExpense,
+    balance,
+    items,
+  };
 }
 
 export function buildMonthRange(month: string): { from: string; to: string } {
@@ -397,12 +430,14 @@ export function buildMonthRange(month: string): { from: string; to: string } {
  */
 async function getMonthFromCsvLink(page: Page): Promise<string | null> {
   const csvLink = await getOptionalAttribute(page.locator("a[href*='/cf/csv']").first(), "href");
-  const yearMatch = csvLink?.match(/year=(\d{4})/);
-  const monthMatch = csvLink?.match(/month=(\d{1,2})/);
-  if (yearMatch && monthMatch) {
-    return `${yearMatch[1]}-${monthMatch[1].padStart(2, "0")}`;
-  }
-  return null;
+  return parseCashFlowMonthCsvHref(csvLink);
+}
+
+async function getDisplayedCashFlowMonth(page: Page): Promise<string> {
+  const csvMonth = await getMonthFromCsvLink(page);
+  if (csvMonth) return csvMonth;
+  const { year, month } = await detectMonth(page);
+  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 /**
@@ -427,7 +462,9 @@ export async function scrapeCashFlowHistory(
   const results: CashFlowHistoryResult[] = [];
 
   for (let i = 0; i < monthsToScrape; i++) {
-    const targetMonth = (await getMonthFromCsvLink(page)) ?? getHistoryMonth(new Date(), i);
+    const targetMonth = await getDisplayedCashFlowMonth(page).catch(() =>
+      getHistoryMonth(new Date(), i),
+    );
     await callbacks.onMonthStart?.(targetMonth);
     try {
       const data = await extractCashFlowFromPage(page);
@@ -435,7 +472,7 @@ export async function scrapeCashFlowHistory(
       log(`  ${data.month}: ${data.items.length} transactions`);
 
       if (i < monthsToScrape - 1) {
-        const currentMonth = await getMonthFromCsvLink(page);
+        const currentMonth = await getDisplayedCashFlowMonth(page);
         const prevButton = page.locator("button.fc-button-prev, span.fc-button-prev").first();
 
         // 月が変わるまで待機（CSV linkのURLパラメータで判定）
@@ -446,11 +483,12 @@ export async function scrapeCashFlowHistory(
             page.waitForResponse((res) => res.url().includes("/cf/fetch") && res.status() === 200),
             prevButton.click(),
           ]);
-          await fetchResponse.finished();
+          const responseFailure = await fetchResponse.finished();
+          if (responseFailure) throw responseFailure;
         });
 
         // /cf/fetch 後も月が変わらなければ、これ以上データがないことを意味する
-        const newMonth = await getMonthFromCsvLink(page);
+        const newMonth = await getDisplayedCashFlowMonth(page);
         if (newMonth === currentMonth) {
           log(`  No more months available after ${currentMonth}, stopping.`);
           await callbacks.onMonthComplete?.(targetMonth);

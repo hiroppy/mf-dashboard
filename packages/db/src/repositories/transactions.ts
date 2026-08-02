@@ -85,6 +85,15 @@ export async function hasTransactionsForMonth(db: Db, month: string): Promise<bo
   return (result?.count ?? 0) > 0;
 }
 
+export async function hasCashFlowPeriod(db: Db, month: string): Promise<boolean> {
+  const result = await db
+    .select({ id: schema.cashFlowPeriods.id })
+    .from(schema.cashFlowPeriods)
+    .where(eq(schema.cashFlowPeriods.month, month))
+    .get();
+  return result !== undefined;
+}
+
 export async function findExistingTransactionMfIds(db: Db, mfIds: string[]): Promise<Set<string>> {
   if (mfIds.length === 0) return new Set();
 
@@ -232,17 +241,23 @@ export async function replaceTransactionsForMonth(
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
   dateRange?: TransactionDateRange,
+  isComplete = items.length > 0,
 ): Promise<number> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
     throw new Error("Invalid transaction month");
   }
 
-  // 有効なトランザクションのみフィルタリング
-  const validItems = items.filter((item) => item.mfId && !item.mfId.startsWith("unknown"));
+  if (items.some((item) => !item.mfId || item.mfId.startsWith("unknown"))) {
+    throw new Error("Invalid transactions: missing transaction ID");
+  }
   const currentYear = parseInt(month.slice(0, 4), 10);
   const replacementRange = resolveTransactionDateRange(month, dateRange);
   const toExclusive = getExclusiveRangeEnd(replacementRange.to);
-  const records = validItems.map((item) => prepareTransactionData(item, accountIdMap, currentYear));
+  const records = items.map((item) => prepareTransactionData(item, accountIdMap, currentYear));
+
+  if (items.length === 0 && !isComplete) {
+    throw new Error("Cannot replace an empty cash flow period without completeness proof");
+  }
 
   if (records.some(({ date }) => date < replacementRange.from || date >= toExclusive)) {
     throw new Error("Invalid transactions: item falls outside replacement date range");
@@ -256,11 +271,9 @@ export async function replaceTransactionsForMonth(
     );
   }
 
-  if (records.length === 0) return 0;
-
-  // バルクinsert（BATCH_SIZE単位）
   const timestamp = now();
 
+  // バルクinsert（BATCH_SIZE単位）
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE);
     const recordsWithTimestamps = batch.map((data) => {
@@ -294,13 +307,35 @@ export async function replaceTransactionsForMonth(
       .run();
   }
 
-  return validItems.length;
+  await db
+    .insert(schema.cashFlowPeriods)
+    .values({
+      month,
+      periodStart: replacementRange.from,
+      periodEnd: replacementRange.to,
+      transactionCount: records.length,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .onConflictDoUpdate({
+      target: schema.cashFlowPeriods.month,
+      set: {
+        periodStart: replacementRange.from,
+        periodEnd: replacementRange.to,
+        transactionCount: records.length,
+        updatedAt: timestamp,
+      },
+    })
+    .run();
+
+  return items.length;
 }
 
 export async function saveTransactionsForMonths(
   db: Db,
   months: Array<{
     dateRange?: TransactionDateRange;
+    isComplete?: boolean;
     items: CashFlowItem[];
     month: string;
   }>,
@@ -308,9 +343,16 @@ export async function saveTransactionsForMonths(
 ): Promise<number[]> {
   return db.transaction(async (transaction) => {
     const savedCounts: number[] = [];
-    for (const { dateRange, items, month } of months) {
+    for (const { dateRange, isComplete, items, month } of months) {
       savedCounts.push(
-        await replaceTransactionsForMonth(transaction, month, items, accountIdMap, dateRange),
+        await replaceTransactionsForMonth(
+          transaction,
+          month,
+          items,
+          accountIdMap,
+          dateRange,
+          isComplete,
+        ),
       );
     }
     return savedCounts;
@@ -323,10 +365,11 @@ export async function saveTransactionsForMonth(
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
   dateRange?: TransactionDateRange,
+  isComplete?: boolean,
 ): Promise<number> {
   const [savedCount = 0] = await saveTransactionsForMonths(
     db,
-    [{ dateRange, items, month }],
+    [{ dateRange, isComplete, items, month }],
     accountIdMap,
   );
   return savedCount;

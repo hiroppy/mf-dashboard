@@ -6,37 +6,24 @@ import { debug } from "../logger.js";
 import { parseJapaneseNumber } from "../parsers.js";
 import {
   SUMMARY_COLUMNS,
+  parseCashFlowMonthCsvHref,
+  parseCashFlowMonthHeader,
   parseDetailRow,
   resolveCashFlowPeriod,
   waitForCashFlowFetchApplied,
 } from "./cash-flow-history.js";
 
-export function parseCashFlowMonthHeader(headerText: string | null): string | null {
-  const match =
-    headerText?.match(/(\d{4})年(\d{1,2})月/) ??
-    headerText?.match(/(\d{4})\/(\d{1,2})\/\d{1,2}\s*-/);
-  if (!match) return null;
+export { parseCashFlowMonthCsvHref, parseCashFlowMonthHeader };
 
-  const monthNumber = Number(match[2]);
-  if (monthNumber < 1 || monthNumber > 12) return null;
-
-  return `${match[1]}-${String(monthNumber).padStart(2, "0")}`;
+async function getRequiredText(locator: ReturnType<Page["locator"]>): Promise<string> {
+  try {
+    return (await locator.textContent({ timeout: 3000 }))?.trim() ?? "";
+  } catch {
+    throw new Error("Could not verify the complete cash flow summary");
+  }
 }
 
-export function parseCashFlowMonthCsvHref(href: string | null): string | null {
-  if (!href) return null;
-
-  const year = href.match(/[?&]year=(\d{4})/)?.[1];
-  const monthMatch = href.match(/[?&]month=(\d{1,2})/);
-  if (!year || !monthMatch) return null;
-
-  const month = Number(monthMatch[1]);
-  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
-
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-async function getDisplayedCashFlowState(
+export async function getDisplayedCashFlowState(
   page: Page,
 ): Promise<{ month: string; periodStart: string; periodEnd: string } | null> {
   const monthHeader = page.locator(".fc-header-title h2").first();
@@ -86,13 +73,14 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
         ),
         todayButton.click(),
       ]);
-      await fetchResponse.finished();
+      const responseFailure = await fetchResponse.finished();
+      if (responseFailure) throw responseFailure;
     });
     await page.waitForFunction((expectedMonth) => {
       const headerText = document.querySelector(".fc-header-title h2")?.textContent ?? "";
       const headerMatch =
         headerText.match(/(\d{4})年(\d{1,2})月/) ??
-        headerText.match(/(\d{4})\/(\d{1,2})\/\d{1,2}\s*-/);
+        headerText.match(/\d{4}\/\d{1,2}\/\d{1,2}\s*-\s*(\d{4})\/(\d{1,2})\/\d{1,2}/);
       const headerMonth = headerMatch
         ? `${headerMatch[1]}-${String(Number(headerMatch[2])).padStart(2, "0")}`
         : null;
@@ -119,18 +107,9 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   const summaryCells = summaryRow.locator("td");
 
   const [incomeText, expenseText, balanceText] = await Promise.all([
-    summaryCells
-      .nth(SUMMARY_COLUMNS.INCOME)
-      .textContent({ timeout: 3000 })
-      .catch(() => "0"),
-    summaryCells
-      .nth(SUMMARY_COLUMNS.EXPENSE)
-      .textContent({ timeout: 3000 })
-      .catch(() => "0"),
-    summaryCells
-      .nth(SUMMARY_COLUMNS.BALANCE)
-      .textContent({ timeout: 3000 })
-      .catch(() => "0"),
+    getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.INCOME)),
+    getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.EXPENSE)),
+    getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.BALANCE)),
   ]);
 
   const totalIncome = parseJapaneseNumber(incomeText || "0");
@@ -159,6 +138,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
     month,
     periodStart: displayedState.periodStart,
     periodEnd: displayedState.periodEnd,
+    isComplete: true,
     totalIncome,
     totalExpense,
     balance,
