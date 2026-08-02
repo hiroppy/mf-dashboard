@@ -74,9 +74,11 @@ interface TransactionGroup {
 }
 
 interface GroupPartition {
-  anchorBigramCounts: Map<TransactionGroup, number>;
+  anchorBigrams: Map<TransactionGroup, Set<string>>;
+  exactOccurrences: Map<string, TransactionGroup>;
   groups: TransactionGroup[];
-  groupsByBigram: Map<string, Set<TransactionGroup>>;
+  groupsByBigramAndMonth: Map<string, Map<string, Set<TransactionGroup>>>;
+  latestMonths: Map<TransactionGroup, string>;
 }
 
 const DEFAULT_OPTIONS = {
@@ -278,7 +280,12 @@ function conflictsWithPostingMonthSchedule(
 ): boolean {
   return transactions.some((existing) => {
     if (existing.month !== transaction.month) return false;
-    if (existing.day === transaction.day) return existing.amount !== transaction.amount;
+    if (existing.day === transaction.day) {
+      return (
+        existing.amount !== transaction.amount ||
+        existing.normalizedDescription !== transaction.normalizedDescription
+      );
+    }
     const existingPosition = boundaryPosition(existing);
     const transactionPosition = boundaryPosition(transaction);
     return !(
@@ -371,23 +378,54 @@ function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore):
 
 function getIndexedGroups(
   partition: GroupPartition,
-  transactionBigrams: Set<string>,
+  transaction: NormalizedTransaction,
   similarityThreshold: number,
 ): TransactionGroup[] {
   if (similarityThreshold === 0) return partition.groups;
 
+  const transactionBigrams = getBigrams(transaction.normalizedDescription);
   const overlapCounts = new Map<TransactionGroup, number>();
+  const includeCurrentMonth = boundaryPosition(transaction) !== null;
   for (const bigram of transactionBigrams) {
-    for (const group of partition.groupsByBigram.get(bigram) ?? []) {
-      overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
+    for (const [month, groups] of partition.groupsByBigramAndMonth.get(bigram) ?? []) {
+      if (month === transaction.month && !includeCurrentMonth) continue;
+      for (const group of groups) {
+        overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
+      }
     }
   }
+  const exactGroup = partition.exactOccurrences.get(exactOccurrenceKey(transaction));
+  if (exactGroup) overlapCounts.set(exactGroup, transactionBigrams.size);
   return [...overlapCounts]
     .filter(([group, overlap]) => {
-      const anchorBigramCount = partition.anchorBigramCounts.get(group) ?? 0;
+      const anchorBigramCount = partition.anchorBigrams.get(group)?.size ?? 0;
       return (2 * overlap) / (transactionBigrams.size + anchorBigramCount) >= similarityThreshold;
     })
     .map(([group]) => group);
+}
+
+function exactOccurrenceKey(transaction: NormalizedTransaction): string {
+  return [transaction.date, transaction.amount, transaction.normalizedDescription].join("\0");
+}
+
+function indexGroupMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
+  for (const bigram of partition.anchorBigrams.get(group) ?? []) {
+    const groupsByMonth = partition.groupsByBigramAndMonth.get(bigram) ?? new Map();
+    const groups = groupsByMonth.get(month) ?? new Set();
+    groups.add(group);
+    groupsByMonth.set(month, groups);
+    partition.groupsByBigramAndMonth.set(bigram, groupsByMonth);
+  }
+  partition.latestMonths.set(group, month);
+}
+
+function moveGroupToMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
+  const previousMonth = partition.latestMonths.get(group);
+  if (!previousMonth || previousMonth === month) return;
+  for (const bigram of partition.anchorBigrams.get(group) ?? []) {
+    partition.groupsByBigramAndMonth.get(bigram)?.get(previousMonth)?.delete(group);
+  }
+  indexGroupMonth(partition, group, month);
 }
 
 function groupTransactions(
@@ -413,14 +451,16 @@ function groupTransactions(
       exactDescriptionKey,
     ].join("\0");
     const partition: GroupPartition = partitions.get(partitionKey) ?? {
-      anchorBigramCounts: new Map(),
+      anchorBigrams: new Map(),
+      exactOccurrences: new Map(),
       groups: [],
-      groupsByBigram: new Map(),
+      groupsByBigramAndMonth: new Map(),
+      latestMonths: new Map(),
     };
     const transactionBigrams = getBigrams(transaction.normalizedDescription);
     const candidateGroups = getIndexedGroups(
       partition,
-      transactionBigrams,
+      transaction,
       options.descriptionSimilarityThreshold,
     );
     let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
@@ -432,16 +472,15 @@ function groupTransactions(
     }
     const existingGroup = bestMatch?.group;
     if (existingGroup) {
+      moveGroupToMonth(partition, existingGroup, transaction.month);
       existingGroup.transactions.push(transaction);
+      partition.exactOccurrences.set(exactOccurrenceKey(transaction), existingGroup);
     } else {
       const group = { transactions: [transaction] };
       partition.groups.push(group);
-      partition.anchorBigramCounts.set(group, transactionBigrams.size);
-      for (const bigram of transactionBigrams) {
-        const indexedGroups = partition.groupsByBigram.get(bigram) ?? new Set();
-        indexedGroups.add(group);
-        partition.groupsByBigram.set(bigram, indexedGroups);
-      }
+      partition.anchorBigrams.set(group, transactionBigrams);
+      partition.exactOccurrences.set(exactOccurrenceKey(transaction), group);
+      indexGroupMonth(partition, group, transaction.month);
     }
     partitions.set(partitionKey, partition);
   }

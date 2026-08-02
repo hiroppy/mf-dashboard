@@ -144,6 +144,18 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium" });
   });
 
+  it("preserves fuzzy-matching labels that recur in parallel", () => {
+    const result = generateRecurringCandidates(
+      ["2026-01-10", "2026-02-10", "2026-03-10"].flatMap((date) => [
+        transaction(date, 20_000, "ACME UTILITY"),
+        transaction(date, 20_000, "XACME UTILITY"),
+      ]),
+      "2026-04",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
   it("normalizes an explicit billing month that lags the posting month", () => {
     const result = generateRecurringCandidates(
       [
@@ -762,6 +774,15 @@ describe("generateRecurringCandidates", () => {
       ).join("");
       return transaction("2026-07-10", 20_000, `${prefix} merchant`);
     });
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("handles many same-month common labels with distinct amounts", () => {
+    const history: RecurringTransaction[] = Array.from({ length: 2_000 }, (_, index) => ({
+      ...transaction("2026-07-10", 10_000 + index, "Payment"),
+      category: "Utilities",
+    }));
 
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
   });
