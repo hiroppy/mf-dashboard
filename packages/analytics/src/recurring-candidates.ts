@@ -203,6 +203,18 @@ function isWithinAmountTolerance(left: number, right: number, tolerance: number)
   return Math.abs(left - right) / Math.max(left, right) <= tolerance;
 }
 
+function daysFromMonthEnd(transaction: NormalizedTransaction): number {
+  const { year, month } = parseIsoDateKey(transaction.date);
+  return getDaysInMonth(year, month) - transaction.day;
+}
+
+function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTransaction): number {
+  const directDistance = Math.abs(left.day - right.day);
+  const [earlyMonth, lateMonth] = left.day <= right.day ? [left, right] : [right, left];
+  const boundaryDistance = daysFromMonthEnd(lateMonth) + earlyMonth.day;
+  return Math.min(directDistance, boundaryDistance);
+}
+
 function belongsToGroup(
   transaction: NormalizedTransaction,
   group: TransactionGroup,
@@ -219,10 +231,12 @@ function belongsToGroup(
     return false;
   }
 
-  const medianDay = median(monthlyTransactions.map(({ day }) => day));
+  const medianDayDistance = median(
+    monthlyTransactions.map((existing) => calendarDayDistance(transaction, existing)),
+  );
   const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
   return (
-    Math.abs(transaction.day - medianDay) <= options.dateDriftDays &&
+    medianDayDistance <= options.dateDriftDays &&
     isWithinAmountTolerance(transaction.amount, medianAmount, options.amountToleranceRatio) &&
     calculateDescriptionSimilarity(
       transaction.normalizedDescription,
@@ -336,11 +350,23 @@ function createCandidate(
 
   const { year, month } = parseYearMonthKey(targetMonth);
   const targetMonthDays = getDaysInMonth(year, month);
-  const isEndOfMonthPattern = occurrences.every(({ date, day }) => {
-    const parts = parseIsoDateKey(date);
-    return day === getDaysInMonth(parts.year, parts.month);
-  });
-  const predictedDay = isEndOfMonthPattern
+  const hasMonthStartOccurrence = occurrences.some(
+    (occurrence) => occurrence.day <= options.dateDriftDays,
+  );
+  const hasMonthEndOccurrence = occurrences.some(
+    (occurrence) => daysFromMonthEnd(occurrence) <= options.dateDriftDays,
+  );
+  const allExactMonthEnd = occurrences.every((occurrence) => daysFromMonthEnd(occurrence) === 0);
+  const isMonthBoundaryPattern =
+    allExactMonthEnd ||
+    (hasMonthStartOccurrence &&
+      hasMonthEndOccurrence &&
+      occurrences.every(
+        (occurrence) =>
+          occurrence.day <= options.dateDriftDays ||
+          daysFromMonthEnd(occurrence) <= options.dateDriftDays,
+      ));
+  const predictedDay = isMonthBoundaryPattern
     ? targetMonthDays
     : Math.min(Math.round(median(occurrences.map(({ day }) => day))), targetMonthDays);
   const dates = occurrences.map(({ date }) => date).sort();

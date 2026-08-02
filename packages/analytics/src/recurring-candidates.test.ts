@@ -181,6 +181,15 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]?.predictedDate).toBe("2026-05-31");
   });
 
+  it("groups holiday drift that crosses a calendar-month boundary", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-03-02", 80_000, "家賃")],
+      "2026-04",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
+  });
+
   it("uses only the preceding 12 months and ignores the target month and future", () => {
     const result = generateRecurringCandidates(
       [
