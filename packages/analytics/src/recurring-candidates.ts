@@ -99,6 +99,7 @@ const DEFAULT_OPTIONS = {
 
 const MONTH_BOUNDARY_WINDOW_DAYS = 3;
 const MAX_GROUPS_PER_AMOUNT_BUCKET = 8;
+const MAX_FUZZY_CANDIDATE_GROUPS = 64;
 const GENERIC_DESCRIPTIONS = new Set(["payment", "振込", "支払", "支払い"]);
 
 function assertRatio(value: number, name: string): void {
@@ -275,7 +276,20 @@ function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTrans
   }
   const directDistance = Math.abs(left.day - right.day);
   const [earlier, later] = left.date <= right.date ? [left, right] : [right, left];
-  if (earlier.month === later.month || earlier.day <= later.day) return directDistance;
+  if (earlier.month === later.month) {
+    const earlierPosition = boundaryPosition(earlier);
+    const laterPosition = boundaryPosition(later);
+    if (
+      earlierPosition?.side === "start" &&
+      earlier.day > 1 &&
+      laterPosition?.side === "end" &&
+      earlierPosition.occurrenceMonth !== laterPosition.occurrenceMonth
+    ) {
+      return earlier.day + daysFromMonthEnd(later);
+    }
+    return directDistance;
+  }
+  if (earlier.day <= later.day) return directDistance;
 
   const crossesRecognizedBoundary =
     daysFromMonthEnd(earlier) <= MONTH_BOUNDARY_WINDOW_DAYS &&
@@ -378,6 +392,22 @@ function getGroupMatchScore(
   ) {
     return null;
   }
+  const representativePosition = boundaryPosition(representative);
+  const transactionPosition = boundaryPosition(transaction);
+  const crossesDelayedBoundary =
+    representativePosition?.side === "end" && transactionPosition?.side === "start";
+  const representativeOccurrenceMonth = crossesDelayedBoundary
+    ? representativePosition.occurrenceMonth
+    : getOccurrenceMonth(representative, boundaryPattern);
+  const transactionOccurrenceMonth = crossesDelayedBoundary
+    ? transactionPosition.occurrenceMonth
+    : getOccurrenceMonth(transaction, boundaryPattern);
+  if (
+    representativeOccurrenceMonth !== transactionOccurrenceMonth &&
+    shiftYearMonthKey(representativeOccurrenceMonth, 1) !== transactionOccurrenceMonth
+  ) {
+    return null;
+  }
   if (conflictsWithBoundaryOccurrence(transaction, group.transactions)) return null;
   const postingMonthConflicts = getPostingMonthConflicts(transaction, group.transactions);
   if (postingMonthConflicts.length > 0) {
@@ -432,10 +462,7 @@ function getGroupMatchScore(
   return {
     amountDistance,
     continuityDistance:
-      getOccurrenceMonth(representative, boundaryPattern) ===
-      shiftYearMonthKey(getOccurrenceMonth(transaction, boundaryPattern), -1)
-        ? 0
-        : 1,
+      representativeOccurrenceMonth === shiftYearMonthKey(transactionOccurrenceMonth, -1) ? 0 : 1,
     dateDistance: groupDayDistance,
     descriptionDistance: 1 - descriptionSimilarity,
     replacedTransactions: [],
@@ -490,26 +517,40 @@ function getFuzzyIndexedGroups(
   if (similarityThreshold === 0) return [];
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
-  const overlapCounts = new Map<TransactionGroup, number>();
-  for (const bigram of transactionBigrams) {
+  const candidateCounts = new Map(
+    [...transactionBigrams].map((bigram) => [
+      bigram,
+      [...(partition.groupsByBigramAndMonth.get(bigram)?.entries() ?? [])]
+        .filter(([month]) => month !== transaction.month)
+        .reduce((count, [, groupsByDescription]) => count + groupsByDescription.size, 0),
+    ]),
+  );
+  const indexedBigrams = [...transactionBigrams].sort(
+    (left, right) => (candidateCounts.get(left) ?? 0) - (candidateCounts.get(right) ?? 0),
+  );
+  const candidates = new Set<TransactionGroup>();
+  for (const bigram of indexedBigrams) {
     for (const [month, groupsByDescription] of partition.groupsByBigramAndMonth.get(bigram) ?? []) {
       if (month === transaction.month) continue;
       for (const [description, groups] of groupsByDescription) {
         if (description === transaction.normalizedDescription) continue;
         for (const group of groups) {
-          overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
+          candidates.add(group);
+          if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
         }
+        if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
       }
+      if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
     }
+    if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
   }
-  const exactGroup = partition.exactOccurrences.get(exactOccurrenceKey(transaction));
-  if (exactGroup) overlapCounts.set(exactGroup, transactionBigrams.size);
-  return [...overlapCounts]
-    .filter(([group, overlap]) => {
-      const anchorBigramCount = partition.anchorBigrams.get(group)?.size ?? 0;
-      return (2 * overlap) / (transactionBigrams.size + anchorBigramCount) >= similarityThreshold;
-    })
-    .map(([group]) => group);
+  return [...candidates].filter((group) => {
+    const anchor = group.transactions[0]?.normalizedDescription ?? "";
+    return (
+      calculateDescriptionSimilarity(transaction.normalizedDescription, anchor) >=
+      similarityThreshold
+    );
+  });
 }
 
 function findBestGroupMatch(
@@ -666,7 +707,9 @@ function groupTransactions(
 ): TransactionGroup[] {
   const partitions = new Map<string, GroupPartition>();
   const isolatedGroups = new Map<string, TransactionGroup>();
-  for (const transaction of transactions) {
+  const pendingTransactions = [...transactions];
+  for (let cursor = 0; cursor < pendingTransactions.length; cursor++) {
+    const transaction = pendingTransactions[cursor];
     if (!transaction.normalizedDescription) {
       const isolatedKey = [
         accountIdKey(transaction.accountId),
@@ -738,6 +781,17 @@ function groupTransactions(
       existingGroup.transactions = existingGroup.transactions.filter(
         (existing) => !replacements.has(existing),
       );
+      for (const replacement of replacements) {
+        if (partition.exactOccurrences.get(exactOccurrenceKey(replacement)) === existingGroup) {
+          partition.exactOccurrences.delete(exactOccurrenceKey(replacement));
+        }
+        if (
+          partition.exactRecurringSlots.get(exactRecurringSlotKey(replacement)) === existingGroup
+        ) {
+          partition.exactRecurringSlots.delete(exactRecurringSlotKey(replacement));
+        }
+        pendingTransactions.push(replacement);
+      }
       existingGroup.transactions.push(transaction);
       indexGroupAmount(partition, existingGroup, transaction);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), existingGroup);

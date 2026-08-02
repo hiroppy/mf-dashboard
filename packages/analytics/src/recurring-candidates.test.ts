@@ -200,6 +200,19 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-13" });
   });
 
+  it("starts a new group after a stale cadence gap", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-10", 100, "Utilities"),
+        transaction("2026-06-10", 110, "Utilities"),
+        transaction("2026-07-10", 121, "Utilities"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", evidence: { occurrenceCount: 2 } });
+  });
+
   it("preserves fuzzy-matching labels that recur in parallel", () => {
     const result = generateRecurringCandidates(
       ["2026-01-10", "2026-02-10", "2026-03-10"].flatMap((date) => [
@@ -386,6 +399,21 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("reassigns a displaced same-month occurrence to another schedule", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-06-13", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-12", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-13", 20_000, "SERVICE PLAN"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-08-11", "2026-08-13"]);
+  });
+
   it("matches near-end dates by their month-end offsets", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-02-27", 80_000, "家賃")],
@@ -447,6 +475,15 @@ describe("generateRecurringCandidates", () => {
         "2026-04",
       ),
     ).toEqual([]);
+  });
+
+  it("groups consecutive boundary occurrences posted in the same calendar month", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-02-02", 80_000, "家賃"), transaction("2026-02-28", 80_000, "家賃")],
+      "2026-03",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-31" });
   });
 
   it("retains separate boundary occurrences posted in the same calendar month", () => {
@@ -1050,6 +1087,24 @@ describe("generateRecurringCandidates", () => {
     });
 
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("bounds fuzzy scans for many drifted common-prefix descriptions", () => {
+    const identity = (index: number) =>
+      Array.from({ length: 3 }, (__, position) =>
+        String.fromCharCode(97 + (Math.floor(index / 26 ** position) % 26)),
+      ).join("");
+    const history = ["2026-06-10", "2026-07-11"].flatMap((date, monthIndex) =>
+      Array.from({ length: 1_000 }, (_, index) =>
+        transaction(
+          date,
+          20_000,
+          `${monthIndex === 0 ? "" : "X"}COMMON UTILITY SERVICE ${identity(index)}`,
+        ),
+      ),
+    );
+
+    expect(generateRecurringCandidates(history, "2026-08")).toHaveLength(1_000);
   });
 
   it("handles many same-month common labels with distinct amounts", () => {
