@@ -5,7 +5,6 @@ import type { CashFlowItem, CashFlowSummary } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
 import { getCsrfToken } from "../hooks/helpers.js";
 import { info, warn } from "../logger.js";
-import { scrapeCashFlowMonth } from "../scrapers/cash-flow-history.js";
 import { scrapeCategoryCandidates } from "../scrapers/category-candidates.js";
 import { applyCategoryDecisions } from "./apply.js";
 import { CategoryDecisionEngine, selectTransactionsForCategorization } from "./engine.js";
@@ -93,25 +92,15 @@ export async function categorizeCashFlowMonth(options: {
   usage: CategoryDecisionUsage;
 }): Promise<CashFlowSummary> {
   const { page, db, cashFlow, config, usage } = options;
-  let latestCashFlowForFallback = cashFlow;
-  let appliedDecisionsForFallback: ResolvedCategoryDecision[] = [];
 
   try {
-    if ((await findCategorizationTargets(db, cashFlow)).length === 0) {
-      return cashFlow;
-    }
-
-    const latestCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
-    latestCashFlowForFallback = latestCashFlow;
-    const latestTargets = await findCategorizationTargets(db, latestCashFlow);
-    if (latestTargets.length === 0) {
-      return latestCashFlow;
-    }
+    const targets = await findCategorizationTargets(db, cashFlow);
+    if (targets.length === 0) return cashFlow;
 
     const candidates = await scrapeCategoryCandidates(page);
     if (candidates.length === 0) {
       warn("Skipped category decision because no Money Forward category candidates were found.");
-      return latestCashFlow;
+      return cashFlow;
     }
 
     const engine = new CategoryDecisionEngine({
@@ -125,16 +114,16 @@ export async function categorizeCashFlowMonth(options: {
           candidates: candidateList,
         }),
     });
-    const decisions = await engine.decideMany(latestTargets);
+    const decisions = await engine.decideMany(targets);
 
     if (decisions.length === 0) {
-      return latestCashFlow;
+      return cashFlow;
     }
 
     const csrfToken = await getCsrfToken(page);
     if (!csrfToken) {
       warn("Skipped category update because CSRF token was not found.");
-      return latestCashFlow;
+      return cashFlow;
     }
 
     const { appliedCount, appliedDecisions } = await applyCategoryDecisions({
@@ -142,27 +131,16 @@ export async function categorizeCashFlowMonth(options: {
       csrfToken,
       decisions,
     });
-    appliedDecisionsForFallback = appliedDecisions;
-
     if (appliedCount === 0) {
-      return latestCashFlow;
+      return cashFlow;
     }
 
     info(`Applied category decisions: ${appliedCount}/${decisions.length} for ${cashFlow.month}`);
-    const updatedCashFlow = await scrapeCashFlowMonth(page, cashFlow.month);
-    latestCashFlowForFallback = updatedCashFlow;
-    return updatedCashFlow;
+    return applyDecisionsToCashFlow(cashFlow, appliedDecisions);
   } catch {
-    const categoriesWereApplied = appliedDecisionsForFallback.length > 0;
-    const fallbackMessage = categoriesWereApplied
-      ? "saving locally reflected categories"
-      : "saving latest scraped cash flow";
     warn(
-      `Category decision failed for ${cashFlow.month}; ${fallbackMessage} (code: CATEGORY_DECISION_PIPELINE_FAILED).`,
+      `Category decision failed for ${cashFlow.month}; saving scraped cash flow (code: CATEGORY_DECISION_PIPELINE_FAILED).`,
     );
-    if (categoriesWereApplied) {
-      return applyDecisionsToCashFlow(latestCashFlowForFallback, appliedDecisionsForFallback);
-    }
-    return latestCashFlowForFallback;
+    return cashFlow;
   }
 }

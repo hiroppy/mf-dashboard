@@ -34,9 +34,4 @@ export const mfUrls = {
   accountDetail(mfId: string, type: "show" | "show_manual" = "show"): string {
     return `${BASE_URL}/accounts/${type}/${mfId}`;
   },
-
-  /** 指定月の家計簿URL を生成 (from/to は YYYY/MM/DD 形式) */
-  cashFlowWithRange(from: string, to: string): string {
-    return `${BASE_URL}/cf?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-  },
 } as const;

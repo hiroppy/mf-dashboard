@@ -49,6 +49,8 @@ export interface CashFlowItem {
 
 export interface CashFlowSummary {
   month: string;
+  periodStart?: string;
+  periodEnd?: string;
   totalIncome: number;
   totalExpense: number;
   balance: number;
