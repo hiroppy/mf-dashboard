@@ -69,7 +69,9 @@ describe("scrapeCashFlowMonth", () => {
       nth: vi.fn<(index: number) => Locator>().mockReturnValue(emptyCell),
     } as unknown as Locator;
     const row = {
-      getAttribute: vi.fn<Locator["getAttribute"]>().mockResolvedValue(""),
+      getAttribute: vi
+        .fn<Locator["getAttribute"]>()
+        .mockImplementation(async (name) => (name === "id" ? "js-transaction-row-a" : "")),
       locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
     } as unknown as Locator;
 
