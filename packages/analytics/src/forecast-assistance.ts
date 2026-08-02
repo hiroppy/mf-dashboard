@@ -82,6 +82,15 @@ export interface AssistedForecastCandidate {
 const signalPriority: readonly ForecastSignal[] = ["salary", "card_payment", "rent", "loan", "tax"];
 
 const minimumLLMConfidence = 0.6;
+const defaultLLMTimeoutMs = 5_000;
+
+function isClassificationCompatible(
+  direction: ForecastCandidateFeatures["direction"],
+  classification: ForecastClassification,
+): boolean {
+  if (classification === "other") return true;
+  return classification === "salary" ? direction === "income" : direction === "expense";
+}
 
 function isBusinessDay(date: string, nonBusinessDates: ReadonlySet<string>): boolean {
   const dayOfWeek = getDayOfWeekIsoDateKey(date);
@@ -126,7 +135,11 @@ export function getBusinessDayShiftCandidates(
 function createRuleClassification(
   candidate: ForecastCandidateFeatures,
 ): ForecastClassificationDecision {
-  const label = signalPriority.find((signal) => candidate.matchedSignals.includes(signal));
+  const label = signalPriority.find(
+    (signal) =>
+      candidate.matchedSignals.includes(signal) &&
+      isClassificationCompatible(candidate.direction, signal),
+  );
   if (!label) {
     return {
       label: "other",
@@ -156,20 +169,15 @@ function createDateCandidates(
   return getBusinessDayShiftCandidates(candidate.nominalDate, candidate.nonBusinessDates);
 }
 
-function createLLMDateCandidates(
-  candidate: ForecastCandidateFeatures,
-  ruleClassification: ForecastClassification,
-): ForecastDateCandidate[] {
-  const ruleCandidates = createDateCandidates(candidate, ruleClassification);
-  if (ruleClassification === "salary") return ruleCandidates;
-
+function createLLMDateCandidates(candidate: ForecastCandidateFeatures): ForecastDateCandidate[] {
+  const nominalCandidate: ForecastDateCandidate = {
+    date: candidate.nominalDate,
+    adjustment: "none",
+  };
   const salaryCandidates = createDateCandidates(candidate, "salary");
   return [
-    ...ruleCandidates,
-    ...salaryCandidates.filter(
-      ({ adjustment }) =>
-        !ruleCandidates.some((dateCandidate) => dateCandidate.adjustment === adjustment),
-    ),
+    nominalCandidate,
+    ...salaryCandidates.filter(({ adjustment }) => adjustment !== nominalCandidate.adjustment),
   ];
 }
 
@@ -182,6 +190,7 @@ function isValidLLMDecision(
   if (decision.classification === "other" || decision.confidence < minimumLLMConfidence) {
     return false;
   }
+  if (!isClassificationCompatible(candidate.direction, decision.classification)) return false;
   const adjustmentWasOffered = dateCandidates.some(
     ({ adjustment }) => adjustment === decision.dateAdjustment,
   );
@@ -203,7 +212,7 @@ export async function generateForecastAssistanceWithLLM(
     output: Output.object({ schema: forecastLLMDecisionSchema }),
     system:
       "あなたは今月の銀行入出金予測候補を補助分類します。入力は匿名化済み特徴量です。分類・信頼度・短い根拠と候補内の日付調整だけを返し、金額計算や予測採否は行いません。",
-    prompt: `次の匿名化済みJSONを分類してください。matchedSignals、出現回数、日付範囲、金額帯だけを根拠にし、dateAdjustmentはdateCandidatesに存在する値を選んでください。\n\n${JSON.stringify(
+    prompt: `次の匿名化済みJSONを分類してください。direction、matchedSignals、出現回数、日付範囲、金額帯だけを根拠にし、dateAdjustmentはdateCandidatesに存在する値を選んでください。\n\n${JSON.stringify(
       {
         candidate: {
           candidateId: candidate.candidateId,
@@ -227,16 +236,36 @@ export async function generateForecastAssistanceWithLLM(
   return parsed.data;
 }
 
+function requestLLMDecision(
+  request: Promise<ForecastLLMDecision | null>,
+  timeoutMs: number,
+): Promise<ForecastLLMDecision | null> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => resolve(null), timeoutMs);
+    request.then(
+      (decision) => {
+        clearTimeout(timeout);
+        resolve(decision);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
 export async function assistForecastCandidate(
   candidate: ForecastCandidateFeatures,
   llmDecider: ForecastLLMDecider = generateForecastAssistanceWithLLM,
+  llmTimeoutMs = defaultLLMTimeoutMs,
 ): Promise<AssistedForecastCandidate> {
   const ruleClassification = createRuleClassification(candidate);
-  const llmDateCandidates = createLLMDateCandidates(candidate, ruleClassification.label);
+  const llmDateCandidates = createLLMDateCandidates(candidate);
 
   let llmDecision: ForecastLLMDecision | null = null;
   try {
-    llmDecision = await llmDecider(candidate, llmDateCandidates);
+    llmDecision = await requestLLMDecision(llmDecider(candidate, llmDateCandidates), llmTimeoutMs);
   } catch {
     // The forecast must remain available when the optional LLM fails.
   }

@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { isLLMEnabled } from "./config.js";
 import {
   assistForecastCandidate,
@@ -30,6 +30,10 @@ const salaryCandidate: ForecastCandidateFeatures = {
   nominalDate: "2026-10-25",
   matchedSignals: ["salary"],
 };
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("getBusinessDayShiftCandidates", () => {
   test("25日が休日の場合は前営業日と翌営業日を候補にする", () => {
@@ -81,6 +85,10 @@ describe("assistForecastCandidate", () => {
 
     const result = await assistForecastCandidate(salaryCandidate, llmDecider);
 
+    expect(llmDecider).toHaveBeenCalledWith(
+      salaryCandidate,
+      expect.arrayContaining([{ date: "2026-10-25", adjustment: "none" }]),
+    );
     expect(result.classification).toEqual({
       label: "salary",
       confidence: 0.82,
@@ -167,6 +175,36 @@ describe("assistForecastCandidate", () => {
     expect(invalidResult.classification.source).toBe("rule");
     expect(ambiguousResult.classification.source).toBe("rule");
   });
+
+  test("収支方向と矛盾するルールとLLM分類を無視する", async () => {
+    const expenseCandidate = {
+      ...salaryCandidate,
+      direction: "expense" as const,
+    };
+
+    const result = await assistForecastCandidate(expenseCandidate, async () => ({
+      candidateId: "candidate-a",
+      classification: "salary",
+      confidence: 0.9,
+      reason: "incompatible direction",
+      dateAdjustment: "previous_business_day",
+    }));
+
+    expect(result.classification).toMatchObject({ label: "other", source: "rule" });
+    expect(result.dateCandidates).toEqual([{ date: "2026-10-25", adjustment: "none" }]);
+  });
+
+  test("LLMがtimeoutした場合はルール結果を返す", async () => {
+    vi.useFakeTimers();
+    const stalledDecider = vi.fn<ForecastLLMDecider>(() => new Promise(() => {}));
+
+    const resultPromise = assistForecastCandidate(salaryCandidate, stalledDecider, 100);
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      classification: { label: "salary", source: "rule" },
+    });
+  });
 });
 
 describe("generateForecastAssistanceWithLLM", () => {
@@ -237,6 +275,7 @@ describe("generateForecastAssistanceWithLLM", () => {
     expect(request?.prompt).not.toContain("Test User");
     expect(request?.prompt).not.toContain("Bank A personal account");
     expect(request?.prompt).not.toContain("500000");
+    expect(request?.prompt).toContain("direction、matchedSignals");
     expect(request?.prompt).toContain('"amountBand": "large"');
     expect(result).toMatchObject({ classification: "salary", confidence: 0.8 });
   });
