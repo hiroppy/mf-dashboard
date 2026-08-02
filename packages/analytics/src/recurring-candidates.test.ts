@@ -918,6 +918,18 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("preserves malformed full dates with mixed separators as stable identifiers", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 40_000, "SERVICE 2026-02/03"),
+        transaction("2026-07-10", 40_000, "SERVICE 2026/02-04"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it("does not fuzzy-match long descriptions with different numeric identifiers", () => {
     const result = generateRecurringCandidates(
       [
@@ -1016,6 +1028,21 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(3);
   });
 
+  it("reassigns same-day rows across amount-compatible schedules", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 90, "MERCHANT PLAN AAA"),
+        transaction("2026-06-10", 110, "MERCHANT PLAN CCC"),
+        transaction("2026-07-10", 100, "MERCHANT PLAN BBB"),
+        transaction("2026-07-10", 110, "MERCHANT PLAN CCC"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ evidence }) => evidence.occurrenceCount)).toEqual([2, 2]);
+  });
+
   it("ranks qualifying fuzzy groups before applying the candidate limit", () => {
     const prefix = "recurring common prefix";
     const decoyDescriptions = Array.from({ length: 64 }, (_, index) => {
@@ -1039,6 +1066,34 @@ describe("generateRecurringCandidates", () => {
 
     expect(highCandidate).toMatchObject({
       evidence: { amountRange: { min: 99, max: 101 }, occurrenceCount: 3 },
+    });
+  });
+
+  it("ranks equal-similarity fuzzy groups before applying the candidate limit", () => {
+    const prefix = "recurring service";
+    const decoyDescriptions = Array.from(
+      { length: 65 },
+      (_, index) => `${prefix}${String.fromCodePoint(0x4e00 + index)}`,
+    );
+    const bestDescription = `${prefix}${String.fromCodePoint(0x5000)}`;
+    const history = decoyDescriptions.flatMap((description) => [
+      transaction("2026-05-10", 100, description),
+      transaction("2026-06-10", 100, description),
+    ]);
+    history.push(
+      transaction("2026-04-10", 100, bestDescription),
+      transaction("2026-05-10", 100, bestDescription),
+      transaction("2026-06-10", 100, bestDescription),
+      transaction("2026-07-10", 100, prefix),
+    );
+
+    const highCandidate = generateRecurringCandidates(history, "2026-08").find(
+      ({ confidence }) => confidence === "high",
+    );
+
+    expect(highCandidate).toMatchObject({
+      predictedDate: "2026-08-10",
+      evidence: { dateRange: { from: "2026-04-10" }, occurrenceCount: 4 },
     });
   });
 

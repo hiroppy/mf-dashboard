@@ -193,6 +193,17 @@ function removeValidYearlessJapaneseDate(
   return isValid ? prefix : match;
 }
 
+function removeValidSeparatedCalendarDate(
+  match: string,
+  prefix: string,
+  yearText: string,
+  _separator: string,
+  monthText: string,
+  dayText: string,
+): string {
+  return removeValidCalendarDate(match, prefix, yearText, monthText, dayText);
+}
+
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
     .replace(
@@ -204,8 +215,8 @@ function normalizeDescription(value: string | null | undefined): string {
       removeValidCalendarDate,
     )
     .replace(
-      /(^|[^a-z0-9])((?:19|20)[0-9]{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
-      removeValidCalendarDate,
+      /(^|[^a-z0-9])((?:19|20)[0-9]{2})([-/.])(0?[1-9]|1[0-2])\3(0?[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
+      removeValidSeparatedCalendarDate,
     )
     .replace(/(?:19|20)[0-9]{2}年(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])/gu, "")
     .replace(
@@ -573,8 +584,9 @@ function getOptimizedGroups(
 function getFuzzyIndexedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
-  similarityThreshold: number,
+  options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
+  const similarityThreshold = options.descriptionSimilarityThreshold;
   if (similarityThreshold === 0) return [];
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
@@ -602,10 +614,27 @@ function getFuzzyIndexedGroups(
       }
     }
   }
-  return [...candidateSimilarities]
-    .sort((left, right) => right[1] - left[1])
+  const scoredCandidates = [...candidateSimilarities].map(([group, similarity]) => ({
+    group,
+    score: getGroupMatchScore(transaction, group, options),
+    similarity,
+  }));
+  return scoredCandidates
+    .sort((left, right) => {
+      const similarityDifference = right.similarity - left.similarity;
+      if (similarityDifference !== 0) return similarityDifference;
+      if (left.score && right.score) {
+        return (
+          compareGroupMatchScores(left.score, right.score) ||
+          right.group.transactions.length - left.group.transactions.length
+        );
+      }
+      if (left.score) return -1;
+      if (right.score) return 1;
+      return 0;
+    })
     .slice(0, MAX_FUZZY_CANDIDATE_GROUPS)
-    .map(([group]) => group);
+    .map(({ group }) => group);
 }
 
 function findBestGroupMatch(
@@ -663,7 +692,6 @@ function findAugmentingPath(
     if (conflicts.length > 1) continue;
 
     const displacedTransaction = conflicts[0];
-    if (displacedTransaction.day === transaction.day) continue;
     const historyGroup = {
       transactions: group.transactions.filter((existing) => existing !== displacedTransaction),
     };
@@ -673,11 +701,7 @@ function findAugmentingPath(
     const alternativeGroups = [
       ...new Set([
         ...getOptimizedGroups(partition, displacedTransaction, options, true),
-        ...getFuzzyIndexedGroups(
-          partition,
-          displacedTransaction,
-          options.descriptionSimilarityThreshold,
-        ),
+        ...getFuzzyIndexedGroups(partition, displacedTransaction, options),
       ]),
     ].filter((candidate) => candidate !== group);
     const displacedPath = findAugmentingPath(
@@ -951,17 +975,14 @@ function groupTransactions(
     const optimizedIsPerfect = optimizedMatch && isPerfectGroupMatchScore(optimizedMatch.score);
     const fuzzyGroups = optimizedIsPerfect
       ? []
-      : getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold);
+      : getFuzzyIndexedGroups(partition, transaction, options);
     const fuzzyMatch = findBestGroupMatch(transaction, fuzzyGroups, options);
     let selectedMatch =
       fuzzyMatch &&
       (!optimizedMatch || compareGroupMatchScores(fuzzyMatch.score, optimizedMatch.score) < 0)
         ? fuzzyMatch
         : optimizedMatch;
-    const hasDifferentIndexedDay = [...partition.amountGroupsByDay.keys()].some(
-      (day) => day !== transaction.day,
-    );
-    if (!selectedMatch && hasDifferentIndexedDay) {
+    if (!selectedMatch) {
       const augmentingPath = findAugmentingPath(
         transaction,
         [
