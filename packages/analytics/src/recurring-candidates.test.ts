@@ -324,6 +324,20 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("does not fuzzy-match long descriptions with different numeric identifiers", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 40_000, "EXAMPLE MEMBERSHIP CARD 1"),
+        transaction("2026-07-05", 40_000, "EXAMPLE MEMBERSHIP CARD 1"),
+        transaction("2026-06-05", 40_000, "EXAMPLE MEMBERSHIP CARD 2"),
+        transaction("2026-07-05", 40_000, "EXAMPLE MEMBERSHIP CARD 2"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
   it("uses categories to keep empty-description streams separate", () => {
     const history: RecurringTransaction[] = [
       {

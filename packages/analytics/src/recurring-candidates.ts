@@ -192,6 +192,11 @@ function calculateDescriptionSimilarity(left: string, right: string): number {
   return (2 * overlap) / (leftBigrams.size + rightBigrams.size);
 }
 
+function haveMatchingNumericTokens(left: string, right: string): boolean {
+  const numericTokens = (value: string) => value.match(/[0-9]+/g) ?? [];
+  return numericTokens(left).join("\0") === numericTokens(right).join("\0");
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
@@ -249,6 +254,10 @@ function belongsToGroup(
   return (
     medianDayDistance <= options.dateDriftDays &&
     isWithinAmountTolerance(transaction.amount, medianAmount, options.amountToleranceRatio) &&
+    haveMatchingNumericTokens(
+      transaction.normalizedDescription,
+      representative.normalizedDescription,
+    ) &&
     calculateDescriptionSimilarity(
       transaction.normalizedDescription,
       representative.normalizedDescription,
