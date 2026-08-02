@@ -20,6 +20,7 @@ import {
 } from "./crawler-phases.js";
 import { createCrawlerProgressReporter } from "./crawler-progress.js";
 import { buildGroupOnlyScrapedData, buildScrapedData } from "./data-builder.js";
+import { getHistoryMaxMonths } from "./history-months.js";
 import type { ScrapeResult } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { switchGroup } from "./scrapers/group.js";
@@ -281,6 +282,37 @@ describe("runSavePhase", () => {
 });
 
 describe("runCashFlowHistoryPhase", () => {
+  test("month mode でも遅延反映に備えて当月と前月を再取得する", async () => {
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: false });
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 2, expect.any(Object));
+    expect(hasTransactionsForMonth).not.toHaveBeenCalled();
+  });
+
+  test("history mode で前月に既存明細があっても当月と前月を再取得する", async () => {
+    vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: true });
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 2, expect.any(Object));
+  });
+
+  test("history mode では未取得の最古月までの履歴取得範囲を維持する", async () => {
+    vi.mocked(hasTransactionsForMonth).mockResolvedValue(false);
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: true });
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith(
+      {},
+      getHistoryMaxMonths(new Date()),
+      expect.any(Object),
+    );
+  });
+
   test("初期 navigation 失敗を対象月 step に記録する", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-history-setup-failure-"));
     try {

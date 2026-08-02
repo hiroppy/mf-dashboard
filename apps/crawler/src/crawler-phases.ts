@@ -265,20 +265,16 @@ export async function runCashFlowHistoryPhase(
 ): Promise<void> {
   phase("Cash Flow History");
 
-  if (!config.isHistoryMode) {
-    log("Skipping cash flow history (SCRAPE_MODE is not history)");
-    await publishHistory([]);
-    return;
-  }
-
   const now = new Date();
-  const maxMonths = getHistoryMaxMonths(now);
+  let monthsToFetch = 2;
 
-  let monthsToFetch = 1;
-  for (let i = 1; i < maxMonths; i++) {
-    const month = getHistoryMonth(now, i);
-    if (!(await hasTransactionsForMonth(db, month))) {
-      monthsToFetch = i + 1;
+  if (config.isHistoryMode) {
+    const maxMonths = getHistoryMaxMonths(now);
+    for (let i = 2; i < maxMonths; i++) {
+      const month = getHistoryMonth(now, i);
+      if (!(await hasTransactionsForMonth(db, month))) {
+        monthsToFetch = i + 1;
+      }
     }
   }
 
