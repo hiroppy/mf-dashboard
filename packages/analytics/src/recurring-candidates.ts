@@ -394,7 +394,12 @@ function groupTransactions(
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const partitions = new Map<string, GroupPartition>();
+  const isolatedGroups: TransactionGroup[] = [];
   for (const transaction of transactions) {
+    if (!transaction.normalizedDescription) {
+      isolatedGroups.push({ transactions: [transaction] });
+      continue;
+    }
     const numericTokenKey = (transaction.normalizedDescription.match(/[0-9]+/g) ?? []).join(".");
     const exactDescriptionKey = transaction.normalizedDescription.includes("categorysep")
       ? transaction.normalizedDescription
@@ -439,7 +444,7 @@ function groupTransactions(
     }
     partitions.set(partitionKey, partition);
   }
-  return [...partitions.values()].flatMap(({ groups }) => groups);
+  return [...partitions.values()].flatMap(({ groups }) => groups).concat(isolatedGroups);
 }
 
 function deduplicateMonths(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
@@ -656,7 +661,6 @@ export function generateRecurringCandidates(
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)
-    .filter(({ normalizedDescription }) => normalizedDescription.length > 0)
     .sort(compareTransactions);
 
   return groupTransactions(history, options)

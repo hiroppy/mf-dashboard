@@ -782,6 +782,22 @@ describe("generateRecurringCandidates", () => {
     ).toMatchObject({ classification: "salary", confidence: "low" });
   });
 
+  it("returns an unlabelled recent large income as a low-confidence candidate", () => {
+    const history: RecurringTransaction[] = [
+      {
+        accountId: accountA,
+        date: "2026-07-10",
+        amount: 150_000,
+        type: "income",
+      },
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")[0]).toMatchObject({
+      confidence: "low",
+      description: null,
+    });
+  });
+
   it("does not forecast a recurring stream that stopped before the previous month", () => {
     expect(
       generateRecurringCandidates(
