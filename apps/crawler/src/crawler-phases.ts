@@ -6,10 +6,10 @@ import { initDb, type Db } from "@mf-dashboard/db";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
-  hasTransactionsForMonth,
+  hasCashFlowPeriod,
   saveTransactionsForMonths,
+  type TransactionPeriodReplacement,
 } from "@mf-dashboard/db/repository/transactions";
-import type { CashFlowItem } from "@mf-dashboard/db/types";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { loginWithAuthState } from "./auth/login.js";
 import { hasAuthState } from "./auth/state.js";
@@ -26,7 +26,11 @@ import {
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
-import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
+import {
+  getHistoryMaxMonthsFromAnchor,
+  getHistoryMonth,
+  getHistoryMonthFromAnchor,
+} from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
 import { debug, error, info, log, phase, warn } from "./logger.js";
 import { sendFailureNotifications, sendSuccessNotifications } from "./notification.js";
@@ -180,8 +184,8 @@ export async function runScrapePhase(
   });
 
   info(`Scraped ${scrapeResult.groupDataList.length} groups`);
-  for (const groupData of scrapeResult.groupDataList) {
-    log(`  - ${groupData.group.name}${isNoGroup(groupData.group.id) ? " (no group)" : ""}`);
+  for (const [groupIndex, groupData] of scrapeResult.groupDataList.entries()) {
+    log(`  - Group ${groupIndex + 1}${isNoGroup(groupData.group.id) ? " (no group)" : ""}`);
   }
 
   return scrapeResult;
@@ -192,7 +196,7 @@ export async function runSavePhase(
   page: Page,
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
-  historyMonths: Array<{ items: CashFlowItem[]; month: string }> = [],
+  historyMonths: TransactionPeriodReplacement[] = [],
   cleanupGroupIds?: string[],
   institutionCategories?: ReadonlyMap<string, string>,
 ): Promise<number[]> {
@@ -201,9 +205,9 @@ export async function runSavePhase(
   let fullData: ReturnType<typeof buildScrapedData> | undefined;
 
   if (noGroupData) {
-    info(`Saving full data for ${noGroupData.group.name}`);
+    info("Saving full data for no-group view");
     let globalData = scrapeResult.globalData;
-    if (categoryDecision.config) {
+    if (categoryDecision.config && historyMonths.length === 0) {
       await switchGroup(page, NO_GROUP_ID);
       globalData = {
         ...globalData,
@@ -218,7 +222,7 @@ export async function runSavePhase(
     }
 
     fullData = buildScrapedData(globalData, noGroupData);
-    debug("Scraped data:", JSON.stringify(fullData, null, 2));
+    debug("Full scraped data prepared");
   } else {
     warn("No no-group data found; skipped full data save");
   }
@@ -227,8 +231,8 @@ export async function runSavePhase(
     (groupData) => !isNoGroup(groupData.group.id),
   );
 
-  const groupOnlyScrapedData = groupOnlyData.map((groupData) => {
-    info(`Saving group-only data for ${groupData.group.name}`);
+  const groupOnlyScrapedData = groupOnlyData.map((groupData, groupIndex) => {
+    info(`Saving group-only data for group ${groupIndex + 1}`);
     return buildGroupOnlyScrapedData(groupData);
   });
 
@@ -253,39 +257,38 @@ export async function runInstitutionCategoryPhase(page: Page): Promise<Map<strin
 export async function runCashFlowHistoryPhase(
   db: Db,
   page: Page,
-  config: Pick<CrawlerConfig, "isHistoryMode">,
+  config: Pick<CrawlerConfig, "isHistoryMode"> & { activeAccountingMonth?: string },
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
-  publishHistory: (
-    months: Array<{ items: CashFlowItem[]; month: string }>,
-  ) => Promise<number[]> = async (months) => {
+  publishHistory: (months: TransactionPeriodReplacement[]) => Promise<number[]> = async (
+    months,
+  ) => {
     const accountIdMap = await buildAccountIdMap(db);
     return saveTransactionsForMonths(db, months, accountIdMap);
   },
 ): Promise<void> {
   phase("Cash Flow History");
 
-  if (!config.isHistoryMode) {
-    log("Skipping cash flow history (SCRAPE_MODE is not history)");
-    await publishHistory([]);
-    return;
-  }
-
   const now = new Date();
-  const maxMonths = getHistoryMaxMonths(now);
+  const activeAccountingMonth = config.activeAccountingMonth ?? getHistoryMonth(now, 0);
+  const maxMonths = getHistoryMaxMonthsFromAnchor(activeAccountingMonth);
 
-  let monthsToFetch = 1;
-  for (let i = 1; i < maxMonths; i++) {
-    const month = getHistoryMonth(now, i);
-    if (!(await hasTransactionsForMonth(db, month))) {
-      monthsToFetch = i + 1;
+  // Always refresh the current and previous periods so transactions posted late by an
+  // institution are incorporated. History mode extends that window to the oldest gap.
+  let monthsToFetch = Math.min(2, maxMonths);
+  if (config.isHistoryMode) {
+    for (let i = 2; i < maxMonths; i++) {
+      const month = getHistoryMonthFromAnchor(activeAccountingMonth, i);
+      if (!(await hasCashFlowPeriod(db, month))) {
+        monthsToFetch = i + 1;
+      }
     }
   }
 
   info(`Fetching ${monthsToFetch} months`);
 
   const monthSteps = new Map<string, string>();
-  const setupMonth = getHistoryMonth(now, 0);
+  const setupMonth = activeAccountingMonth;
   let setupStepId: string | null = null;
   if (progress) {
     setupStepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month: setupMonth });
@@ -336,11 +339,7 @@ export async function runCashFlowHistoryPhase(
       },
     });
 
-    const preparedMonths: Array<{
-      items: CashFlowItem[];
-      month: string;
-      stepId?: string;
-    }> = [];
+    const preparedMonths: Array<TransactionPeriodReplacement & { stepId?: string }> = [];
     for (const { month, progressMonth = month, data: monthData } of historyResults) {
       let stepId = monthSteps.get(progressMonth);
       if (progress && !stepId) {
@@ -358,6 +357,11 @@ export async function runCashFlowHistoryPhase(
           })
         : monthData;
       preparedMonths.push({
+        dateRange:
+          categorizedMonthData.periodStart && categorizedMonthData.periodEnd
+            ? { from: categorizedMonthData.periodStart, to: categorizedMonthData.periodEnd }
+            : undefined,
+        isComplete: categorizedMonthData.isComplete,
         items: categorizedMonthData.items,
         month,
         stepId,
@@ -365,7 +369,12 @@ export async function runCashFlowHistoryPhase(
     }
 
     const savedCounts = await publishHistory(
-      preparedMonths.map(({ items, month }) => ({ items, month })),
+      preparedMonths.map(({ dateRange, isComplete, items, month }) => ({
+        dateRange,
+        isComplete,
+        items,
+        month,
+      })),
     );
     for (const [index, { month, stepId }] of preparedMonths.entries()) {
       log(`  ${month}: saved ${savedCounts[index] ?? 0} transactions`);
@@ -386,13 +395,14 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
   }
 
   const results = await Promise.all(
-    groupDataList.map(async (groupData) => {
-      info(`Running financial analysis for ${groupData.group.name}`);
+    groupDataList.map(async (groupData, groupIndex) => {
+      const groupLabel = `group ${groupIndex + 1}`;
+      info(`Running financial analysis for ${groupLabel}`);
       const report = await analyzeFinancialData(db, groupData.group.id);
       if (report) {
-        info(`Analysis completed and saved for ${groupData.group.name}`);
+        info(`Analysis completed and saved for ${groupLabel}`);
       } else {
-        log(`No changes detected, skipped analysis for ${groupData.group.name}`);
+        log(`No changes detected, skipped analysis for ${groupLabel}`);
       }
       return report;
     }),

@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   },
   trailingSlash: true,
   reactCompiler: true,
+  experimental: {
+    useTypeScriptCli: true,
+  },
 };
 
 export default nextConfig;

@@ -7,10 +7,18 @@ import { getJstYearMonthKey, parseYearMonthKey, shiftYearMonthKey } from "@mf-da
  * Money Forward dates are handled in Japan time even when CI runs in UTC.
  */
 export function getHistoryMonth(now: Date, monthsAgo: number): string {
-  return shiftYearMonthKey(getJstYearMonthKey(now), -monthsAgo);
+  return getHistoryMonthFromAnchor(getJstYearMonthKey(now), monthsAgo);
 }
 
 export function getHistoryMaxMonths(now: Date): number {
-  const { month } = parseYearMonthKey(getJstYearMonthKey(now));
+  return getHistoryMaxMonthsFromAnchor(getJstYearMonthKey(now));
+}
+
+export function getHistoryMonthFromAnchor(anchorMonth: string, monthsAgo: number): string {
+  return shiftYearMonthKey(anchorMonth, -monthsAgo);
+}
+
+export function getHistoryMaxMonthsFromAnchor(anchorMonth: string): number {
+  const { month } = parseYearMonthKey(anchorMonth);
   return month + 12;
 }

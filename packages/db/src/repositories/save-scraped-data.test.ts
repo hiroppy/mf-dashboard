@@ -44,6 +44,7 @@ function createScrapedData(): ScrapedData {
     items: [],
     cashFlow: {
       month: "2026-07",
+      isComplete: true,
       totalIncome: 0,
       totalExpense: 0,
       balance: 0,
@@ -231,6 +232,30 @@ describe("normalizePortfolioCategories", () => {
 });
 
 describe("saveScrapedData", () => {
+  test("空の当月取得結果で同月の既存トランザクションを削除する", async () => {
+    const populatedData = createScrapedData();
+    populatedData.cashFlow.items = [
+      {
+        mfId: "transaction-a",
+        date: "2026-07-01",
+        category: "Category A",
+        subCategory: null,
+        description: "Transaction A",
+        amount: 1_000,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      },
+    ];
+    await saveScrapedData(db, populatedData);
+    expect(await db.select().from(schema.transactions).all()).toHaveLength(1);
+
+    const emptyData = createScrapedData();
+    await saveScrapedData(db, emptyData);
+
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+  });
+
   test("ポートフォリオの全詳細フィールドを保持して保存する", async () => {
     const data = createScrapedData();
 

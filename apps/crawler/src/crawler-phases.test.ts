@@ -4,7 +4,7 @@ import path from "node:path";
 import { buildAccountIdMap } from "@mf-dashboard/db/repository/accounts";
 import { saveScrapedDataBatch } from "@mf-dashboard/db/repository/save-scraped-data";
 import {
-  hasTransactionsForMonth,
+  hasCashFlowPeriod,
   saveTransactionsForMonths,
 } from "@mf-dashboard/db/repository/transactions";
 import type { CashFlowSummary } from "@mf-dashboard/db/types";
@@ -20,6 +20,7 @@ import {
 } from "./crawler-phases.js";
 import { createCrawlerProgressReporter } from "./crawler-progress.js";
 import { buildGroupOnlyScrapedData, buildScrapedData } from "./data-builder.js";
+import { getHistoryMaxMonths } from "./history-months.js";
 import type { ScrapeResult } from "./scraper.js";
 import { scrapeCashFlowHistory } from "./scrapers/cash-flow-history.js";
 import { switchGroup } from "./scrapers/group.js";
@@ -44,7 +45,7 @@ vi.mock("@mf-dashboard/db/repository/save-scraped-data", () => ({
 }));
 
 vi.mock("@mf-dashboard/db/repository/transactions", () => ({
-  hasTransactionsForMonth: vi.fn<() => Promise<boolean>>(),
+  hasCashFlowPeriod: vi.fn<() => Promise<boolean>>(),
   saveTransactionsForMonths: vi.fn<() => Promise<number[]>>(),
 }));
 
@@ -145,7 +146,7 @@ beforeEach(() => {
   vi.mocked(buildAccountIdMap).mockReset();
   vi.mocked(saveScrapedDataBatch).mockReset();
   vi.mocked(saveScrapedDataBatch).mockResolvedValue([]);
-  vi.mocked(hasTransactionsForMonth).mockReset();
+  vi.mocked(hasCashFlowPeriod).mockReset();
   vi.mocked(saveTransactionsForMonths).mockReset();
   vi.mocked(saveTransactionsForMonths).mockResolvedValue([]);
   vi.mocked(scrapeCashFlowHistory).mockReset();
@@ -278,9 +279,86 @@ describe("runSavePhase", () => {
       institutionCategories: undefined,
     });
   });
+
+  test("履歴側で分類済みの場合は当月cash flowを二重分類しない", async () => {
+    const originalCashFlow = cashFlow("2026-06", "Service A");
+
+    await runSavePhase(
+      {} as Parameters<typeof runSavePhase>[0],
+      {} as Parameters<typeof runSavePhase>[1],
+      scrapeResult(originalCashFlow),
+      categoryDecisionRuntime(),
+      [{ items: originalCashFlow.items, month: originalCashFlow.month }],
+    );
+
+    expect(categorizeCashFlowMonth).not.toHaveBeenCalled();
+    expect(buildScrapedData).toHaveBeenCalledWith(
+      expect.objectContaining({ cashFlow: originalCashFlow }),
+      expect.anything(),
+    );
+  });
 });
 
 describe("runCashFlowHistoryPhase", () => {
+  test("month modeでも遅延反映を取り込むため当月と直前期間を再取得する", async () => {
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+    const publishHistory = vi.fn<() => Promise<number[]>>().mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase(
+      {} as Parameters<typeof runCashFlowHistoryPhase>[0],
+      {} as Parameters<typeof runCashFlowHistoryPhase>[1],
+      { isHistoryMode: false },
+      undefined,
+      undefined,
+      publishHistory,
+    );
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith(expect.anything(), 2, expect.anything());
+    expect(hasCashFlowPeriod).not.toHaveBeenCalled();
+    expect(publishHistory).toHaveBeenCalledWith([]);
+  });
+
+  test("history modeで既存期間が揃っていても当月と直前期間を再取得する", async () => {
+    vi.mocked(hasCashFlowPeriod).mockResolvedValue(true);
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: true });
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 2, expect.any(Object));
+  });
+
+  test("締め日後は現在の会計期間月を起点に未取得期間を探す", async () => {
+    vi.mocked(hasCashFlowPeriod).mockImplementation(async (_db, month) => month !== "2026-07");
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, {
+      isHistoryMode: true,
+      activeAccountingMonth: "2026-09",
+    });
+
+    expect(hasCashFlowPeriod).toHaveBeenCalledWith({}, "2026-07");
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 3, expect.any(Object));
+  });
+
+  test("history modeでは未取得の最古会計期間まで取得する", async () => {
+    const now = new Date("2026-08-31T14:59:59.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    vi.mocked(hasCashFlowPeriod).mockResolvedValue(false);
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    try {
+      await runCashFlowHistoryPhase({} as never, {} as never, { isHistoryMode: true });
+      expect(scrapeCashFlowHistory).toHaveBeenCalledWith(
+        {},
+        getHistoryMaxMonths(now),
+        expect.any(Object),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("初期 navigation 失敗を対象月 step に記録する", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "crawler-history-setup-failure-"));
     try {
@@ -290,7 +368,7 @@ describe("runCashFlowHistoryPhase", () => {
         startedAt: "2026-07-01T00:00:00.000Z",
       });
       vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
-      vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+      vi.mocked(hasCashFlowPeriod).mockResolvedValue(true);
       vi.mocked(switchGroup).mockRejectedValueOnce(new Error("navigation failed"));
 
       await expect(
@@ -329,7 +407,7 @@ describe("runCashFlowHistoryPhase", () => {
       });
       const monthData = cashFlow("2026-05", "Service A");
       vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
-      vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+      vi.mocked(hasCashFlowPeriod).mockResolvedValue(true);
       vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
         await callbacks?.onMonthStart?.("2026-06");
         return [{ month: "2026-05", progressMonth: "2026-06", data: monthData }];
@@ -366,7 +444,7 @@ describe("runCashFlowHistoryPhase", () => {
         startedAt: "2026-07-01T00:00:00.000Z",
       });
       vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
-      vi.mocked(hasTransactionsForMonth).mockResolvedValue(false);
+      vi.mocked(hasCashFlowPeriod).mockResolvedValue(false);
       vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
         await callbacks?.onMonthStart?.("2026-06");
         await callbacks?.onMonthComplete?.("2026-06");
@@ -413,7 +491,7 @@ describe("runCashFlowHistoryPhase", () => {
         startedAt: "2026-07-01T00:00:00.000Z",
       });
       vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
-      vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+      vi.mocked(hasCashFlowPeriod).mockResolvedValue(true);
       vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
         await callbacks?.onMonthStart?.("2026-06");
         return [{ month: "2026-06", data: monthData }];
@@ -454,7 +532,7 @@ describe("runCashFlowHistoryPhase", () => {
         startedAt: "2026-07-01T00:00:00.000Z",
       });
       vi.mocked(buildAccountIdMap).mockResolvedValue(new Map());
-      vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+      vi.mocked(hasCashFlowPeriod).mockResolvedValue(true);
       vi.mocked(scrapeCashFlowHistory).mockImplementation(async (_page, _months, callbacks) => {
         await callbacks?.onMonthStart?.("2026-06");
         await callbacks?.onMonthComplete?.("2026-06");
@@ -499,7 +577,7 @@ describe("runCashFlowHistoryPhase", () => {
     const accountIdMap = new Map([["account-a", 1]]);
     const categoryDecision = categoryDecisionRuntime();
     vi.mocked(buildAccountIdMap).mockResolvedValue(accountIdMap);
-    vi.mocked(hasTransactionsForMonth).mockResolvedValue(true);
+    vi.mocked(hasCashFlowPeriod).mockResolvedValue(true);
     vi.mocked(scrapeCashFlowHistory).mockResolvedValue([
       { month: "2026-06", data: originalCashFlow },
     ]);
