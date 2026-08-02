@@ -98,6 +98,7 @@ const DEFAULT_OPTIONS = {
 } satisfies Required<GenerateRecurringCandidatesOptions>;
 
 const MONTH_BOUNDARY_WINDOW_DAYS = 3;
+const MAX_GROUPS_PER_AMOUNT_BUCKET = 8;
 const GENERIC_DESCRIPTIONS = new Set(["payment", "振込", "支払", "支払い"]);
 
 function assertRatio(value: number, name: string): void {
@@ -183,11 +184,15 @@ function normalizeDescription(value: string | null | undefined): string {
       removeValidCalendarDate,
     )
     .replace(
+      /(^|[^0-9])((?:19|20)[0-9]{2})年(0?[1-9]|1[0-2])月(0?[1-9]|[12][0-9]|3[01])日(?=$|[^0-9])/gu,
+      removeValidCalendarDate,
+    )
+    .replace(
       /(^|[^a-z0-9])((?:19|20)[0-9]{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
       removeValidCalendarDate,
     )
     .replace(
-      /(?<![0-9])(?:(?:19|20)[0-9]{2}年)?(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
+      /(?:(?:19|20)[0-9]{2}年(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])|(?<![0-9年])(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?)(?![0-9])/gu,
       "",
     )
     .replace(
@@ -434,6 +439,7 @@ function getOptimizedGroups(
     partition,
     transaction,
     options.amountToleranceRatio,
+    Number.POSITIVE_INFINITY,
   )) {
     groups.add(group);
   }
@@ -443,6 +449,7 @@ function getOptimizedGroups(
     partition,
     transaction,
     options.amountToleranceRatio,
+    MAX_GROUPS_PER_AMOUNT_BUCKET,
   )) {
     groups.add(group);
   }
@@ -508,6 +515,7 @@ function getAmountIndexedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
   tolerance: number,
+  maxGroupsPerAmount: number,
 ): TransactionGroup[] {
   if (!groupsByDay || !amountKeysByDay) return [];
 
@@ -536,7 +544,9 @@ function getAmountIndexedGroups(
       ) {
         break;
       }
+      let inspectedGroups = 0;
       for (const group of groupsByAmount.get(amount) ?? []) {
+        if (inspectedGroups++ >= maxGroupsPerAmount) break;
         if (
           partition.latestMonths.get(group) !== transaction.month ||
           !conflictsWithPostingMonthSchedule(transaction, group.transactions)
@@ -674,6 +684,7 @@ function groupTransactions(
     if (existingGroup) {
       moveGroupToMonth(partition, existingGroup, transaction.month);
       existingGroup.transactions.push(transaction);
+      indexGroupAmount(partition, existingGroup, transaction);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), existingGroup);
       partition.exactRecurringSlots.set(exactRecurringSlotKey(transaction), existingGroup);
     } else {
@@ -837,6 +848,12 @@ function predictDay(
 ): number {
   const days = occurrences.map(({ day }) => day);
   if (days.every((day) => day === days[0])) return Math.min(days[0], targetMonthDays);
+  const fixedCalendarDay = Math.max(...days);
+  const isClippedFixedCalendarDay = occurrences.every((occurrence) => {
+    const { year, month } = parseIsoDateKey(occurrence.date);
+    return occurrence.day === Math.min(fixedCalendarDay, getDaysInMonth(year, month));
+  });
+  if (isClippedFixedCalendarDay) return Math.min(fixedCalendarDay, targetMonthDays);
   const allMonthEndSide = occurrences.every(
     (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
   );

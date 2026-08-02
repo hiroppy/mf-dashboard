@@ -237,6 +237,21 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
   });
 
+  it("normalizes valid Japanese full dates but preserves impossible dates", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-30", 50_000, "CARD 2026年6月30日"),
+        transaction("2026-07-31", 50_000, "CARD 2026年7月31日"),
+        transaction("2026-06-10", 20_000, "SERVICE 2026年2月30日"),
+        transaction("2026-07-10", 20_000, "SERVICE 2026年2月31日"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
+  });
+
   it("normalizes non-zero-padded Western billing months", () => {
     const result = generateRecurringCandidates(
       [
@@ -353,6 +368,19 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-28" });
+  });
+
+  it("restores a fixed calendar day after a shorter month clips it", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-30", 80_000, "家賃"),
+        transaction("2026-02-28", 80_000, "家賃"),
+        transaction("2026-03-30", 80_000, "家賃"),
+      ],
+      "2026-04",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high", predictedDate: "2026-04-30" });
   });
 
   it("groups stable calendar days when date drift is zero", () => {
@@ -750,6 +778,31 @@ describe("generateRecurringCandidates", () => {
         descriptionSimilarityThreshold: 0,
       }),
     ).toEqual([]);
+  });
+
+  it("bounds equal-amount buckets with many distinct descriptions", () => {
+    const history = Array.from({ length: 5_000 }, (_, index) => {
+      const identity = Array.from({ length: 4 }, (__, position) =>
+        String.fromCharCode(97 + (Math.floor(index / 26 ** position) % 26)),
+      ).join("");
+      return transaction("2026-07-10", 20_000, `${identity} merchant`);
+    });
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("updates amount indexes as an accepted group's amount drifts", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-10", 10_000, "Utilities"),
+        transaction("2026-06-10", 11_000, "Utilities"),
+        transaction("2026-07-10", 11_500, "Utilities"),
+      ],
+      "2026-08",
+      { descriptionSimilarityThreshold: 0 },
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 3 } });
   });
 
   it("preserves boundaries between stable numeric tokens", () => {
