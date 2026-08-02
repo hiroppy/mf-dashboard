@@ -12,7 +12,7 @@ function transaction(
   amount: number,
   description: string,
   type: "income" | "expense" = "expense",
-  accountId = accountA,
+  accountId: string | number = accountA,
 ): RecurringTransaction {
   return { accountId, date, amount, description, type };
 }
@@ -22,10 +22,12 @@ describe("classifyRecurringTransaction", () => {
     ["カード利用代金", "card"],
     ["家賃", "rent"],
     ["住宅ローン返済", "loan"],
+    ["カードローン返済", "loan"],
     ["給与振込", "salary"],
     ["役員報酬", "executive_compensation"],
     ["Executive compensation", "executive_compensation"],
     ["所得税 予定納税", "tax"],
+    ["税・社会保障 / 所得税・住民税", "tax"],
     ["Tax payment", "tax"],
     ["定期支払", "other"],
   ] as const)("classifies %s as %s", (description, expected) => {
@@ -243,6 +245,20 @@ describe("generateRecurringCandidates", () => {
 
     expect(result).toHaveLength(3);
     expect(result.map(({ accountId }) => accountId)).toEqual([accountA, "account-b", accountA]);
+  });
+
+  it("orders numeric and string account IDs independently of input order", () => {
+    const history = [
+      transaction("2026-06-05", 80_000, "家賃", "expense", 1),
+      transaction("2026-07-05", 80_000, "家賃", "expense", 1),
+      transaction("2026-06-05", 80_000, "家賃", "expense", "1"),
+      transaction("2026-07-05", 80_000, "家賃", "expense", "1"),
+    ];
+
+    const accountIds = (transactions: RecurringTransaction[]) =>
+      generateRecurringCandidates(transactions, "2026-08").map(({ accountId }) => accountId);
+    expect(accountIds(history)).toEqual([1, "1"]);
+    expect(accountIds([...history].reverse())).toEqual([1, "1"]);
   });
 
   it("does not merge card payments distinguished by stable numeric identifiers", () => {

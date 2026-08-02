@@ -128,10 +128,14 @@ const classificationRules: ReadonlyArray<{
     english: ["executive compensation"],
   },
   { classification: "salary", japanese: ["給与", "給料"], english: ["salary", "payroll"] },
-  { classification: "card", japanese: ["カード"], english: ["card"] },
   { classification: "rent", japanese: ["家賃", "賃料"], english: ["rent"] },
   { classification: "loan", japanese: ["ローン", "返済"], english: ["loan"] },
-  { classification: "tax", japanese: ["予定納税", "税金", "納税"], english: ["tax"] },
+  { classification: "card", japanese: ["カード"], english: ["card"] },
+  {
+    classification: "tax",
+    japanese: ["予定納税", "税金", "納税", "税・社会保障", "所得税", "住民税"],
+    english: ["tax"],
+  },
 ];
 
 function normalizeCaseAndWidth(value: string | null | undefined): string {
@@ -282,10 +286,14 @@ function compareTextKeys(keys: Array<[string, string]>): number {
   return 0;
 }
 
+function accountIdKey(accountId: string | number): string {
+  return `${typeof accountId}:${accountId}`;
+}
+
 function compareCandidates(left: RecurringCandidate, right: RecurringCandidate): number {
   const textResult = compareTextKeys([
     [left.predictedDate, right.predictedDate],
-    [String(left.accountId), String(right.accountId)],
+    [accountIdKey(left.accountId), accountIdKey(right.accountId)],
     [left.description ?? "", right.description ?? ""],
     [left.type, right.type],
     [left.classification, right.classification],
@@ -306,7 +314,7 @@ function compareCandidates(left: RecurringCandidate, right: RecurringCandidate):
 function compareTransactions(left: NormalizedTransaction, right: NormalizedTransaction): number {
   const textResult = compareTextKeys([
     [left.date, right.date],
-    [String(left.accountId), String(right.accountId)],
+    [accountIdKey(left.accountId), accountIdKey(right.accountId)],
     [left.type, right.type],
     [left.classification, right.classification],
     [left.normalizedDescription, right.normalizedDescription],
