@@ -12,7 +12,8 @@ import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "../../src/data-builder.js";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { scrapeAllGroups } from "../../src/scraper.js";
-import { isNoGroup, createGroupScope } from "../../src/scrapers/group.js";
+import { isNoGroup } from "../../src/scrapers/group.js";
+import { createAnonymousGroupScope } from "./group-state.js";
 import {
   gotoHome,
   launchLoggedInContext,
@@ -42,7 +43,7 @@ beforeAll(async () => {
     await saveScreenshot(page, "db-save-groups-test-before-scrape.png");
 
     return withErrorScreenshot(page, "db-save-groups-test-error.png", async () => {
-      await using _scope = await createGroupScope(page);
+      await using _scope = await createAnonymousGroupScope(page);
 
       const progress = await createCrawlerProgressReporter(PROGRESS_STATE_PATH, {
         id: randomUUID(),

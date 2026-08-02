@@ -1,11 +1,12 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { createGroupScope, NO_GROUP_ID, switchGroup } from "../../src/scrapers/group.js";
+import { NO_GROUP_ID } from "../../src/scrapers/group.js";
 import { scrapeInstitutionCategories } from "../../src/scrapers/institution-categories.js";
 import { selectManualHoldingAccounts } from "../../src/scrapers/manual-holding-accounts.js";
 import { PNS_CORE_COLUMN_COUNT, selectLinkedPnsAccounts } from "../../src/scrapers/portfolio.js";
 import { getRegisteredAccounts } from "../../src/scrapers/registered-accounts.js";
+import { createAnonymousGroupScope, switchGroupAnonymously } from "./group-state.js";
 import { launchLoggedInContext, withNewPage } from "./helpers.js";
 
 const PORTFOLIO_TABLE_SELECTOR =
@@ -14,7 +15,7 @@ const PORTFOLIO_TABLE_SELECTOR =
 let browser: Browser;
 let context: BrowserContext;
 let groupScopePage: Page;
-let groupScope: Awaited<ReturnType<typeof createGroupScope>>;
+let groupScope: AsyncDisposable;
 
 async function gotoPortfolio(page: Page): Promise<void> {
   await page.goto(mfUrls.portfolio, { waitUntil: "domcontentloaded" });
@@ -27,8 +28,8 @@ async function gotoPortfolio(page: Page): Promise<void> {
 beforeAll(async () => {
   ({ browser, context } = await launchLoggedInContext());
   groupScopePage = await context.newPage();
-  groupScope = await createGroupScope(groupScopePage);
-  await switchGroup(groupScopePage, NO_GROUP_ID);
+  groupScope = await createAnonymousGroupScope(groupScopePage);
+  await switchGroupAnonymously(groupScopePage, NO_GROUP_ID);
 });
 
 afterAll(async () => {

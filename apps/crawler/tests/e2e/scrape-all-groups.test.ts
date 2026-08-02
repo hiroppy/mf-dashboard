@@ -7,7 +7,8 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { scrapeAllGroups } from "../../src/scraper.js";
-import { isNoGroup, createGroupScope } from "../../src/scrapers/group.js";
+import { isNoGroup } from "../../src/scrapers/group.js";
+import { createAnonymousGroupScope } from "./group-state.js";
 import {
   gotoHome,
   launchLoggedInContext,
@@ -28,7 +29,7 @@ beforeAll(async () => {
     await saveScreenshot(page, "scrape-all-groups-test-before-scrape.png");
 
     return withErrorScreenshot(page, "scrape-all-groups-test-error.png", async () => {
-      await using _scope = await createGroupScope(page);
+      await using _scope = await createAnonymousGroupScope(page);
       const progress = await createCrawlerProgressReporter(progressStatePath, {
         id: randomUUID(),
         source: "e2e",
