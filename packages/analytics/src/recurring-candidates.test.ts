@@ -206,6 +206,20 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-10" });
   });
 
+  it("preserves Japanese identifiers with implausible years", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 40_000, "CARD 1234年5月"),
+        transaction("2026-07-05", 40_000, "CARD 1234年5月"),
+        transaction("2026-06-05", 40_000, "CARD 9876年5月"),
+        transaction("2026-07-05", 40_000, "CARD 9876年5月"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
   it("clips a month-end prediction to the target month's last day", () => {
     const result = generateRecurringCandidates(
       [
@@ -405,6 +419,23 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("preserves repeated ordinary schedules within each month", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-01-12", 20_000, "SERVICE PLAN"),
+        transaction("2026-02-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-02-12", 20_000, "SERVICE PLAN"),
+        transaction("2026-03-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-03-12", 20_000, "SERVICE PLAN"),
+      ],
+      "2026-04",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-04-10", "2026-04-12"]);
+  });
+
   it("weights each month once when grouping around the median day", () => {
     const result = generateRecurringCandidates(
       [
@@ -526,6 +557,21 @@ describe("generateRecurringCandidates", () => {
         transaction("2026-07-05", 40_000, "EXAMPLE MEMBERSHIP CARD 2"),
       ],
       "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+  });
+
+  it("requires exact identity at the maximum description threshold", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 40_000, "CARD ABACA"),
+        transaction("2026-07-05", 40_000, "CARD ABACA"),
+        transaction("2026-06-05", 40_000, "CARD ACABA"),
+        transaction("2026-07-05", 40_000, "CARD ACABA"),
+      ],
+      "2026-08",
+      { descriptionSimilarityThreshold: 1 },
     );
 
     expect(result).toHaveLength(2);

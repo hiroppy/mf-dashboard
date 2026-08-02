@@ -159,7 +159,7 @@ function containsEnglishTerm(text: string, term: string): boolean {
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
     .replace(
-      /(?<![0-9])(?:[0-9]{4}年)?(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
+      /(?<![0-9])(?:(?:19|20)[0-9]{2}年)?(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
       "",
     )
     .replace(
@@ -209,7 +209,8 @@ function calculateDescriptionSimilarity(left: string, right: string): number {
   for (const bigram of leftBigrams) {
     if (rightBigrams.has(bigram)) overlap++;
   }
-  return (2 * overlap) / (leftBigrams.size + rightBigrams.size);
+  const similarity = (2 * overlap) / (leftBigrams.size + rightBigrams.size);
+  return similarity === 1 ? 1 - Number.EPSILON : similarity;
 }
 
 function haveMatchingNumericTokens(left: string, right: string): boolean {
@@ -271,6 +272,22 @@ function conflictsWithBoundaryOccurrence(
   });
 }
 
+function conflictsWithPostingMonthSchedule(
+  transaction: NormalizedTransaction,
+  transactions: NormalizedTransaction[],
+): boolean {
+  return transactions.some((existing) => {
+    if (existing.month !== transaction.month || existing.day === transaction.day) return false;
+    const existingPosition = boundaryPosition(existing);
+    const transactionPosition = boundaryPosition(transaction);
+    return !(
+      existingPosition &&
+      transactionPosition &&
+      existingPosition.occurrenceMonth !== transactionPosition.occurrenceMonth
+    );
+  });
+}
+
 function normalizeGroupingText(transaction: RecurringTransaction): string {
   const description = normalizeDescription(transaction.description);
   const normalizeCategoryPart = (value: string | null | undefined) =>
@@ -305,6 +322,7 @@ function getGroupMatchScore(
     return null;
   }
   if (conflictsWithBoundaryOccurrence(transaction, group.transactions)) return null;
+  if (conflictsWithPostingMonthSchedule(transaction, group.transactions)) return null;
 
   const dayDistances = monthlyTransactions.map((existing) =>
     calendarDayDistance(transaction, existing),
