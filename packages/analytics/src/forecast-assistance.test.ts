@@ -96,6 +96,36 @@ describe("assistForecastCandidate", () => {
     );
   });
 
+  test("LLMが給与へ補強した場合は休日ズレ候補を再計算する", async () => {
+    const unclassifiedCandidate = {
+      ...salaryCandidate,
+      matchedSignals: [],
+    };
+    const llmDecider = vi.fn<ForecastLLMDecider>().mockResolvedValue({
+      candidateId: "candidate-a",
+      classification: "salary",
+      confidence: 0.8,
+      reason: "出現日と金額帯から給与候補と判断しました。",
+      dateAdjustment: "next_business_day",
+    });
+
+    const result = await assistForecastCandidate(unclassifiedCandidate, llmDecider);
+
+    expect(llmDecider).toHaveBeenCalledWith(
+      unclassifiedCandidate,
+      expect.arrayContaining([
+        { date: "2026-10-23", adjustment: "previous_business_day" },
+        { date: "2026-10-26", adjustment: "next_business_day" },
+      ]),
+    );
+    expect(result.classification).toMatchObject({ label: "salary", source: "llm" });
+    expect(result.dateCandidates).toEqual([
+      { date: "2026-10-23", adjustment: "previous_business_day" },
+      { date: "2026-10-26", adjustment: "next_business_day" },
+    ]);
+    expect(result.suggestedDateAdjustment).toBe("next_business_day");
+  });
+
   test("直近1回のみの新規大口入金を要確認として説明する", async () => {
     const result = await assistForecastCandidate(
       {

@@ -156,6 +156,23 @@ function createDateCandidates(
   return getBusinessDayShiftCandidates(candidate.nominalDate, candidate.nonBusinessDates);
 }
 
+function createLLMDateCandidates(
+  candidate: ForecastCandidateFeatures,
+  ruleClassification: ForecastClassification,
+): ForecastDateCandidate[] {
+  const ruleCandidates = createDateCandidates(candidate, ruleClassification);
+  if (ruleClassification === "salary") return ruleCandidates;
+
+  const salaryCandidates = createDateCandidates(candidate, "salary");
+  return [
+    ...ruleCandidates,
+    ...salaryCandidates.filter(
+      ({ adjustment }) =>
+        !ruleCandidates.some((dateCandidate) => dateCandidate.adjustment === adjustment),
+    ),
+  ];
+}
+
 function isValidLLMDecision(
   decision: ForecastLLMDecision,
   candidate: ForecastCandidateFeatures,
@@ -165,7 +182,14 @@ function isValidLLMDecision(
   if (decision.classification === "other" || decision.confidence < minimumLLMConfidence) {
     return false;
   }
-  return dateCandidates.some(({ adjustment }) => adjustment === decision.dateAdjustment);
+  const adjustmentWasOffered = dateCandidates.some(
+    ({ adjustment }) => adjustment === decision.dateAdjustment,
+  );
+  const adjustmentMatchesClassification = createDateCandidates(
+    candidate,
+    decision.classification,
+  ).some(({ adjustment }) => adjustment === decision.dateAdjustment);
+  return adjustmentWasOffered && adjustmentMatchesClassification;
 }
 
 export async function generateForecastAssistanceWithLLM(
@@ -208,18 +232,21 @@ export async function assistForecastCandidate(
   llmDecider: ForecastLLMDecider = generateForecastAssistanceWithLLM,
 ): Promise<AssistedForecastCandidate> {
   const ruleClassification = createRuleClassification(candidate);
-  const dateCandidates = createDateCandidates(candidate, ruleClassification.label);
+  const llmDateCandidates = createLLMDateCandidates(candidate, ruleClassification.label);
 
   let llmDecision: ForecastLLMDecision | null = null;
   try {
-    llmDecision = await llmDecider(candidate, dateCandidates);
+    llmDecision = await llmDecider(candidate, llmDateCandidates);
   } catch {
     // The forecast must remain available when the optional LLM fails.
   }
 
-  if (llmDecision && !isValidLLMDecision(llmDecision, candidate, dateCandidates)) {
+  if (llmDecision && !isValidLLMDecision(llmDecision, candidate, llmDateCandidates)) {
     llmDecision = null;
   }
+
+  const classification = llmDecision?.classification ?? ruleClassification.label;
+  const dateCandidates = createDateCandidates(candidate, classification);
 
   const isNewLargeIncome =
     candidate.direction === "income" &&
