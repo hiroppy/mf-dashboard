@@ -180,8 +180,8 @@ export async function runScrapePhase(
   });
 
   info(`Scraped ${scrapeResult.groupDataList.length} groups`);
-  for (const [groupIndex, groupData] of scrapeResult.groupDataList.entries()) {
-    log(`  - Group ${groupIndex + 1}${isNoGroup(groupData.group.id) ? " (no group)" : ""}`);
+  for (const groupData of scrapeResult.groupDataList) {
+    log(`  - ${groupData.group.name}${isNoGroup(groupData.group.id) ? " (no group)" : ""}`);
   }
 
   return scrapeResult;
@@ -201,7 +201,7 @@ export async function runSavePhase(
   let fullData: ReturnType<typeof buildScrapedData> | undefined;
 
   if (noGroupData) {
-    info("Saving full data for no-group view");
+    info(`Saving full data for ${noGroupData.group.name}`);
     let globalData = scrapeResult.globalData;
     if (categoryDecision.config) {
       await switchGroup(page, NO_GROUP_ID);
@@ -218,7 +218,7 @@ export async function runSavePhase(
     }
 
     fullData = buildScrapedData(globalData, noGroupData);
-    debug("Full scraped data prepared");
+    debug("Scraped data:", JSON.stringify(fullData, null, 2));
   } else {
     warn("No no-group data found; skipped full data save");
   }
@@ -227,8 +227,8 @@ export async function runSavePhase(
     (groupData) => !isNoGroup(groupData.group.id),
   );
 
-  const groupOnlyScrapedData = groupOnlyData.map((groupData, groupIndex) => {
-    info(`Saving group-only data for group ${groupIndex + 1}`);
+  const groupOnlyScrapedData = groupOnlyData.map((groupData) => {
+    info(`Saving group-only data for ${groupData.group.name}`);
     return buildGroupOnlyScrapedData(groupData);
   });
 
@@ -257,11 +257,7 @@ export async function runCashFlowHistoryPhase(
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
   publishHistory: (
-    months: Array<{
-      dateRange?: { from: string; to: string };
-      items: CashFlowItem[];
-      month: string;
-    }>,
+    months: Array<{ items: CashFlowItem[]; month: string }>,
   ) => Promise<number[]> = async (months) => {
     const accountIdMap = await buildAccountIdMap(db);
     return saveTransactionsForMonths(db, months, accountIdMap);
@@ -341,7 +337,6 @@ export async function runCashFlowHistoryPhase(
     });
 
     const preparedMonths: Array<{
-      dateRange?: { from: string; to: string };
       items: CashFlowItem[];
       month: string;
       stepId?: string;
@@ -363,10 +358,6 @@ export async function runCashFlowHistoryPhase(
           })
         : monthData;
       preparedMonths.push({
-        dateRange:
-          categorizedMonthData.periodStart && categorizedMonthData.periodEnd
-            ? { from: categorizedMonthData.periodStart, to: categorizedMonthData.periodEnd }
-            : undefined,
         items: categorizedMonthData.items,
         month,
         stepId,
@@ -374,7 +365,7 @@ export async function runCashFlowHistoryPhase(
     }
 
     const savedCounts = await publishHistory(
-      preparedMonths.map(({ dateRange, items, month }) => ({ dateRange, items, month })),
+      preparedMonths.map(({ items, month }) => ({ items, month })),
     );
     for (const [index, { month, stepId }] of preparedMonths.entries()) {
       log(`  ${month}: saved ${savedCounts[index] ?? 0} transactions`);
@@ -395,14 +386,13 @@ export async function runAnalyticsPhase(db: Db, groupDataList: GroupData[]): Pro
   }
 
   const results = await Promise.all(
-    groupDataList.map(async (groupData, groupIndex) => {
-      const groupLabel = `group ${groupIndex + 1}`;
-      info(`Running financial analysis for ${groupLabel}`);
+    groupDataList.map(async (groupData) => {
+      info(`Running financial analysis for ${groupData.group.name}`);
       const report = await analyzeFinancialData(db, groupData.group.id);
       if (report) {
-        info(`Analysis completed and saved for ${groupLabel}`);
+        info(`Analysis completed and saved for ${groupData.group.name}`);
       } else {
-        log(`No changes detected, skipped analysis for ${groupLabel}`);
+        log(`No changes detected, skipped analysis for ${groupData.group.name}`);
       }
       return report;
     }),

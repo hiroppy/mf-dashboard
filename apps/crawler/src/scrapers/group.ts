@@ -11,24 +11,6 @@ const EXCLUDED_OPTION_IDS = ["create_group"];
 
 const GROUP_SELECTOR = 'select[name="group_id_hash"]';
 
-function sanitizeGroupSwitchError(error: unknown): Error {
-  const name = error instanceof Error ? error.name : "";
-  const message = error instanceof Error ? error.message : String(error);
-
-  if (name === "TimeoutError" || /timeout|timed out/i.test(message)) {
-    const sanitized = new Error("Group switch timed out");
-    sanitized.name = "TimeoutError";
-    return sanitized;
-  }
-  if (/net::ERR_|page\.goto|navigation/i.test(message)) {
-    return new Error("Group switch navigation failed");
-  }
-  if (/selector|locator|waiting for .* to be|not found|no element/i.test(message)) {
-    return new Error("Group selector not found");
-  }
-  return new Error("Group switch failed");
-}
-
 /** グループ選択なしかどうかを判定 */
 export function isNoGroup(groupId: string): boolean {
   return groupId === NO_GROUP_ID;
@@ -120,7 +102,7 @@ export async function getAllGroups(page: Page): Promise<Group[]> {
 
     // 「グループの追加・編集」などの特殊オプションを除外
     if (!isValidGroupOption(value)) {
-      debug("Skipping non-group option");
+      debug(`Skipping non-group option: ${text.trim()} (${value})`);
       continue;
     }
 
@@ -170,8 +152,8 @@ export async function getCurrentGroup(page: Page): Promise<Group | null> {
  * @returns 切り替え後のグループ情報
  */
 export async function switchGroup(page: Page, groupId: string): Promise<Group | null> {
-  const groupLabel = isNoGroup(groupId) ? "no group" : "selected group";
-  log(`Switching to ${groupLabel}`);
+  const groupName = isNoGroup(groupId) ? "グループ選択なし" : groupId;
+  log(`Switching to group: ${groupName}`);
 
   const groupSelect = await getGroupSelector(page);
   if (!groupSelect) {
@@ -185,25 +167,27 @@ export async function switchGroup(page: Page, groupId: string): Promise<Group | 
     return getCurrentGroup(page);
   }
 
-  try {
-    // グループを切り替え
-    await groupSelect.selectOption({ value: groupId });
+  // グループを切り替え
+  await groupSelect.selectOption({ value: groupId });
 
-    // ページ遷移またはリロードを待つ
-    await page.waitForLoadState("domcontentloaded");
-    // グループセレクタが更新されるまで待機
-    await page.locator(GROUP_SELECTOR).waitFor({ state: "visible", timeout: 5000 });
+  // ページ遷移またはリロードを待つ
+  await page.waitForLoadState("domcontentloaded");
+  // グループセレクタが更新されるまで待機
+  await page.locator('select[name="group_id_hash"]').waitFor({ state: "visible", timeout: 5000 });
 
-    // MoneyForwardはページ遷移で切り替わるので、新しいページでセレクタを確認
-    const newGroupSelect = await getGroupSelector(page, false);
-    if (!newGroupSelect || (await newGroupSelect.inputValue()) !== groupId) {
-      throw new Error("Group selector verification failed");
-    }
-  } catch (error) {
-    throw sanitizeGroupSwitchError(error);
+  // 切り替え完了の確認（alertやnotificationの表示を待つ）
+  // MoneyForwardはページ遷移で切り替わるので、新しいページでセレクタを確認
+  const newGroupSelect = await getGroupSelector(page, false);
+  if (!newGroupSelect) {
+    throw new Error("Group selector not found after switch");
   }
 
-  log(`Successfully switched to ${groupLabel}`);
+  const newValue = await newGroupSelect.inputValue();
+  if (newValue !== groupId) {
+    throw new Error(`Group switch failed: expected ${groupId}, got ${newValue}`);
+  }
+
+  log(`Successfully switched to group: ${groupName}`);
   return getCurrentGroup(page);
 }
 
@@ -226,13 +210,15 @@ export async function createGroupScope(
       const MAX_RETRIES = 2;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          log(`Restoring original group${attempt > 0 ? ` (retry ${attempt})` : ""}`);
+          log(
+            `Restoring original group: ${originalGroup.name}${attempt > 0 ? ` (retry ${attempt})` : ""}`,
+          );
           await switchGroup(page, originalGroup.id);
-          log("Successfully restored original group");
+          log(`Successfully restored group: ${originalGroup.name}`);
           return;
-        } catch (error) {
+        } catch (err) {
           if (attempt < MAX_RETRIES) {
-            warn(`Failed to restore group (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+            warn(`Failed to restore group (attempt ${attempt + 1}/${MAX_RETRIES + 1}):`, err);
             // ページ状態をリセットしてリトライ
             try {
               await page.goto(mfUrls.home, {
@@ -243,8 +229,7 @@ export async function createGroupScope(
               // ナビゲーション失敗は次のリトライで再試行
             }
           } else {
-            warn("Failed to restore original group after all retries");
-            throw sanitizeGroupSwitchError(error);
+            warn("Failed to restore original group after all retries:", err);
           }
         }
       }

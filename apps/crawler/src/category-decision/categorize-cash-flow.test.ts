@@ -4,6 +4,7 @@ import type { Page } from "playwright";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { getCsrfToken } from "../hooks/helpers.js";
 import { warn } from "../logger.js";
+import { scrapeCashFlowMonth } from "../scrapers/cash-flow-history.js";
 import { scrapeCategoryCandidates } from "../scrapers/category-candidates.js";
 import { applyCategoryDecisions } from "./apply.js";
 import { categorizeCashFlowMonth } from "./categorize-cash-flow.js";
@@ -24,6 +25,10 @@ vi.mock("../hooks/helpers.js", () => ({
 vi.mock("../logger.js", () => ({
   info: vi.fn<(...args: unknown[]) => void>(),
   warn: vi.fn<(...args: unknown[]) => void>(),
+}));
+
+vi.mock("../scrapers/cash-flow-history.js", () => ({
+  scrapeCashFlowMonth: vi.fn<() => Promise<CashFlowSummary>>(),
 }));
 
 vi.mock("../scrapers/category-candidates.js", () => ({
@@ -67,6 +72,7 @@ function item(mfId: string, description = "Service A"): CashFlowItem {
 describe("categorizeCashFlowMonth", () => {
   beforeEach(() => {
     vi.mocked(findExistingTransactionMfIds).mockReset();
+    vi.mocked(scrapeCashFlowMonth).mockReset();
     vi.mocked(scrapeCategoryCandidates).mockReset();
     vi.mocked(getCsrfToken).mockReset();
     vi.mocked(applyCategoryDecisions).mockReset();
@@ -84,10 +90,14 @@ describe("categorizeCashFlowMonth", () => {
     vi.mocked(getCsrfToken).mockResolvedValue("csrf");
   });
 
-  test("履歴取得済みの取引をそのままカテゴリ判定する", async () => {
+  test("再スクレイプ後の取引でDB既存mfIdを照合し直す", async () => {
     const db = {} as Parameters<typeof categorizeCashFlowMonth>[0]["db"];
-    const initialCashFlow = cashFlow("2026-06", [item("existing"), item("new")]);
-    vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set(["existing"]));
+    const initialCashFlow = cashFlow("2026-06", [item("initial-new")]);
+    const latestCashFlow = cashFlow("2026-06", [item("latest-existing"), item("latest-new")]);
+    vi.mocked(findExistingTransactionMfIds)
+      .mockResolvedValueOnce(new Set())
+      .mockResolvedValueOnce(new Set(["latest-existing"]));
+    vi.mocked(scrapeCashFlowMonth).mockResolvedValue(latestCashFlow);
     vi.mocked(applyCategoryDecisions).mockResolvedValue({
       appliedCount: 0,
       appliedDecisions: [],
@@ -101,21 +111,23 @@ describe("categorizeCashFlowMonth", () => {
       usage: { llmCallsUsed: 0 },
     });
 
-    expect(findExistingTransactionMfIds).toHaveBeenCalledOnce();
-    expect(findExistingTransactionMfIds).toHaveBeenCalledWith(db, ["existing", "new"]);
+    expect(findExistingTransactionMfIds).toHaveBeenNthCalledWith(2, db, [
+      "latest-existing",
+      "latest-new",
+    ]);
     expect(vi.mocked(applyCategoryDecisions).mock.calls[0]?.[0].decisions).toHaveLength(1);
     expect(
       vi.mocked(applyCategoryDecisions).mock.calls[0]?.[0].decisions[0]?.transaction.mfId,
-    ).toBe("new");
+    ).toBe("latest-new");
   });
 
-  test("カテゴリ反映後も元の月跨ぎ表示期間と取引集合を保持する", async () => {
-    const initialCashFlow = {
-      ...cashFlow("2026-08", [item("initial-new")]),
-      periodStart: "2026-07-26",
-      periodEnd: "2026-08-25",
-    };
+  test("カテゴリ反映後の再スクレイプ失敗時は反映カテゴリをローカル適用して返す", async () => {
+    const initialCashFlow = cashFlow("2026-06", [item("initial-new")]);
+    const latestCashFlow = cashFlow("2026-06", [item("latest-new")]);
     vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set());
+    vi.mocked(scrapeCashFlowMonth)
+      .mockResolvedValueOnce(latestCashFlow)
+      .mockRejectedValueOnce(new Error("final scrape failed"));
     vi.mocked(applyCategoryDecisions).mockImplementation(async ({ decisions }) => ({
       appliedCount: 1,
       appliedDecisions: decisions,
@@ -129,41 +141,24 @@ describe("categorizeCashFlowMonth", () => {
       usage: { llmCallsUsed: 0 },
     });
 
-    expect(result).toEqual({
-      ...initialCashFlow,
-      items: [{ ...initialCashFlow.items[0], category: "食費", subCategory: "食料品" }],
-    });
-  });
-
-  test("一部だけ反映できた場合は成功したカテゴリだけをローカル適用する", async () => {
-    const initialCashFlow = cashFlow("2026-06", [item("applied"), item("not-applied")]);
-    vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set());
-    vi.mocked(applyCategoryDecisions).mockImplementation(async ({ decisions }) => ({
-      appliedCount: 1,
-      appliedDecisions: decisions.slice(0, 1),
-    }));
-
-    const result = await categorizeCashFlowMonth({
-      page: {} as Page,
-      db: {} as Parameters<typeof categorizeCashFlowMonth>[0]["db"],
-      cashFlow: initialCashFlow,
-      config,
-      usage: { llmCallsUsed: 0 },
-    });
-
     expect(result.items).toEqual([
       {
-        ...initialCashFlow.items[0],
+        ...latestCashFlow.items[0],
         category: "食費",
         subCategory: "食料品",
       },
-      initialCashFlow.items[1],
     ]);
+    expect(warn).toHaveBeenCalledWith(
+      "Category decision failed for 2026-06; saving locally reflected categories (code: CATEGORY_DECISION_PIPELINE_FAILED).",
+    );
+    expect(JSON.stringify(vi.mocked(warn).mock.calls)).not.toContain("final scrape failed");
   });
 
-  test("カテゴリ反映前の失敗時は履歴取得済みの取引を返す", async () => {
+  test("再スクレイプ後かつカテゴリ反映前の失敗時は最新取引を返す", async () => {
     const initialCashFlow = cashFlow("2026-06", [item("initial-new")]);
+    const latestCashFlow = cashFlow("2026-06", [item("initial-new"), item("latest-new")]);
     vi.mocked(findExistingTransactionMfIds).mockResolvedValue(new Set());
+    vi.mocked(scrapeCashFlowMonth).mockResolvedValue(latestCashFlow);
     vi.mocked(scrapeCategoryCandidates).mockRejectedValue(new Error("candidate scrape failed"));
 
     const result = await categorizeCashFlowMonth({
@@ -174,9 +169,9 @@ describe("categorizeCashFlowMonth", () => {
       usage: { llmCallsUsed: 0 },
     });
 
-    expect(result).toBe(initialCashFlow);
+    expect(result).toBe(latestCashFlow);
     expect(warn).toHaveBeenCalledWith(
-      "Category decision failed for 2026-06; saving scraped cash flow (code: CATEGORY_DECISION_PIPELINE_FAILED).",
+      "Category decision failed for 2026-06; saving latest scraped cash flow (code: CATEGORY_DECISION_PIPELINE_FAILED).",
     );
     expect(JSON.stringify(vi.mocked(warn).mock.calls)).not.toContain("candidate scrape failed");
   });

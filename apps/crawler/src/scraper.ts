@@ -188,7 +188,7 @@ async function scrapeGroupData(page: Page, group: Group): Promise<GroupData> {
 
   // Asset Summary
   const summary = await getAssetSummary(page);
-  log("Asset summary scraped");
+  log(`Asset summary: ${summary.totalAssets}`);
 
   // Asset Items
   const items = await getAssetItems(page);
@@ -233,12 +233,12 @@ async function runPhase2(
   phase("Scrape: Group Data");
   const groupDataList: GroupData[] = [];
 
-  for (const [groupIndex, groupEntry] of groupsToProcess.entries()) {
+  for (const groupEntry of groupsToProcess) {
     const groupId = groupEntry.id;
     const groupName = groupEntry.name;
 
     const groupStep = await progress.startStep(CRAWLER_STEPS.groupData, { groupName });
-    log(`--- Group ${groupIndex + 1}${isNoGroup(groupId) ? " (no group)" : ""} ---`);
+    log(`--- ${groupName} ---`);
     const group: Group = {
       id: groupId,
       name: groupName,
@@ -282,7 +282,7 @@ export async function scrapeAllGroups(
     CRAWLER_STEPS.groupList,
     async () => {
       const defaultGroup = await getCurrentGroup(page);
-      log(defaultGroup ? "Default group state captured" : "No default group found");
+      log(`Default group: ${defaultGroup?.name ?? "none"}`);
 
       const allGroups = await getAllGroups(page);
       log(`Found ${allGroups.length} groups`);
