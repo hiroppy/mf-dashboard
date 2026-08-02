@@ -117,6 +117,7 @@ describe("cashFlow", () => {
   });
 
   test("取引があれば実在する mfId がある", () => {
+    expect(data.cashFlow.items.length).toBeGreaterThan(0);
     for (const item of data.cashFlow.items) {
       expect(Boolean(item.mfId) && !item.mfId.startsWith("unknown")).toBe(true);
     }

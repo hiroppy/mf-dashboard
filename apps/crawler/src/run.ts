@@ -23,6 +23,18 @@ import { error, info, warn } from "./logger.js";
 import { createGroupScope } from "./scrapers/group.js";
 import { notifyWebRefresh } from "./web-refresh.js";
 
+async function disposeGroupScope(
+  groupScope: Awaited<ReturnType<typeof createGroupScope>>,
+  crawlFailed: boolean,
+): Promise<void> {
+  try {
+    await groupScope[Symbol.asyncDispose]();
+  } catch (restoreError) {
+    if (!crawlFailed) throw restoreError;
+    warn("Group restoration also failed after the crawl had already failed");
+  }
+}
+
 export async function runCrawler(progress: CrawlerProgressReporter): Promise<void> {
   const config = runLoadPhase();
   let runtime: CrawlerRuntime | null = null;
@@ -39,8 +51,9 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
 
     let scrapeResult: Awaited<ReturnType<typeof runScrapePhase>>;
     let originalGroup: Awaited<ReturnType<typeof createGroupScope>>["originalGroup"];
-    {
-      await using groupScope = await createGroupScope(activeRuntime.page);
+    const groupScope = await createGroupScope(activeRuntime.page);
+    let crawlFailed = false;
+    try {
       originalGroup = groupScope.originalGroup;
       scrapeResult = await runScrapePhase(activeRuntime.page, config, progress);
       const cleanupResult = config.cleanupGroups
@@ -81,6 +94,11 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
       await runCrawlerStep(progress, CRAWLER_STEPS.analytics, () =>
         runAnalyticsPhase(activeRuntime.db, scrapeResult.groupDataList),
       );
+    } catch (err) {
+      crawlFailed = true;
+      throw err;
+    } finally {
+      await disposeGroupScope(groupScope, crawlFailed);
     }
     const notificationStep = await progress.startStep(CRAWLER_STEPS.notification);
     const notificationFailure = await runNotificationPhase(

@@ -23,40 +23,51 @@ export const SUMMARY_COLUMNS = { INCOME: 0, EXPENSE: 2, BALANCE: 4 } as const;
 
 const TEXT_TIMEOUT = 1000;
 const SUMMARY_TIMEOUT = 3000;
-const CASH_FLOW_TABLE_UPDATE_STATE = "__mfDashboardCashFlowTableUpdate";
+const CASH_FLOW_AJAX_STATE = "__mfDashboardCashFlowAjax";
 
-export async function waitForCashFlowTableReplacement(
+export async function waitForCashFlowFetchApplied(
   page: Page,
   navigate: () => Promise<void>,
 ): Promise<void> {
   await page.evaluate((stateKey) => {
-    const table = document.querySelector("#cf-detail-table");
-    if (!table) throw new Error("Cash flow detail table not found");
+    type AjaxSettings = { url?: string };
+    type AjaxHandler = (event: unknown, xhr: unknown, settings: AjaxSettings) => void;
+    type JQueryTarget = {
+      on: (eventName: string, handler: AjaxHandler) => void;
+      off: (eventName: string, handler: AjaxHandler) => void;
+    };
+    type JQueryFactory = (target: Document) => JQueryTarget;
 
-    const state = { updated: false, observer: null as MutationObserver | null };
-    state.observer = new MutationObserver((records) => {
-      if (records.some((record) => record.type === "childList")) {
-        state.updated = true;
-        state.observer?.disconnect();
+    const jquery = Reflect.get(window, "jQuery") as JQueryFactory | undefined;
+    if (!jquery) throw new Error("Cash flow AJAX lifecycle is unavailable");
+
+    const target = jquery(document);
+    const state = { completed: false, target, handler: null as AjaxHandler | null };
+    state.handler = (_event, _xhr, settings) => {
+      if (settings.url?.includes("/cf/fetch")) {
+        state.completed = true;
+        target.off("ajaxComplete.mfDashboardCashFlow", state.handler!);
       }
-    });
-    state.observer.observe(table, { childList: true, subtree: true });
+    };
+    target.on("ajaxComplete.mfDashboardCashFlow", state.handler);
     Reflect.set(window, stateKey, state);
-  }, CASH_FLOW_TABLE_UPDATE_STATE);
+  }, CASH_FLOW_AJAX_STATE);
 
   try {
     await navigate();
     await page.waitForFunction(
-      (stateKey) => Reflect.get(window, stateKey)?.updated === true,
-      CASH_FLOW_TABLE_UPDATE_STATE,
+      (stateKey) => Reflect.get(window, stateKey)?.completed === true,
+      CASH_FLOW_AJAX_STATE,
     );
   } finally {
     await page
       .evaluate((stateKey) => {
         const state = Reflect.get(window, stateKey);
-        state?.observer?.disconnect();
+        if (state?.handler) {
+          state.target.off("ajaxComplete.mfDashboardCashFlow", state.handler);
+        }
         Reflect.deleteProperty(window, stateKey);
-      }, CASH_FLOW_TABLE_UPDATE_STATE)
+      }, CASH_FLOW_AJAX_STATE)
       .catch(() => undefined);
   }
 }
@@ -352,7 +363,7 @@ export async function scrapeCashFlowHistory(
         // 月が変わるまで待機（CSV linkのURLパラメータで判定）
         // クリックで /cf/fetch が発火するため、取りこぼさないよう先にリスナーを登録し、
         // レスポンス到着後にCSV linkの月パラメータが変わったかを確認する
-        await waitForCashFlowTableReplacement(page, async () => {
+        await waitForCashFlowFetchApplied(page, async () => {
           const [fetchResponse] = await Promise.all([
             page.waitForResponse((res) => res.url().includes("/cf/fetch") && res.status() === 200),
             prevButton.click(),

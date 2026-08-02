@@ -1,7 +1,7 @@
 import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import type { Locator, Page, Response } from "playwright";
 import { describe, expect, test, vi } from "vitest";
-import { getCashFlow, parseCashFlowMonthHeader } from "./cash-flow.js";
+import { getCashFlow, parseCashFlowMonthCsvHref, parseCashFlowMonthHeader } from "./cash-flow.js";
 
 describe("parseCashFlowMonthHeader", () => {
   test.each([
@@ -20,8 +20,20 @@ describe("parseCashFlowMonthHeader", () => {
   );
 });
 
+describe("parseCashFlowMonthCsvHref", () => {
+  test.each([
+    [null, null],
+    ["/cf/csv?year=2026", null],
+    ["/cf/csv?year=2026&month=0", null],
+    ["/cf/csv?year=2026&month=13", null],
+    ["/cf/csv?year=2026&month=8", "2026-08"],
+  ])("%s を %s として解釈する", (href, expected) => {
+    expect(parseCashFlowMonthCsvHref(href)).toBe(expected);
+  });
+});
+
 describe("getCashFlow", () => {
-  test("当月取得レスポンスと取引DOMの置換を待ってから結果を返す", async () => {
+  test("当月取得AJAXのDOM適用完了を待ってから結果を返す", async () => {
     const currentMonth = getJstYearMonthKey();
     const [year, month] = currentMonth.split("-");
     const events: string[] = [];
@@ -77,12 +89,12 @@ describe("getCashFlow", () => {
     const evaluate = vi
       .fn<(callback: unknown, argument: string) => Promise<void>>()
       .mockImplementation(async () => {
-        events.push(evaluate.mock.calls.length === 1 ? "observer-installed" : "observer-cleaned");
+        events.push(evaluate.mock.calls.length === 1 ? "ajax-wait-installed" : "ajax-wait-cleaned");
       });
     const waitForFunction = vi
       .fn<(callback: unknown, argument: string) => Promise<void>>()
       .mockImplementation(async () => {
-        events.push(waitForFunction.mock.calls.length === 1 ? "table-updated" : "month-updated");
+        events.push(waitForFunction.mock.calls.length === 1 ? "ajax-applied" : "month-updated");
       });
     const locator = vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
       if (selector === "#cf-detail-table") return detailTable;
@@ -103,13 +115,13 @@ describe("getCashFlow", () => {
 
     await expect(getCashFlow(page)).resolves.toMatchObject({ month: currentMonth, items: [] });
     expect(waitForFunction.mock.calls.map((call) => call[1])).toEqual([
-      "__mfDashboardCashFlowTableUpdate",
+      "__mfDashboardCashFlowAjax",
       currentMonth,
     ]);
     expect(events).toEqual([
-      "observer-installed",
-      "table-updated",
-      "observer-cleaned",
+      "ajax-wait-installed",
+      "ajax-applied",
+      "ajax-wait-cleaned",
       "month-updated",
       "detail-read",
     ]);

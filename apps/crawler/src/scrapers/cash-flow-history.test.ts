@@ -1,6 +1,6 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
-import { chromium, type Browser, type Locator, type Page } from "playwright";
-import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import type { Locator, Page } from "playwright";
+import { describe, expect, test, vi } from "vitest";
 import {
   buildMonthRange,
   extractCashFlowFromPage,
@@ -22,44 +22,66 @@ describe("buildMonthRange", () => {
 });
 
 describe("scrapeCashFlowHistory", () => {
-  let browser: Browser;
-
-  beforeAll(async () => {
-    browser = await chromium.launch();
-  });
-
-  afterAll(async () => {
-    await browser.close();
-  });
-
   test("前月 navigation の失敗を対象月の callback に通知する", async () => {
-    const page = await browser.newPage();
-    page.setDefaultTimeout(500);
-    try {
-      // A read-only E2E cannot safely and deterministically force the service's
-      // previous-month navigation to fail, so this failure branch uses minimal HTML.
-      await page.route("https://moneyforward.com/cf**", async (route) => {
-        await route.fulfill({
-          contentType: "text/html",
-          body: `
-            <a href="/cf/csv?year=2026&month=7">CSV</a>
-            <button class="fc-button-prev">前月</button>
-            <table id="monthly_total_table_kakeibo"><tbody><tr>
-              <td>¥0</td><td></td><td>¥0</td><td></td><td>¥0</td>
-            </tr></tbody></table>
-            <table id="cf-detail-table" style="display: table; width: 1px; height: 1px">
-              <tbody></tbody>
-            </table>
-          `,
-        });
-      });
-      const onMonthFailure = vi.fn<(month: string, error: unknown) => void>();
+    const detailTable = {
+      waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as unknown as Locator;
+    let csvLink: Locator;
+    csvLink = {
+      first: vi.fn<() => Locator>(() => csvLink),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      getAttribute: vi
+        .fn<(name: string) => Promise<string | null>>()
+        .mockResolvedValue("/cf/csv?year=2026&month=7"),
+    } as unknown as Locator;
+    let monthHeader: Locator;
+    monthHeader = {
+      first: vi.fn<() => Locator>(() => monthHeader),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("2026年7月"),
+    } as unknown as Locator;
+    const amountCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("0"),
+    } as unknown as Locator;
+    const summaryCells = {
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(amountCell),
+    } as unknown as Locator;
+    const summaryRow = {
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(summaryCells),
+    } as unknown as Locator;
+    const summaryRows = {
+      first: vi.fn<() => Locator>().mockReturnValue(summaryRow),
+    } as unknown as Locator;
+    const detailRows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
+    let previousButton: Locator;
+    previousButton = {
+      first: vi.fn<() => Locator>(() => previousButton),
+      click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as unknown as Locator;
+    const page = {
+      goto: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+      evaluate: vi.fn<(callback: unknown, argument: string) => Promise<void>>().mockResolvedValue(),
+      locator: vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
+        if (selector === "#cf-detail-table") return detailTable;
+        if (selector === "a[href*='/cf/csv']") return csvLink;
+        if (selector === ".fc-header-title h2") return monthHeader;
+        if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
+        if (selector === "#cf-detail-table tbody > tr") return detailRows;
+        if (selector === "button.fc-button-prev, span.fc-button-prev") return previousButton;
+        return {
+          count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+        } as unknown as Locator;
+      }),
+      waitForResponse: vi
+        .fn<() => Promise<never>>()
+        .mockRejectedValue(new Error("Navigation Timeout")),
+    } as unknown as Page;
+    const onMonthFailure = vi.fn<(month: string, error: unknown) => void>();
 
-      await expect(scrapeCashFlowHistory(page, 2, { onMonthFailure })).rejects.toThrow(/Timeout/);
-      expect(onMonthFailure).toHaveBeenCalledWith("2026-07", expect.any(Error));
-    } finally {
-      await page.close();
-    }
+    await expect(scrapeCashFlowHistory(page, 2, { onMonthFailure })).rejects.toThrow(/Timeout/);
+    expect(onMonthFailure).toHaveBeenCalledWith("2026-07", expect.any(Error));
   });
 
   test("IDのない取引行をselectorで除外せず月次抽出を失敗させる", async () => {

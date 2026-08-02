@@ -7,7 +7,7 @@ import { parseJapaneseNumber } from "../parsers.js";
 import {
   SUMMARY_COLUMNS,
   parseDetailRow,
-  waitForCashFlowTableReplacement,
+  waitForCashFlowFetchApplied,
 } from "./cash-flow-history.js";
 
 export function parseCashFlowMonthHeader(headerText: string | null): string | null {
@@ -22,12 +22,15 @@ export function parseCashFlowMonthHeader(headerText: string | null): string | nu
   return `${match[1]}-${String(monthNumber).padStart(2, "0")}`;
 }
 
-function parseCashFlowMonthCsvHref(href: string | null): string | null {
+export function parseCashFlowMonthCsvHref(href: string | null): string | null {
   if (!href) return null;
 
   const year = href.match(/[?&]year=(\d{4})/)?.[1];
-  const month = Number(href.match(/[?&]month=(\d{1,2})/)?.[1]);
-  if (!year || month < 1 || month > 12) return null;
+  const monthMatch = href.match(/[?&]month=(\d{1,2})/);
+  if (!year || !monthMatch) return null;
+
+  const month = Number(monthMatch[1]);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
 
   return `${year}-${String(month).padStart(2, "0")}`;
 }
@@ -71,7 +74,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
     }
 
     debug("Clicking today button to navigate to current month");
-    await waitForCashFlowTableReplacement(page, async () => {
+    await waitForCashFlowFetchApplied(page, async () => {
       const [fetchResponse] = await Promise.all([
         page.waitForResponse(
           (response) => response.url().includes("/cf/fetch") && response.status() === 200,

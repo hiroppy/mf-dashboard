@@ -201,6 +201,28 @@ describe("runCrawler progress", () => {
     );
   });
 
+  test("crawlとグループ復元が両方失敗した場合は元のcrawl errorを保持する", async () => {
+    const crawlError = new Error("portfolio scrape failed");
+    const restoreError = new Error("Group switch timed out");
+    vi.mocked(runScrapePhase).mockRejectedValueOnce(crawlError);
+    vi.mocked(createGroupScope).mockResolvedValueOnce({
+      originalGroup: null,
+      [Symbol.asyncDispose]: vi.fn<() => Promise<void>>().mockRejectedValue(restoreError),
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await expect(runCrawler(progress)).rejects.toBe(crawlError);
+    expect(handleCrawlerFailure).toHaveBeenCalledWith(
+      crawlError,
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   test("history replacementsをcurrent dataと同じsave phaseへ渡す", async () => {
     vi.mocked(runLoadPhase).mockReturnValue({
       skipRefresh: false,
