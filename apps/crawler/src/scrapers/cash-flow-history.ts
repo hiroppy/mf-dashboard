@@ -139,7 +139,6 @@ async function detectTransactionType(
  */
 export async function parseDetailRow(
   row: ReturnType<Page["locator"]>,
-  index: number,
   year: number,
 ): Promise<CashFlowItem> {
   const cells = row.locator("td");
@@ -153,10 +152,10 @@ export async function parseDetailRow(
     getText(cells.nth(DETAIL_COLUMNS.AMOUNT)),
   ]);
 
-  const mfId = rowId?.replace("js-transaction-", "") || `unknown-${index}`;
+  const mfId = rowId?.startsWith("js-transaction-") ? rowId.slice("js-transaction-".length) : "";
 
   // A monthly replacement is safe only when every rendered transaction row was extracted.
-  if (!description || !amountText) {
+  if (!mfId || !description || !amountText) {
     throw new Error("Incomplete cash flow transaction row");
   }
 
@@ -232,7 +231,7 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {
-    items.push(await parseDetailRow(detailRows.nth(i), i, year));
+    items.push(await parseDetailRow(detailRows.nth(i), year));
   }
 
   return { month, totalIncome, totalExpense, balance, items };

@@ -73,9 +73,28 @@ describe("scrapeCashFlowMonth", () => {
       locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
     } as unknown as Locator;
 
-    await expect(parseDetailRow(row, 0, 2026)).rejects.toThrow(
-      "Incomplete cash flow transaction row",
-    );
+    await expect(parseDetailRow(row, 2026)).rejects.toThrow("Incomplete cash flow transaction row");
+  });
+
+  test("取引IDを取得できない行があれば月次置換へ進まない", async () => {
+    const texts = new Map([
+      [1, "2026/07/01"],
+      [2, "Transaction A"],
+      [3, "1,000"],
+    ]);
+    const cells = {
+      nth: vi.fn<(index: number) => Locator>((index) => {
+        return {
+          textContent: vi.fn<Locator["textContent"]>().mockResolvedValue(texts.get(index) ?? ""),
+        } as unknown as Locator;
+      }),
+    } as unknown as Locator;
+    const row = {
+      getAttribute: vi.fn<Locator["getAttribute"]>().mockResolvedValue(""),
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
+    } as unknown as Locator;
+
+    await expect(parseDetailRow(row, 2026)).rejects.toThrow("Incomplete cash flow transaction row");
   });
 
   test("指定月範囲へ遷移し、詳細テーブルを待ってから抽出する", async () => {
