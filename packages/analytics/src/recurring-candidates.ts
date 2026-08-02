@@ -783,7 +783,8 @@ function getConfidence(
   const latest = occurrences.at(-1);
   if (!latest) return null;
   const latestOccurrenceMonth = getOccurrenceMonth(latest, boundaryPattern);
-  if (latest.month !== previousMonth && latestOccurrenceMonth !== previousMonth) return null;
+  const latestScheduledMonth = boundaryPattern ? latestOccurrenceMonth : latest.month;
+  if (latestScheduledMonth !== previousMonth) return null;
   if (occurrences.length >= 3) return "high";
   if (occurrences.length === 2) return "medium";
 

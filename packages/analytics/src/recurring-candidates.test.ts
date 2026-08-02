@@ -412,11 +412,24 @@ describe("generateRecurringCandidates", () => {
 
   it("groups holiday drift that crosses a calendar-month boundary", () => {
     const result = generateRecurringCandidates(
-      [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-03-02", 80_000, "家賃")],
-      "2026-04",
+      [
+        transaction("2025-12-31", 80_000, "家賃"),
+        transaction("2026-02-02", 80_000, "家賃"),
+        transaction("2026-02-28", 80_000, "家賃"),
+      ],
+      "2026-03",
     );
 
-    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
+    expect(result[0]).toMatchObject({ confidence: "high", predictedDate: "2026-03-31" });
+  });
+
+  it("does not treat a delayed posting as the latest scheduled boundary occurrence", () => {
+    expect(
+      generateRecurringCandidates(
+        [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-03-02", 80_000, "家賃")],
+        "2026-04",
+      ),
+    ).toEqual([]);
   });
 
   it("retains separate boundary occurrences posted in the same calendar month", () => {
