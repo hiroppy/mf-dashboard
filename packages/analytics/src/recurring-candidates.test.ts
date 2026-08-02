@@ -571,6 +571,18 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium" });
   });
 
+  it("normalizes punctuation before volatile numeric references", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 20_000, "UTILITY INVOICE NO: 1001"),
+        transaction("2026-07-05", 20_000, "UTILITY INVOICE NO: 1002"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium" });
+  });
+
   it("uses categories to keep empty-description streams separate", () => {
     const history: RecurringTransaction[] = [
       {

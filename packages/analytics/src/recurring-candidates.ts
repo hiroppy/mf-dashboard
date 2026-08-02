@@ -167,7 +167,7 @@ function normalizeDescription(value: string | null | undefined): string {
       "$1",
     )
     .replace(
-      /\b(invoice|authorization|auth|reference|ref)\s*(?:no\.?|number|#)?\s*[0-9]+\b/gu,
+      /\b(invoice|authorization|auth|reference|ref)(?:\s*(?:no\.?|number))?\s*[:#-]?\s*[0-9]+\b/gu,
       "$1",
     )
     .replace(/(?<=[0-9])[\p{Punctuation}\p{Separator}\p{Symbol}]+(?=[0-9])/gu, " numsep ")
