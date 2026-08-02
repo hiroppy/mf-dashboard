@@ -77,6 +77,7 @@ type AmountGroupsByDay = Map<number, Map<number, Set<TransactionGroup>>>;
 type AmountKeysByDay = Map<number, number[]>;
 
 interface GroupPartition {
+  amountIndexEntries: Map<TransactionGroup, Array<{ amount: number; day: number }>>;
   amountGroupsByDay: AmountGroupsByDay;
   amountGroupsByDescriptionAndDay: Map<string, AmountGroupsByDay>;
   amountKeysByDay: AmountKeysByDay;
@@ -252,8 +253,10 @@ function calculateDescriptionSimilarity(left: string, right: string): number {
   if (!left || !right) return 0;
   if (left === right) return 1;
 
-  const leftBigrams = getBigrams(left);
-  const rightBigrams = getBigrams(right);
+  return calculateBigramSimilarity(getBigrams(left), getBigrams(right));
+}
+
+function calculateBigramSimilarity(leftBigrams: Set<string>, rightBigrams: Set<string>): number {
   let overlap = 0;
   for (const bigram of leftBigrams) {
     if (rightBigrams.has(bigram)) overlap++;
@@ -282,6 +285,16 @@ function daysFromMonthEnd(transaction: NormalizedTransaction): number {
 
 function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTransaction): number {
   if (left.day === right.day) return 0;
+  const leftMonth = parseIsoDateKey(left.date);
+  const rightMonth = parseIsoDateKey(right.date);
+  const leftMonthDays = getDaysInMonth(leftMonth.year, leftMonth.month);
+  const rightMonthDays = getDaysInMonth(rightMonth.year, rightMonth.month);
+  if (
+    (left.day === leftMonthDays && right.day > leftMonthDays) ||
+    (right.day === rightMonthDays && left.day > rightMonthDays)
+  ) {
+    return 0;
+  }
   const leftMonthEndOffset = daysFromMonthEnd(left);
   const rightMonthEndOffset = daysFromMonthEnd(right);
   if (
@@ -427,6 +440,15 @@ function getGroupMatchScore(
   if (conflictsWithBoundaryOccurrence(transaction, group.transactions)) return null;
   const postingMonthConflicts = getPostingMonthConflicts(transaction, group.transactions);
   if (postingMonthConflicts.length > 0) {
+    if (
+      postingMonthConflicts.some(
+        (existing) =>
+          existing.day === transaction.day &&
+          existing.normalizedDescription !== transaction.normalizedDescription,
+      )
+    ) {
+      return null;
+    }
     const conflictSet = new Set(postingMonthConflicts);
     const historyGroup = {
       transactions: group.transactions.filter((existing) => !conflictSet.has(existing)),
@@ -507,12 +529,18 @@ function getOptimizedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
   options: Required<GenerateRecurringCandidatesOptions>,
+  forAugmentingMatch = false,
 ): TransactionGroup[] {
   const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
   const exactRecurringScore = exactRecurringGroup
     ? getGroupMatchScore(transaction, exactRecurringGroup, options)
     : null;
-  if (exactRecurringGroup && exactRecurringScore && isPerfectGroupMatchScore(exactRecurringScore)) {
+  if (
+    !forAugmentingMatch &&
+    exactRecurringGroup &&
+    exactRecurringScore &&
+    isPerfectGroupMatchScore(exactRecurringScore)
+  ) {
     return [exactRecurringGroup];
   }
   const groups = new Set<TransactionGroup>();
@@ -524,6 +552,7 @@ function getOptimizedGroups(
     transaction,
     options.amountToleranceRatio,
     MAX_GROUPS_PER_AMOUNT_BUCKET,
+    forAugmentingMatch,
   )) {
     groups.add(group);
   }
@@ -534,6 +563,7 @@ function getOptimizedGroups(
     transaction,
     options.amountToleranceRatio,
     MAX_GROUPS_PER_AMOUNT_BUCKET,
+    forAugmentingMatch,
   )) {
     groups.add(group);
   }
@@ -564,6 +594,13 @@ function getFuzzyIndexedGroups(
     for (const [description, groups] of groupsByDescription ?? []) {
       if (description === transaction.normalizedDescription) continue;
       for (const group of groups) {
+        const anchorBigrams = partition.anchorBigrams.get(group);
+        if (
+          !anchorBigrams ||
+          calculateBigramSimilarity(transactionBigrams, anchorBigrams) < similarityThreshold
+        ) {
+          continue;
+        }
         candidates.add(group);
         if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
       }
@@ -571,13 +608,7 @@ function getFuzzyIndexedGroups(
     }
     if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
   }
-  return [...candidates].filter((group) => {
-    const anchor = group.transactions[0]?.normalizedDescription ?? "";
-    return (
-      calculateDescriptionSimilarity(transaction.normalizedDescription, anchor) >=
-      similarityThreshold
-    );
-  });
+  return [...candidates];
 }
 
 function findBestGroupMatch(
@@ -590,6 +621,61 @@ function findBestGroupMatch(
     const score = getGroupMatchScore(transaction, group, options);
     if (score && (!bestMatch || compareGroupMatchScores(score, bestMatch.score) < 0)) {
       bestMatch = { group, score };
+    }
+  }
+  return bestMatch;
+}
+
+interface AugmentingGroupMatch {
+  group: TransactionGroup;
+  score: GroupMatchScore;
+  displacedTransaction: NormalizedTransaction;
+  alternativeGroup: TransactionGroup;
+  alternativeScore: GroupMatchScore;
+}
+
+function findAugmentingGroupMatch(
+  transaction: NormalizedTransaction,
+  candidateGroups: TransactionGroup[],
+  partition: GroupPartition,
+  options: Required<GenerateRecurringCandidatesOptions>,
+): AugmentingGroupMatch | undefined {
+  let bestMatch: AugmentingGroupMatch | undefined;
+  for (const group of candidateGroups) {
+    const conflicts = getPostingMonthConflicts(transaction, group.transactions);
+    if (conflicts.length !== 1) continue;
+
+    const displacedTransaction = conflicts[0];
+    if (displacedTransaction.day === transaction.day) continue;
+    const historyGroup = {
+      transactions: group.transactions.filter((existing) => existing !== displacedTransaction),
+    };
+    const score = getGroupMatchScore(transaction, historyGroup, options);
+    if (!score) continue;
+
+    const alternative = findBestGroupMatch(
+      displacedTransaction,
+      getOptimizedGroups(partition, displacedTransaction, options, true).filter(
+        (candidate) => candidate !== group,
+      ),
+      options,
+    );
+    if (!alternative || alternative.score.replacedTransactions.length > 0) continue;
+
+    const match = {
+      group,
+      score,
+      displacedTransaction,
+      alternativeGroup: alternative.group,
+      alternativeScore: alternative.score,
+    };
+    if (
+      !bestMatch ||
+      compareGroupMatchScores(match.score, bestMatch.score) < 0 ||
+      (compareGroupMatchScores(match.score, bestMatch.score) === 0 &&
+        compareGroupMatchScores(match.alternativeScore, bestMatch.alternativeScore) < 0)
+    ) {
+      bestMatch = match;
     }
   }
   return bestMatch;
@@ -613,6 +699,7 @@ function getAmountIndexedGroups(
   transaction: NormalizedTransaction,
   tolerance: number,
   maxCandidateGroups: number,
+  includePostingMonthConflicts = false,
 ): TransactionGroup[] {
   if (!groupsByDay || !amountKeysByDay) return [];
 
@@ -640,6 +727,7 @@ function getAmountIndexedGroups(
       for (const group of groupsByAmount.get(amount) ?? []) {
         if (
           partition.latestMonths.get(group) !== transaction.month ||
+          includePostingMonthConflicts ||
           !conflictsWithPostingMonthSchedule(transaction, group.transactions)
         ) {
           const previousSize = candidates.size;
@@ -676,19 +764,52 @@ function indexGroupMonth(partition: GroupPartition, group: TransactionGroup, mon
   partition.latestMonths.set(group, month);
 }
 
-function indexGroupAmount(
-  partition: GroupPartition,
-  group: TransactionGroup,
-  transaction: NormalizedTransaction,
-): void {
-  indexGroupByDayAndAmount(
+function indexGroupAmount(partition: GroupPartition, group: TransactionGroup): void {
+  removeGroupAmountEntries(
     partition.amountGroupsByDay,
     partition.amountKeysByDay,
     group,
-    transaction.day,
-    transaction.amount,
+    partition.amountIndexEntries.get(group) ?? [],
   );
   reindexDescriptionAmount(partition, group);
+
+  const boundaryPattern = isMonthBoundaryPattern(group.transactions);
+  const monthlyTransactions = deduplicateOccurrences(group.transactions, boundaryPattern);
+  if (monthlyTransactions.length === 0) return;
+  const amount = median(monthlyTransactions.map((transaction) => transaction.amount));
+  const entries = [...new Set(monthlyTransactions.map((transaction) => transaction.day))].map(
+    (day) => ({ amount, day }),
+  );
+  for (const entry of entries) {
+    indexGroupByDayAndAmount(
+      partition.amountGroupsByDay,
+      partition.amountKeysByDay,
+      group,
+      entry.day,
+      entry.amount,
+    );
+  }
+  partition.amountIndexEntries.set(group, entries);
+}
+
+function removeGroupAmountEntries(
+  groupsByDay: AmountGroupsByDay,
+  amountKeysByDay: AmountKeysByDay,
+  group: TransactionGroup,
+  entries: Array<{ amount: number; day: number }>,
+): void {
+  for (const { amount, day } of entries) {
+    const groupsByAmount = groupsByDay.get(day);
+    const groups = groupsByAmount?.get(amount);
+    groups?.delete(group);
+    if (groups?.size !== 0) continue;
+
+    groupsByAmount?.delete(amount);
+    const amountKeys = amountKeysByDay.get(day);
+    if (!amountKeys) continue;
+    const index = lowerBound(amountKeys, amount);
+    if (amountKeys[index] === amount) amountKeys.splice(index, 1);
+  }
 }
 
 function indexGroupByDayAndAmount(
@@ -711,21 +832,17 @@ function indexGroupByDayAndAmount(
 }
 
 function reindexDescriptionAmount(partition: GroupPartition, group: TransactionGroup): void {
-  for (const { amount, day, description } of partition.descriptionAmountIndexEntries.get(group) ??
-    []) {
+  const previousEntries = partition.descriptionAmountIndexEntries.get(group) ?? [];
+  const previousDescriptions = new Set(previousEntries.map(({ description }) => description));
+  for (const description of previousDescriptions) {
     const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description);
     const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description);
-    const groupsByAmount = groupsByDay?.get(day);
-    const groups = groupsByAmount?.get(amount);
-    groups?.delete(group);
-    if (groups?.size === 0) {
-      groupsByAmount?.delete(amount);
-      const amountKeys = amountKeysByDay?.get(day);
-      if (amountKeys) {
-        const index = lowerBound(amountKeys, amount);
-        if (amountKeys[index] === amount) amountKeys.splice(index, 1);
-      }
-    }
+    removeGroupAmountEntries(
+      groupsByDay ?? new Map(),
+      amountKeysByDay ?? new Map(),
+      group,
+      previousEntries.filter((entry) => entry.description === description),
+    );
   }
 
   const boundaryPattern = isMonthBoundaryPattern(group.transactions);
@@ -801,6 +918,7 @@ function groupTransactions(
       exactDescriptionKey,
     ].join("\0");
     const partition: GroupPartition = partitions.get(partitionKey) ?? {
+      amountIndexEntries: new Map(),
       amountGroupsByDay: new Map(),
       amountGroupsByDescriptionAndDay: new Map(),
       amountKeysByDay: new Map(),
@@ -815,26 +933,52 @@ function groupTransactions(
     };
     if (partition.exactOccurrences.has(exactOccurrenceKey(transaction))) continue;
     const transactionBigrams = getBigrams(transaction.normalizedDescription);
-    const optimizedMatch = findBestGroupMatch(
-      transaction,
-      getOptimizedGroups(partition, transaction, options),
-      options,
-    );
+    const optimizedGroups = getOptimizedGroups(partition, transaction, options);
+    const optimizedMatch = findBestGroupMatch(transaction, optimizedGroups, options);
     const optimizedIsPerfect = optimizedMatch && isPerfectGroupMatchScore(optimizedMatch.score);
-    const fuzzyMatch = optimizedIsPerfect
-      ? undefined
-      : findBestGroupMatch(
-          transaction,
-          getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold),
-          options,
-        );
-    const selectedMatch =
+    const fuzzyGroups = optimizedIsPerfect
+      ? []
+      : getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold);
+    const fuzzyMatch = findBestGroupMatch(transaction, fuzzyGroups, options);
+    let selectedMatch =
       fuzzyMatch &&
       (!optimizedMatch || compareGroupMatchScores(fuzzyMatch.score, optimizedMatch.score) < 0)
         ? fuzzyMatch
         : optimizedMatch;
-    const existingGroup = selectedMatch?.group;
-    if (existingGroup) {
+    const hasDifferentIndexedDay = [...partition.amountGroupsByDay.keys()].some(
+      (day) => day !== transaction.day,
+    );
+    if (!selectedMatch && hasDifferentIndexedDay) {
+      const augmentingMatch = findAugmentingGroupMatch(
+        transaction,
+        [
+          ...new Set([
+            ...getOptimizedGroups(partition, transaction, options, true),
+            ...fuzzyGroups,
+          ]),
+        ],
+        partition,
+        options,
+      );
+      if (augmentingMatch) {
+        const { displacedTransaction, alternativeGroup, group } = augmentingMatch;
+        moveGroupToMonth(partition, alternativeGroup, displacedTransaction.month);
+        group.transactions = group.transactions.filter(
+          (existing) => existing !== displacedTransaction,
+        );
+        alternativeGroup.transactions.push(displacedTransaction);
+        indexGroupAmount(partition, group);
+        indexGroupAmount(partition, alternativeGroup);
+        partition.exactOccurrences.set(exactOccurrenceKey(displacedTransaction), alternativeGroup);
+        partition.exactRecurringSlots.set(
+          exactRecurringSlotKey(displacedTransaction),
+          alternativeGroup,
+        );
+        selectedMatch = { group, score: augmentingMatch.score };
+      }
+    }
+    if (selectedMatch) {
+      const existingGroup = selectedMatch.group;
       moveGroupToMonth(partition, existingGroup, transaction.month);
       const replacements = new Set(selectedMatch.score.replacedTransactions);
       existingGroup.transactions = existingGroup.transactions.filter(
@@ -852,7 +996,7 @@ function groupTransactions(
         pendingTransactions.splice(cursor + 1, 0, replacement);
       }
       existingGroup.transactions.push(transaction);
-      indexGroupAmount(partition, existingGroup, transaction);
+      indexGroupAmount(partition, existingGroup);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), existingGroup);
       partition.exactRecurringSlots.set(exactRecurringSlotKey(transaction), existingGroup);
     } else {
@@ -861,7 +1005,7 @@ function groupTransactions(
       partition.anchorBigrams.set(group, transactionBigrams);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), group);
       partition.exactRecurringSlots.set(exactRecurringSlotKey(transaction), group);
-      indexGroupAmount(partition, group, transaction);
+      indexGroupAmount(partition, group);
       indexGroupMonth(partition, group, transaction.month);
     }
     partitions.set(partitionKey, partition);

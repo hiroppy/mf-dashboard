@@ -205,6 +205,29 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 3 } });
   });
 
+  it("ignores dissimilar fuzzy groups before applying the candidate limit", () => {
+    const decoys = Array.from({ length: 64 }, (_, index) => {
+      const unique = String.fromCodePoint(0x4e00 + index).repeat(12);
+      return transaction("2026-06-10", 20_000, `za${unique}ab${unique}ba`);
+    });
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-10", 20_000, "zabab"),
+        ...decoys,
+        transaction("2026-06-10", 20_000, "zabab"),
+        transaction("2026-07-10", 20_000, "zaba"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      description: "zaba",
+      evidence: { occurrenceCount: 3 },
+    });
+  });
+
   it("prefers a consecutive fuzzy group over a stale exact-description group", () => {
     const result = generateRecurringCandidates(
       [
@@ -494,6 +517,16 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "high", predictedDate: "2026-04-30" });
+  });
+
+  it("groups a fixed calendar day clipped by a shorter month when drift is zero", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-01-30", 80_000, "家賃"), transaction("2026-02-28", 80_000, "家賃")],
+      "2026-03",
+      { dateDriftDays: 0 },
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-30" });
   });
 
   it("groups stable calendar days when date drift is zero", () => {
@@ -927,6 +960,43 @@ describe("generateRecurringCandidates", () => {
         descriptionSimilarityThreshold: 0,
       }),
     ).toEqual([]);
+  });
+
+  it("ranks description-free amount candidates by each group's current median", () => {
+    const competingGroups = Array.from({ length: 8 }, (_, index) =>
+      transaction("2026-06-10", 92 + index, `competing ${String.fromCharCode(97 + index)}`),
+    );
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-10", 120, "aaa target service"),
+        transaction("2026-06-10", 80, "aaa target service"),
+        ...competingGroups,
+        transaction("2026-07-10", 100, "zzz renamed service"),
+      ],
+      "2026-08",
+      { amountToleranceRatio: 0.5, descriptionSimilarityThreshold: 0 },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      description: "zzz renamed service",
+      evidence: { occurrenceCount: 3 },
+    });
+  });
+
+  it("jointly assigns same-month rows across compatible recurring schedules", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 20_000, "SERVICE PLAN"),
+        transaction("2026-06-06", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-06", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-09", 20_000, "SERVICE PLAN"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
   });
 
   it("bounds equal-amount buckets with many distinct descriptions", () => {
