@@ -8,6 +8,7 @@ import {
   resolveCashFlowDate,
   resolveCashFlowPeriod,
   scrapeCashFlowHistory,
+  verifyCashFlowRowsComplete,
 } from "./cash-flow-history.js";
 
 describe("buildMonthRange", () => {
@@ -65,6 +66,33 @@ describe("isSupportedCashFlowAmount", () => {
   );
 });
 
+describe("verifyCashFlowRowsComplete", () => {
+  test("0件でもCSVリンクがなく集計値が0なら明示的な空期間として受け入れる", async () => {
+    const page = {
+      locator: vi.fn<() => { count: () => Promise<number> }>().mockReturnValue({
+        count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+      }),
+    } as unknown as Page;
+
+    await expect(verifyCashFlowRowsComplete(page, 0, [0, 0, 0])).resolves.toBeUndefined();
+  });
+
+  test.each([
+    [1, [0, 0, 0]],
+    [0, [1, 0, 1]],
+  ])("CSVリンク数 %i と集計値 %j の0件表示を完全とは扱わない", async (csvLinks, totals) => {
+    const page = {
+      locator: vi.fn<() => { count: () => Promise<number> }>().mockReturnValue({
+        count: vi.fn<() => Promise<number>>().mockResolvedValue(csvLinks),
+      }),
+    } as unknown as Page;
+
+    await expect(verifyCashFlowRowsComplete(page, 0, totals)).rejects.toThrow(
+      "explicit empty cash flow period",
+    );
+  });
+});
+
 describe("scrapeCashFlowHistory", () => {
   test("前月 navigation の失敗を対象月の callback に通知する", async () => {
     const detailTable = {
@@ -73,7 +101,7 @@ describe("scrapeCashFlowHistory", () => {
     let csvLink: Locator;
     csvLink = {
       first: vi.fn<() => Locator>(() => csvLink),
-      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
       getAttribute: vi
         .fn<(name: string) => Promise<string | null>>()
         .mockResolvedValue("/cf/csv?year=2026&month=7"),
@@ -132,7 +160,7 @@ describe("scrapeCashFlowHistory", () => {
     const self = <T extends object>(value: T): T & { first: () => T } =>
       Object.assign(value, { first: () => value });
     const csvLink = self({
-      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
       getAttribute: vi
         .fn<() => Promise<string | null>>()
         .mockResolvedValue("/cf/csv?year=2026&month=7"),
@@ -243,6 +271,41 @@ describe("scrapeCashFlowHistory", () => {
     await expect(extractCashFlowFromPage(page)).rejects.toThrow(
       "Incomplete cash flow transaction row",
     );
+  });
+
+  test("空の集計セルを完全な月次結果として扱わない", async () => {
+    let monthHeader: Locator;
+    monthHeader = {
+      first: vi.fn<() => Locator>(() => monthHeader),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("2026年7月"),
+    } as unknown as Locator;
+    const emptyCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue(""),
+    } as unknown as Locator;
+    const summaryCells = {
+      nth: vi.fn<() => Locator>().mockReturnValue(emptyCell),
+    } as unknown as Locator;
+    const summaryRow = {
+      locator: vi.fn<() => Locator>().mockReturnValue(summaryCells),
+    } as unknown as Locator;
+    const summaryRows = {
+      first: vi.fn<() => Locator>().mockReturnValue(summaryRow),
+    } as unknown as Locator;
+    let missing: Locator;
+    missing = {
+      first: vi.fn<() => Locator>(() => missing),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
+    const page = {
+      locator: vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
+        if (selector === ".fc-header-title h2") return monthHeader;
+        if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
+        return missing;
+      }),
+    } as unknown as Page;
+
+    await expect(extractCashFlowFromPage(page)).rejects.toThrow("complete cash flow summary");
   });
 });
 

@@ -6,10 +6,12 @@ import { debug } from "../logger.js";
 import { parseJapaneseNumber } from "../parsers.js";
 import {
   SUMMARY_COLUMNS,
+  isSupportedCashFlowAmount,
   parseCashFlowMonthCsvHref,
   parseCashFlowMonthHeader,
   parseDetailRow,
   resolveCashFlowPeriod,
+  verifyCashFlowRowsComplete,
   waitForCashFlowFetchApplied,
 } from "./cash-flow-history.js";
 
@@ -102,6 +104,10 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
     getRequiredText(summaryCells.nth(SUMMARY_COLUMNS.BALANCE)),
   ]);
 
+  if (![incomeText, expenseText, balanceText].every(isSupportedCashFlowAmount)) {
+    throw new Error("Could not verify the complete cash flow summary");
+  }
+
   const totalIncome = parseJapaneseNumber(incomeText || "0");
   const totalExpense = parseJapaneseNumber(expenseText || "0");
   const balance = parseJapaneseNumber(balanceText || "0");
@@ -113,6 +119,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   // Parse detail items
   const detailRows = page.locator("#cf-detail-table tbody > tr");
   const detailCount = await detailRows.count();
+  await verifyCashFlowRowsComplete(page, detailCount, [totalIncome, totalExpense, balance]);
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {

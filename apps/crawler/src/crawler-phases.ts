@@ -26,7 +26,11 @@ import {
   type CrawlerProgressReporter,
 } from "./crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "./data-builder.js";
-import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
+import {
+  getHistoryMaxMonthsFromAnchor,
+  getHistoryMonth,
+  getHistoryMonthFromAnchor,
+} from "./history-months.js";
 import { runHooks } from "./hooks/runner.js";
 import { debug, error, info, log, phase, warn } from "./logger.js";
 import { sendFailureNotifications, sendSuccessNotifications } from "./notification.js";
@@ -253,7 +257,7 @@ export async function runInstitutionCategoryPhase(page: Page): Promise<Map<strin
 export async function runCashFlowHistoryPhase(
   db: Db,
   page: Page,
-  config: Pick<CrawlerConfig, "isHistoryMode">,
+  config: Pick<CrawlerConfig, "isHistoryMode"> & { activeAccountingMonth?: string },
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
   progress?: CrawlerProgressReporter,
   publishHistory: (
@@ -271,14 +275,15 @@ export async function runCashFlowHistoryPhase(
   phase("Cash Flow History");
 
   const now = new Date();
-  const maxMonths = getHistoryMaxMonths(now);
+  const activeAccountingMonth = config.activeAccountingMonth ?? getHistoryMonth(now, 0);
+  const maxMonths = getHistoryMaxMonthsFromAnchor(activeAccountingMonth);
 
   // Always refresh the current and previous periods so transactions posted late by an
   // institution are incorporated. History mode extends that window to the oldest gap.
   let monthsToFetch = Math.min(2, maxMonths);
   if (config.isHistoryMode) {
     for (let i = 2; i < maxMonths; i++) {
-      const month = getHistoryMonth(now, i);
+      const month = getHistoryMonthFromAnchor(activeAccountingMonth, i);
       if (!(await hasCashFlowPeriod(db, month))) {
         monthsToFetch = i + 1;
       }
@@ -288,7 +293,7 @@ export async function runCashFlowHistoryPhase(
   info(`Fetching ${monthsToFetch} months`);
 
   const monthSteps = new Map<string, string>();
-  const setupMonth = getHistoryMonth(now, 0);
+  const setupMonth = activeAccountingMonth;
   let setupStepId: string | null = null;
   if (progress) {
     setupStepId = await progress.startStep(CRAWLER_STEPS.monthlyCashFlow, { month: setupMonth });

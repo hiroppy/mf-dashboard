@@ -36,6 +36,19 @@ export function isSupportedCashFlowAmount(value: string): boolean {
   return CASH_FLOW_AMOUNT_PATTERN.test(normalized);
 }
 
+export async function verifyCashFlowRowsComplete(
+  page: Page,
+  detailCount: number,
+  totals: readonly number[],
+): Promise<void> {
+  if (detailCount > 0) return;
+
+  const hasCsvLink = (await page.locator("a[href*='/cf/csv']").count()) > 0;
+  if (hasCsvLink || totals.some((total) => total !== 0)) {
+    throw new Error("Could not verify an explicit empty cash flow period");
+  }
+}
+
 export function parseCashFlowMonthHeader(headerText: string | null): string | null {
   const match =
     headerText?.match(/(\d{4})年(\d{1,2})月/) ??
@@ -384,7 +397,12 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
     getTextWithFailureSignal(summaryCells.nth(SUMMARY_COLUMNS.BALANCE), SUMMARY_TIMEOUT),
   ]);
 
-  if (incomeText === null || expenseText === null || balanceText === null) {
+  if (
+    incomeText === null ||
+    expenseText === null ||
+    balanceText === null ||
+    ![incomeText, expenseText, balanceText].every(isSupportedCashFlowAmount)
+  ) {
     throw new Error("Could not verify the complete cash flow summary");
   }
 
@@ -395,6 +413,7 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   // Parse detail items
   const detailRows = page.locator("#cf-detail-table tbody > tr");
   const detailCount = await detailRows.count();
+  await verifyCashFlowRowsComplete(page, detailCount, [totalIncome, totalExpense, balance]);
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {

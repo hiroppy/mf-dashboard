@@ -327,6 +327,19 @@ describe("runCashFlowHistoryPhase", () => {
     expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 2, expect.any(Object));
   });
 
+  test("締め日後は現在の会計期間月を起点に未取得期間を探す", async () => {
+    vi.mocked(hasCashFlowPeriod).mockImplementation(async (_db, month) => month !== "2026-07");
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, {
+      isHistoryMode: true,
+      activeAccountingMonth: "2026-09",
+    });
+
+    expect(hasCashFlowPeriod).toHaveBeenCalledWith({}, "2026-07");
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 3, expect.any(Object));
+  });
+
   test("history modeでは未取得の最古会計期間まで取得する", async () => {
     const now = new Date("2026-08-31T14:59:59.000Z");
     vi.useFakeTimers();

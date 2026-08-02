@@ -155,6 +155,14 @@ describe("runCrawler progress", () => {
     expect(runSavePhase).toHaveBeenCalledOnce();
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
+    expect(runCashFlowHistoryPhase).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ activeAccountingMonth: "2026-07" }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
   });
 

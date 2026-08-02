@@ -73,7 +73,10 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
         runCashFlowHistoryPhase(
           activeRuntime.db,
           activeRuntime.page,
-          config,
+          {
+            ...config,
+            activeAccountingMonth: scrapeResult.globalData.cashFlow.month,
+          },
           activeRuntime.categoryDecision,
           progress,
           async (historyMonths) => {
