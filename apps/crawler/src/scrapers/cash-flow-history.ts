@@ -153,9 +153,15 @@ export async function parseDetailRow(
   ]);
 
   const mfId = rowId?.startsWith("js-transaction-") ? rowId.slice("js-transaction-".length) : "";
+  const date = convertDateToIso(dateText || "", year);
+  const parsedDate = new Date(`${date}T00:00:00Z`);
+  const isValidDate =
+    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.toISOString().slice(0, 10) === date;
 
   // A monthly replacement is safe only when every rendered transaction row was extracted.
-  if (!mfId || !description || !amountText) {
+  if (!mfId || !isValidDate || !description || !amountText) {
     throw new Error("Incomplete cash flow transaction row");
   }
 
@@ -190,7 +196,7 @@ export async function parseDetailRow(
 
   return {
     mfId,
-    date: convertDateToIso(dateText || "", year),
+    date,
     category: categoryText || null,
     subCategory: subCategoryText || null,
     description,

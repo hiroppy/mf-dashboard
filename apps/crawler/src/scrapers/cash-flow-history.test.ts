@@ -99,6 +99,34 @@ describe("scrapeCashFlowMonth", () => {
     await expect(parseDetailRow(row, 2026)).rejects.toThrow("Incomplete cash flow transaction row");
   });
 
+  test.each(["", "invalid", "02/30"])(
+    "日付 %j を有効な日付として取得できない行があれば月次置換へ進まない",
+    async (dateText) => {
+      const texts = new Map([
+        [1, dateText],
+        [2, "Transaction A"],
+        [3, "1,000"],
+      ]);
+      const cells = {
+        nth: vi.fn<(index: number) => Locator>((index) => {
+          return {
+            textContent: vi.fn<Locator["textContent"]>().mockResolvedValue(texts.get(index) ?? ""),
+          } as unknown as Locator;
+        }),
+      } as unknown as Locator;
+      const row = {
+        getAttribute: vi
+          .fn<Locator["getAttribute"]>()
+          .mockImplementation(async (name) => (name === "id" ? "js-transaction-row-a" : "")),
+        locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
+      } as unknown as Locator;
+
+      await expect(parseDetailRow(row, 2026)).rejects.toThrow(
+        "Incomplete cash flow transaction row",
+      );
+    },
+  );
+
   test("指定月範囲へ遷移し、詳細テーブルを待ってから抽出する", async () => {
     const waitFor = vi.fn<Locator["waitFor"]>().mockResolvedValue(undefined);
     const detailTable = { waitFor } as unknown as Locator;

@@ -116,9 +116,11 @@ describe("cashFlow", () => {
     expect(Array.isArray(data.cashFlow.items)).toBe(true);
   });
 
-  test("取引に mfId がある", () => {
-    const withMfId = data.cashFlow.items.filter((i) => !!i.mfId && !i.mfId.startsWith("unknown"));
-    expect(withMfId.length).toBeGreaterThan(0);
+  test("取引があれば実在する mfId がある", () => {
+    for (const item of data.cashFlow.items) {
+      expect(item.mfId).toBeTruthy();
+      expect(item.mfId).not.toMatch(/^unknown/);
+    }
   });
 });
 
