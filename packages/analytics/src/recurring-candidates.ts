@@ -123,6 +123,11 @@ const classificationRules: ReadonlyArray<{
   english: readonly string[];
 }> = [
   {
+    classification: "tax",
+    japanese: ["予定納税", "税金", "納税", "税・社会保障", "所得税", "住民税"],
+    english: ["tax"],
+  },
+  {
     classification: "executive_compensation",
     japanese: ["役員報酬"],
     english: ["executive compensation"],
@@ -131,11 +136,6 @@ const classificationRules: ReadonlyArray<{
   { classification: "rent", japanese: ["家賃", "賃料"], english: ["rent"] },
   { classification: "loan", japanese: ["ローン", "返済"], english: ["loan"] },
   { classification: "card", japanese: ["カード"], english: ["card"] },
-  {
-    classification: "tax",
-    japanese: ["予定納税", "税金", "納税", "税・社会保障", "所得税", "住民税"],
-    english: ["tax"],
-  },
 ];
 
 function normalizeCaseAndWidth(value: string | null | undefined): string {
@@ -180,8 +180,8 @@ function getBigrams(value: string): Set<string> {
 }
 
 function calculateDescriptionSimilarity(left: string, right: string): number {
-  if (left === right) return 1;
   if (!left || !right) return 0;
+  if (left === right) return 1;
 
   const leftBigrams = getBigrams(left);
   const rightBigrams = getBigrams(right);
@@ -210,9 +210,20 @@ function daysFromMonthEnd(transaction: NormalizedTransaction): number {
 
 function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTransaction): number {
   const directDistance = Math.abs(left.day - right.day);
-  const [earlyMonth, lateMonth] = left.day <= right.day ? [left, right] : [right, left];
-  const boundaryDistance = daysFromMonthEnd(lateMonth) + earlyMonth.day;
+  const [earlier, later] = left.date <= right.date ? [left, right] : [right, left];
+  if (earlier.month === later.month || earlier.day <= later.day) return directDistance;
+
+  const boundaryDistance = daysFromMonthEnd(earlier) + later.day;
   return Math.min(directDistance, boundaryDistance);
+}
+
+function normalizeGroupingText(transaction: RecurringTransaction): string {
+  const description = normalizeDescription(transaction.description);
+  if (description) return description;
+
+  return normalizeCaseAndWidth(
+    [transaction.category, transaction.subCategory].filter(Boolean).join(" "),
+  ).replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
 }
 
 function belongsToGroup(
@@ -415,7 +426,7 @@ export function generateRecurringCandidates(
         classification: classifyRecurringTransaction(transaction),
         day,
         month: transaction.date.slice(0, 7),
-        normalizedDescription: normalizeDescription(transaction.description),
+        normalizedDescription: normalizeGroupingText(transaction),
       };
     })
     .filter(({ month }) => month >= firstHistoryMonth && month < targetMonth)

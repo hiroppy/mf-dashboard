@@ -28,6 +28,7 @@ describe("classifyRecurringTransaction", () => {
     ["Executive compensation", "executive_compensation"],
     ["所得税 予定納税", "tax"],
     ["税・社会保障 / 所得税・住民税", "tax"],
+    ["給与所得税", "tax"],
     ["Tax payment", "tax"],
     ["定期支払", "other"],
   ] as const)("classifies %s as %s", (description, expected) => {
@@ -190,6 +191,21 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
   });
 
+  it("does not merge inverse month-start and month-end schedules", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-01", 80_000, "定期支払"),
+        transaction("2026-01-31", 80_000, "定期支払"),
+        transaction("2026-02-01", 80_000, "定期支払"),
+        transaction("2026-02-28", 80_000, "定期支払"),
+      ],
+      "2026-03",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-03-01", "2026-03-31"]);
+  });
+
   it("uses only the preceding 12 months and ignores the target month and future", () => {
     const result = generateRecurringCandidates(
       [
@@ -308,6 +324,27 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("uses categories to keep empty-description streams separate", () => {
+    const history: RecurringTransaction[] = [
+      {
+        accountId: accountA,
+        date: "2026-06-10",
+        amount: 20_000,
+        type: "expense",
+        category: "Food",
+      },
+      {
+        accountId: accountA,
+        date: "2026-07-10",
+        amount: 20_000,
+        type: "expense",
+        category: "Household",
+      },
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
   it("excludes transfers, empty amounts, small one-offs, and older one-off income", () => {
     const result = generateRecurringCandidates(
       [
@@ -352,9 +389,21 @@ describe("generateRecurringCandidates", () => {
 
   it("orders null and non-null descriptions deterministically", () => {
     const history: RecurringTransaction[] = [
-      { accountId: accountA, date: "2026-06-10", amount: 20_000, type: "expense" },
+      {
+        accountId: accountA,
+        date: "2026-06-10",
+        amount: 20_000,
+        type: "expense",
+        category: "Membership",
+      },
       transaction("2026-06-10", 20_000, "家賃"),
-      { accountId: accountA, date: "2026-07-10", amount: 20_000, type: "expense" },
+      {
+        accountId: accountA,
+        date: "2026-07-10",
+        amount: 20_000,
+        type: "expense",
+        category: "Membership",
+      },
       transaction("2026-07-10", 20_000, "家賃"),
     ];
 
