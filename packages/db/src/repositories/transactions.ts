@@ -184,6 +184,10 @@ export async function replaceTransactionsForMonth(
   items: CashFlowItem[],
   accountIdMap?: Map<string, number>,
 ): Promise<number> {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw new Error("Invalid transaction month");
+  }
+
   // 既存データを削除
   const deleted = await deleteTransactionsForMonth(db, month);
   if (deleted > 0) {

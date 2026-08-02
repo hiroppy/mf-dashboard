@@ -28,7 +28,7 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { replaceTransactionsForMonth, saveTransaction } from "./transactions";
+import { replaceTransactionsForMonth } from "./transactions";
 
 const isCI = process.env.CI === "true";
 const DEPOSIT_ASSET_CATEGORY = "預金・現金";
@@ -306,13 +306,12 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   log(`  - Liabilities: ${data.liabilities.items.length}`);
 
   // 10. Save transactions
-  let savedCount = 0;
-  for (const item of data.cashFlow.items) {
-    await saveTransaction(db, item, accountIdMap);
-    if (item.mfId && !item.mfId.startsWith("unknown")) {
-      savedCount++;
-    }
-  }
+  const savedCount = await replaceTransactionsForMonth(
+    db,
+    data.cashFlow.month,
+    data.cashFlow.items,
+    accountIdMap,
+  );
   log(`  - Transactions: ${savedCount}/${data.cashFlow.items.length}`);
 
   // 11. Save asset history

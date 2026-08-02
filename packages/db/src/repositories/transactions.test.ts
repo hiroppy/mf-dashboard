@@ -463,6 +463,25 @@ describe("hasTransactionsForMonth / deleteTransactionsForMonth", () => {
 });
 
 describe("saveTransactionsForMonth", () => {
+  test("不正な月では既存トランザクションを削除しない", async () => {
+    await db.insert(schema.transactions).values({
+      mfId: "transaction-a",
+      date: "2025-04-01",
+      category: "Category A",
+      subCategory: null,
+      description: "Transaction A",
+      amount: 1_000,
+      type: "expense",
+      isTransfer: false,
+      isExcludedFromCalculation: false,
+      createdAt: "2025-04-01T00:00:00.000Z",
+      updatedAt: "2025-04-01T00:00:00.000Z",
+    });
+
+    await expect(saveTransactionsForMonth(db, "", [])).rejects.toThrow("Invalid transaction month");
+    expect(await db.select().from(schema.transactions).all()).toHaveLength(1);
+  });
+
   const items: CashFlowItem[] = [
     {
       mfId: "tx1",
