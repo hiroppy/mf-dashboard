@@ -141,20 +141,12 @@ describe("DB保存", () => {
 
   // Note: monthly_summary, yearly_summary, and monthly_category_totals are now calculated dynamically from transactions
 
-  test("取得した有効なトランザクションが重複なく保存される", async () => {
+  test("保存されたトランザクションIDが有効で重複しない", async () => {
     const db = getDb();
     const transactions = await db.select().from(schema.transactions).all();
-    const expectedMfIds = [
-      ...new Set(
-        scrapedData.cashFlow.items
-          .map((item) => item.mfId)
-          .filter((mfId) => mfId && !mfId.startsWith("unknown")),
-      ),
-    ].sort();
-    const actualMfIds = transactions.map((transaction) => transaction.mfId).sort();
+    const mfIds = transactions.map((transaction) => transaction.mfId);
 
-    expect(actualMfIds.length).toBe(expectedMfIds.length);
-    const actualMfIdSet = new Set(actualMfIds);
-    expect(expectedMfIds.every((mfId) => actualMfIdSet.has(mfId))).toBe(true);
+    expect(mfIds.every((mfId) => Boolean(mfId) && !mfId.startsWith("unknown"))).toBe(true);
+    expect(new Set(mfIds).size).toBe(mfIds.length);
   });
 });

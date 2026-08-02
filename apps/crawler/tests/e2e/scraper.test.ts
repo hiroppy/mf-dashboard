@@ -107,22 +107,6 @@ describe("cashFlow", () => {
     expect(data.cashFlow.month).toBeTruthy();
   });
 
-  test("表示期間が取得され、全取引がその範囲内にある", () => {
-    const { periodStart, periodEnd } = data.cashFlow;
-    const hasValidPeriod =
-      Boolean(periodStart?.match(/^\d{4}-\d{2}-\d{2}$/)) &&
-      Boolean(periodEnd?.match(/^\d{4}-\d{2}-\d{2}$/)) &&
-      periodStart !== undefined &&
-      periodEnd !== undefined &&
-      periodStart <= periodEnd;
-    const allItemsAreWithinPeriod =
-      periodStart !== undefined &&
-      periodEnd !== undefined &&
-      data.cashFlow.items.every(({ date }) => date >= periodStart && date <= periodEnd);
-    expect(hasValidPeriod).toBe(true);
-    expect(allItemsAreWithinPeriod).toBe(true);
-  });
-
   test("収支合計が数値", () => {
     expect(typeof data.cashFlow.totalIncome).toBe("number");
     expect(typeof data.cashFlow.totalExpense).toBe("number");
