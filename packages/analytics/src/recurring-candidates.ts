@@ -85,7 +85,7 @@ interface GroupPartition {
   exactOccurrences: Map<string, TransactionGroup>;
   exactRecurringSlots: Map<string, TransactionGroup>;
   groups: TransactionGroup[];
-  groupsByBigramAndMonth: Map<string, Map<string, Set<TransactionGroup>>>;
+  groupsByBigramAndMonth: Map<string, Map<string, Map<string, Set<TransactionGroup>>>>;
   latestMonths: Map<TransactionGroup, string>;
 }
 
@@ -353,16 +353,13 @@ interface GroupMatchScore {
   descriptionDistance: number;
 }
 
-function occurrenceMonth(transaction: NormalizedTransaction): string {
-  return boundaryPosition(transaction)?.occurrenceMonth ?? transaction.month;
-}
-
 function getGroupMatchScore(
   transaction: NormalizedTransaction,
   group: TransactionGroup,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): GroupMatchScore | null {
-  const monthlyTransactions = deduplicateMonths(group.transactions);
+  const boundaryPattern = isMonthBoundaryPattern(group.transactions);
+  const monthlyTransactions = deduplicateOccurrences(group.transactions, boundaryPattern);
   const representative = monthlyTransactions.at(-1);
   if (!representative) return null;
   if (!transaction.normalizedDescription || !representative.normalizedDescription) return null;
@@ -408,7 +405,8 @@ function getGroupMatchScore(
   return {
     amountDistance,
     continuityDistance:
-      occurrenceMonth(representative) === shiftYearMonthKey(occurrenceMonth(transaction), -1)
+      getOccurrenceMonth(representative, boundaryPattern) ===
+      shiftYearMonthKey(getOccurrenceMonth(transaction, boundaryPattern), -1)
         ? 0
         : 1,
     dateDistance: groupDayDistance,
@@ -466,10 +464,13 @@ function getFuzzyIndexedGroups(
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
   const overlapCounts = new Map<TransactionGroup, number>();
   for (const bigram of transactionBigrams) {
-    for (const [month, groups] of partition.groupsByBigramAndMonth.get(bigram) ?? []) {
+    for (const [month, groupsByDescription] of partition.groupsByBigramAndMonth.get(bigram) ?? []) {
       if (month === transaction.month) continue;
-      for (const group of groups) {
-        overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
+      for (const [description, groups] of groupsByDescription) {
+        if (description === transaction.normalizedDescription) continue;
+        for (const group of groups) {
+          overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
+        }
       }
     }
   }
@@ -483,11 +484,11 @@ function getFuzzyIndexedGroups(
     .map(([group]) => group);
 }
 
-function findBestGroup(
+function findBestGroupMatch(
   transaction: NormalizedTransaction,
   groups: TransactionGroup[],
   options: Required<GenerateRecurringCandidatesOptions>,
-): TransactionGroup | undefined {
+): { group: TransactionGroup; score: GroupMatchScore } | undefined {
   let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
   for (const group of groups) {
     const score = getGroupMatchScore(transaction, group, options);
@@ -495,7 +496,7 @@ function findBestGroup(
       bestMatch = { group, score };
     }
   }
-  return bestMatch?.group;
+  return bestMatch;
 }
 
 function lowerBound(values: number[], target: number): number {
@@ -527,23 +528,20 @@ function getAmountIndexedGroups(
     let rightIndex = insertionIndex;
     let inspectedAmounts = 0;
     while ((leftIndex >= 0 || rightIndex < amountKeys.length) && inspectedAmounts < 8) {
-      const leftDistance =
+      const leftRatio =
         leftIndex >= 0
-          ? Math.abs(amountKeys[leftIndex] - transaction.amount)
+          ? Math.abs(amountKeys[leftIndex] - transaction.amount) /
+            Math.max(amountKeys[leftIndex], transaction.amount)
           : Number.POSITIVE_INFINITY;
-      const rightDistance =
+      const rightRatio =
         rightIndex < amountKeys.length
-          ? Math.abs(amountKeys[rightIndex] - transaction.amount)
+          ? Math.abs(amountKeys[rightIndex] - transaction.amount) /
+            Math.max(amountKeys[rightIndex], transaction.amount)
           : Number.POSITIVE_INFINITY;
-      const index = leftDistance <= rightDistance ? leftIndex-- : rightIndex++;
+      const index = leftRatio <= rightRatio ? leftIndex-- : rightIndex++;
       const amount = amountKeys[index];
       inspectedAmounts++;
-      if (
-        Math.abs(amount - transaction.amount) / Math.max(amount, transaction.amount) >
-        tolerance
-      ) {
-        break;
-      }
+      if (Math.min(leftRatio, rightRatio) > tolerance) break;
       let inspectedGroups = 0;
       for (const group of groupsByAmount.get(amount) ?? []) {
         if (inspectedGroups++ >= maxGroupsPerAmount) break;
@@ -568,11 +566,14 @@ function exactRecurringSlotKey(transaction: NormalizedTransaction): string {
 }
 
 function indexGroupMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
+  const description = group.transactions[0]?.normalizedDescription ?? "";
   for (const bigram of partition.anchorBigrams.get(group) ?? []) {
     const groupsByMonth = partition.groupsByBigramAndMonth.get(bigram) ?? new Map();
-    const groups = groupsByMonth.get(month) ?? new Set();
+    const groupsByDescription = groupsByMonth.get(month) ?? new Map();
+    const groups = groupsByDescription.get(description) ?? new Set();
     groups.add(group);
-    groupsByMonth.set(month, groups);
+    groupsByDescription.set(description, groups);
+    groupsByMonth.set(month, groupsByDescription);
     partition.groupsByBigramAndMonth.set(bigram, groupsByMonth);
   }
   partition.latestMonths.set(group, month);
@@ -620,8 +621,13 @@ function indexGroupByDayAndAmount(
 function moveGroupToMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
   const previousMonth = partition.latestMonths.get(group);
   if (!previousMonth || previousMonth === month) return;
+  const description = group.transactions[0]?.normalizedDescription ?? "";
   for (const bigram of partition.anchorBigrams.get(group) ?? []) {
-    partition.groupsByBigramAndMonth.get(bigram)?.get(previousMonth)?.delete(group);
+    partition.groupsByBigramAndMonth
+      .get(bigram)
+      ?.get(previousMonth)
+      ?.get(description)
+      ?.delete(group);
   }
   indexGroupMonth(partition, group, month);
 }
@@ -673,14 +679,25 @@ function groupTransactions(
       latestMonths: new Map(),
     };
     const transactionBigrams = getBigrams(transaction.normalizedDescription);
-    const optimizedGroups = getOptimizedGroups(partition, transaction, options);
+    const optimizedMatch = findBestGroupMatch(
+      transaction,
+      getOptimizedGroups(partition, transaction, options),
+      options,
+    );
+    const optimizedIsPerfect =
+      optimizedMatch && Object.values(optimizedMatch.score).every((distance) => distance === 0);
+    const fuzzyMatch = optimizedIsPerfect
+      ? undefined
+      : findBestGroupMatch(
+          transaction,
+          getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold),
+          options,
+        );
     const existingGroup =
-      findBestGroup(transaction, optimizedGroups, options) ??
-      findBestGroup(
-        transaction,
-        getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold),
-        options,
-      );
+      fuzzyMatch &&
+      (!optimizedMatch || compareGroupMatchScores(fuzzyMatch.score, optimizedMatch.score) < 0)
+        ? fuzzyMatch.group
+        : optimizedMatch?.group;
     if (existingGroup) {
       moveGroupToMonth(partition, existingGroup, transaction.month);
       existingGroup.transactions.push(transaction);
@@ -701,14 +718,6 @@ function groupTransactions(
   return [...partitions.values()]
     .flatMap(({ groups }) => groups)
     .concat([...isolatedGroups.values()]);
-}
-
-function deduplicateMonths(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
-  const byMonth = new Map<string, NormalizedTransaction>();
-  for (const transaction of transactions) {
-    if (!byMonth.has(transaction.month)) byMonth.set(transaction.month, transaction);
-  }
-  return [...byMonth.values()];
 }
 
 function isMonthBoundaryPattern(occurrences: NormalizedTransaction[]): boolean {

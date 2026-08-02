@@ -170,6 +170,23 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-10" });
   });
 
+  it("ranks a fuzzy group beyond the bounded amount bucket", () => {
+    const stale = Array.from({ length: 8 }, (_, index) =>
+      transaction("2026-01-10", 20_000, `${String.fromCharCode(98 + index)}ACME UTILITY`),
+    );
+    const result = generateRecurringCandidates(
+      [
+        ...stale,
+        transaction("2026-05-10", 20_000, "ACME UTILITY"),
+        transaction("2026-06-10", 20_000, "ACME UTILITY"),
+        transaction("2026-07-10", 20_000, "XACME UTILITY"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 3 } });
+  });
+
   it("prefers a consecutive fuzzy group over a stale exact-description group", () => {
     const result = generateRecurringCandidates(
       [
@@ -417,6 +434,20 @@ describe("generateRecurringCandidates", () => {
       predictedDate: "2026-04-30",
       evidence: { occurrenceCount: 3 },
     });
+  });
+
+  it("uses boundary occurrence months when matching amount drift", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-31", 100, "定期支払"),
+        transaction("2026-03-02", 110, "定期支払"),
+        transaction("2026-03-31", 115, "定期支払"),
+        transaction("2026-04-30", 120, "定期支払"),
+      ],
+      "2026-05",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 4 } });
   });
 
   it("counts delayed boundary postings as separate scheduled occurrences", () => {
@@ -803,6 +834,20 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "high", evidence: { occurrenceCount: 3 } });
+  });
+
+  it("searches both amount-index sides using the compatibility ratio", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 89, "Utilities"),
+        transaction("2026-06-10", 111, "Utilities"),
+        transaction("2026-07-10", 100, "Utilities"),
+      ],
+      "2026-08",
+      { descriptionSimilarityThreshold: 0 },
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", evidence: { occurrenceCount: 2 } });
   });
 
   it("preserves boundaries between stable numeric tokens", () => {
