@@ -144,6 +144,18 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
   });
 
+  it("normalizes non-zero-padded Western billing months", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-30", 50_000, "カード利用代金 2026-5"),
+        transaction("2026-07-31", 50_000, "カード利用代金 2026/6"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
+  });
+
   it("matches complete Japanese month tokens without partial numeric matches", () => {
     const result = generateRecurringCandidates(
       [
@@ -189,6 +201,33 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
+  });
+
+  it("counts delayed boundary postings as separate scheduled occurrences", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-31", 80_000, "家賃"),
+        transaction("2026-03-02", 80_000, "家賃"),
+        transaction("2026-03-31", 80_000, "家賃"),
+      ],
+      "2026-04",
+    );
+
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      predictedDate: "2026-04-30",
+      evidence: { occurrenceCount: 3 },
+    });
+  });
+
+  it("does not force ordinary dates to month-end with a large drift option", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-06-15", 80_000, "家賃"), transaction("2026-07-15", 80_000, "家賃")],
+      "2026-08",
+      { dateDriftDays: 15 },
+    );
+
+    expect(result[0]?.predictedDate).toBe("2026-08-15");
   });
 
   it("does not merge inverse month-start and month-end schedules", () => {
@@ -338,6 +377,18 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("normalizes recognized volatile numeric references", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 20_000, "UTILITY INVOICE 1001"),
+        transaction("2026-07-05", 20_000, "UTILITY INVOICE 1002"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium" });
+  });
+
   it("uses categories to keep empty-description streams separate", () => {
     const history: RecurringTransaction[] = [
       {
@@ -352,6 +403,21 @@ describe("generateRecurringCandidates", () => {
         date: "2026-07-10",
         amount: 20_000,
         type: "expense",
+        category: "Household",
+      },
+    ];
+
+    expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("uses categories to separate generic nonempty descriptions", () => {
+    const history: RecurringTransaction[] = [
+      {
+        ...transaction("2026-06-10", 20_000, "Payment"),
+        category: "Food",
+      },
+      {
+        ...transaction("2026-07-10", 20_000, "Payment"),
         category: "Household",
       },
     ];

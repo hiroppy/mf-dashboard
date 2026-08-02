@@ -81,6 +81,9 @@ const DEFAULT_OPTIONS = {
   largeIncomeThreshold: 100_000,
 } satisfies Required<GenerateRecurringCandidatesOptions>;
 
+const MONTH_BOUNDARY_WINDOW_DAYS = 3;
+const GENERIC_DESCRIPTIONS = new Set(["payment", "振込", "支払", "支払い"]);
+
 function assertRatio(value: number, name: string): void {
   if (!Number.isFinite(value) || value < 0 || value > 1) {
     throw new Error(`${name} must be between 0 and 1`);
@@ -150,7 +153,14 @@ function containsEnglishTerm(text: string, term: string): boolean {
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
     .replace(/(?<![0-9])(?:[0-9]{4}年)?(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])/gu, "")
-    .replace(/(^|[^a-z0-9])[0-9]{4}[-/.]?(?:0[1-9]|1[0-2])(?=$|[^a-z0-9])/gu, "$1")
+    .replace(
+      /(^|[^a-z0-9])[0-9]{4}(?:[-/.](?:0?[1-9]|1[0-2])|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
+      "$1",
+    )
+    .replace(
+      /\b(invoice|authorization|auth|reference|ref)\s*(?:no\.?|number|#)?\s*[0-9]+\b/gu,
+      "$1",
+    )
     .replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
 }
 
@@ -224,11 +234,11 @@ function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTrans
 
 function normalizeGroupingText(transaction: RecurringTransaction): string {
   const description = normalizeDescription(transaction.description);
-  if (description) return description;
-
-  return normalizeCaseAndWidth(
+  const category = normalizeCaseAndWidth(
     [transaction.category, transaction.subCategory].filter(Boolean).join(" "),
   ).replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
+  if (!description) return category;
+  return GENERIC_DESCRIPTIONS.has(description) ? `${description}${category}` : description;
 }
 
 function belongsToGroup(
@@ -247,12 +257,12 @@ function belongsToGroup(
     return false;
   }
 
-  const medianDayDistance = median(
-    monthlyTransactions.map((existing) => calendarDayDistance(transaction, existing)),
+  const nearestDayDistance = Math.min(
+    ...monthlyTransactions.map((existing) => calendarDayDistance(transaction, existing)),
   );
   const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
   return (
-    medianDayDistance <= options.dateDriftDays &&
+    nearestDayDistance <= options.dateDriftDays &&
     isWithinAmountTolerance(transaction.amount, medianAmount, options.amountToleranceRatio) &&
     haveMatchingNumericTokens(
       transaction.normalizedDescription,
@@ -269,16 +279,23 @@ function groupTransactions(
   transactions: NormalizedTransaction[],
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
-  const groups: TransactionGroup[] = [];
+  const partitions = new Map<string, TransactionGroup[]>();
   for (const transaction of transactions) {
+    const partitionKey = [
+      accountIdKey(transaction.accountId),
+      transaction.type,
+      transaction.classification,
+    ].join("\0");
+    const groups = partitions.get(partitionKey) ?? [];
     const existingGroup = groups.find((group) => belongsToGroup(transaction, group, options));
     if (existingGroup) {
       existingGroup.transactions.push(transaction);
     } else {
       groups.push({ transactions: [transaction] });
     }
+    partitions.set(partitionKey, groups);
   }
-  return groups;
+  return [...partitions.values()].flat();
 }
 
 function deduplicateMonths(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
@@ -289,13 +306,55 @@ function deduplicateMonths(transactions: NormalizedTransaction[]): NormalizedTra
   return [...byMonth.values()];
 }
 
+function isMonthBoundaryPattern(occurrences: NormalizedTransaction[]): boolean {
+  const hasMonthStartOccurrence = occurrences.some(
+    (occurrence) => occurrence.day <= MONTH_BOUNDARY_WINDOW_DAYS,
+  );
+  const hasMonthEndOccurrence = occurrences.some(
+    (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
+  );
+  const allExactMonthEnd = occurrences.every((occurrence) => daysFromMonthEnd(occurrence) === 0);
+  return (
+    allExactMonthEnd ||
+    (hasMonthStartOccurrence &&
+      hasMonthEndOccurrence &&
+      occurrences.every(
+        (occurrence) =>
+          occurrence.day <= MONTH_BOUNDARY_WINDOW_DAYS ||
+          daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
+      ))
+  );
+}
+
+function getOccurrenceMonth(transaction: NormalizedTransaction, boundaryPattern: boolean): string {
+  return boundaryPattern && transaction.day <= MONTH_BOUNDARY_WINDOW_DAYS
+    ? shiftYearMonthKey(transaction.month, -1)
+    : transaction.month;
+}
+
+function deduplicateOccurrences(
+  transactions: NormalizedTransaction[],
+  boundaryPattern: boolean,
+): NormalizedTransaction[] {
+  const byOccurrenceMonth = new Map<string, NormalizedTransaction>();
+  for (const transaction of transactions) {
+    const occurrenceMonth = getOccurrenceMonth(transaction, boundaryPattern);
+    if (!byOccurrenceMonth.has(occurrenceMonth))
+      byOccurrenceMonth.set(occurrenceMonth, transaction);
+  }
+  return [...byOccurrenceMonth.values()];
+}
+
 function getConfidence(
   occurrences: NormalizedTransaction[],
   previousMonth: string,
   largeIncomeThreshold: number,
+  boundaryPattern: boolean,
 ): RecurringCandidateConfidence | null {
   const latest = occurrences.at(-1);
-  if (latest?.month !== previousMonth) return null;
+  if (!latest) return null;
+  const latestOccurrenceMonth = getOccurrenceMonth(latest, boundaryPattern);
+  if (latest.month !== previousMonth && latestOccurrenceMonth !== previousMonth) return null;
   if (occurrences.length >= 3) return "high";
   if (occurrences.length === 2) return "medium";
 
@@ -357,11 +416,13 @@ function createCandidate(
   targetMonth: string,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): RecurringCandidate | null {
-  const occurrences = deduplicateMonths(group.transactions);
+  const boundaryPattern = isMonthBoundaryPattern(group.transactions);
+  const occurrences = deduplicateOccurrences(group.transactions, boundaryPattern);
   const confidence = getConfidence(
     occurrences,
     shiftYearMonthKey(targetMonth, -1),
     options.largeIncomeThreshold,
+    boundaryPattern,
   );
   if (!confidence) return null;
 
@@ -370,23 +431,7 @@ function createCandidate(
 
   const { year, month } = parseYearMonthKey(targetMonth);
   const targetMonthDays = getDaysInMonth(year, month);
-  const hasMonthStartOccurrence = occurrences.some(
-    (occurrence) => occurrence.day <= options.dateDriftDays,
-  );
-  const hasMonthEndOccurrence = occurrences.some(
-    (occurrence) => daysFromMonthEnd(occurrence) <= options.dateDriftDays,
-  );
-  const allExactMonthEnd = occurrences.every((occurrence) => daysFromMonthEnd(occurrence) === 0);
-  const isMonthBoundaryPattern =
-    allExactMonthEnd ||
-    (hasMonthStartOccurrence &&
-      hasMonthEndOccurrence &&
-      occurrences.every(
-        (occurrence) =>
-          occurrence.day <= options.dateDriftDays ||
-          daysFromMonthEnd(occurrence) <= options.dateDriftDays,
-      ));
-  const predictedDay = isMonthBoundaryPattern
+  const predictedDay = boundaryPattern
     ? targetMonthDays
     : Math.min(Math.round(median(occurrences.map(({ day }) => day))), targetMonthDays);
   const dates = occurrences.map(({ date }) => date).sort();
