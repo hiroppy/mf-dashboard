@@ -82,6 +82,10 @@ interface GroupPartition {
   amountKeysByDay: AmountKeysByDay;
   amountKeysByDescriptionAndDay: Map<string, AmountKeysByDay>;
   anchorBigrams: Map<TransactionGroup, Set<string>>;
+  descriptionAmountIndexEntries: Map<
+    TransactionGroup,
+    Array<{ amount: number; day: number; description: string }>
+  >;
   exactOccurrences: Map<string, TransactionGroup>;
   exactRecurringSlots: Map<string, TransactionGroup>;
   groups: TransactionGroup[];
@@ -178,6 +182,16 @@ function removeValidCalendarDate(
   return Number(dayText) <= getDaysInMonth(Number(yearText), Number(monthText)) ? prefix : match;
 }
 
+function removeValidYearlessJapaneseDate(
+  match: string,
+  prefix: string,
+  monthText: string,
+  dayText?: string,
+): string {
+  const isValid = !dayText || Number(dayText) <= getDaysInMonth(2024, Number(monthText));
+  return isValid ? prefix : match;
+}
+
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
     .replace(
@@ -192,9 +206,10 @@ function normalizeDescription(value: string | null | undefined): string {
       /(^|[^a-z0-9])((?:19|20)[0-9]{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
       removeValidCalendarDate,
     )
+    .replace(/(?:19|20)[0-9]{2}年(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])/gu, "")
     .replace(
-      /(?:(?:19|20)[0-9]{2}年(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])|(?<![0-9年])(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?)(?![0-9])/gu,
-      "",
+      /(^|[^0-9年])(0?[1-9]|1[0-2])月(?:(0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
+      removeValidYearlessJapaneseDate,
     )
     .replace(
       /(^|[^a-z0-9])(?:19|20)[0-9]{2}(?:[-/.](?:0?[1-9]|1[0-2])(?![-/.][0-9])|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
@@ -478,16 +493,29 @@ function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore):
   );
 }
 
+function isPerfectGroupMatchScore(score: GroupMatchScore): boolean {
+  return (
+    score.dateDistance === 0 &&
+    score.amountDistance === 0 &&
+    score.continuityDistance === 0 &&
+    score.descriptionDistance === 0
+  );
+}
+
 function getOptimizedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
-  if (exactRecurringGroup && getGroupMatchScore(transaction, exactRecurringGroup, options)) {
+  const exactRecurringScore = exactRecurringGroup
+    ? getGroupMatchScore(transaction, exactRecurringGroup, options)
+    : null;
+  if (exactRecurringGroup && exactRecurringScore && isPerfectGroupMatchScore(exactRecurringScore)) {
     return [exactRecurringGroup];
   }
   const groups = new Set<TransactionGroup>();
+  if (exactRecurringScore && exactRecurringGroup) groups.add(exactRecurringGroup);
   for (const group of getAmountIndexedGroups(
     partition.amountGroupsByDescriptionAndDay.get(transaction.normalizedDescription),
     partition.amountKeysByDescriptionAndDay.get(transaction.normalizedDescription),
@@ -656,38 +684,73 @@ function indexGroupAmount(
   group: TransactionGroup,
   transaction: NormalizedTransaction,
 ): void {
-  const description = transaction.normalizedDescription;
-  const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description) ?? new Map();
-  const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description) ?? new Map();
-  indexGroupByDayAndAmount(groupsByDay, amountKeysByDay, group, transaction);
-  partition.amountGroupsByDescriptionAndDay.set(description, groupsByDay);
-  partition.amountKeysByDescriptionAndDay.set(description, amountKeysByDay);
-
   indexGroupByDayAndAmount(
     partition.amountGroupsByDay,
     partition.amountKeysByDay,
     group,
-    transaction,
+    transaction.day,
+    transaction.amount,
   );
+  reindexDescriptionAmount(partition, group);
 }
 
 function indexGroupByDayAndAmount(
   groupsByDay: AmountGroupsByDay,
   amountKeysByDay: AmountKeysByDay,
   group: TransactionGroup,
-  transaction: NormalizedTransaction,
+  day: number,
+  amount: number,
 ): void {
-  const groupsByAmount = groupsByDay.get(transaction.day) ?? new Map();
-  const groups = groupsByAmount.get(transaction.amount) ?? new Set();
+  const groupsByAmount = groupsByDay.get(day) ?? new Map();
+  const groups = groupsByAmount.get(amount) ?? new Set();
   groups.add(group);
-  groupsByAmount.set(transaction.amount, groups);
-  groupsByDay.set(transaction.day, groupsByAmount);
+  groupsByAmount.set(amount, groups);
+  groupsByDay.set(day, groupsByAmount);
 
-  const amountKeys = amountKeysByDay.get(transaction.day) ?? [];
-  const insertionIndex = lowerBound(amountKeys, transaction.amount);
-  if (amountKeys[insertionIndex] !== transaction.amount)
-    amountKeys.splice(insertionIndex, 0, transaction.amount);
-  amountKeysByDay.set(transaction.day, amountKeys);
+  const amountKeys = amountKeysByDay.get(day) ?? [];
+  const insertionIndex = lowerBound(amountKeys, amount);
+  if (amountKeys[insertionIndex] !== amount) amountKeys.splice(insertionIndex, 0, amount);
+  amountKeysByDay.set(day, amountKeys);
+}
+
+function reindexDescriptionAmount(partition: GroupPartition, group: TransactionGroup): void {
+  for (const { amount, day, description } of partition.descriptionAmountIndexEntries.get(group) ??
+    []) {
+    const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description);
+    const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description);
+    const groupsByAmount = groupsByDay?.get(day);
+    const groups = groupsByAmount?.get(amount);
+    groups?.delete(group);
+    if (groups?.size === 0) {
+      groupsByAmount?.delete(amount);
+      const amountKeys = amountKeysByDay?.get(day);
+      if (amountKeys) {
+        const index = lowerBound(amountKeys, amount);
+        if (amountKeys[index] === amount) amountKeys.splice(index, 1);
+      }
+    }
+  }
+
+  const boundaryPattern = isMonthBoundaryPattern(group.transactions);
+  const monthlyTransactions = deduplicateOccurrences(group.transactions, boundaryPattern);
+  if (monthlyTransactions.length === 0) return;
+  const amount = median(monthlyTransactions.map((transaction) => transaction.amount));
+  const days = new Set(monthlyTransactions.map((transaction) => transaction.day));
+  const descriptions = new Set(
+    monthlyTransactions.map((transaction) => transaction.normalizedDescription),
+  );
+  const entries = [...descriptions].flatMap((description) => {
+    const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description) ?? new Map();
+    const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description) ?? new Map();
+    const descriptionEntries = [...days].map((day) => ({ amount, day, description }));
+    for (const { day } of descriptionEntries) {
+      indexGroupByDayAndAmount(groupsByDay, amountKeysByDay, group, day, amount);
+    }
+    partition.amountGroupsByDescriptionAndDay.set(description, groupsByDay);
+    partition.amountKeysByDescriptionAndDay.set(description, amountKeysByDay);
+    return descriptionEntries;
+  });
+  partition.descriptionAmountIndexEntries.set(group, entries);
 }
 
 function moveGroupToMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
@@ -746,6 +809,7 @@ function groupTransactions(
       amountKeysByDay: new Map(),
       amountKeysByDescriptionAndDay: new Map(),
       anchorBigrams: new Map(),
+      descriptionAmountIndexEntries: new Map(),
       exactOccurrences: new Map(),
       exactRecurringSlots: new Map(),
       groups: [],
@@ -759,12 +823,7 @@ function groupTransactions(
       getOptimizedGroups(partition, transaction, options),
       options,
     );
-    const optimizedIsPerfect =
-      optimizedMatch &&
-      optimizedMatch.score.dateDistance === 0 &&
-      optimizedMatch.score.amountDistance === 0 &&
-      optimizedMatch.score.continuityDistance === 0 &&
-      optimizedMatch.score.descriptionDistance === 0;
+    const optimizedIsPerfect = optimizedMatch && isPerfectGroupMatchScore(optimizedMatch.score);
     const fuzzyMatch = optimizedIsPerfect
       ? undefined
       : findBestGroupMatch(

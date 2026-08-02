@@ -282,6 +282,21 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
   });
 
+  it("normalizes valid yearless Japanese dates but preserves impossible dates", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-30", 50_000, "CARD 2月28日"),
+        transaction("2026-07-31", 50_000, "CARD 2月29日"),
+        transaction("2026-06-10", 20_000, "SERVICE 2月30日"),
+        transaction("2026-07-10", 20_000, "SERVICE 2月31日"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
+  });
+
   it("normalizes non-zero-padded Western billing months", () => {
     const result = generateRecurringCandidates(
       [
@@ -947,6 +962,46 @@ describe("generateRecurringCandidates", () => {
     expect(generateRecurringCandidates(history, "2026-11")[0]).toMatchObject({
       confidence: "medium",
       evidence: { occurrenceCount: 2 },
+    });
+  });
+
+  it("ranks an exact recurring slot with other compatible schedules", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-09", 111, "Utilities"),
+        transaction("2026-05-14", 103, "Utilities"),
+        transaction("2026-06-12", 89, "Utilities"),
+        transaction("2026-06-12", 99, "Utilities"),
+        transaction("2026-07-12", 99, "Utilities"),
+      ],
+      "2026-08",
+      { amountToleranceRatio: 0.2 },
+    );
+
+    expect(result.find(({ confidence }) => confidence === "high")).toMatchObject({
+      predictedAmount: 99,
+      evidence: { amountRange: { min: 89, max: 103 } },
+    });
+  });
+
+  it("ranks exact-label schedules before applying the candidate limit", () => {
+    const result = generateRecurringCandidates(
+      [
+        ...[80, 91, 92, 93, 94, 95, 96, 97, 98].map((amount) =>
+          transaction("2026-05-10", amount, "Utilities"),
+        ),
+        ...[91, 92, 93, 94, 95, 96, 97, 98, 120].map((amount) =>
+          transaction("2026-06-10", amount, "Utilities"),
+        ),
+        transaction("2026-07-10", 100, "Utilities"),
+      ],
+      "2026-08",
+      { amountToleranceRatio: 0.5 },
+    );
+
+    expect(result.find(({ confidence }) => confidence === "high")).toMatchObject({
+      predictedAmount: 100,
+      evidence: { amountRange: { min: 80, max: 120 } },
     });
   });
 
