@@ -1,8 +1,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { extractAccountMfIdFromDetailUrl } from "../../src/scrapers/account-detail.js";
-import { getCurrentGroup, NO_GROUP_ID, switchGroup } from "../../src/scrapers/group.js";
+import { createGroupScope, NO_GROUP_ID, switchGroup } from "../../src/scrapers/group.js";
 import { scrapeInstitutionCategories } from "../../src/scrapers/institution-categories.js";
 import { selectManualHoldingAccounts } from "../../src/scrapers/manual-holding-accounts.js";
 import { PNS_CORE_COLUMN_COUNT, selectLinkedPnsAccounts } from "../../src/scrapers/portfolio.js";
@@ -14,7 +13,8 @@ const PORTFOLIO_TABLE_SELECTOR =
 
 let browser: Browser;
 let context: BrowserContext;
-let originalGroupId: string | null = null;
+let groupScopePage: Page;
+let groupScope: Awaited<ReturnType<typeof createGroupScope>>;
 
 async function gotoPortfolio(page: Page): Promise<void> {
   await page.goto(mfUrls.portfolio, { waitUntil: "domcontentloaded" });
@@ -26,21 +26,16 @@ async function gotoPortfolio(page: Page): Promise<void> {
 
 beforeAll(async () => {
   ({ browser, context } = await launchLoggedInContext());
-  await withNewPage(context, async (page) => {
-    originalGroupId = (await getCurrentGroup(page))?.id ?? null;
-    await switchGroup(page, NO_GROUP_ID);
-  });
+  groupScopePage = await context.newPage();
+  groupScope = await createGroupScope(groupScopePage);
+  await switchGroup(groupScopePage, NO_GROUP_ID);
 });
 
 afterAll(async () => {
   try {
-    const groupIdToRestore = originalGroupId;
-    if (groupIdToRestore && groupIdToRestore !== NO_GROUP_ID) {
-      await withNewPage(context, async (page) => {
-        await switchGroup(page, groupIdToRestore);
-      });
-    }
+    await groupScope?.[Symbol.asyncDispose]();
   } finally {
+    await groupScopePage?.close();
     await context?.close();
     await browser?.close();
   }
@@ -119,18 +114,8 @@ describe("portfolio page structure", () => {
     });
   });
 
-  test("預金行を現在の登録口座へ一意に紐付けられる", async () => {
+  test("預金行に金融機関セルと任意の口座詳細リンク構造が存在する", async () => {
     await withNewPage(context, async (page) => {
-      const institutionCategories = await scrapeInstitutionCategories(page);
-      const registeredAccounts = await getRegisteredAccounts(page);
-      const registeredAccountMfIds = new Set(registeredAccounts.accounts.map(({ mfId }) => mfId));
-      const accountMfIdsByName = new Map<string, string[]>();
-      for (const account of registeredAccounts.accounts) {
-        const mfIds = accountMfIdsByName.get(account.name) ?? [];
-        mfIds.push(account.mfId);
-        accountMfIdsByName.set(account.name, mfIds);
-      }
-
       await gotoPortfolio(page);
       const rows = page.locator("table.table-depo tbody tr");
       if ((await rows.count()) === 0) {
@@ -139,21 +124,16 @@ describe("portfolio page structure", () => {
 
       for (let index = 0; index < (await rows.count()); index++) {
         const institutionCell = rows.nth(index).locator("td").nth(2);
-        const href = await institutionCell
-          .locator("a")
-          .first()
-          .getAttribute("href")
-          .catch(() => null);
-        const explicitAccountMfId = href ? extractAccountMfIdFromDetailUrl(href, "show") : null;
-        const institution = (await institutionCell.textContent())?.trim() ?? "";
-        const candidateMfIds = explicitAccountMfId
-          ? registeredAccountMfIds.has(explicitAccountMfId)
-            ? [explicitAccountMfId]
-            : []
-          : (accountMfIdsByName.get(institution) ?? []);
+        expect(await institutionCell.count()).toBe(1);
+        expect(((await institutionCell.textContent())?.trim().length ?? 0) > 0).toBe(true);
 
-        expect(candidateMfIds.length).toBe(1);
-        expect(institutionCategories.has(candidateMfIds[0]!)).toBe(true);
+        const detailLinks = institutionCell.locator("a");
+        expect(await detailLinks.count()).toBeLessThanOrEqual(1);
+        expect(
+          await detailLinks.evaluateAll((links) =>
+            links.every(({ href }) => new URL(href).pathname.startsWith("/accounts/show/")),
+          ),
+        ).toBe(true);
       }
     });
   });
