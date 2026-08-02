@@ -161,8 +161,8 @@ pnpm --filter @mf-dashboard/crawler dev:scrape
 
 Scraping mode is inferred from database existence:
 
-- If `data/moneyforward.db` exists, `month` mode fetches the current month only.
-- If it does not exist, `history` mode fetches the past 13 months.
+- If `data/moneyforward.db` exists, `month` mode re-fetches the current and previous accounting periods so delayed transactions and category updates are incorporated.
+- If it does not exist, `history` mode fetches from January of the previous year through the current accounting period.
 - For testing, set `SCRAPE_MODE=history` or `SCRAPE_MODE=month` to override detection.
 - To remove groups no longer present in Money Forward, run with `CLEANUP_GROUPS=true`. Otherwise, groups are only upserted and never deleted.
 

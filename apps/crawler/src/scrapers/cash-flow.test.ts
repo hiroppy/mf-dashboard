@@ -1,7 +1,12 @@
-import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
+import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import type { Locator, Page, Response } from "playwright";
 import { describe, expect, test, vi } from "vitest";
-import { getCashFlow, parseCashFlowMonthCsvHref, parseCashFlowMonthHeader } from "./cash-flow.js";
+import {
+  getCashFlow,
+  isCurrentAccountingPeriod,
+  parseCashFlowMonthCsvHref,
+  parseCashFlowMonthHeader,
+} from "./cash-flow.js";
 
 describe("parseCashFlowMonthHeader", () => {
   test.each([
@@ -34,29 +39,31 @@ describe("parseCashFlowMonthCsvHref", () => {
 });
 
 describe("getCashFlow", () => {
-  test("月跨ぎヘッダーよりCSVの対象月を優先する", async () => {
-    const currentMonth = getJstYearMonthKey();
-    const [year, month] = currentMonth.split("-");
-    const previousMonthDate = new Date(Number(year), Number(month) - 2, 1);
-    const previousYear = previousMonthDate.getFullYear();
-    const previousMonth = previousMonthDate.getMonth() + 1;
+  test("締め日後の月跨ぎ期間を当日期間として判定する", () => {
+    expect(
+      isCurrentAccountingPeriod(
+        { periodStart: "2026-08-26", periodEnd: "2026-09-25" },
+        "2026-08-26",
+      ),
+    ).toBe(true);
+  });
 
+  test("締め日跨ぎの当日期間ではCSVがなくてもTodayを再クリックしない", async () => {
+    const today = getJstTodayIsoDate();
+    const [year, month, day] = today.split("-").map(Number);
     let monthHeader: Locator;
     monthHeader = {
       first: vi.fn<() => Locator>(() => monthHeader),
       count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
       textContent: vi
         .fn<() => Promise<string | null>>()
-        .mockResolvedValue(`${previousYear}/${previousMonth}/26 - ${year}/${Number(month)}/25`),
+        .mockResolvedValue(`${year}/${month}/${day} - ${year}/${month}/${day}`),
     } as unknown as Locator;
 
     let csvLink: Locator;
     csvLink = {
       first: vi.fn<() => Locator>(() => csvLink),
-      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
-      getAttribute: vi
-        .fn<() => Promise<string | null>>()
-        .mockResolvedValue(`/cf/csv?year=${year}&month=${Number(month)}`),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
     } as unknown as Locator;
 
     const detailTable = {
@@ -98,13 +105,16 @@ describe("getCashFlow", () => {
       locator,
     } as unknown as Page;
 
-    await expect(getCashFlow(page)).resolves.toMatchObject({ month: currentMonth, items: [] });
+    await expect(getCashFlow(page)).resolves.toMatchObject({
+      month: `${year}-${String(month).padStart(2, "0")}`,
+      items: [],
+    });
     expect(clickToday).not.toHaveBeenCalled();
   });
 
   test("当月取得AJAXのDOM適用完了を待ってから結果を返す", async () => {
-    const currentMonth = getJstYearMonthKey();
-    const [year, month] = currentMonth.split("-");
+    const today = getJstTodayIsoDate();
+    const [year, month, day] = today.split("-").map(Number);
     const events: string[] = [];
 
     let monthHeader: Locator;
@@ -114,7 +124,7 @@ describe("getCashFlow", () => {
       textContent: vi
         .fn<() => Promise<string | null>>()
         .mockResolvedValueOnce("2000/1/1 - 2000/1/31")
-        .mockResolvedValueOnce(`${year}/${Number(month)}/1 - ${year}/${Number(month)}/28`),
+        .mockResolvedValueOnce(`${year}/${month}/${day} - ${year}/${month}/${day}`),
     } as unknown as Locator;
 
     let csvLink: Locator;
@@ -182,16 +192,17 @@ describe("getCashFlow", () => {
       waitForFunction,
     } as unknown as Page;
 
-    await expect(getCashFlow(page)).resolves.toMatchObject({ month: currentMonth, items: [] });
+    await expect(getCashFlow(page)).resolves.toMatchObject({
+      month: `${year}-${String(month).padStart(2, "0")}`,
+      items: [],
+    });
     expect(waitForFunction.mock.calls.map((call) => call[1])).toEqual([
       "__mfDashboardCashFlowAjax",
-      currentMonth,
     ]);
     expect(events).toEqual([
       "ajax-wait-installed",
       "ajax-applied",
       "ajax-wait-cleaned",
-      "month-updated",
       "detail-read",
     ]);
   });

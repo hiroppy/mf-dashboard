@@ -1,4 +1,4 @@
-import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
+import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import type { CashFlowSummary, CashFlowItem } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
@@ -23,7 +23,7 @@ async function getRequiredText(locator: ReturnType<Page["locator"]>): Promise<st
   }
 }
 
-export async function getDisplayedCashFlowState(
+async function getDisplayedCashFlowState(
   page: Page,
 ): Promise<{ month: string; periodStart: string; periodEnd: string } | null> {
   const monthHeader = page.locator(".fc-header-title h2").first();
@@ -41,6 +41,46 @@ export async function getDisplayedCashFlowState(
   return month ? { month, ...resolveCashFlowPeriod(headerText, month) } : null;
 }
 
+export function isCurrentAccountingPeriod(
+  period: { periodStart: string; periodEnd: string },
+  today = getJstTodayIsoDate(),
+): boolean {
+  return period.periodStart <= today && today <= period.periodEnd;
+}
+
+export async function ensureCurrentCashFlowView(
+  page: Page,
+): Promise<{ month: string; periodStart: string; periodEnd: string }> {
+  let displayedState = await getDisplayedCashFlowState(page);
+  if (!displayedState) {
+    throw new Error("Could not determine the displayed cash flow month");
+  }
+
+  if (isCurrentAccountingPeriod(displayedState)) return displayedState;
+
+  const todayButton = page.locator(".fc-button-today").first();
+  if (!(await todayButton.isVisible())) {
+    throw new Error(`Could not navigate cash flow from ${displayedState.month} to today`);
+  }
+
+  debug("Clicking today button to navigate to the current accounting period");
+  await waitForCashFlowFetchApplied(page, async () => {
+    const [fetchResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) => response.url().includes("/cf/fetch") && response.status() === 200,
+      ),
+      todayButton.click(),
+    ]);
+    const responseFailure = await fetchResponse.finished();
+    if (responseFailure) throw responseFailure;
+  });
+  displayedState = await getDisplayedCashFlowState(page);
+  if (!displayedState || !isCurrentAccountingPeriod(displayedState)) {
+    throw new Error("Cash flow did not return to the current accounting period");
+  }
+  return displayedState;
+}
+
 export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   debug("Getting cash flow from /cf page...");
 
@@ -48,59 +88,8 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   // テーブルが表示されるまで待機
   await page.locator("#cf-detail-table").waitFor({ state: "visible", timeout: 10000 });
 
-  const currentMonth = getJstYearMonthKey();
-  let displayedState = await getDisplayedCashFlowState(page);
-  if (!displayedState) {
-    throw new Error("Could not determine the displayed cash flow month");
-  }
-  let { month } = displayedState;
-
-  // When a previous month is displayed, the service loads the current month's rows
-  // asynchronously. Waiting for the full response and month transition prevents treating the
-  // previous table as authoritative. Do not click the disabled button on an already
-  // current page because empty months legitimately have no CSV link or transaction rows.
-  const todayButton = page.locator(".fc-button-today").first();
-  if (month !== currentMonth) {
-    if (!(await todayButton.isVisible())) {
-      throw new Error(`Could not navigate cash flow from ${month} to ${currentMonth}`);
-    }
-
-    debug("Clicking today button to navigate to current month");
-    await waitForCashFlowFetchApplied(page, async () => {
-      const [fetchResponse] = await Promise.all([
-        page.waitForResponse(
-          (response) => response.url().includes("/cf/fetch") && response.status() === 200,
-        ),
-        todayButton.click(),
-      ]);
-      const responseFailure = await fetchResponse.finished();
-      if (responseFailure) throw responseFailure;
-    });
-    await page.waitForFunction((expectedMonth) => {
-      const headerText = document.querySelector(".fc-header-title h2")?.textContent ?? "";
-      const headerMatch =
-        headerText.match(/(\d{4})年(\d{1,2})月/) ??
-        headerText.match(/\d{4}\/\d{1,2}\/\d{1,2}\s*-\s*(\d{4})\/(\d{1,2})\/\d{1,2}/);
-      const headerMonth = headerMatch
-        ? `${headerMatch[1]}-${String(Number(headerMatch[2])).padStart(2, "0")}`
-        : null;
-      const csvHref = document.querySelector("a[href*='/cf/csv']")?.getAttribute("href") ?? "";
-      const csvYear = csvHref.match(/[?&]year=(\d{4})/)?.[1];
-      const csvMonthNumber = Number(csvHref.match(/[?&]month=(\d{1,2})/)?.[1]);
-      const csvMonth =
-        csvYear && csvMonthNumber >= 1 && csvMonthNumber <= 12
-          ? `${csvYear}-${String(csvMonthNumber).padStart(2, "0")}`
-          : null;
-
-      return csvMonth ? csvMonth === expectedMonth : headerMonth === expectedMonth;
-    }, currentMonth);
-
-    displayedState = await getDisplayedCashFlowState(page);
-    month = displayedState?.month ?? "";
-    if (!displayedState || month !== currentMonth) {
-      throw new Error(`Cash flow remained on ${month || "an unknown month"}`);
-    }
-  }
+  const displayedState = await ensureCurrentCashFlowView(page);
+  const { month } = displayedState;
 
   // Get totals from summary table (並列取得)
   const summaryRow = page.locator("#monthly_total_table_kakeibo tbody tr").first();

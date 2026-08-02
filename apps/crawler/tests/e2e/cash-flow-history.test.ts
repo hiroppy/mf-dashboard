@@ -1,9 +1,11 @@
-import { getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
-import { scrapeCashFlowHistory } from "../../src/scrapers/cash-flow-history.js";
-import { getDisplayedCashFlowState } from "../../src/scrapers/cash-flow.js";
+import {
+  scrapeCashFlowHistory,
+  waitForCashFlowFetchApplied,
+} from "../../src/scrapers/cash-flow-history.js";
+import { ensureCurrentCashFlowView } from "../../src/scrapers/cash-flow.js";
 import {
   gotoHome,
   launchLoggedInContext,
@@ -68,25 +70,42 @@ describe("scrapeCashFlowHistory", () => {
     });
   });
 
-  test("CSVリンクがない月跨ぎ表示では期間終了月を対象月にする", async () => {
+  test("CSVリンクがない実ページから当日期間へ戻れる", async () => {
     await withNewPage(context, async (page) => {
       await page.goto(mfUrls.cashFlow, { waitUntil: "domcontentloaded" });
       await page.locator("#cf-detail-table").waitFor({ state: "visible", timeout: 10000 });
 
-      const currentMonth = getJstYearMonthKey();
-      const [year, month] = currentMonth.split("-").map(Number);
-      const previousMonth = new Date(year!, month! - 2, 1);
-      const rangeHeader = `${previousMonth.getFullYear()}/${previousMonth.getMonth() + 1}/26 - ${year}/${month}/25`;
-      await page.evaluate((header) => {
-        document.querySelector("a[href*='/cf/csv']")?.remove();
-        const title = document.querySelector(".fc-header-title h2");
-        if (!title) throw new Error("Cash flow month header is unavailable");
-        title.textContent = header;
-      }, rangeHeader);
+      const monthHeader = page.locator(".fc-header-title h2").first();
+      const nextButton = page.locator("button.fc-button-next, span.fc-button-next").first();
+      await ensureCurrentCashFlowView(page);
+      const currentPeriodHeader = await monthHeader.textContent();
+      let foundEmptyPeriod = false;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const previousHeader = await monthHeader.textContent();
+        await waitForCashFlowFetchApplied(page, async () => {
+          const [fetchResponse] = await Promise.all([
+            page.waitForResponse(
+              (response) => response.url().includes("/cf/fetch") && response.status() === 200,
+            ),
+            nextButton.click(),
+          ]);
+          const responseFailure = await fetchResponse.finished();
+          if (responseFailure) throw responseFailure;
+        });
+        await expect.poll(() => monthHeader.textContent()).not.toBe(previousHeader);
+        if ((await page.locator("a[href*='/cf/csv']").count()) === 0) {
+          foundEmptyPeriod = true;
+          break;
+        }
+      }
+      expect(foundEmptyPeriod).toBe(true);
 
-      const state = await getDisplayedCashFlowState(page);
-      expect(state?.month).toBe(currentMonth);
-      expect(state?.periodEnd).toBe(`${currentMonth}-25`);
+      const emptyPeriodHeader = await monthHeader.textContent();
+      await ensureCurrentCashFlowView(page);
+      const restoredHeader = await monthHeader.textContent();
+      expect(restoredHeader).not.toBe(emptyPeriodHeader);
+      expect(restoredHeader).toBe(currentPeriodHeader);
+      await expect(page.locator("#cf-detail-table").isVisible()).resolves.toBe(true);
     });
   });
 });
