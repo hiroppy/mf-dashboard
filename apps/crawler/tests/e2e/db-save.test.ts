@@ -84,7 +84,7 @@ describe("DB保存", () => {
     expect(snapshots.length).toBeGreaterThan(0);
     const latestSnapshot = snapshots[snapshots.length - 1];
     const today = new Date().toISOString().split("T")[0];
-    expect(latestSnapshot.date).toBe(today);
+    expect(latestSnapshot.date === today).toBe(true);
   });
 
   test("取得したポートフォリオが値を欠落させず保存される", async () => {
@@ -127,7 +127,10 @@ describe("DB保存", () => {
       }))
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-    expect(actual).toEqual(expected);
+    expect(actual.length).toBe(expected.length);
+    expect(
+      actual.every((value, index) => JSON.stringify(value) === JSON.stringify(expected[index])),
+    ).toBe(true);
   });
 
   test("口座ステータスが保存される", async () => {

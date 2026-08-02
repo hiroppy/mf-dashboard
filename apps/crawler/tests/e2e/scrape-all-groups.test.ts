@@ -104,9 +104,7 @@ describe("scrapeAllGroups", () => {
 
     test("各グループにgroup情報がある", () => {
       for (const groupData of result.groupDataList) {
-        expect(groupData.group).toBeDefined();
-        expect(groupData.group.id).toBeDefined();
-        expect(groupData.group.name).toBeTruthy();
+        expect(Boolean(groupData.group.id) && Boolean(groupData.group.name)).toBe(true);
         expect(typeof groupData.group.isCurrent).toBe("boolean");
       }
     });
@@ -128,7 +126,7 @@ describe("scrapeAllGroups", () => {
     test("各グループにsummaryがある", () => {
       for (const groupData of result.groupDataList) {
         expect(groupData.summary).toBeDefined();
-        expect(groupData.summary.totalAssets).toBeDefined();
+        expect(groupData.summary.totalAssets !== undefined).toBe(true);
       }
     });
 

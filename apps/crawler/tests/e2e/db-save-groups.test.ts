@@ -93,7 +93,7 @@ describe("グループ保存（新フロー）", () => {
     const db = getDb();
     const groups = await db.select().from(schema.groups).all();
     const currentGroups = groups.filter((g) => g.isCurrent);
-    expect(currentGroups).toHaveLength(1);
+    expect(currentGroups.length).toBe(1);
   });
 
   test("isCurrentのグループはdefaultGroupと一致する", async () => {
@@ -106,7 +106,7 @@ describe("グループ保存（新フロー）", () => {
       .where(eq(schema.groups.isCurrent, true))
       .get();
 
-    expect(currentGroup?.id).toBe(scrapeResult.defaultGroup.id);
+    expect(currentGroup?.id === scrapeResult.defaultGroup.id).toBe(true);
   });
 });
 

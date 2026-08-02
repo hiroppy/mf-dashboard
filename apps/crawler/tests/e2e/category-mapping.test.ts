@@ -75,8 +75,8 @@ describe("Money Forward category mapping", () => {
         );
 
         expect(checks.length).toBeGreaterThan(0);
-        expect(checks).toEqual(
-          checks.map(({ id }) => ({ id, existsInApp: true, nameMatches: true })),
+        expect(checks.every(({ existsInApp, nameMatches }) => existsInApp && nameMatches)).toBe(
+          true,
         );
       });
     });
@@ -152,16 +152,22 @@ describe("Money Forward category mapping", () => {
         expect(new Set(htmlMappings.map((mapping) => mapping.isIncome))).toEqual(
           new Set([false, true]),
         );
-        expect(checks).toEqual(
-          checks.map(({ id }) => ({
-            id,
-            existsInHtml: true,
-            existsInApp: true,
-            largeCategoryNameMatches: true,
-            middleCategoryNameMatches: true,
-            typeMatches: true,
-          })),
-        );
+        expect(
+          checks.every(
+            ({
+              existsInHtml,
+              existsInApp,
+              largeCategoryNameMatches,
+              middleCategoryNameMatches,
+              typeMatches,
+            }) =>
+              existsInHtml &&
+              existsInApp &&
+              largeCategoryNameMatches &&
+              middleCategoryNameMatches &&
+              typeMatches,
+          ),
+        ).toBe(true);
       });
     });
   });

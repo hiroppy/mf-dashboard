@@ -120,7 +120,7 @@ export async function getAllGroups(page: Page): Promise<Group[]> {
 
     // 「グループの追加・編集」などの特殊オプションを除外
     if (!isValidGroupOption(value)) {
-      debug(`Skipping non-group option: ${text.trim()} (${value})`);
+      debug("Skipping non-group option");
       continue;
     }
 
