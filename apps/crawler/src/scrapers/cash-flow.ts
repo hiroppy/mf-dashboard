@@ -71,8 +71,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {
-    const item = await parseDetailRow(detailRows.nth(i), i, currentYear);
-    if (item) items.push(item);
+    items.push(await parseDetailRow(detailRows.nth(i), i, currentYear));
   }
 
   return { month, totalIncome, totalExpense, balance, items };

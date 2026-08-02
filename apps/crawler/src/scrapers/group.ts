@@ -11,6 +11,24 @@ const EXCLUDED_OPTION_IDS = ["create_group"];
 
 const GROUP_SELECTOR = 'select[name="group_id_hash"]';
 
+function sanitizeGroupSwitchError(error: unknown): Error {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (name === "TimeoutError" || /timeout|timed out/i.test(message)) {
+    const sanitized = new Error("Group switch timed out");
+    sanitized.name = "TimeoutError";
+    return sanitized;
+  }
+  if (/net::ERR_|page\.goto|navigation/i.test(message)) {
+    return new Error("Group switch navigation failed");
+  }
+  if (/selector|locator|waiting for .* to be|not found|no element/i.test(message)) {
+    return new Error("Group selector not found");
+  }
+  return new Error("Group switch failed");
+}
+
 /** グループ選択なしかどうかを判定 */
 export function isNoGroup(groupId: string): boolean {
   return groupId === NO_GROUP_ID;
@@ -179,10 +197,10 @@ export async function switchGroup(page: Page, groupId: string): Promise<Group | 
     // MoneyForwardはページ遷移で切り替わるので、新しいページでセレクタを確認
     const newGroupSelect = await getGroupSelector(page, false);
     if (!newGroupSelect || (await newGroupSelect.inputValue()) !== groupId) {
-      throw new Error("verification failed");
+      throw new Error("Group selector verification failed");
     }
-  } catch {
-    throw new Error("Group switch failed");
+  } catch (error) {
+    throw sanitizeGroupSwitchError(error);
   }
 
   log(`Successfully switched to ${groupLabel}`);
@@ -212,7 +230,7 @@ export async function createGroupScope(
           await switchGroup(page, originalGroup.id);
           log("Successfully restored original group");
           return;
-        } catch {
+        } catch (error) {
           if (attempt < MAX_RETRIES) {
             warn(`Failed to restore group (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
             // ページ状態をリセットしてリトライ
@@ -226,7 +244,7 @@ export async function createGroupScope(
             }
           } else {
             warn("Failed to restore original group after all retries");
-            throw new Error("Failed to restore original group after all retries");
+            throw sanitizeGroupSwitchError(error);
           }
         }
       }

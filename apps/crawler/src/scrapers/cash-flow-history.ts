@@ -141,7 +141,7 @@ export async function parseDetailRow(
   row: ReturnType<Page["locator"]>,
   index: number,
   year: number,
-): Promise<CashFlowItem | null> {
+): Promise<CashFlowItem> {
   const cells = row.locator("td");
 
   // グループ1: 基本情報を並列取得
@@ -155,8 +155,10 @@ export async function parseDetailRow(
 
   const mfId = rowId?.replace("js-transaction-", "") || `unknown-${index}`;
 
-  // 必須フィールドが空の場合はスキップ
-  if (!description || !amountText) return null;
+  // A monthly replacement is safe only when every rendered transaction row was extracted.
+  if (!description || !amountText) {
+    throw new Error("Incomplete cash flow transaction row");
+  }
 
   // グループ2: カテゴリ情報を並列取得
   const [categoryText, subCategoryText] = await Promise.all([
@@ -230,8 +232,7 @@ export async function extractCashFlowFromPage(page: Page): Promise<CashFlowSumma
   const items: CashFlowItem[] = [];
 
   for (let i = 0; i < detailCount; i++) {
-    const item = await parseDetailRow(detailRows.nth(i), i, year);
-    if (item) items.push(item);
+    items.push(await parseDetailRow(detailRows.nth(i), i, year));
   }
 
   return { month, totalIncome, totalExpense, balance, items };

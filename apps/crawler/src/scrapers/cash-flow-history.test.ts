@@ -3,6 +3,7 @@ import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import {
   buildMonthRange,
+  parseDetailRow,
   scrapeCashFlowHistory,
   scrapeCashFlowMonth,
 } from "./cash-flow-history.js";
@@ -60,6 +61,23 @@ describe("scrapeCashFlowHistory", () => {
 });
 
 describe("scrapeCashFlowMonth", () => {
+  test("必須セルを取得できない行があれば部分的な月次結果を返さない", async () => {
+    const emptyCell = {
+      textContent: vi.fn<Locator["textContent"]>().mockResolvedValue(""),
+    } as unknown as Locator;
+    const cells = {
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(emptyCell),
+    } as unknown as Locator;
+    const row = {
+      getAttribute: vi.fn<Locator["getAttribute"]>().mockResolvedValue(""),
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
+    } as unknown as Locator;
+
+    await expect(parseDetailRow(row, 0, 2026)).rejects.toThrow(
+      "Incomplete cash flow transaction row",
+    );
+  });
+
   test("指定月範囲へ遷移し、詳細テーブルを待ってから抽出する", async () => {
     const waitFor = vi.fn<Locator["waitFor"]>().mockResolvedValue(undefined);
     const detailTable = { waitFor } as unknown as Locator;

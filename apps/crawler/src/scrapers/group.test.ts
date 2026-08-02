@@ -9,9 +9,9 @@ const logger = vi.hoisted(() => ({
 
 vi.mock("../logger.js", () => logger);
 
-import { createGroupScope, NO_GROUP_ID } from "./group.js";
+import { createGroupScope, NO_GROUP_ID, switchGroup } from "./group.js";
 
-function createFailingGroupPage() {
+function createFailingGroupPage(switchError: Error = new Error("private-group-id")) {
   const state = { currentGroupId: "private-group-id" };
   const option = {
     count: vi.fn<() => Promise<number>>(async () => 1),
@@ -23,7 +23,7 @@ function createFailingGroupPage() {
     isVisible: vi.fn<() => Promise<boolean>>(async () => true),
     locator: vi.fn<() => typeof option>(() => option),
     selectOption: vi.fn<() => Promise<never>>(async () => {
-      throw new Error("private-group-id");
+      throw switchError;
     }),
     waitFor: vi.fn<() => Promise<void>>(async () => undefined),
   };
@@ -48,13 +48,44 @@ describe("createGroupScope", () => {
     const scope = await createGroupScope(page);
     state.currentGroupId = NO_GROUP_ID;
 
-    await expect(scope[Symbol.asyncDispose]()).rejects.toThrow(
-      "Failed to restore original group after all retries",
-    );
+    await expect(scope[Symbol.asyncDispose]()).rejects.toThrow("Group switch failed");
 
     expect(select.selectOption).toHaveBeenCalledTimes(3);
     const diagnostics = JSON.stringify([...logger.log.mock.calls, ...logger.warn.mock.calls]);
     expect(diagnostics).not.toContain("private-group-id");
     expect(diagnostics).not.toContain("Private Group Name");
   });
+});
+
+describe("switchGroup", () => {
+  test.each([
+    {
+      expectedMessage: "Group switch timed out",
+      expectedName: "TimeoutError",
+      rawError: Object.assign(new Error("private-group-id timed out after 5000ms"), {
+        name: "TimeoutError",
+      }),
+    },
+    {
+      expectedMessage: "Group switch navigation failed",
+      expectedName: "Error",
+      rawError: new Error("page.goto private-group-id net::ERR_ABORTED"),
+    },
+    {
+      expectedMessage: "Group selector not found",
+      expectedName: "Error",
+      rawError: new Error("locator private-group-id not found"),
+    },
+  ])(
+    "元の値を伏せて $expectedMessage を維持する",
+    async ({ expectedMessage, expectedName, rawError }) => {
+      const { page, state } = createFailingGroupPage(rawError);
+      state.currentGroupId = NO_GROUP_ID;
+
+      const error = await switchGroup(page, "private-group-id").catch((caught) => caught);
+
+      expect(error).toMatchObject({ message: expectedMessage, name: expectedName });
+      expect((error as Error).message).not.toContain("private-group-id");
+    },
+  );
 });

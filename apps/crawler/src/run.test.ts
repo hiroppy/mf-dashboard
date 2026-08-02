@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  handleCrawlerFailure,
   runAnalyticsPhase,
   runAuthPhase,
   runCashFlowHistoryPhase,
@@ -155,6 +156,49 @@ describe("runCrawler progress", () => {
     expect(runInstitutionCategoryPhase).toHaveBeenCalledOnce();
     expect(runCashFlowHistoryPhase).toHaveBeenCalledOnce();
     expect(runAnalyticsPhase).toHaveBeenCalledOnce();
+  });
+
+  test("グループ復元を完了してから成功通知を送る", async () => {
+    const dispose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    vi.mocked(createGroupScope).mockResolvedValueOnce({
+      originalGroup: null,
+      [Symbol.asyncDispose]: dispose,
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await runCrawler(progress);
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(dispose.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(runNotificationPhase).mock.invocationCallOrder[0]!,
+    );
+  });
+
+  test("グループ復元に失敗した場合は成功通知とweb refreshを実行しない", async () => {
+    const restoreError = new Error("Group switch timed out");
+    vi.mocked(createGroupScope).mockResolvedValueOnce({
+      originalGroup: null,
+      [Symbol.asyncDispose]: vi.fn<() => Promise<void>>().mockRejectedValue(restoreError),
+    });
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await expect(runCrawler(progress)).rejects.toThrow("Group switch timed out");
+
+    expect(runNotificationPhase).not.toHaveBeenCalled();
+    expect(notifyWebRefresh).not.toHaveBeenCalled();
+    expect(handleCrawlerFailure).toHaveBeenCalledWith(
+      restoreError,
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   test("history replacementsをcurrent dataと同じsave phaseへ渡す", async () => {
