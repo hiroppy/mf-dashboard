@@ -369,6 +369,23 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
   });
 
+  it("keeps the closest same-month occurrence for an existing schedule", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-07", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-10", 20_000, "SERVICE PLAN"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({
+      confidence: "medium",
+      predictedDate: "2026-08-10",
+      evidence: { occurrenceCount: 2 },
+    });
+  });
+
   it("matches near-end dates by their month-end offsets", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-02-27", 80_000, "家賃")],

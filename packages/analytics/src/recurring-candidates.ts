@@ -313,11 +313,11 @@ function conflictsWithBoundaryOccurrence(
   });
 }
 
-function conflictsWithPostingMonthSchedule(
+function getPostingMonthConflicts(
   transaction: NormalizedTransaction,
   transactions: NormalizedTransaction[],
-): boolean {
-  return transactions.some((existing) => {
+): NormalizedTransaction[] {
+  return transactions.filter((existing) => {
     if (existing.month !== transaction.month) return false;
     if (existing.day === transaction.day) {
       return (
@@ -333,6 +333,13 @@ function conflictsWithPostingMonthSchedule(
       existingPosition.occurrenceMonth !== transactionPosition.occurrenceMonth
     );
   });
+}
+
+function conflictsWithPostingMonthSchedule(
+  transaction: NormalizedTransaction,
+  transactions: NormalizedTransaction[],
+): boolean {
+  return getPostingMonthConflicts(transaction, transactions).length > 0;
 }
 
 function normalizeGroupingText(transaction: RecurringTransaction): string {
@@ -351,6 +358,7 @@ interface GroupMatchScore {
   continuityDistance: number;
   dateDistance: number;
   descriptionDistance: number;
+  replacedTransactions: NormalizedTransaction[];
 }
 
 function getGroupMatchScore(
@@ -371,7 +379,26 @@ function getGroupMatchScore(
     return null;
   }
   if (conflictsWithBoundaryOccurrence(transaction, group.transactions)) return null;
-  if (conflictsWithPostingMonthSchedule(transaction, group.transactions)) return null;
+  const postingMonthConflicts = getPostingMonthConflicts(transaction, group.transactions);
+  if (postingMonthConflicts.length > 0) {
+    const conflictSet = new Set(postingMonthConflicts);
+    const historyGroup = {
+      transactions: group.transactions.filter((existing) => !conflictSet.has(existing)),
+    };
+    const candidateScore = getGroupMatchScore(transaction, historyGroup, options);
+    const bestExistingScore = postingMonthConflicts
+      .map((existing) => getGroupMatchScore(existing, historyGroup, options))
+      .filter((score): score is GroupMatchScore => score !== null)
+      .sort(compareGroupMatchScores)[0];
+    if (
+      !candidateScore ||
+      !bestExistingScore ||
+      compareGroupMatchScores(candidateScore, bestExistingScore) >= 0
+    ) {
+      return null;
+    }
+    return { ...candidateScore, replacedTransactions: postingMonthConflicts };
+  }
 
   const dayDistances = monthlyTransactions.map((existing) =>
     calendarDayDistance(transaction, existing),
@@ -411,6 +438,7 @@ function getGroupMatchScore(
         : 1,
     dateDistance: groupDayDistance,
     descriptionDistance: 1 - descriptionSimilarity,
+    replacedTransactions: [],
   };
 }
 
@@ -685,7 +713,11 @@ function groupTransactions(
       options,
     );
     const optimizedIsPerfect =
-      optimizedMatch && Object.values(optimizedMatch.score).every((distance) => distance === 0);
+      optimizedMatch &&
+      optimizedMatch.score.dateDistance === 0 &&
+      optimizedMatch.score.amountDistance === 0 &&
+      optimizedMatch.score.continuityDistance === 0 &&
+      optimizedMatch.score.descriptionDistance === 0;
     const fuzzyMatch = optimizedIsPerfect
       ? undefined
       : findBestGroupMatch(
@@ -693,13 +725,18 @@ function groupTransactions(
           getFuzzyIndexedGroups(partition, transaction, options.descriptionSimilarityThreshold),
           options,
         );
-    const existingGroup =
+    const selectedMatch =
       fuzzyMatch &&
       (!optimizedMatch || compareGroupMatchScores(fuzzyMatch.score, optimizedMatch.score) < 0)
-        ? fuzzyMatch.group
-        : optimizedMatch?.group;
+        ? fuzzyMatch
+        : optimizedMatch;
+    const existingGroup = selectedMatch?.group;
     if (existingGroup) {
       moveGroupToMonth(partition, existingGroup, transaction.month);
+      const replacements = new Set(selectedMatch.score.replacedTransactions);
+      existingGroup.transactions = existingGroup.transactions.filter(
+        (existing) => !replacements.has(existing),
+      );
       existingGroup.transactions.push(transaction);
       indexGroupAmount(partition, existingGroup, transaction);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), existingGroup);
