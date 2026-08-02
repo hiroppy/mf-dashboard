@@ -774,6 +774,14 @@ function getMonthlySuffix(
   return occurrences.slice(suffixStart);
 }
 
+function getActiveBoundarySuffix(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
+  let occurrences = getMonthlySuffix(deduplicateOccurrences(transactions, true), true);
+  while (occurrences.length > 1 && !isMonthBoundaryPattern(occurrences)) {
+    occurrences = occurrences.slice(1);
+  }
+  return occurrences;
+}
+
 function getConfidence(
   occurrences: NormalizedTransaction[],
   previousMonth: string,
@@ -879,12 +887,17 @@ function createCandidate(
   targetMonth: string,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): RecurringCandidate | null {
-  const historicalBoundaryPattern = isMonthBoundaryPattern(group.transactions);
-  const occurrences = getMonthlySuffix(
-    deduplicateOccurrences(group.transactions, historicalBoundaryPattern),
-    historicalBoundaryPattern,
+  const postingMonthOccurrences = getMonthlySuffix(
+    deduplicateOccurrences(group.transactions, false),
+    false,
   );
-  const boundaryPattern = isMonthBoundaryPattern(occurrences);
+  const boundaryOccurrences = getActiveBoundarySuffix(group.transactions);
+  const useBoundaryOccurrences =
+    boundaryOccurrences.length >= 2 &&
+    boundaryOccurrences.length > postingMonthOccurrences.length &&
+    isMonthBoundaryPattern(boundaryOccurrences);
+  const occurrences = useBoundaryOccurrences ? boundaryOccurrences : postingMonthOccurrences;
+  const boundaryPattern = useBoundaryOccurrences || isMonthBoundaryPattern(occurrences);
   const confidence = getConfidence(
     occurrences,
     shiftYearMonthKey(targetMonth, -1),

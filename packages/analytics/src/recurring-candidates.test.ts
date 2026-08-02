@@ -1166,6 +1166,26 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-02" });
   });
 
+  it("infers an active boundary suffix before occurrence-month deduplication", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-27", 80_000, "定期支払"),
+        transaction("2026-02-28", 80_000, "定期支払"),
+        transaction("2026-03-31", 80_000, "定期支払"),
+        transaction("2026-05-02", 80_000, "定期支払"),
+        transaction("2026-05-31", 80_000, "定期支払"),
+        transaction("2026-06-30", 80_000, "定期支払"),
+      ],
+      "2026-07",
+    );
+
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      predictedDate: "2026-07-31",
+      evidence: { occurrenceCount: 5 },
+    });
+  });
+
   it("orders null and non-null descriptions deterministically", () => {
     const history: RecurringTransaction[] = [
       {
