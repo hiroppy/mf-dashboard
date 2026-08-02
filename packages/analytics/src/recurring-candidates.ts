@@ -648,6 +648,8 @@ function predictDay(
   targetMonthDays: number,
   boundaryPattern: boolean,
 ): number {
+  const days = occurrences.map(({ day }) => day);
+  if (days.every((day) => day === days[0])) return Math.min(days[0], targetMonthDays);
   const allMonthEndSide = occurrences.every(
     (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
   );
@@ -655,7 +657,7 @@ function predictDay(
     return targetMonthDays - Math.round(median(occurrences.map(daysFromMonthEnd)));
   }
   if (boundaryPattern) return targetMonthDays;
-  return Math.min(Math.round(median(occurrences.map(({ day }) => day))), targetMonthDays);
+  return Math.min(Math.round(median(days)), targetMonthDays);
 }
 
 function createCandidate(

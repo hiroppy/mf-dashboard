@@ -277,6 +277,15 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-30" });
   });
 
+  it("prefers a stable day-of-month over month-end offsets", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-01-28", 80_000, "家賃"), transaction("2026-02-28", 80_000, "家賃")],
+      "2026-03",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-28" });
+  });
+
   it("groups holiday drift that crosses a calendar-month boundary", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-03-02", 80_000, "家賃")],
