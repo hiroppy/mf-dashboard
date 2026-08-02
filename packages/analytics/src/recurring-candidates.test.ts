@@ -170,6 +170,19 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-10" });
   });
 
+  it("prefers a consecutive fuzzy group over a stale exact-description group", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-10", 20_000, "XACME UTILITY"),
+        transaction("2026-06-14", 20_000, "ACME UTILITY"),
+        transaction("2026-07-12", 20_000, "XACME UTILITY"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-13" });
+  });
+
   it("preserves fuzzy-matching labels that recur in parallel", () => {
     const result = generateRecurringCandidates(
       ["2026-01-10", "2026-02-10", "2026-03-10"].flatMap((date) => [
@@ -201,6 +214,21 @@ describe("generateRecurringCandidates", () => {
         transaction("2026-07-31", 50_000, "CARD 20260731"),
         transaction("2026-06-10", 20_000, "SERVICE 20260230"),
         transaction("2026-07-10", 20_000, "SERVICE 20260231"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
+  });
+
+  it("normalizes valid separated full dates but preserves impossible dates", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-30", 50_000, "CARD 2026-06-30"),
+        transaction("2026-07-31", 50_000, "CARD 2026/07/31"),
+        transaction("2026-06-10", 20_000, "SERVICE 2026-02-30"),
+        transaction("2026-07-10", 20_000, "SERVICE 2026-02-31"),
       ],
       "2026-08",
     );

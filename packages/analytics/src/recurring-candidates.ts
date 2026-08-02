@@ -166,19 +166,32 @@ function containsEnglishTerm(text: string, term: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${escapedTerm}(?=$|[^a-z0-9])`).test(text);
 }
 
+function removeValidCalendarDate(
+  match: string,
+  prefix: string,
+  yearText: string,
+  monthText: string,
+  dayText: string,
+): string {
+  return Number(dayText) <= getDaysInMonth(Number(yearText), Number(monthText)) ? prefix : match;
+}
+
 function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
     .replace(
       /(^|[^a-z0-9])((?:19|20)[0-9]{2})(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
-      (match, prefix: string, yearText: string, monthText: string, dayText: string) =>
-        Number(dayText) <= getDaysInMonth(Number(yearText), Number(monthText)) ? prefix : match,
+      removeValidCalendarDate,
+    )
+    .replace(
+      /(^|[^a-z0-9])((?:19|20)[0-9]{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])(?=$|[^a-z0-9])/gu,
+      removeValidCalendarDate,
     )
     .replace(
       /(?<![0-9])(?:(?:19|20)[0-9]{2}年)?(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12][0-9]|3[01])日|分)?(?![0-9])/gu,
       "",
     )
     .replace(
-      /(^|[^a-z0-9])(?:19|20)[0-9]{2}(?:[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
+      /(^|[^a-z0-9])(?:19|20)[0-9]{2}(?:[-/.](?:0?[1-9]|1[0-2])(?![-/.][0-9])|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
       "$1",
     )
     .replace(
@@ -330,8 +343,13 @@ function normalizeGroupingText(transaction: RecurringTransaction): string {
 
 interface GroupMatchScore {
   amountDistance: number;
+  continuityDistance: number;
   dateDistance: number;
   descriptionDistance: number;
+}
+
+function occurrenceMonth(transaction: NormalizedTransaction): string {
+  return boundaryPosition(transaction)?.occurrenceMonth ?? transaction.month;
 }
 
 function getGroupMatchScore(
@@ -384,6 +402,10 @@ function getGroupMatchScore(
   }
   return {
     amountDistance,
+    continuityDistance:
+      occurrenceMonth(representative) === shiftYearMonthKey(occurrenceMonth(transaction), -1)
+        ? 0
+        : 1,
     dateDistance: groupDayDistance,
     descriptionDistance: 1 - descriptionSimilarity,
   };
@@ -393,6 +415,7 @@ function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore):
   return (
     left.dateDistance - right.dateDistance ||
     left.amountDistance - right.amountDistance ||
+    left.continuityDistance - right.continuityDistance ||
     left.descriptionDistance - right.descriptionDistance
   );
 }
