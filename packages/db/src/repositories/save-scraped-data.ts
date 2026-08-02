@@ -2,13 +2,7 @@ import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
 import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type {
-  CashFlowItem,
-  Portfolio,
-  PortfolioItem,
-  RegisteredAccounts,
-  ScrapedData,
-} from "../types";
+import type { Portfolio, PortfolioItem, RegisteredAccounts, ScrapedData } from "../types";
 import { now } from "../utils";
 import {
   upsertAccounts,
@@ -28,7 +22,11 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { replaceTransactionsForMonth, saveTransaction } from "./transactions";
+import {
+  assertNonOverlappingTransactionRanges,
+  replaceTransactionsForMonth,
+  type TransactionPeriodReplacement,
+} from "./transactions";
 
 const isCI = process.env.CI === "true";
 const DEPOSIT_ASSET_CATEGORY = "預金・現金";
@@ -138,7 +136,7 @@ export async function saveScrapedDataBatch(
     cleanupGroupIds?: string[];
     fullData?: ScrapedData;
     groupOnlyData: ScrapedData[];
-    historyMonths?: Array<{ items: CashFlowItem[]; month: string }>;
+    historyMonths?: TransactionPeriodReplacement[];
     institutionCategories?: ReadonlyMap<string, string>;
   },
 ): Promise<number[]> {
@@ -164,10 +162,18 @@ export async function saveScrapedDataBatch(
 
     const savedCounts: number[] = [];
     if (data.historyMonths?.length) {
+      assertNonOverlappingTransactionRanges(data.historyMonths);
       const accountIdMap = await buildAccountIdMap(transaction);
-      for (const { items, month } of data.historyMonths) {
+      for (const { dateRange, isComplete, items, month } of data.historyMonths) {
         savedCounts.push(
-          await replaceTransactionsForMonth(transaction, month, items, accountIdMap),
+          await replaceTransactionsForMonth(
+            transaction,
+            month,
+            items,
+            accountIdMap,
+            dateRange,
+            isComplete,
+          ),
         );
       }
     }
@@ -306,13 +312,16 @@ async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Pro
   log(`  - Liabilities: ${data.liabilities.items.length}`);
 
   // 10. Save transactions
-  let savedCount = 0;
-  for (const item of data.cashFlow.items) {
-    await saveTransaction(db, item, accountIdMap);
-    if (item.mfId && !item.mfId.startsWith("unknown")) {
-      savedCount++;
-    }
-  }
+  const savedCount = await replaceTransactionsForMonth(
+    db,
+    data.cashFlow.month,
+    data.cashFlow.items,
+    accountIdMap,
+    data.cashFlow.periodStart && data.cashFlow.periodEnd
+      ? { from: data.cashFlow.periodStart, to: data.cashFlow.periodEnd }
+      : undefined,
+    data.cashFlow.isComplete,
+  );
   log(`  - Transactions: ${savedCount}/${data.cashFlow.items.length}`);
 
   // 11. Save asset history

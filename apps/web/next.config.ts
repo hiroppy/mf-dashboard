@@ -30,6 +30,7 @@ export default function createNextConfig(phase: string): NextConfig {
     reactCompiler: true,
     experimental: {
       typedEnv: true,
+      useTypeScriptCli: true,
     },
   };
 }
