@@ -28,7 +28,7 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { replaceTransactionsForMonth } from "./transactions";
+import { assertNonOverlappingTransactionRanges, replaceTransactionsForMonth } from "./transactions";
 
 const isCI = process.env.CI === "true";
 const DEPOSIT_ASSET_CATEGORY = "預金・現金";
@@ -169,6 +169,7 @@ export async function saveScrapedDataBatch(
 
     const savedCounts: number[] = [];
     if (data.historyMonths?.length) {
+      assertNonOverlappingTransactionRanges(data.historyMonths);
       const accountIdMap = await buildAccountIdMap(transaction);
       for (const { dateRange, isComplete, items, month } of data.historyMonths) {
         savedCounts.push(

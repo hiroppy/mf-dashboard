@@ -146,6 +146,10 @@ function resolveTransactionDateRange(
   month: string,
   range?: TransactionDateRange,
 ): TransactionDateRange {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw new Error("Invalid transaction month");
+  }
+
   if (range) {
     const isValidDate = (value: string) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -161,6 +165,24 @@ function resolveTransactionDateRange(
   const [year, monthNumber] = month.split("-").map(Number);
   const lastDay = new Date(year, monthNumber, 0).getDate();
   return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
+
+export function assertNonOverlappingTransactionRanges(
+  months: Array<{ dateRange?: TransactionDateRange; month: string }>,
+): void {
+  const ranges = months.map(({ dateRange, month }) =>
+    resolveTransactionDateRange(month, dateRange),
+  );
+
+  for (let index = 0; index < ranges.length; index++) {
+    const range = ranges[index]!;
+    for (let previousIndex = 0; previousIndex < index; previousIndex++) {
+      const previousRange = ranges[previousIndex]!;
+      if (range.from <= previousRange.to && previousRange.from <= range.to) {
+        throw new Error("Overlapping transaction date ranges");
+      }
+    }
+  }
 }
 
 function getExclusiveRangeEnd(to: string): string {
@@ -243,10 +265,6 @@ export async function replaceTransactionsForMonth(
   dateRange?: TransactionDateRange,
   isComplete = items.length > 0,
 ): Promise<number> {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-    throw new Error("Invalid transaction month");
-  }
-
   if (items.some((item) => !item.mfId || item.mfId.startsWith("unknown"))) {
     throw new Error("Invalid transactions: missing transaction ID");
   }
@@ -340,6 +358,8 @@ export async function saveTransactionsForMonths(
   }>,
   accountIdMap?: Map<string, number>,
 ): Promise<number[]> {
+  assertNonOverlappingTransactionRanges(months);
+
   return db.transaction(async (transaction) => {
     const savedCounts: number[] = [];
     for (const { dateRange, isComplete, items, month } of months) {

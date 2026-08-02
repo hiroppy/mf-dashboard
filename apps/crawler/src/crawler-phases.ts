@@ -196,7 +196,12 @@ export async function runSavePhase(
   page: Page,
   scrapeResult: ScrapeResult,
   categoryDecision: CategoryDecisionRuntime = { config: null, usage: { llmCallsUsed: 0 } },
-  historyMonths: Array<{ isComplete?: boolean; items: CashFlowItem[]; month: string }> = [],
+  historyMonths: Array<{
+    dateRange?: { from: string; to: string };
+    isComplete?: boolean;
+    items: CashFlowItem[];
+    month: string;
+  }> = [],
   cleanupGroupIds?: string[],
   institutionCategories?: ReadonlyMap<string, string>,
 ): Promise<number[]> {

@@ -197,7 +197,7 @@ export async function switchGroup(page: Page, groupId: string): Promise<Group | 
     // MoneyForwardはページ遷移で切り替わるので、新しいページでセレクタを確認
     const newGroupSelect = await getGroupSelector(page, false);
     if (!newGroupSelect || (await newGroupSelect.inputValue()) !== groupId) {
-      throw new Error("Group selector verification failed");
+      throw new Error("Group verification failed");
     }
   } catch (error) {
     throw sanitizeGroupSwitchError(error);

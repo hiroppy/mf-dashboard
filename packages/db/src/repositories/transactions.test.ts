@@ -669,6 +669,45 @@ describe("saveTransactionsForMonth", () => {
     expect(result.map(({ mfId }) => mfId).sort()).toEqual(["period-august", "period-september"]);
   });
 
+  test("置換範囲が重複するバッチでは既存データを削除しない", async () => {
+    await saveTransactionsForMonth(db, "2026-07", [
+      { ...items[0]!, mfId: "existing-transaction", date: "2026-07-27" },
+    ]);
+
+    await expect(
+      saveTransactionsForMonths(db, [
+        {
+          month: "2026-08",
+          dateRange: { from: "2026-07-26", to: "2026-08-25" },
+          items: [{ ...items[0]!, mfId: "period-august", date: "2026-07-27" }],
+        },
+        {
+          month: "2026-07",
+          items: [{ ...items[1]!, mfId: "calendar-july", date: "2026-07-01" }],
+        },
+      ]),
+    ).rejects.toThrow("Overlapping transaction date ranges");
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId)).toEqual(["existing-transaction"]);
+  });
+
+  test("不正な置換範囲では既存データを削除しない", async () => {
+    await saveTransactionsForMonth(db, "2026-08", [
+      { ...items[0]!, mfId: "existing-transaction", date: "2026-08-01" },
+    ]);
+
+    await expect(
+      saveTransactionsForMonth(db, "2026-08", [], undefined, {
+        from: "2026-08-25",
+        to: "2026-07-26",
+      }),
+    ).rejects.toThrow("Invalid transaction date range");
+
+    const result = await db.select().from(schema.transactions).all();
+    expect(result.map(({ mfId }) => mfId)).toEqual(["existing-transaction"]);
+  });
+
   test("置換範囲外の取引があれば既存データを削除しない", async () => {
     await saveTransactionsForMonth(db, "2026-08", [
       {

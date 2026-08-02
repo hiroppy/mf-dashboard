@@ -22,7 +22,7 @@ function createFailingGroupPage(switchError: Error = new Error("private-group-id
     inputValue: vi.fn<() => Promise<string>>(async () => state.currentGroupId),
     isVisible: vi.fn<() => Promise<boolean>>(async () => true),
     locator: vi.fn<() => typeof option>(() => option),
-    selectOption: vi.fn<() => Promise<never>>(async () => {
+    selectOption: vi.fn<() => Promise<void>>(async () => {
       throw switchError;
     }),
     waitFor: vi.fn<() => Promise<void>>(async () => undefined),
@@ -88,4 +88,15 @@ describe("switchGroup", () => {
       expect((error as Error).message).not.toContain("private-group-id");
     },
   );
+
+  test("選択後にセレクタの値が一致しない場合は匿名のエラーにする", async () => {
+    const { page, select, state } = createFailingGroupPage();
+    select.selectOption = vi.fn<() => Promise<void>>(async () => undefined);
+    state.currentGroupId = NO_GROUP_ID;
+
+    const error = await switchGroup(page, "private-group-id").catch((caught) => caught);
+
+    expect(error).toMatchObject({ message: "Group switch failed" });
+    expect((error as Error).message).not.toContain("private-group-id");
+  });
 });
