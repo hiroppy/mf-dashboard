@@ -1097,6 +1097,35 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("ranks fuzzy groups by their complete match score before applying the limit", () => {
+    const prefix = "recurring service";
+    const decoyDescriptions = Array.from(
+      { length: 65 },
+      (_, index) => `${prefix}${String.fromCodePoint(0x4e00 + index)}`,
+    );
+    const bestDescription = `${prefix}xyz`;
+    const history = decoyDescriptions.flatMap((description) => [
+      transaction("2026-05-10", 100, description),
+      transaction("2026-06-13", 100, description),
+      transaction("2026-07-13", 100, description),
+    ]);
+    history.push(
+      transaction("2026-05-10", 100, bestDescription),
+      transaction("2026-06-10", 100, bestDescription),
+      transaction("2026-07-13", 100, bestDescription),
+      transaction("2026-08-10", 100, prefix),
+    );
+
+    const highCandidate = generateRecurringCandidates(history, "2026-09").find(
+      ({ confidence }) => confidence === "high",
+    );
+
+    expect(highCandidate).toMatchObject({
+      predictedDate: "2026-09-10",
+      evidence: { occurrenceCount: 4 },
+    });
+  });
+
   it("bounds equal-amount buckets with many distinct descriptions", () => {
     const history = Array.from({ length: 5_000 }, (_, index) => {
       const identity = Array.from({ length: 4 }, (__, position) =>

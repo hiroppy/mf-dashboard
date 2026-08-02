@@ -621,17 +621,16 @@ function getFuzzyIndexedGroups(
   }));
   return scoredCandidates
     .sort((left, right) => {
-      const similarityDifference = right.similarity - left.similarity;
-      if (similarityDifference !== 0) return similarityDifference;
       if (left.score && right.score) {
         return (
           compareGroupMatchScores(left.score, right.score) ||
+          right.similarity - left.similarity ||
           right.group.transactions.length - left.group.transactions.length
         );
       }
       if (left.score) return -1;
       if (right.score) return 1;
-      return 0;
+      return right.similarity - left.similarity;
     })
     .slice(0, MAX_FUZZY_CANDIDATE_GROUPS)
     .map(({ group }) => group);
