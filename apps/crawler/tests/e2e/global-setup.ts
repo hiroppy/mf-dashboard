@@ -4,7 +4,7 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import { chromium } from "playwright";
 import { loginWithAuthState } from "../../src/auth/login.js";
 import { createBrowserContext } from "../../src/browser/context.js";
-import { getCurrentGroup, switchGroup } from "../../src/scrapers/group.js";
+import { getSelectedGroupId, switchGroupAnonymously } from "./group-state.js";
 
 export const SCREENSHOT_DIR = path.resolve(process.cwd(), "tests/e2e/screenshots");
 
@@ -36,8 +36,7 @@ export async function setup() {
 
     // ホームに遷移してデフォルトグループをキャプチャ
     await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
-    const group = await getCurrentGroup(page);
-    defaultGroupId = group?.id ?? null;
+    defaultGroupId = await getSelectedGroupId(page);
     console.log(defaultGroupId ? "Default group state captured" : "No default group found");
   } finally {
     await browser.close();
@@ -61,16 +60,16 @@ export async function teardown() {
       timeout: 15000,
     });
 
-    const currentGroup = await getCurrentGroup(page);
-    if (currentGroup?.id === defaultGroupId) {
+    const currentGroupId = await getSelectedGroupId(page);
+    if (currentGroupId === defaultGroupId) {
       console.log("Group already correct, no restore needed");
       return;
     }
 
-    await switchGroup(page, defaultGroupId);
+    await switchGroupAnonymously(page, defaultGroupId);
     console.log("Successfully restored default group state");
-  } catch (err) {
-    console.error("Failed to restore default group:", err);
+  } catch {
+    throw new Error("Failed to restore default group state");
   } finally {
     await browser.close();
   }

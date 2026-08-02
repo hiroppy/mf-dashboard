@@ -7,7 +7,8 @@ import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { scrapeAllGroups } from "../../src/scraper.js";
-import { isNoGroup, createGroupScope } from "../../src/scrapers/group.js";
+import { isNoGroup } from "../../src/scrapers/group.js";
+import { createAnonymousGroupScope } from "./group-state.js";
 import {
   gotoHome,
   launchLoggedInContext,
@@ -28,7 +29,7 @@ beforeAll(async () => {
     await saveScreenshot(page, "scrape-all-groups-test-before-scrape.png");
 
     return withErrorScreenshot(page, "scrape-all-groups-test-error.png", async () => {
-      await using _scope = await createGroupScope(page);
+      await using _scope = await createAnonymousGroupScope(page);
       const progress = await createCrawlerProgressReporter(progressStatePath, {
         id: randomUUID(),
         source: "e2e",
@@ -104,9 +105,7 @@ describe("scrapeAllGroups", () => {
 
     test("各グループにgroup情報がある", () => {
       for (const groupData of result.groupDataList) {
-        expect(groupData.group).toBeDefined();
-        expect(groupData.group.id).toBeDefined();
-        expect(groupData.group.name).toBeTruthy();
+        expect(Boolean(groupData.group.id) && Boolean(groupData.group.name)).toBe(true);
         expect(typeof groupData.group.isCurrent).toBe("boolean");
       }
     });
@@ -128,7 +127,7 @@ describe("scrapeAllGroups", () => {
     test("各グループにsummaryがある", () => {
       for (const groupData of result.groupDataList) {
         expect(groupData.summary).toBeDefined();
-        expect(groupData.summary.totalAssets).toBeDefined();
+        expect(groupData.summary.totalAssets !== undefined).toBe(true);
       }
     });
 
