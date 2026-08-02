@@ -73,6 +73,12 @@ interface TransactionGroup {
   transactions: NormalizedTransaction[];
 }
 
+interface GroupPartition {
+  anchorBigramCounts: Map<TransactionGroup, number>;
+  groups: TransactionGroup[];
+  groupsByBigram: Map<string, Set<TransactionGroup>>;
+}
+
 const DEFAULT_OPTIONS = {
   lookbackMonths: 12,
   dateDriftDays: 3,
@@ -345,27 +351,57 @@ function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore):
   );
 }
 
+function getIndexedGroups(
+  partition: GroupPartition,
+  transactionBigrams: Set<string>,
+  similarityThreshold: number,
+): TransactionGroup[] {
+  if (similarityThreshold === 0) return partition.groups;
+
+  const overlapCounts = new Map<TransactionGroup, number>();
+  for (const bigram of transactionBigrams) {
+    for (const group of partition.groupsByBigram.get(bigram) ?? []) {
+      overlapCounts.set(group, (overlapCounts.get(group) ?? 0) + 1);
+    }
+  }
+  return [...overlapCounts]
+    .filter(([group, overlap]) => {
+      const anchorBigramCount = partition.anchorBigramCounts.get(group) ?? 0;
+      return (2 * overlap) / (transactionBigrams.size + anchorBigramCount) >= similarityThreshold;
+    })
+    .map(([group]) => group);
+}
+
 function groupTransactions(
   transactions: NormalizedTransaction[],
   options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
-  const partitions = new Map<string, TransactionGroup[]>();
+  const partitions = new Map<string, GroupPartition>();
   for (const transaction of transactions) {
     const numericTokenKey = (transaction.normalizedDescription.match(/[0-9]+/g) ?? []).join(".");
-    const descriptionPrefix = Array.from(transaction.normalizedDescription).slice(0, 4).join("");
-    const descriptionBucket = transaction.normalizedDescription.includes("categorysep")
+    const exactDescriptionKey = transaction.normalizedDescription.includes("categorysep")
       ? transaction.normalizedDescription
-      : descriptionPrefix;
+      : "";
     const partitionKey = [
       accountIdKey(transaction.accountId),
       transaction.type,
       transaction.classification,
       numericTokenKey,
-      descriptionBucket,
+      exactDescriptionKey,
     ].join("\0");
-    const groups = partitions.get(partitionKey) ?? [];
+    const partition: GroupPartition = partitions.get(partitionKey) ?? {
+      anchorBigramCounts: new Map(),
+      groups: [],
+      groupsByBigram: new Map(),
+    };
+    const transactionBigrams = getBigrams(transaction.normalizedDescription);
+    const candidateGroups = getIndexedGroups(
+      partition,
+      transactionBigrams,
+      options.descriptionSimilarityThreshold,
+    );
     let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
-    for (const group of groups) {
+    for (const group of candidateGroups) {
       const score = getGroupMatchScore(transaction, group, options);
       if (score && (!bestMatch || compareGroupMatchScores(score, bestMatch.score) < 0)) {
         bestMatch = { group, score };
@@ -375,11 +411,18 @@ function groupTransactions(
     if (existingGroup) {
       existingGroup.transactions.push(transaction);
     } else {
-      groups.push({ transactions: [transaction] });
+      const group = { transactions: [transaction] };
+      partition.groups.push(group);
+      partition.anchorBigramCounts.set(group, transactionBigrams.size);
+      for (const bigram of transactionBigrams) {
+        const indexedGroups = partition.groupsByBigram.get(bigram) ?? new Set();
+        indexedGroups.add(group);
+        partition.groupsByBigram.set(bigram, indexedGroups);
+      }
     }
-    partitions.set(partitionKey, groups);
+    partitions.set(partitionKey, partition);
   }
-  return [...partitions.values()].flat();
+  return [...partitions.values()].flatMap(({ groups }) => groups);
 }
 
 function deduplicateMonths(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
@@ -513,11 +556,12 @@ function createCandidate(
   targetMonth: string,
   options: Required<GenerateRecurringCandidatesOptions>,
 ): RecurringCandidate | null {
-  const boundaryPattern = isMonthBoundaryPattern(group.transactions);
+  const historicalBoundaryPattern = isMonthBoundaryPattern(group.transactions);
   const occurrences = getMonthlySuffix(
-    deduplicateOccurrences(group.transactions, boundaryPattern),
-    boundaryPattern,
+    deduplicateOccurrences(group.transactions, historicalBoundaryPattern),
+    historicalBoundaryPattern,
   );
+  const boundaryPattern = isMonthBoundaryPattern(occurrences);
   const confidence = getConfidence(
     occurrences,
     shiftYearMonthKey(targetMonth, -1),

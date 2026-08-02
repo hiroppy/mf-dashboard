@@ -132,6 +132,18 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("fuzzy-matches descriptions that differ in their prefix", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 20_000, "ACME UTILITY"),
+        transaction("2026-07-10", 20_000, "XACME UTILITY"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium" });
+  });
+
   it("normalizes an explicit billing month that lags the posting month", () => {
     const result = generateRecurringCandidates(
       [
@@ -659,6 +671,19 @@ describe("generateRecurringCandidates", () => {
         "2026-08",
       ),
     ).toEqual([]);
+  });
+
+  it("detects the month-boundary schedule from the active monthly suffix", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-31", 80_000, "定期支払"),
+        transaction("2026-06-02", 80_000, "定期支払"),
+        transaction("2026-07-02", 80_000, "定期支払"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-08-02" });
   });
 
   it("orders null and non-null descriptions deterministically", () => {
