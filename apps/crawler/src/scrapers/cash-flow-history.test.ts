@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   buildMonthRange,
   extractCashFlowFromPage,
+  isSupportedCashFlowAmount,
   parseDetailRow,
   scrapeCashFlowHistory,
   scrapeCashFlowMonth,
@@ -19,6 +20,22 @@ describe("buildMonthRange", () => {
   ])("%s の月初/月末範囲を返す", (month, expected) => {
     expect(buildMonthRange(month)).toEqual(expected);
   });
+});
+
+describe("isSupportedCashFlowAmount", () => {
+  test.each(["0", "1,000", "-1,000", "¥1,000円", "▲ 1,000", "-1,000\n(振替)"])(
+    "%j を対応する金額形式として受け入れる",
+    (value) => {
+      expect(isSupportedCashFlowAmount(value)).toBe(true);
+    },
+  );
+
+  test.each(["", "--", "取得中", "1,23", "1.5", "取得中(振替)"])(
+    "%j を月次置換可能な金額として扱わない",
+    (value) => {
+      expect(isSupportedCashFlowAmount(value)).toBe(false);
+    },
+  );
 });
 
 describe("scrapeCashFlowHistory", () => {
@@ -190,6 +207,34 @@ describe("scrapeCashFlowMonth", () => {
         [1, dateText],
         [2, "Transaction A"],
         [3, "1,000"],
+      ]);
+      const cells = {
+        nth: vi.fn<(index: number) => Locator>((index) => {
+          return {
+            textContent: vi.fn<Locator["textContent"]>().mockResolvedValue(texts.get(index) ?? ""),
+          } as unknown as Locator;
+        }),
+      } as unknown as Locator;
+      const row = {
+        getAttribute: vi
+          .fn<Locator["getAttribute"]>()
+          .mockImplementation(async (name) => (name === "id" ? "js-transaction-row-a" : "")),
+        locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
+      } as unknown as Locator;
+
+      await expect(parseDetailRow(row, 2026)).rejects.toThrow(
+        "Incomplete cash flow transaction row",
+      );
+    },
+  );
+
+  test.each(["--", "取得中", "1,23"])(
+    "金額 %j を数値として取得できない行があれば月次置換へ進まない",
+    async (amountText) => {
+      const texts = new Map([
+        [1, "2026/07/01"],
+        [2, "Transaction A"],
+        [3, amountText],
       ]);
       const cells = {
         nth: vi.fn<(index: number) => Locator>((index) => {

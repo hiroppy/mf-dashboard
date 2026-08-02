@@ -24,6 +24,13 @@ export const SUMMARY_COLUMNS = { INCOME: 0, EXPENSE: 2, BALANCE: 4 } as const;
 const TEXT_TIMEOUT = 1000;
 const SUMMARY_TIMEOUT = 3000;
 const CASH_FLOW_AJAX_STATE = "__mfDashboardCashFlowAjax";
+const CASH_FLOW_AMOUNT_PATTERN =
+  /^(?:(?:[+\-−▲][¥$]?)|(?:[¥$][+\-−▲]?))?(?:\d{1,3}(?:,\d{3})+|\d+)(?:円)?$/;
+
+export function isSupportedCashFlowAmount(value: string): boolean {
+  const normalized = value.replace(/\s/g, "").replace(/\(振替\)$/, "");
+  return CASH_FLOW_AMOUNT_PATTERN.test(normalized);
+}
 
 export async function waitForCashFlowFetchApplied(
   page: Page,
@@ -209,7 +216,7 @@ export async function parseDetailRow(
     parsedDate.toISOString().slice(0, 10) === date;
 
   // A monthly replacement is safe only when every rendered transaction row was extracted.
-  if (!mfId || !isValidDate || !description || !amountText) {
+  if (!mfId || !isValidDate || !description || !isSupportedCashFlowAmount(amountText)) {
     throw new Error("Incomplete cash flow transaction row");
   }
 
