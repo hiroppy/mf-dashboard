@@ -76,6 +76,7 @@ interface TransactionGroup {
 interface GroupPartition {
   anchorBigrams: Map<TransactionGroup, Set<string>>;
   exactOccurrences: Map<string, TransactionGroup>;
+  exactRecurringSlots: Map<string, TransactionGroup>;
   groups: TransactionGroup[];
   groupsByBigramAndMonth: Map<string, Map<string, Set<TransactionGroup>>>;
   latestMonths: Map<TransactionGroup, string>;
@@ -233,7 +234,14 @@ function daysFromMonthEnd(transaction: NormalizedTransaction): number {
 }
 
 function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTransaction): number {
-  if (daysFromMonthEnd(left) === 0 && daysFromMonthEnd(right) === 0) return 0;
+  const leftMonthEndOffset = daysFromMonthEnd(left);
+  const rightMonthEndOffset = daysFromMonthEnd(right);
+  if (
+    leftMonthEndOffset <= MONTH_BOUNDARY_WINDOW_DAYS &&
+    rightMonthEndOffset <= MONTH_BOUNDARY_WINDOW_DAYS
+  ) {
+    return Math.abs(leftMonthEndOffset - rightMonthEndOffset);
+  }
   const directDistance = Math.abs(left.day - right.day);
   const [earlier, later] = left.date <= right.date ? [left, right] : [right, left];
   if (earlier.month === later.month || earlier.day <= later.day) return directDistance;
@@ -381,6 +389,8 @@ function getIndexedGroups(
   transaction: NormalizedTransaction,
   similarityThreshold: number,
 ): TransactionGroup[] {
+  const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
+  if (exactRecurringGroup) return [exactRecurringGroup];
   if (similarityThreshold === 0) return partition.groups;
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
@@ -406,6 +416,10 @@ function getIndexedGroups(
 
 function exactOccurrenceKey(transaction: NormalizedTransaction): string {
   return [transaction.date, transaction.amount, transaction.normalizedDescription].join("\0");
+}
+
+function exactRecurringSlotKey(transaction: NormalizedTransaction): string {
+  return [transaction.day, transaction.amount, transaction.normalizedDescription].join("\0");
 }
 
 function indexGroupMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
@@ -453,6 +467,7 @@ function groupTransactions(
     const partition: GroupPartition = partitions.get(partitionKey) ?? {
       anchorBigrams: new Map(),
       exactOccurrences: new Map(),
+      exactRecurringSlots: new Map(),
       groups: [],
       groupsByBigramAndMonth: new Map(),
       latestMonths: new Map(),
@@ -475,11 +490,13 @@ function groupTransactions(
       moveGroupToMonth(partition, existingGroup, transaction.month);
       existingGroup.transactions.push(transaction);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), existingGroup);
+      partition.exactRecurringSlots.set(exactRecurringSlotKey(transaction), existingGroup);
     } else {
       const group = { transactions: [transaction] };
       partition.groups.push(group);
       partition.anchorBigrams.set(group, transactionBigrams);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), group);
+      partition.exactRecurringSlots.set(exactRecurringSlotKey(transaction), group);
       indexGroupMonth(partition, group, transaction.month);
     }
     partitions.set(partitionKey, partition);
@@ -502,9 +519,11 @@ function isMonthBoundaryPattern(occurrences: NormalizedTransaction[]): boolean {
   const hasMonthEndOccurrence = occurrences.some(
     (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
   );
-  const allExactMonthEnd = occurrences.every((occurrence) => daysFromMonthEnd(occurrence) === 0);
+  const allMonthEndSide = occurrences.every(
+    (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
+  );
   return (
-    allExactMonthEnd ||
+    allMonthEndSide ||
     (hasMonthStartOccurrence &&
       hasMonthEndOccurrence &&
       occurrences.every(
@@ -624,6 +643,21 @@ function compareTransactions(left: NormalizedTransaction, right: NormalizedTrans
   return textResult || left.amount - right.amount;
 }
 
+function predictDay(
+  occurrences: NormalizedTransaction[],
+  targetMonthDays: number,
+  boundaryPattern: boolean,
+): number {
+  const allMonthEndSide = occurrences.every(
+    (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
+  );
+  if (allMonthEndSide) {
+    return targetMonthDays - Math.round(median(occurrences.map(daysFromMonthEnd)));
+  }
+  if (boundaryPattern) return targetMonthDays;
+  return Math.min(Math.round(median(occurrences.map(({ day }) => day))), targetMonthDays);
+}
+
 function createCandidate(
   group: TransactionGroup,
   targetMonth: string,
@@ -648,9 +682,7 @@ function createCandidate(
 
   const { year, month } = parseYearMonthKey(targetMonth);
   const targetMonthDays = getDaysInMonth(year, month);
-  const predictedDay = boundaryPattern
-    ? targetMonthDays
-    : Math.min(Math.round(median(occurrences.map(({ day }) => day))), targetMonthDays);
+  const predictedDay = predictDay(occurrences, targetMonthDays, boundaryPattern);
   const dates = occurrences.map(({ date }) => date).sort();
   const amounts = occurrences.map(({ amount }) => amount);
 

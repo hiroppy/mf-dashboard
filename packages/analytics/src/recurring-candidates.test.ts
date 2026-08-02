@@ -127,7 +127,7 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({
       classification: "card",
       confidence: "high",
-      predictedDate: "2026-08-30",
+      predictedDate: "2026-08-31",
       predictedAmount: 50_000,
     });
   });
@@ -266,6 +266,15 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-04-30" });
+  });
+
+  it("matches near-end dates by their month-end offsets", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-02-27", 80_000, "家賃")],
+      "2026-03",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-30" });
   });
 
   it("groups holiday drift that crosses a calendar-month boundary", () => {
@@ -785,6 +794,17 @@ describe("generateRecurringCandidates", () => {
     }));
 
     expect(generateRecurringCandidates(history, "2026-08")).toEqual([]);
+  });
+
+  it("handles many prior-month common-label recurring slots", () => {
+    const history: RecurringTransaction[] = ["2026-06-10", "2026-07-10"].flatMap((date) =>
+      Array.from({ length: 2_000 }, (_, index) => ({
+        ...transaction(date, 10_000 + index, "Payment"),
+        category: "Utilities",
+      })),
+    );
+
+    expect(generateRecurringCandidates(history, "2026-08")).toHaveLength(2_000);
   });
 
   it("excludes transfers, empty amounts, small one-offs, and older one-off income", () => {
