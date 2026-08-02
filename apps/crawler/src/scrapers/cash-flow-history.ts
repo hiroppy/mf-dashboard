@@ -84,6 +84,17 @@ async function getText(locator: Locator, timeout = TEXT_TIMEOUT): Promise<string
   return (text ?? "").trim();
 }
 
+async function getTextWithFailureSignal(
+  locator: Locator,
+  timeout = TEXT_TIMEOUT,
+): Promise<string | null> {
+  try {
+    return (await locator.textContent({ timeout }))?.trim() ?? "";
+  } catch {
+    return null;
+  }
+}
+
 async function getOptionalText(locator: Locator, timeout = TEXT_TIMEOUT): Promise<string | null> {
   if ((await locator.count()) === 0) return null;
   const text = await locator.first().textContent({ timeout });
@@ -132,6 +143,15 @@ async function detectMonth(page: Page): Promise<{ year: number; month: number }>
   let year = today.year;
   let month = today.month;
 
+  // Prefer the CSV period because range headers can start in the previous calendar month.
+  const csvLink = await getOptionalAttribute(page.locator("a[href*='/cf/csv']").first(), "href");
+  const csvYear = csvLink?.match(/[?&]year=(\d{4})/)?.[1];
+  const csvMonth = csvLink?.match(/[?&]month=(\d{1,2})/)?.[1];
+  const csvMonthNumber = Number(csvMonth);
+  if (csvYear && csvMonth && csvMonthNumber >= 1 && csvMonthNumber <= 12) {
+    return { year: Number(csvYear), month: csvMonthNumber };
+  }
+
   // Try 1: fc-header-title (FullCalendar style)
   const headerTitle = await getOptionalText(page.locator(".fc-header-title h2"), SUMMARY_TIMEOUT);
   let match = headerTitle?.match(/(\d{4})年(\d{1,2})月/);
@@ -142,16 +162,6 @@ async function detectMonth(page: Page): Promise<{ year: number; month: number }>
       page.locator(".heading-small, .month-title, [class*='month']").first(),
     );
     match = pageText?.match(/(\d{4})年(\d{1,2})月/) || pageText?.match(/(\d{4})\/(\d{1,2})/);
-  }
-
-  // Try 3: Get from CSV download link URL
-  if (!match) {
-    const csvLink = await getOptionalAttribute(page.locator("a[href*='/cf/csv']").first(), "href");
-    const yearMatch = csvLink?.match(/year=(\d{4})/);
-    const monthMatch = csvLink?.match(/month=(\d{1,2})/);
-    if (yearMatch && monthMatch) {
-      return { year: parseInt(yearMatch[1]), month: parseInt(monthMatch[1]) };
-    }
   }
 
   if (match) {
@@ -222,9 +232,13 @@ export async function parseDetailRow(
 
   // グループ2: カテゴリ情報を並列取得
   const [categoryText, subCategoryText] = await Promise.all([
-    getText(cells.nth(DETAIL_COLUMNS.CATEGORY)),
-    getText(cells.nth(DETAIL_COLUMNS.SUB_CATEGORY)),
+    getTextWithFailureSignal(cells.nth(DETAIL_COLUMNS.CATEGORY)),
+    getTextWithFailureSignal(cells.nth(DETAIL_COLUMNS.SUB_CATEGORY)),
   ]);
+
+  if (categoryText === null || subCategoryText === null) {
+    throw new Error("Incomplete cash flow transaction row");
+  }
 
   const { accountFrom, accountTo, hasTransferBox } = await parseAccountCell(
     cells.nth(DETAIL_COLUMNS.ACCOUNT),

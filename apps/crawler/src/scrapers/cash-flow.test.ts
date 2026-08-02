@@ -33,6 +33,74 @@ describe("parseCashFlowMonthCsvHref", () => {
 });
 
 describe("getCashFlow", () => {
+  test("月跨ぎヘッダーよりCSVの対象月を優先する", async () => {
+    const currentMonth = getJstYearMonthKey();
+    const [year, month] = currentMonth.split("-");
+    const previousMonthDate = new Date(Number(year), Number(month) - 2, 1);
+    const previousYear = previousMonthDate.getFullYear();
+    const previousMonth = previousMonthDate.getMonth() + 1;
+
+    let monthHeader: Locator;
+    monthHeader = {
+      first: vi.fn<() => Locator>(() => monthHeader),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      textContent: vi
+        .fn<() => Promise<string | null>>()
+        .mockResolvedValue(`${previousYear}/${previousMonth}/26 - ${year}/${Number(month)}/25`),
+    } as unknown as Locator;
+
+    let csvLink: Locator;
+    csvLink = {
+      first: vi.fn<() => Locator>(() => csvLink),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      getAttribute: vi
+        .fn<() => Promise<string | null>>()
+        .mockResolvedValue(`/cf/csv?year=${year}&month=${Number(month)}`),
+    } as unknown as Locator;
+
+    const detailTable = {
+      waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    } as unknown as Locator;
+    const clickToday = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    let todayButton: Locator;
+    todayButton = {
+      first: vi.fn<() => Locator>(() => todayButton),
+      isVisible: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+      click: clickToday,
+    } as unknown as Locator;
+    const amountCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue("0"),
+    } as unknown as Locator;
+    const summaryCells = {
+      nth: vi.fn<(index: number) => Locator>().mockReturnValue(amountCell),
+    } as unknown as Locator;
+    const summaryRow = {
+      locator: vi.fn<(selector: string) => Locator>().mockReturnValue(summaryCells),
+    } as unknown as Locator;
+    const summaryRows = {
+      first: vi.fn<() => Locator>().mockReturnValue(summaryRow),
+    } as unknown as Locator;
+    const detailRows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
+    const locator = vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
+      if (selector === "#cf-detail-table") return detailTable;
+      if (selector === ".fc-header-title h2") return monthHeader;
+      if (selector === "a[href*='/cf/csv']") return csvLink;
+      if (selector === ".fc-button-today") return todayButton;
+      if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
+      if (selector === "#cf-detail-table tbody > tr") return detailRows;
+      throw new Error(`Unexpected selector: ${selector}`);
+    });
+    const page = {
+      goto: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+      locator,
+    } as unknown as Page;
+
+    await expect(getCashFlow(page)).resolves.toMatchObject({ month: currentMonth, items: [] });
+    expect(clickToday).not.toHaveBeenCalled();
+  });
+
   test("当月取得AJAXのDOM適用完了を待ってから結果を返す", async () => {
     const currentMonth = getJstYearMonthKey();
     const [year, month] = currentMonth.split("-");

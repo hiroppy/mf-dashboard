@@ -144,14 +144,17 @@ describe("scrapeCashFlowHistory", () => {
       count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
       nth: vi.fn<(index: number) => Locator>().mockReturnValue(rowWithoutId),
     } as unknown as Locator;
+    let missing: Locator;
+    missing = {
+      first: vi.fn<() => Locator>(() => missing),
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
     const page = {
       locator: vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
         if (selector === ".fc-header-title h2") return monthHeader;
         if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
         if (selector === "#cf-detail-table tbody > tr") return detailRows;
-        return {
-          count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-        } as unknown as Locator;
+        return missing;
       }),
     } as unknown as Page;
 
@@ -240,6 +243,39 @@ describe("scrapeCashFlowMonth", () => {
         nth: vi.fn<(index: number) => Locator>((index) => {
           return {
             textContent: vi.fn<Locator["textContent"]>().mockResolvedValue(texts.get(index) ?? ""),
+          } as unknown as Locator;
+        }),
+      } as unknown as Locator;
+      const row = {
+        getAttribute: vi
+          .fn<Locator["getAttribute"]>()
+          .mockImplementation(async (name) => (name === "id" ? "js-transaction-row-a" : "")),
+        locator: vi.fn<(selector: string) => Locator>().mockReturnValue(cells),
+      } as unknown as Locator;
+
+      await expect(parseDetailRow(row, 2026)).rejects.toThrow(
+        "Incomplete cash flow transaction row",
+      );
+    },
+  );
+
+  test.each([5, 6])(
+    "カテゴリ列 %i の取得に失敗した行があれば月次置換へ進まない",
+    async (failedColumn) => {
+      const texts = new Map([
+        [1, "2026/07/01"],
+        [2, "Transaction A"],
+        [3, "1,000"],
+        [5, ""],
+        [6, ""],
+      ]);
+      const cells = {
+        nth: vi.fn<(index: number) => Locator>((index) => {
+          return {
+            textContent: vi.fn<Locator["textContent"]>().mockImplementation(async () => {
+              if (index === failedColumn) throw new Error("Detached cell");
+              return texts.get(index) ?? "";
+            }),
           } as unknown as Locator;
         }),
       } as unknown as Locator;

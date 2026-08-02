@@ -47,7 +47,7 @@ async function getDisplayedCashFlowMonth(page: Page): Promise<string | null> {
     hasCsvLink ? csvLink.getAttribute("href", { timeout: 3000 }).catch(() => null) : null,
   ]);
 
-  return parseCashFlowMonthHeader(headerText) ?? parseCashFlowMonthCsvHref(csvHref);
+  return parseCashFlowMonthCsvHref(csvHref) ?? parseCashFlowMonthHeader(headerText);
 }
 
 export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
@@ -99,7 +99,7 @@ export async function getCashFlow(page: Page): Promise<CashFlowSummary> {
           ? `${csvYear}-${String(csvMonthNumber).padStart(2, "0")}`
           : null;
 
-      return headerMonth === expectedMonth || csvMonth === expectedMonth;
+      return csvMonth ? csvMonth === expectedMonth : headerMonth === expectedMonth;
     }, currentMonth);
 
     month = await getDisplayedCashFlowMonth(page);
