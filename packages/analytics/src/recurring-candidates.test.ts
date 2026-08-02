@@ -156,6 +156,19 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ classification: "card", confidence: "medium" });
   });
 
+  it("normalizes complete Western dates including their day suffix", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-05-30", 20_000, "UTILITY 2026-05-30"),
+        transaction("2026-06-30", 20_000, "UTILITY 2026/06/30"),
+        transaction("2026-07-31", 20_000, "UTILITY 2026.07.31"),
+      ],
+      "2026-08",
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "high" });
+  });
+
   it("matches complete Japanese month tokens without partial numeric matches", () => {
     const result = generateRecurringCandidates(
       [
@@ -236,6 +249,24 @@ describe("generateRecurringCandidates", () => {
 
     expect(result).toHaveLength(2);
     expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-05-02", "2026-05-31"]);
+  });
+
+  it("keeps interleaved streams separate after a delayed boundary posting", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-31", 80_000, "定期支払"),
+        transaction("2026-03-02", 80_000, "定期支払"),
+        transaction("2026-03-31", 80_000, "定期支払"),
+        transaction("2026-04-02", 80_000, "定期支払"),
+        transaction("2026-04-30", 80_000, "定期支払"),
+        transaction("2026-05-02", 80_000, "定期支払"),
+        transaction("2026-05-31", 80_000, "定期支払"),
+      ],
+      "2026-06",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ predictedDate }) => predictedDate)).toEqual(["2026-06-02", "2026-06-30"]);
   });
 
   it("does not force ordinary dates to month-end with a large drift option", () => {
@@ -376,6 +407,22 @@ describe("generateRecurringCandidates", () => {
 
     expect(result).toHaveLength(3);
     expect(result.map(({ accountId }) => accountId)).toEqual([accountA, "account-b", accountA]);
+  });
+
+  it("assigns a transaction to the closest compatible schedule", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-10", 20_000, "定期支払"),
+        transaction("2026-01-14", 20_000, "定期支払"),
+        transaction("2026-02-10", 20_000, "定期支払"),
+        transaction("2026-02-14", 20_000, "定期支払"),
+        transaction("2026-03-13", 20_000, "定期支払"),
+      ],
+      "2026-04",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ confidence: "high", predictedDate: "2026-04-14" });
   });
 
   it("orders numeric and string account IDs independently of input order", () => {

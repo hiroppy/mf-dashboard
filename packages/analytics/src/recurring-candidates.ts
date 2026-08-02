@@ -154,7 +154,7 @@ function normalizeDescription(value: string | null | undefined): string {
   return normalizeCaseAndWidth(value)
     .replace(/(?<![0-9])(?:[0-9]{4}年)?(?:0?[1-9]|1[0-2])月(?:分)?(?![0-9])/gu, "")
     .replace(
-      /(^|[^a-z0-9])[0-9]{4}(?:[-/.](?:0?[1-9]|1[0-2])|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
+      /(^|[^a-z0-9])[0-9]{4}(?:[-/.](?:0?[1-9]|1[0-2])(?:[-/.](?:0?[1-9]|[12][0-9]|3[01]))?|(?:0[1-9]|1[0-2]))(?=$|[^a-z0-9])/gu,
       "$1",
     )
     .replace(
@@ -215,10 +215,6 @@ function median(values: number[]): number {
   return (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function isWithinAmountTolerance(left: number, right: number, tolerance: number): boolean {
-  return Math.abs(left - right) / Math.max(left, right) <= tolerance;
-}
-
 function daysFromMonthEnd(transaction: NormalizedTransaction): number {
   const { year, month } = parseIsoDateKey(transaction.date);
   return getDaysInMonth(year, month) - transaction.day;
@@ -274,22 +270,28 @@ function normalizeGroupingText(transaction: RecurringTransaction): string {
   return GENERIC_DESCRIPTIONS.has(description) ? `${description}${category}` : description;
 }
 
-function belongsToGroup(
+interface GroupMatchScore {
+  amountDistance: number;
+  dateDistance: number;
+  descriptionDistance: number;
+}
+
+function getGroupMatchScore(
   transaction: NormalizedTransaction,
   group: TransactionGroup,
   options: Required<GenerateRecurringCandidatesOptions>,
-): boolean {
+): GroupMatchScore | null {
   const monthlyTransactions = deduplicateMonths(group.transactions);
   const representative = monthlyTransactions.at(-1);
-  if (!representative) return false;
+  if (!representative) return null;
   if (
     transaction.accountId !== representative.accountId ||
     transaction.type !== representative.type ||
     transaction.classification !== representative.classification
   ) {
-    return false;
+    return null;
   }
-  if (conflictsWithBoundaryOccurrence(transaction, monthlyTransactions)) return false;
+  if (conflictsWithBoundaryOccurrence(transaction, group.transactions)) return null;
 
   const dayDistances = monthlyTransactions.map((existing) =>
     calendarDayDistance(transaction, existing),
@@ -301,17 +303,35 @@ function belongsToGroup(
     ? Math.min(...dayDistances)
     : median(dayDistances);
   const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
+  const amountDistance =
+    Math.abs(transaction.amount - medianAmount) / Math.max(transaction.amount, medianAmount);
+  const descriptionSimilarity = calculateDescriptionSimilarity(
+    transaction.normalizedDescription,
+    representative.normalizedDescription,
+  );
+  if (
+    groupDayDistance > options.dateDriftDays ||
+    amountDistance > options.amountToleranceRatio ||
+    !haveMatchingNumericTokens(
+      transaction.normalizedDescription,
+      representative.normalizedDescription,
+    ) ||
+    descriptionSimilarity < options.descriptionSimilarityThreshold
+  ) {
+    return null;
+  }
+  return {
+    amountDistance,
+    dateDistance: groupDayDistance,
+    descriptionDistance: 1 - descriptionSimilarity,
+  };
+}
+
+function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore): number {
   return (
-    groupDayDistance <= options.dateDriftDays &&
-    isWithinAmountTolerance(transaction.amount, medianAmount, options.amountToleranceRatio) &&
-    haveMatchingNumericTokens(
-      transaction.normalizedDescription,
-      representative.normalizedDescription,
-    ) &&
-    calculateDescriptionSimilarity(
-      transaction.normalizedDescription,
-      representative.normalizedDescription,
-    ) >= options.descriptionSimilarityThreshold
+    left.dateDistance - right.dateDistance ||
+    left.amountDistance - right.amountDistance ||
+    left.descriptionDistance - right.descriptionDistance
   );
 }
 
@@ -327,7 +347,14 @@ function groupTransactions(
       transaction.classification,
     ].join("\0");
     const groups = partitions.get(partitionKey) ?? [];
-    const existingGroup = groups.find((group) => belongsToGroup(transaction, group, options));
+    let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
+    for (const group of groups) {
+      const score = getGroupMatchScore(transaction, group, options);
+      if (score && (!bestMatch || compareGroupMatchScores(score, bestMatch.score) < 0)) {
+        bestMatch = { group, score };
+      }
+    }
+    const existingGroup = bestMatch?.group;
     if (existingGroup) {
       existingGroup.transactions.push(transaction);
     } else {
