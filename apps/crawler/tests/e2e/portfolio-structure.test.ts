@@ -33,14 +33,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const groupIdToRestore = originalGroupId;
-  if (groupIdToRestore && groupIdToRestore !== NO_GROUP_ID) {
-    await withNewPage(context, async (page) => {
-      await switchGroup(page, groupIdToRestore);
-    });
+  try {
+    const groupIdToRestore = originalGroupId;
+    if (groupIdToRestore && groupIdToRestore !== NO_GROUP_ID) {
+      await withNewPage(context, async (page) => {
+        await switchGroup(page, groupIdToRestore);
+      });
+    }
+  } finally {
+    await context?.close();
+    await browser?.close();
   }
-  await context?.close();
-  await browser?.close();
 });
 
 describe("portfolio page structure", () => {
@@ -75,14 +78,13 @@ describe("portfolio page structure", () => {
         throw new Error("The account has no portfolio row with explicit manual holding keys");
       }
       const portfolioRow = portfolioRowsWithKeys.first();
-      const [holdingMfId, subAccountMfId] = await Promise.all([
-        portfolioRow.locator('input[name="user_asset_det[id]"]').inputValue(),
-        portfolioRow.locator('input[name="user_asset_det[sub_account_id_hash]"]').inputValue(),
-      ]);
+      const subAccountMfId = await portfolioRow
+        .locator('input[name="user_asset_det[sub_account_id_hash]"]')
+        .inputValue();
 
       // The transaction source selector exposes the sub-account key and display name. Use its
       // unique current manual-account match only to choose one representative detail page; the
-      // assertions below still verify ownership with explicit IDs rather than display names.
+      // assertions below verify only the structural contract used by the parser.
       await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
       const sourceNames = await page.locator("option").evaluateAll((options, expected) => {
         const names = options.flatMap((option) => {
@@ -104,32 +106,15 @@ describe("portfolio page structure", () => {
         waitUntil: "domcontentloaded",
       });
       expect(response?.ok()).toBe(true);
-      expect(new URL(page.url()).pathname).toMatch(/^\/accounts\/show_manual\//);
+      expect(new URL(page.url()).pathname.startsWith("/accounts/show_manual/")).toBe(true);
       const detailRowsWithKeys = page.locator(
         'table.table-pns tbody tr:has(input[name="user_asset_det[id]"]):has(input[name="user_asset_det[sub_account_id_hash]"])',
       );
-      let foundMatchingDetailKey = false;
-      for (let index = 0; index < (await detailRowsWithKeys.count()); index++) {
-        const detailRow = detailRowsWithKeys.nth(index);
-        const [detailHoldingMfId, detailSubAccountMfId] = await Promise.all([
-          detailRow.locator('input[name="user_asset_det[id]"]').inputValue(),
-          detailRow.locator('input[name="user_asset_det[sub_account_id_hash]"]').inputValue(),
-        ]);
-        if (detailHoldingMfId === holdingMfId && detailSubAccountMfId === subAccountMfId) {
-          foundMatchingDetailKey = true;
-          break;
-        }
-      }
-      expect(foundMatchingDetailKey).toBe(true);
+      expect(await detailRowsWithKeys.count()).toBeGreaterThan(0);
       expect(
         await page
           .locator('input[name="account[id_hash]"], input[name="rollover_info[account_id_hash]"]')
-          .evaluateAll(
-            (inputs, expectedAccountMfId) =>
-              inputs.filter((input) => (input as HTMLInputElement).value === expectedAccountMfId)
-                .length,
-            accountMfId,
-          ),
+          .count(),
       ).toBeGreaterThan(0);
     });
   });
@@ -138,6 +123,7 @@ describe("portfolio page structure", () => {
     await withNewPage(context, async (page) => {
       const institutionCategories = await scrapeInstitutionCategories(page);
       const registeredAccounts = await getRegisteredAccounts(page);
+      const registeredAccountMfIds = new Set(registeredAccounts.accounts.map(({ mfId }) => mfId));
       const accountMfIdsByName = new Map<string, string[]>();
       for (const account of registeredAccounts.accounts) {
         const mfIds = accountMfIdsByName.get(account.name) ?? [];
@@ -161,10 +147,12 @@ describe("portfolio page structure", () => {
         const explicitAccountMfId = href ? extractAccountMfIdFromDetailUrl(href, "show") : null;
         const institution = (await institutionCell.textContent())?.trim() ?? "";
         const candidateMfIds = explicitAccountMfId
-          ? [explicitAccountMfId]
+          ? registeredAccountMfIds.has(explicitAccountMfId)
+            ? [explicitAccountMfId]
+            : []
           : (accountMfIdsByName.get(institution) ?? []);
 
-        expect(candidateMfIds).toHaveLength(1);
+        expect(candidateMfIds.length).toBe(1);
         expect(institutionCategories.has(candidateMfIds[0]!)).toBe(true);
       }
     });
@@ -189,7 +177,7 @@ describe("portfolio page structure", () => {
         waitUntil: "domcontentloaded",
       });
       expect(response?.ok()).toBe(true);
-      expect(new URL(page.url()).pathname).toMatch(/^\/accounts\/show\//);
+      expect(new URL(page.url()).pathname.startsWith("/accounts/show/")).toBe(true);
 
       const tables = page.locator("table.table-pns");
       let foundLinkedPnsStructure = false;

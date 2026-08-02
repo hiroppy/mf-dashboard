@@ -150,6 +150,8 @@ describe("DB保存", () => {
     ].sort();
     const actualMfIds = transactions.map((transaction) => transaction.mfId).sort();
 
-    expect(actualMfIds).toEqual(expectedMfIds);
+    expect(actualMfIds.length).toBe(expectedMfIds.length);
+    const actualMfIdSet = new Set(actualMfIds);
+    expect(expectedMfIds.every((mfId) => actualMfIdSet.has(mfId))).toBe(true);
   });
 });
