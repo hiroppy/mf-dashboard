@@ -999,6 +999,49 @@ describe("generateRecurringCandidates", () => {
     expect(result).toHaveLength(2);
   });
 
+  it("follows an augmenting path across three compatible recurring schedules", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-05", 20_000, "SERVICE PLAN"),
+        transaction("2026-06-07", 20_000, "SERVICE PLAN"),
+        transaction("2026-06-09", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-07", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-09", 20_000, "SERVICE PLAN"),
+        transaction("2026-07-11", 20_000, "SERVICE PLAN"),
+      ],
+      "2026-08",
+      { dateDriftDays: 2 },
+    );
+
+    expect(result).toHaveLength(3);
+  });
+
+  it("ranks qualifying fuzzy groups before applying the candidate limit", () => {
+    const prefix = "recurring common prefix";
+    const decoyDescriptions = Array.from({ length: 64 }, (_, index) => {
+      const first = String.fromCharCode(97 + Math.floor(index / 26));
+      const second = String.fromCharCode(97 + (index % 26));
+      return `${prefix}${first}${second}`;
+    });
+    const history = decoyDescriptions.flatMap((description) => [
+      transaction("2026-05-10", 100, description),
+      transaction("2026-06-10", 100, description),
+    ]);
+    history.push(
+      transaction("2026-05-10", 99, `${prefix}z`),
+      transaction("2026-06-10", 101, `${prefix}z`),
+      transaction("2026-07-10", 100, prefix),
+    );
+
+    const highCandidate = generateRecurringCandidates(history, "2026-08").find(
+      ({ confidence }) => confidence === "high",
+    );
+
+    expect(highCandidate).toMatchObject({
+      evidence: { amountRange: { min: 99, max: 101 }, occurrenceCount: 3 },
+    });
+  });
+
   it("bounds equal-amount buckets with many distinct descriptions", () => {
     const history = Array.from({ length: 5_000 }, (_, index) => {
       const identity = Array.from({ length: 4 }, (__, position) =>

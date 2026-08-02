@@ -588,27 +588,24 @@ function getFuzzyIndexedGroups(
   const indexedBigrams = [...transactionBigrams].sort(
     (left, right) => (candidateCounts.get(left) ?? 0) - (candidateCounts.get(right) ?? 0),
   );
-  const candidates = new Set<TransactionGroup>();
+  const candidateSimilarities = new Map<TransactionGroup, number>();
   for (const bigram of indexedBigrams) {
     const groupsByDescription = partition.groupsByBigramAndMonth.get(bigram)?.get(previousMonth);
     for (const [description, groups] of groupsByDescription ?? []) {
       if (description === transaction.normalizedDescription) continue;
       for (const group of groups) {
+        if (candidateSimilarities.has(group)) continue;
         const anchorBigrams = partition.anchorBigrams.get(group);
-        if (
-          !anchorBigrams ||
-          calculateBigramSimilarity(transactionBigrams, anchorBigrams) < similarityThreshold
-        ) {
-          continue;
-        }
-        candidates.add(group);
-        if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
+        if (!anchorBigrams) continue;
+        const similarity = calculateBigramSimilarity(transactionBigrams, anchorBigrams);
+        if (similarity >= similarityThreshold) candidateSimilarities.set(group, similarity);
       }
-      if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
     }
-    if (candidates.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
   }
-  return [...candidates];
+  return [...candidateSimilarities]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, MAX_FUZZY_CANDIDATE_GROUPS)
+    .map(([group]) => group);
 }
 
 function findBestGroupMatch(
@@ -626,24 +623,44 @@ function findBestGroupMatch(
   return bestMatch;
 }
 
-interface AugmentingGroupMatch {
+interface AugmentingAssignment {
+  transaction: NormalizedTransaction;
   group: TransactionGroup;
   score: GroupMatchScore;
-  displacedTransaction: NormalizedTransaction;
-  alternativeGroup: TransactionGroup;
-  alternativeScore: GroupMatchScore;
 }
 
-function findAugmentingGroupMatch(
+function compareAugmentingPaths(
+  left: AugmentingAssignment[],
+  right: AugmentingAssignment[],
+): number {
+  for (let index = 1; index <= Math.min(left.length, right.length); index++) {
+    const scoreComparison = compareGroupMatchScores(
+      left[left.length - index].score,
+      right[right.length - index].score,
+    );
+    if (scoreComparison !== 0) return scoreComparison;
+  }
+  return left.length - right.length;
+}
+
+function findAugmentingPath(
   transaction: NormalizedTransaction,
   candidateGroups: TransactionGroup[],
   partition: GroupPartition,
   options: Required<GenerateRecurringCandidatesOptions>,
-): AugmentingGroupMatch | undefined {
-  let bestMatch: AugmentingGroupMatch | undefined;
+  visitedGroups = new Set<TransactionGroup>(),
+): AugmentingAssignment[] | undefined {
+  let bestPath: AugmentingAssignment[] | undefined;
   for (const group of candidateGroups) {
+    if (visitedGroups.has(group)) continue;
     const conflicts = getPostingMonthConflicts(transaction, group.transactions);
-    if (conflicts.length !== 1) continue;
+    if (conflicts.length === 0) {
+      const score = getGroupMatchScore(transaction, group, options);
+      const path = score ? [{ transaction, group, score }] : undefined;
+      if (path && (!bestPath || compareAugmentingPaths(path, bestPath) < 0)) bestPath = path;
+      continue;
+    }
+    if (conflicts.length > 1) continue;
 
     const displacedTransaction = conflicts[0];
     if (displacedTransaction.day === transaction.day) continue;
@@ -653,32 +670,28 @@ function findAugmentingGroupMatch(
     const score = getGroupMatchScore(transaction, historyGroup, options);
     if (!score) continue;
 
-    const alternative = findBestGroupMatch(
+    const alternativeGroups = [
+      ...new Set([
+        ...getOptimizedGroups(partition, displacedTransaction, options, true),
+        ...getFuzzyIndexedGroups(
+          partition,
+          displacedTransaction,
+          options.descriptionSimilarityThreshold,
+        ),
+      ]),
+    ].filter((candidate) => candidate !== group);
+    const displacedPath = findAugmentingPath(
       displacedTransaction,
-      getOptimizedGroups(partition, displacedTransaction, options, true).filter(
-        (candidate) => candidate !== group,
-      ),
+      alternativeGroups,
+      partition,
       options,
+      new Set([...visitedGroups, group]),
     );
-    if (!alternative || alternative.score.replacedTransactions.length > 0) continue;
-
-    const match = {
-      group,
-      score,
-      displacedTransaction,
-      alternativeGroup: alternative.group,
-      alternativeScore: alternative.score,
-    };
-    if (
-      !bestMatch ||
-      compareGroupMatchScores(match.score, bestMatch.score) < 0 ||
-      (compareGroupMatchScores(match.score, bestMatch.score) === 0 &&
-        compareGroupMatchScores(match.alternativeScore, bestMatch.alternativeScore) < 0)
-    ) {
-      bestMatch = match;
-    }
+    if (!displacedPath) continue;
+    const path = [...displacedPath, { transaction, group, score }];
+    if (!bestPath || compareAugmentingPaths(path, bestPath) < 0) bestPath = path;
   }
-  return bestMatch;
+  return bestPath;
 }
 
 function lowerBound(values: number[], target: number): number {
@@ -949,7 +962,7 @@ function groupTransactions(
       (day) => day !== transaction.day,
     );
     if (!selectedMatch && hasDifferentIndexedDay) {
-      const augmentingMatch = findAugmentingGroupMatch(
+      const augmentingPath = findAugmentingPath(
         transaction,
         [
           ...new Set([
@@ -960,21 +973,33 @@ function groupTransactions(
         partition,
         options,
       );
-      if (augmentingMatch) {
-        const { displacedTransaction, alternativeGroup, group } = augmentingMatch;
-        moveGroupToMonth(partition, alternativeGroup, displacedTransaction.month);
-        group.transactions = group.transactions.filter(
-          (existing) => existing !== displacedTransaction,
-        );
-        alternativeGroup.transactions.push(displacedTransaction);
-        indexGroupAmount(partition, group);
-        indexGroupAmount(partition, alternativeGroup);
-        partition.exactOccurrences.set(exactOccurrenceKey(displacedTransaction), alternativeGroup);
-        partition.exactRecurringSlots.set(
-          exactRecurringSlotKey(displacedTransaction),
-          alternativeGroup,
-        );
-        selectedMatch = { group, score: augmentingMatch.score };
+      if (augmentingPath) {
+        for (const assignment of augmentingPath.slice(0, -1)) {
+          const sourceGroup = partition.exactOccurrences.get(
+            exactOccurrenceKey(assignment.transaction),
+          );
+          if (sourceGroup && sourceGroup !== assignment.group) {
+            sourceGroup.transactions = sourceGroup.transactions.filter(
+              (existing) => existing !== assignment.transaction,
+            );
+            indexGroupAmount(partition, sourceGroup);
+          }
+          moveGroupToMonth(partition, assignment.group, assignment.transaction.month);
+          assignment.group.transactions.push(assignment.transaction);
+          indexGroupAmount(partition, assignment.group);
+          partition.exactOccurrences.set(
+            exactOccurrenceKey(assignment.transaction),
+            assignment.group,
+          );
+          partition.exactRecurringSlots.set(
+            exactRecurringSlotKey(assignment.transaction),
+            assignment.group,
+          );
+        }
+        const currentAssignment = augmentingPath.at(-1);
+        if (currentAssignment) {
+          selectedMatch = { group: currentAssignment.group, score: currentAssignment.score };
+        }
       }
     }
     if (selectedMatch) {
