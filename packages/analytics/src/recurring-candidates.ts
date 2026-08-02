@@ -74,6 +74,8 @@ interface TransactionGroup {
 }
 
 interface GroupPartition {
+  amountGroupsByDescription: Map<string, Map<number, Set<TransactionGroup>>>;
+  amountKeysByDescription: Map<string, number[]>;
   anchorBigrams: Map<TransactionGroup, Set<string>>;
   exactOccurrences: Map<string, TransactionGroup>;
   exactRecurringSlots: Map<string, TransactionGroup>;
@@ -234,6 +236,7 @@ function daysFromMonthEnd(transaction: NormalizedTransaction): number {
 }
 
 function calendarDayDistance(left: NormalizedTransaction, right: NormalizedTransaction): number {
+  if (left.day === right.day) return 0;
   const leftMonthEndOffset = daysFromMonthEnd(left);
   const rightMonthEndOffset = daysFromMonthEnd(right);
   if (
@@ -387,10 +390,17 @@ function compareGroupMatchScores(left: GroupMatchScore, right: GroupMatchScore):
 function getIndexedGroups(
   partition: GroupPartition,
   transaction: NormalizedTransaction,
-  similarityThreshold: number,
+  options: Required<GenerateRecurringCandidatesOptions>,
 ): TransactionGroup[] {
   const exactRecurringGroup = partition.exactRecurringSlots.get(exactRecurringSlotKey(transaction));
   if (exactRecurringGroup) return [exactRecurringGroup];
+  const amountIndexedGroups = getAmountIndexedGroups(
+    partition,
+    transaction,
+    options.amountToleranceRatio,
+  );
+  if (amountIndexedGroups.length > 0) return amountIndexedGroups;
+  const similarityThreshold = options.descriptionSimilarityThreshold;
   if (similarityThreshold === 0) return partition.groups;
 
   const transactionBigrams = getBigrams(transaction.normalizedDescription);
@@ -414,6 +424,55 @@ function getIndexedGroups(
     .map(([group]) => group);
 }
 
+function lowerBound(values: number[], target: number): number {
+  let start = 0;
+  let end = values.length;
+  while (start < end) {
+    const middle = Math.floor((start + end) / 2);
+    if (values[middle] < target) start = middle + 1;
+    else end = middle;
+  }
+  return start;
+}
+
+function getAmountIndexedGroups(
+  partition: GroupPartition,
+  transaction: NormalizedTransaction,
+  tolerance: number,
+): TransactionGroup[] {
+  const amountKeys = partition.amountKeysByDescription.get(transaction.normalizedDescription) ?? [];
+  const groupsByAmount = partition.amountGroupsByDescription.get(transaction.normalizedDescription);
+  if (!groupsByAmount || amountKeys.length === 0) return [];
+
+  const insertionIndex = lowerBound(amountKeys, transaction.amount);
+  const candidates: TransactionGroup[] = [];
+  let leftIndex = insertionIndex - 1;
+  let rightIndex = insertionIndex;
+  let inspectedAmounts = 0;
+  while ((leftIndex >= 0 || rightIndex < amountKeys.length) && inspectedAmounts < 8) {
+    const leftDistance =
+      leftIndex >= 0
+        ? Math.abs(amountKeys[leftIndex] - transaction.amount)
+        : Number.POSITIVE_INFINITY;
+    const rightDistance =
+      rightIndex < amountKeys.length
+        ? Math.abs(amountKeys[rightIndex] - transaction.amount)
+        : Number.POSITIVE_INFINITY;
+    const index = leftDistance <= rightDistance ? leftIndex-- : rightIndex++;
+    const amount = amountKeys[index];
+    inspectedAmounts++;
+    if (Math.abs(amount - transaction.amount) / Math.max(amount, transaction.amount) > tolerance) {
+      break;
+    }
+    for (const group of groupsByAmount.get(amount) ?? []) {
+      const latestMonth = partition.latestMonths.get(group);
+      if (latestMonth !== transaction.month || boundaryPosition(transaction))
+        candidates.push(group);
+    }
+  }
+  return candidates;
+}
+
 function exactOccurrenceKey(transaction: NormalizedTransaction): string {
   return [transaction.date, transaction.amount, transaction.normalizedDescription].join("\0");
 }
@@ -431,6 +490,25 @@ function indexGroupMonth(partition: GroupPartition, group: TransactionGroup, mon
     partition.groupsByBigramAndMonth.set(bigram, groupsByMonth);
   }
   partition.latestMonths.set(group, month);
+}
+
+function indexGroupAmount(
+  partition: GroupPartition,
+  group: TransactionGroup,
+  transaction: NormalizedTransaction,
+): void {
+  const description = transaction.normalizedDescription;
+  const groupsByAmount = partition.amountGroupsByDescription.get(description) ?? new Map();
+  const groups = groupsByAmount.get(transaction.amount) ?? new Set();
+  groups.add(group);
+  groupsByAmount.set(transaction.amount, groups);
+  partition.amountGroupsByDescription.set(description, groupsByAmount);
+
+  const amountKeys = partition.amountKeysByDescription.get(description) ?? [];
+  const insertionIndex = lowerBound(amountKeys, transaction.amount);
+  if (amountKeys[insertionIndex] !== transaction.amount)
+    amountKeys.splice(insertionIndex, 0, transaction.amount);
+  partition.amountKeysByDescription.set(description, amountKeys);
 }
 
 function moveGroupToMonth(partition: GroupPartition, group: TransactionGroup, month: string): void {
@@ -465,6 +543,8 @@ function groupTransactions(
       exactDescriptionKey,
     ].join("\0");
     const partition: GroupPartition = partitions.get(partitionKey) ?? {
+      amountGroupsByDescription: new Map(),
+      amountKeysByDescription: new Map(),
       anchorBigrams: new Map(),
       exactOccurrences: new Map(),
       exactRecurringSlots: new Map(),
@@ -473,11 +553,7 @@ function groupTransactions(
       latestMonths: new Map(),
     };
     const transactionBigrams = getBigrams(transaction.normalizedDescription);
-    const candidateGroups = getIndexedGroups(
-      partition,
-      transaction,
-      options.descriptionSimilarityThreshold,
-    );
+    const candidateGroups = getIndexedGroups(partition, transaction, options);
     let bestMatch: { group: TransactionGroup; score: GroupMatchScore } | undefined;
     for (const group of candidateGroups) {
       const score = getGroupMatchScore(transaction, group, options);
@@ -497,6 +573,7 @@ function groupTransactions(
       partition.anchorBigrams.set(group, transactionBigrams);
       partition.exactOccurrences.set(exactOccurrenceKey(transaction), group);
       partition.exactRecurringSlots.set(exactRecurringSlotKey(transaction), group);
+      indexGroupAmount(partition, group, transaction);
       indexGroupMonth(partition, group, transaction.month);
     }
     partitions.set(partitionKey, partition);

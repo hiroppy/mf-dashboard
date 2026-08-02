@@ -286,6 +286,16 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-28" });
   });
 
+  it("groups stable calendar days when date drift is zero", () => {
+    const result = generateRecurringCandidates(
+      [transaction("2026-01-28", 80_000, "家賃"), transaction("2026-02-28", 80_000, "家賃")],
+      "2026-03",
+      { dateDriftDays: 0 },
+    );
+
+    expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-28" });
+  });
+
   it("groups holiday drift that crosses a calendar-month boundary", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-31", 80_000, "家賃"), transaction("2026-03-02", 80_000, "家賃")],
@@ -807,6 +817,17 @@ describe("generateRecurringCandidates", () => {
 
   it("handles many prior-month common-label recurring slots", () => {
     const history: RecurringTransaction[] = ["2026-06-10", "2026-07-10"].flatMap((date) =>
+      Array.from({ length: 2_000 }, (_, index) => ({
+        ...transaction(date, 10_000 + index, "Payment"),
+        category: "Utilities",
+      })),
+    );
+
+    expect(generateRecurringCandidates(history, "2026-08")).toHaveLength(2_000);
+  });
+
+  it("handles many common-label slots with accepted date drift", () => {
+    const history: RecurringTransaction[] = ["2026-06-10", "2026-07-11"].flatMap((date) =>
       Array.from({ length: 2_000 }, (_, index) => ({
         ...transaction(date, 10_000 + index, "Payment"),
         category: "Utilities",
