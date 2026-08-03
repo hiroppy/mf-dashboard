@@ -105,6 +105,7 @@ const DEFAULT_OPTIONS = {
 const MONTH_BOUNDARY_WINDOW_DAYS = 3;
 const MAX_GROUPS_PER_AMOUNT_BUCKET = 8;
 const MAX_FUZZY_CANDIDATE_GROUPS = 64;
+const MAX_INELIGIBLE_CURRENT_MONTH_GROUPS = 64;
 const GENERIC_DESCRIPTIONS = new Set(["payment", "振込", "支払", "支払い"]);
 
 function assertRatio(value: number, name: string): void {
@@ -593,6 +594,7 @@ function getOptimizedGroups(
     transaction,
     options,
     MAX_GROUPS_PER_AMOUNT_BUCKET,
+    true,
     forAugmentingMatch,
   )) {
     groups.add(group);
@@ -604,6 +606,7 @@ function getOptimizedGroups(
     transaction,
     options,
     MAX_GROUPS_PER_AMOUNT_BUCKET,
+    options.descriptionSimilarityThreshold === 0,
     forAugmentingMatch,
   )) {
     groups.add(group);
@@ -741,15 +744,18 @@ function getAmountIndexedGroups(
   transaction: NormalizedTransaction,
   options: Required<GenerateRecurringCandidatesOptions>,
   maxCandidateGroups: number,
+  rankBeforeCapping: boolean,
   includePostingMonthConflicts = false,
 ): TransactionGroup[] {
   if (!groupsByDay || !amountKeysByDay) return [];
 
   const candidates = new Set<TransactionGroup>();
   const previousMonth = shiftYearMonthKey(transaction.month, -1);
-  const rankBeforeCapping = options.descriptionSimilarityThreshold === 0;
   for (const [day, groupsByAmount] of groupsByDay) {
     let dayCandidateCount = 0;
+    let ineligibleCurrentMonthCount = 0;
+    let reachedIneligibleLimit = false;
+    const rankedGroups = [];
     const addCandidate = (group: TransactionGroup): boolean => {
       const previousSize = candidates.size;
       candidates.add(group);
@@ -774,7 +780,6 @@ function getAmountIndexedGroups(
       const index = leftRatio <= rightRatio ? leftIndex-- : rightIndex++;
       const amount = amountKeys[index];
       if (Math.min(leftRatio, rightRatio) > options.amountToleranceRatio) break;
-      const rankedGroups = [];
       for (const group of groupsByAmount.get(amount) ?? []) {
         const latestMonth = partition.latestMonths.get(group);
         if (latestMonth !== transaction.month && latestMonth !== previousMonth) {
@@ -787,11 +792,18 @@ function getAmountIndexedGroups(
             continue;
           }
         }
-        const isEligible =
-          latestMonth !== transaction.month ||
-          includePostingMonthConflicts ||
-          !conflictsWithPostingMonthSchedule(transaction, group.transactions);
-        if (!isEligible) continue;
+        if (
+          latestMonth === transaction.month &&
+          !includePostingMonthConflicts &&
+          conflictsWithPostingMonthSchedule(transaction, group.transactions)
+        ) {
+          ineligibleCurrentMonthCount++;
+          if (ineligibleCurrentMonthCount >= MAX_INELIGIBLE_CURRENT_MONTH_GROUPS) {
+            reachedIneligibleLimit = true;
+            break;
+          }
+          continue;
+        }
         const candidate = getIndexedGroupCandidate(
           transaction,
           group,
@@ -805,13 +817,14 @@ function getAmountIndexedGroups(
         }
         if (addCandidate(group)) break;
       }
-      if (rankBeforeCapping) {
-        rankedGroups.sort((left, right) => compareGroupMatchScores(left.score, right.score));
-        for (const { group } of rankedGroups) {
-          if (addCandidate(group)) break;
-        }
-      }
+      if (reachedIneligibleLimit) break;
       if (dayCandidateCount >= maxCandidateGroups) break;
+    }
+    if (rankBeforeCapping) {
+      rankedGroups.sort((left, right) => compareGroupMatchScores(left.score, right.score));
+      for (const { group } of rankedGroups) {
+        if (addCandidate(group)) break;
+      }
     }
   }
   return [...candidates];

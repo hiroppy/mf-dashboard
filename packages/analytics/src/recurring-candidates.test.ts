@@ -1291,6 +1291,25 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("ranks exact-label amount buckets by the complete match score", () => {
+    const decoyAmounts = Array.from({ length: 8 }, (_, index) => 100 + index);
+    const result = generateRecurringCandidates(
+      [
+        ...decoyAmounts.map((amount) => transaction("2026-05-10", amount, "Utilities")),
+        transaction("2026-05-10", 110, "Utilities"),
+        ...decoyAmounts.map((amount) => transaction("2026-06-13", amount, "Utilities")),
+        transaction("2026-06-10", 110, "Utilities"),
+        transaction("2026-07-10", 100, "Utilities"),
+      ],
+      "2026-08",
+    );
+
+    expect(result.find(({ confidence }) => confidence === "high")).toMatchObject({
+      predictedAmount: 110,
+      evidence: { amountRange: { min: 100, max: 110 }, occurrenceCount: 3 },
+    });
+  });
+
   it("preserves boundaries between stable numeric tokens", () => {
     const result = generateRecurringCandidates(
       [
@@ -1482,7 +1501,7 @@ describe("generateRecurringCandidates", () => {
   });
 
   it("handles many same-month common labels with distinct amounts", () => {
-    const history: RecurringTransaction[] = Array.from({ length: 2_000 }, (_, index) => ({
+    const history: RecurringTransaction[] = Array.from({ length: 4_000 }, (_, index) => ({
       ...transaction("2026-07-10", 10_000 + index, "Payment"),
       category: "Utilities",
     }));
