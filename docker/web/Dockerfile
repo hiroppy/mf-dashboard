@@ -47,6 +47,7 @@ RUN mkdir -p /pnpm \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY patches ./patches
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/date-utils/package.json ./packages/date-utils/
