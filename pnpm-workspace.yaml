@@ -9,6 +9,18 @@ allowBuilds:
   sharp: true
   workerd: true
 
+patchedDependencies:
+  "@stryker-mutator/core@9.6.1": patches/@stryker-mutator__core@9.6.1.patch
+  "@stryker-mutator/typescript-checker@9.6.1": patches/@stryker-mutator__typescript-checker@9.6.1.patch
+
+packageExtensions:
+  "@stryker-mutator/core@9.6.1":
+    dependencies:
+      typescript-stryker: npm:typescript@6.0.3
+  "@stryker-mutator/typescript-checker@9.6.1":
+    dependencies:
+      typescript-stryker: npm:typescript@6.0.3
+
 minimumReleaseAgeExclude:
   - "@storybook/addon-a11y@10.5.5"
   - "@storybook/addon-vitest@10.5.5"

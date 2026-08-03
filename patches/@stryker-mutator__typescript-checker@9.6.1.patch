@@ -1,0 +1,30 @@
+diff --git a/dist/src/fs/hybrid-file-system.js b/dist/src/fs/hybrid-file-system.js
+--- a/dist/src/fs/hybrid-file-system.js
++++ b/dist/src/fs/hybrid-file-system.js
+@@ -1 +1 @@
+-import ts from 'typescript';
++import ts from 'typescript-stryker';
+diff --git a/dist/src/fs/script-file.js b/dist/src/fs/script-file.js
+--- a/dist/src/fs/script-file.js
++++ b/dist/src/fs/script-file.js
+@@ -1 +1 @@
+-import ts from 'typescript';
++import ts from 'typescript-stryker';
+diff --git a/dist/src/tsconfig-helpers.js b/dist/src/tsconfig-helpers.js
+--- a/dist/src/tsconfig-helpers.js
++++ b/dist/src/tsconfig-helpers.js
+@@ -2 +2 @@
+-import ts from 'typescript';
++import ts from 'typescript-stryker';
+diff --git a/dist/src/typescript-checker.js b/dist/src/typescript-checker.js
+--- a/dist/src/typescript-checker.js
++++ b/dist/src/typescript-checker.js
+@@ -5 +5 @@
+-import ts from 'typescript';
++import ts from 'typescript-stryker';
+diff --git a/dist/src/typescript-compiler.js b/dist/src/typescript-compiler.js
+--- a/dist/src/typescript-compiler.js
++++ b/dist/src/typescript-compiler.js
+@@ -2 +2 @@
+-import ts from 'typescript';
++import ts from 'typescript-stryker';

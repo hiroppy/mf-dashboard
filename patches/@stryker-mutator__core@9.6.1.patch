@@ -1,0 +1,21 @@
+diff --git a/dist/src/sandbox/ts-config-preprocessor.js b/dist/src/sandbox/ts-config-preprocessor.js
+--- a/dist/src/sandbox/ts-config-preprocessor.js
++++ b/dist/src/sandbox/ts-config-preprocessor.js
+@@ -42,7 +42,7 @@ export class TSConfigPreprocessor {
+             const tsconfigFile = project.files.get(tsconfigFileName);
+             if (tsconfigFile) {
+                 this.log.debug('Rewriting file %s', tsconfigFile);
+-                const { default: ts } = await import('typescript');
++                const { default: ts } = await import('typescript-stryker');
+                 const { config } = ts.parseConfigFileTextToJson(tsconfigFileName, await tsconfigFile.readContent());
+                 if (config) {
+                     await this.rewriteExtends(project, config, tsconfigFileName);
+@@ -82,7 +82,7 @@ export class TSConfigPreprocessor {
+         }
+     }
+     async rewriteProjectReferences(project, config, originTSConfigFileName) {
+-        const { default: ts } = await import('typescript');
++        const { default: ts } = await import('typescript-stryker');
+         if (Array.isArray(config.references)) {
+             for (const reference of config.references) {
+                 const referencePath = ts.resolveProjectReferencePath(reference);

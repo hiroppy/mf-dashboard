@@ -40,6 +40,12 @@ catalogs:
       specifier: 4.1.10
       version: 4.1.10
 
+packageExtensionsChecksum: sha256-xDoPxmt7b+JUolnKBbVUL1Q3IRv8QZMGW0Zl8eNVZNc=
+
+patchedDependencies:
+  '@stryker-mutator/core@9.6.1': 6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb
+  '@stryker-mutator/typescript-checker@9.6.1': 32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159
+
 importers:
 
   .:
@@ -98,13 +104,13 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: 'catalog:'
-        version: 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+        version: 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/typescript-checker':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
+        version: 9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -238,13 +244,13 @@ importers:
         version: 10.5.5(@babel/core@7.29.0(supports-color@10.2.2))(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.1)(next@16.2.12(@babel/core@7.29.0(supports-color@10.2.2))(@opentelemetry/api@1.9.0)(@playwright/test@1.62.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.57.1)(storybook@10.5.5(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.0(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@stryker-mutator/core':
         specifier: 'catalog:'
-        version: 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+        version: 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/typescript-checker':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
+        version: 9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
       '@tailwindcss/postcss':
         specifier: 4.3.3
         version: 4.3.3
@@ -320,13 +326,13 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: 'catalog:'
-        version: 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+        version: 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/typescript-checker':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
+        version: 9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -341,13 +347,13 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: 'catalog:'
-        version: 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+        version: 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/typescript-checker':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
+        version: 9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -369,13 +375,13 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: 'catalog:'
-        version: 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+        version: 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/typescript-checker':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
+        version: 9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.5
@@ -415,13 +421,13 @@ importers:
     devDependencies:
       '@stryker-mutator/core':
         specifier: 'catalog:'
-        version: 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+        version: 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/typescript-checker':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
+        version: 9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)
       '@stryker-mutator/vitest-runner':
         specifier: 'catalog:'
-        version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
+        version: 9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -777,13 +783,6 @@ packages:
   '@csstools/color-helpers@6.1.0':
     resolution: {integrity: sha512-064IFJdjTfUqnjpCVpMOdbr8FLQBhinbZj6yRv2An2E41O/pLEXqfFRWqGq/SxlE5PEUYTlvWsG2r8MswAVvkg==}
     engines: {node: '>=20.19.0'}
-
-  '@csstools/css-calc@3.2.1':
-    resolution: {integrity: sha512-DtdHlgXh5ZkA43cwBcAm+huzgJiwx3ZTWVjBs94kwz2xKqSimDA3lBgCjphYgwgVUMWatSM0pDd8TILB1yrVVg==}
-    engines: {node: '>=20.19.0'}
-    peerDependencies:
-      '@csstools/css-parser-algorithms': ^4.0.0
-      '@csstools/css-tokenizer': ^4.0.0
 
   '@csstools/css-calc@3.3.0':
     resolution: {integrity: sha512-c5ihYsPkdG6JCkU2zTMm4+k6r7RXuGxtWYhu5DHMIiF1FHzrfmHL5so11AoFpUv/tu61xfcmT4AmKoFfMPoqdQ==}
@@ -1457,15 +1456,6 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
-
-  '@exodus/bytes@1.15.0':
-    resolution: {integrity: sha512-UY0nlA+feH81UGSHv92sLEPLCeZFjXOuHhrIo0HQydScuQc8s0A7kL/UdgwgDq8g8ilksmuoF35YVTNphV2aBQ==}
-    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
-    peerDependencies:
-      '@noble/hashes': ^1.8.0 || ^2.0.0
-    peerDependenciesMeta:
-      '@noble/hashes':
-        optional: true
 
   '@exodus/bytes@1.15.1':
     resolution: {integrity: sha512-S6mL0yNB/Abt9Ei4tq8gDhcczc4S3+vQ4ra7vxnAf+YHC02srtqxKKZghx2Dq6p0e66THKwR6r8N6P95wEty7Q==}
@@ -6242,6 +6232,11 @@ packages:
     resolution: {integrity: sha512-k4kX5Up6qA68D0Cby2AK+6+vM5k3qTxe+/3FqhnHRExjY5cfbOnzjQZbP/LXleF8hVoDvDqxlgk9KK83HoBZlQ==}
     engines: {node: '>= 16.0.0'}
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -6645,7 +6640,7 @@ snapshots:
 
   '@asamuzakjp/css-color@6.0.5':
     dependencies:
-      '@csstools/css-calc': 3.2.1(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)
+      '@csstools/css-calc': 3.3.0(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)
       '@csstools/css-color-parser': 4.1.10(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)
       '@csstools/css-parser-algorithms': 4.0.0(@csstools/css-tokenizer@4.0.0)
       '@csstools/css-tokenizer': 4.0.0
@@ -6967,11 +6962,6 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.9
 
   '@csstools/color-helpers@6.1.0': {}
-
-  '@csstools/css-calc@3.2.1(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)':
-    dependencies:
-      '@csstools/css-parser-algorithms': 4.0.0(@csstools/css-tokenizer@4.0.0)
-      '@csstools/css-tokenizer': 4.0.0
 
   '@csstools/css-calc@3.3.0(@csstools/css-parser-algorithms@4.0.0(@csstools/css-tokenizer@4.0.0))(@csstools/css-tokenizer@4.0.0)':
     dependencies:
@@ -7359,8 +7349,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.1':
     optional: true
-
-  '@exodus/bytes@1.15.0': {}
 
   '@exodus/bytes@1.15.1': {}
 
@@ -8800,7 +8788,7 @@ snapshots:
       tslib: 2.8.1
       typed-inject: 5.0.0
 
-  '@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2)':
+  '@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)':
     dependencies:
       '@inquirer/prompts': 8.5.2(@types/node@25.9.5)
       '@stryker-mutator/api': 9.6.1
@@ -8828,6 +8816,7 @@ snapshots:
       tslib: 2.8.1
       typed-inject: 5.0.0
       typed-rest-client: 2.3.1
+      typescript-stryker: typescript@6.0.3
     transitivePeerDependencies:
       - '@types/node'
       - supports-color
@@ -8849,20 +8838,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@stryker-mutator/typescript-checker@9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)':
+  '@stryker-mutator/typescript-checker@9.6.1(patch_hash=32e997c188b9593b27ea67999048dd2f012e26b6aca350de5275026a62c3e159)(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(typescript@7.0.2)':
     dependencies:
       '@stryker-mutator/api': 9.6.1
-      '@stryker-mutator/core': 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+      '@stryker-mutator/core': 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/util': 9.6.1
       semver: 7.7.4
       typescript: 7.0.2
+      typescript-stryker: typescript@6.0.3
 
   '@stryker-mutator/util@9.6.1': {}
 
-  '@stryker-mutator/vitest-runner@9.6.1(@stryker-mutator/core@9.6.1(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)':
+  '@stryker-mutator/vitest-runner@9.6.1(@stryker-mutator/core@9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2))(vitest@4.1.10)':
     dependencies:
       '@stryker-mutator/api': 9.6.1
-      '@stryker-mutator/core': 9.6.1(@types/node@25.9.5)(supports-color@10.2.2)
+      '@stryker-mutator/core': 9.6.1(patch_hash=6a9a39a8a966a96afa56069a93a5e62da3e2f67ab09f6e5fec2a326d1c5378fb)(@types/node@25.9.5)(supports-color@10.2.2)
       '@stryker-mutator/util': 9.6.1
       semver: 7.8.4
       tslib: 2.8.1
@@ -10247,7 +10237,7 @@ snapshots:
 
   html-encoding-sniffer@6.0.0:
     dependencies:
-      '@exodus/bytes': 1.15.0
+      '@exodus/bytes': 1.15.1
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -12047,6 +12037,8 @@ snapshots:
       tunnel: 0.0.6
       underscore: 1.13.8
 
+  typescript@6.0.3: {}
+
   typescript@7.0.2:
     optionalDependencies:
       '@typescript/typescript-aix-ppc64': 7.0.2
@@ -12281,7 +12273,7 @@ snapshots:
 
   whatwg-url@16.0.1:
     dependencies:
-      '@exodus/bytes': 1.15.0
+      '@exodus/bytes': 1.15.1
       tr46: 6.0.0
       webidl-conversions: 8.0.1
     transitivePeerDependencies:
