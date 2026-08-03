@@ -1,4 +1,4 @@
-import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
+import { getJstTodayIsoDate, shiftYearMonthKey } from "@mf-dashboard/date-utils";
 import { getAccountsWithAssets, getTransactions } from "@mf-dashboard/db";
 import { Landmark } from "lucide-react";
 import { EmptyState } from "../ui/empty-state";
@@ -10,11 +10,12 @@ interface BankCashFlowForecastProps {
 }
 
 export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
+  const currentDate = getJstTodayIsoDate();
+  const historyStartDate = `${shiftYearMonthKey(currentDate.slice(0, 7), -12)}-01`;
   const [accounts, transactions] = await Promise.all([
     getAccountsWithAssets(groupId),
-    getTransactions({ groupId }),
+    getTransactions({ groupId, startDate: historyStartDate }),
   ]);
-  const currentDate = getJstTodayIsoDate();
   const forecasts = buildBankCashFlowForecastViews(accounts, transactions, currentDate);
 
   if (forecasts.length === 0) {

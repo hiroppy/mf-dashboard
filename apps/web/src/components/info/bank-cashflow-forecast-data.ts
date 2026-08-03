@@ -10,12 +10,14 @@ import {
   type RecurringCandidate,
   type RecurringTransaction,
 } from "@mf-dashboard/analytics/recurring-candidates";
+import { addDaysToIsoDateKey, parseIsoDateKey } from "@mf-dashboard/date-utils";
 
 interface ForecastAccount {
   id: number;
   name: string;
   categoryName: string;
   totalAssets: number;
+  lastUpdated: string | null;
 }
 
 interface ForecastTransaction {
@@ -34,6 +36,9 @@ interface ForecastTransaction {
 export interface BankCashFlowForecastView extends BankBalanceForecast {
   accountName: string;
 }
+
+const CANDIDATE_DATE_DRIFT_DAYS = 3;
+const CANDIDATE_AMOUNT_TOLERANCE_RATIO = 0.1;
 
 function isRecurringTransactionType(type: string): type is RecurringTransaction["type"] {
   return type === "income" || type === "expense" || type === "transfer";
@@ -68,19 +73,57 @@ function normalizeDescription(description: string | null | undefined): string {
   return description?.normalize("NFKC").trim().toLocaleLowerCase("ja-JP") ?? "";
 }
 
-function isCandidateAlreadyRecorded(
-  candidate: RecurringCandidate,
-  actualTransactions: ForecastTransaction[],
-): boolean {
-  const candidateDescription = normalizeDescription(candidate.description);
-  if (!candidateDescription) return false;
+function getBalanceAsOfDate(lastUpdated: string | null, currentDate: string): string | null {
+  const date = lastUpdated?.slice(0, 10);
+  if (!date || date < `${currentDate.slice(0, 7)}-01` || date > currentDate) return null;
 
-  return actualTransactions.some(
-    (transaction) =>
-      transaction.accountId === candidate.accountId &&
-      transaction.type === candidate.type &&
-      normalizeDescription(transaction.description) === candidateDescription,
+  try {
+    parseIsoDateKey(date);
+    return date;
+  } catch {
+    return null;
+  }
+}
+
+function matchesRecordedCandidate(
+  candidate: RecurringCandidate,
+  transaction: ForecastTransaction,
+): boolean {
+  const amountDifference = Math.abs(Math.abs(transaction.amount) - candidate.predictedAmount);
+  const amountTolerance = Math.max(
+    1,
+    Math.round(candidate.predictedAmount * CANDIDATE_AMOUNT_TOLERANCE_RATIO),
   );
+  const earliestDate = addDaysToIsoDateKey(candidate.predictedDate, -CANDIDATE_DATE_DRIFT_DAYS);
+  const latestDate = addDaysToIsoDateKey(candidate.predictedDate, CANDIDATE_DATE_DRIFT_DAYS);
+
+  return (
+    transaction.accountId === candidate.accountId &&
+    transaction.type === candidate.type &&
+    normalizeDescription(transaction.description) === normalizeDescription(candidate.description) &&
+    classifyRecurringTransaction(transaction) === candidate.classification &&
+    amountDifference <= amountTolerance &&
+    transaction.date >= earliestDate &&
+    transaction.date <= latestDate
+  );
+}
+
+function excludeRecordedCandidates(
+  candidates: RecurringCandidate[],
+  actualTransactions: ForecastTransaction[],
+): RecurringCandidate[] {
+  const matchedTransactionIndexes = new Set<number>();
+
+  return candidates.filter((candidate) => {
+    const matchIndex = actualTransactions.findIndex(
+      (transaction, index) =>
+        !matchedTransactionIndexes.has(index) && matchesRecordedCandidate(candidate, transaction),
+    );
+    if (matchIndex === -1) return true;
+
+    matchedTransactionIndexes.add(matchIndex);
+    return false;
+  });
 }
 
 export function buildBankCashFlowForecastViews(
@@ -89,7 +132,12 @@ export function buildBankCashFlowForecastViews(
   currentDate: string,
   candidates?: RecurringCandidate[],
 ): BankCashFlowForecastView[] {
-  const bankAccounts = accounts.filter(({ categoryName }) => categoryName === "銀行");
+  const bankAccounts = accounts.flatMap((account) => {
+    if (account.categoryName !== "銀行") return [];
+
+    const balanceAsOfDate = getBalanceAsOfDate(account.lastUpdated, currentDate);
+    return balanceAsOfDate ? [{ ...account, balanceAsOfDate }] : [];
+  });
   if (bankAccounts.length === 0) return [];
 
   const month = currentDate.slice(0, 7);
@@ -107,23 +155,21 @@ export function buildBankCashFlowForecastViews(
     const event = toActualEvent(transaction);
     return event ? [event] : [];
   });
-  const forecastEvents = forecastCandidates
-    .filter(
-      (candidate) =>
-        typeof candidate.accountId === "number" &&
-        bankAccountIds.has(candidate.accountId) &&
-        candidate.predictedDate >= currentDate &&
-        !isCandidateAlreadyRecorded(candidate, actualTransactions),
-    )
-    .map((candidate, index) =>
-      recurringCandidateToBankCashFlowEvent(`forecast-${index}`, candidate),
-    );
+  const eligibleCandidates = forecastCandidates.filter(
+    (candidate) =>
+      typeof candidate.accountId === "number" &&
+      bankAccountIds.has(candidate.accountId) &&
+      candidate.predictedDate >= currentDate,
+  );
+  const forecastEvents = excludeRecordedCandidates(eligibleCandidates, actualTransactions).map(
+    (candidate, index) => recurringCandidateToBankCashFlowEvent(`forecast-${index}`, candidate),
+  );
 
   const forecasts = calculateMonthlyBankBalanceForecasts(
-    bankAccounts.map(({ id, totalAssets }) => ({
+    bankAccounts.map(({ id, totalAssets, balanceAsOfDate }) => ({
       accountId: id,
       currentBalance: totalAssets,
-      balanceAsOfDate: currentDate,
+      balanceAsOfDate,
     })),
     [...actualEvents, ...forecastEvents],
     currentDate,
