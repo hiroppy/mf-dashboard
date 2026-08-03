@@ -2,6 +2,7 @@ import { hasInvestmentHoldings } from "@mf-dashboard/db";
 import type { Metadata } from "next";
 import { AssetBreakdownChart } from "../components/info/asset-breakdown-chart";
 import { AssetHistoryChart } from "../components/info/asset-history-chart";
+import { BankCashFlowForecast } from "../components/info/bank-cashflow-forecast";
 import { DailyChangeCard } from "../components/info/daily-change-card";
 import { MonthlyBalanceCard } from "../components/info/monthly-balance-card";
 import { MonthlyIncomeExpenseChart } from "../components/info/monthly-income-expense-chart";
@@ -22,6 +23,8 @@ export async function DashboardContent({ groupId }: { groupId?: string }) {
       </div>
 
       {showDailyChange && <DailyChangeCard groupId={groupId} />}
+
+      <BankCashFlowForecast groupId={groupId} />
 
       <AssetHistoryChart groupId={groupId} />
 

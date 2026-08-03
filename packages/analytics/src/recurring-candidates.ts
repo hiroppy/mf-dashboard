@@ -48,6 +48,7 @@ export interface RecurringCandidate {
   classification: RecurringCandidateClassification;
   confidence: RecurringCandidateConfidence;
   description: string | null;
+  recurringIdentity?: string;
   predictedDate: string;
   predictedAmount: number;
   evidence: RecurringCandidateEvidence;
@@ -72,6 +73,11 @@ interface NormalizedTransaction extends RecurringTransaction {
 interface TransactionGroup {
   transactions: NormalizedTransaction[];
 }
+
+type RecurringIdentitySource = Pick<
+  RecurringTransaction,
+  "category" | "description" | "subCategory"
+>;
 
 type AmountGroupsByDay = Map<number, Map<number, Set<TransactionGroup>>>;
 type AmountKeysByDay = Map<number, number[]>;
@@ -411,7 +417,7 @@ function conflictsWithPostingMonthSchedule(
   return getPostingMonthConflicts(transaction, transactions).length > 0;
 }
 
-function normalizeGroupingText(transaction: RecurringTransaction): string {
+function normalizeGroupingText(transaction: RecurringIdentitySource): string {
   const description = normalizeDescription(transaction.description);
   const normalizeCategoryPart = (value: string | null | undefined) =>
     normalizeCaseAndWidth(value).replace(/[\p{Punctuation}\p{Separator}\p{Symbol}]/gu, "");
@@ -420,6 +426,22 @@ function normalizeGroupingText(transaction: RecurringTransaction): string {
   if (!description) return category;
   if (!GENERIC_DESCRIPTIONS.has(description)) return description;
   return category ? `${description}descriptionsep${category}` : "";
+}
+
+export function matchesRecurringCandidateIdentity(
+  candidate: Pick<RecurringCandidate, "description" | "recurringIdentity">,
+  transaction: RecurringIdentitySource,
+): boolean {
+  const candidateIdentity =
+    candidate.recurringIdentity ?? normalizeDescription(candidate.description);
+  const transactionIdentity = normalizeGroupingText(transaction);
+  if (!candidateIdentity || !transactionIdentity) return candidateIdentity === transactionIdentity;
+
+  return (
+    haveMatchingNumericTokens(candidateIdentity, transactionIdentity) &&
+    calculateDescriptionSimilarity(candidateIdentity, transactionIdentity) >=
+      DEFAULT_OPTIONS.descriptionSimilarityThreshold
+  );
 }
 
 interface GroupMatchScore {
@@ -1343,6 +1365,7 @@ function createCandidate(
     classification: latest.classification,
     confidence,
     description: latest.description ?? null,
+    recurringIdentity: latest.normalizedDescription,
     predictedDate: formatIsoDateKey({ year, month, day: predictedDay }),
     predictedAmount: Math.round(median(amounts)),
     evidence: {

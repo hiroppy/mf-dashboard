@@ -4,7 +4,7 @@ import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { transformTransferToIncome } from "../shared/transfer";
 
 export async function getTransactions(
-  options?: { limit?: number; groupId?: string },
+  options?: { limit?: number; groupId?: string; startDate?: string },
   db: Db = getDb(),
 ) {
   const groupId = await resolveGroupId(db, options?.groupId);
@@ -31,7 +31,12 @@ export async function getTransactions(
     })
     .from(schema.transactions)
     .leftJoin(schema.accounts, eq(schema.accounts.id, schema.transactions.accountId))
-    .where(inArray(schema.transactions.accountId, accountIds))
+    .where(
+      and(
+        inArray(schema.transactions.accountId, accountIds),
+        options?.startDate ? gte(schema.transactions.date, options.startDate) : undefined,
+      ),
+    )
     .orderBy(desc(schema.transactions.date));
 
   if (options?.limit) {
