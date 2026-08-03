@@ -6,25 +6,42 @@ on:
     - cron: "0 15 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: mutation-testing-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'full' }}
   cancel-in-progress: true
 
 jobs:
   mutation:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: crawler
+            path: apps/crawler
+          - workspace: web
+            path: apps/web
+          - workspace: analytics
+            path: packages/analytics
+          - workspace: date-utils
+            path: packages/date-utils
+          - workspace: db
+            path: packages/db
+          - workspace: meta
+            path: packages/meta
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-node
-      - run: pnpm test:mutation
+      - run: pnpm --filter @mf-dashboard/${{ matrix.workspace }} test:mutation
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: mutation-reports
+          name: mutation-report-${{ matrix.workspace }}
           path: |
-            apps/*/reports/mutation/mutation.html
-            apps/*/reports/mutation/mutation.json
-            packages/*/reports/mutation/mutation.html
-            packages/*/reports/mutation/mutation.json
+            ${{ matrix.path }}/reports/mutation/mutation.html
+            ${{ matrix.path }}/reports/mutation/mutation.json
           retention-days: 7
