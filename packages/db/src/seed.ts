@@ -92,9 +92,9 @@ if (period && !/^\d{4}-\d{2}$/.test(period)) {
 const currentDate = new Date();
 const YEAR_END = period ? Number(period.split("-")[0]) : currentDate.getFullYear();
 const MONTH_END = period ? Number(period.split("-")[1]) : currentDate.getMonth() + 1;
-const FIXED_DAY = Math.min(currentDate.getDate(), daysInMonth(YEAR_END, MONTH_END));
-const today = new Date(dateStr(YEAR_END, MONTH_END, FIXED_DAY));
-fixedTimestamp = `${dateStr(YEAR_END, MONTH_END, FIXED_DAY)}T00:00:00.000Z`;
+const DEMO_FORECAST_AS_OF_DAY = 3;
+const today = new Date(dateStr(YEAR_END, MONTH_END, DEMO_FORECAST_AS_OF_DAY));
+fixedTimestamp = `${dateStr(YEAR_END, MONTH_END, DEMO_FORECAST_AS_OF_DAY)}T00:00:00.000Z`;
 const range = {
   yearStart: YEAR_START,
   monthStart: MONTH_START,
@@ -372,7 +372,7 @@ forEachMonth(range, (y, m) => {
 
     if (tmpl.frequency === "monthly") {
       const day = Math.min(tmpl.fixedDay!, maxDay);
-      if (isCurrentPeriod && day > FIXED_DAY) continue;
+      if (isCurrentPeriod && day > DEMO_FORECAST_AS_OF_DAY) continue;
 
       const amount = randInt(tmpl.minAmount, tmpl.maxAmount);
       const desc = tmpl.description || getDescription(tmpl.category, tmpl.subCategory, pick);
@@ -398,7 +398,7 @@ forEachMonth(range, (y, m) => {
       const count = tmpl.occurrences ?? 1;
       for (let i = 0; i < count; i++) {
         const day = randInt(1, maxDay);
-        if (isCurrentPeriod && day > FIXED_DAY) continue;
+        if (isCurrentPeriod && day > DEMO_FORECAST_AS_OF_DAY) continue;
 
         const amount = randInt(tmpl.minAmount, tmpl.maxAmount);
         const desc = tmpl.description || getDescription(tmpl.category, tmpl.subCategory, pick);
@@ -480,7 +480,7 @@ const insightCount = await seedInsights({
   now,
   yearEnd: YEAR_END,
   monthEnd: MONTH_END,
-  fixedDay: FIXED_DAY,
+  fixedDay: DEMO_FORECAST_AS_OF_DAY,
 });
 if (insightCount > 0) {
   console.log(`インサイトデータを挿入しました (${insightCount}グループ)`);

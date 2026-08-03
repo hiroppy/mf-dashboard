@@ -14,4 +14,14 @@ describe("demo transaction templates", () => {
       ).toBe(true);
     },
   );
+
+  it("カード候補の金額を月ごとに変動させない", () => {
+    expect(
+      txTemplates.find(({ description }) => description === "デビットカード支払い"),
+    ).toMatchObject({
+      frequency: "monthly",
+      minAmount: 15_000,
+      maxAmount: 15_000,
+    });
+  });
 });

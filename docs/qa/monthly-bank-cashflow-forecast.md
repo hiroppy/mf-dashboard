@@ -9,6 +9,8 @@ pnpm --filter @mf-dashboard/db build:demo
 pnpm --filter @mf-dashboard/web dev
 ```
 
+demo 表示の予測基準日は、月後半に実行しても代表候補を再現できるよう当月3日に固定される。本番表示は実際の当日を基準にする。
+
 銀行ごとの現在残高と月末予測残高を確認し、「入出金の詳細」を開くと、日付順の入出金、各入出金後の残高、推定根拠が表示される。
 
 - `実績`: Money Forwardから取得済みの当月入出金
