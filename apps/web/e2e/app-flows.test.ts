@@ -57,6 +57,43 @@ test.describe("App flows", () => {
     expect(releaseWarnings).toEqual([]);
   });
 
+  test("shows the monthly bank cash flow forecast on default and group dashboards", async ({
+    page,
+  }) => {
+    for (const path of ["/", "/demo_group_002"]) {
+      await test.step(`Inspect bank cash flow forecast at ${path}`, async () => {
+        await page.goto(path);
+        await expectHeading(page, "ダッシュボード");
+
+        await expect(page.getByText(/^\d+月の銀行別予測$/)).toBeVisible();
+        await expect(page.getByText("現在残高").first()).toBeVisible();
+        await expect(page.getByText("月末予測残高").first()).toBeVisible();
+        await expect(
+          page.getByText("過去月表示と任意月への切替は対象外です。", {
+            exact: false,
+          }),
+        ).toBeVisible();
+        await expect(page.getByRole("combobox", { name: "月を選択" })).toHaveCount(0);
+
+        const bank = page.getByRole("region", { name: "三井住友銀行" });
+        const details = bank.getByRole("button", { name: /入出金の詳細/ });
+        await expect(details).toHaveAttribute("aria-expanded", "false");
+        await expect(bank.getByText("給与振込")).toHaveCount(0);
+
+        await details.click();
+
+        await expect(details).toHaveAttribute("aria-expanded", "true");
+        await expect(bank.getByText("給与振込")).toBeVisible();
+        await expect(bank.getByText("予測").first()).toBeVisible();
+        await expect(bank.getByText(/入出金後残高:/).first()).toBeVisible();
+
+        const actualBank = page.getByRole("region", { name: "楽天銀行" });
+        await actualBank.getByRole("button", { name: /入出金の詳細/ }).click();
+        await expect(actualBank.getByText("実績").first()).toBeVisible();
+      });
+    }
+  });
+
   test("navigates between primary pages from the sidebar", async ({ page }) => {
     // This scenario compiles and visits six routes. WebKit on CI can exceed
     // Playwright's 30-second default while the Next.js dev server warms up.
