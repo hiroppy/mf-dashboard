@@ -48,6 +48,16 @@ const forecast: BankCashFlowForecastView = {
 };
 
 describe("BankCashFlowForecastClient", () => {
+  it("実績・予測・要確認の意味と今月予測の限界を説明する", () => {
+    render(<BankCashFlowForecastClient forecasts={[forecast]} />);
+
+    expect(screen.getByRole("heading", { name: "表示の見方" })).toBeTruthy();
+    expect(screen.getByText("Money Forwardから取得済みの入出金です。")).toBeTruthy();
+    expect(screen.getByText(/過去の定期的な入出金から日付と金額を推定/)).toBeTruthy();
+    expect(screen.getByText(/根拠が少ない候補/)).toBeTruthy();
+    expect(screen.getByText(/今月だけの参考値.*過去月表示と任意月への切替は対象外/)).toBeTruthy();
+  });
+
   it("詳細ボタンで日付別の入出金と入出金後残高を開閉する", () => {
     render(<BankCashFlowForecastClient forecasts={[forecast]} />);
 
