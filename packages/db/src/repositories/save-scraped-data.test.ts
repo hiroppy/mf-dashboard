@@ -1,11 +1,17 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
 import * as schema from "../schema/schema";
 import { closeTestDb, createTestDb, resetTestDb } from "../test-helpers";
 import type { ScrapedData } from "../types";
-import { saveGroupOnlyData, saveScrapedData, saveScrapedDataBatch } from "./save-scraped-data";
+import {
+  normalizePortfolioCategories,
+  saveGroupOnlyData,
+  saveScrapedData,
+  saveScrapedDataBatch,
+} from "./save-scraped-data";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -38,6 +44,7 @@ function createScrapedData(): ScrapedData {
     items: [],
     cashFlow: {
       month: "2026-07",
+      isComplete: true,
       totalIncome: 0,
       totalExpense: 0,
       balance: 0,
@@ -82,7 +89,173 @@ function createScrapedData(): ScrapedData {
   };
 }
 
+describe("normalizePortfolioCategories", () => {
+  const registeredAccounts: ScrapedData["registeredAccounts"] = {
+    accounts: [
+      {
+        mfId: "bank-a",
+        name: "Bank A",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 100000,
+      },
+      {
+        mfId: "crypto-a",
+        name: "Crypto Account A",
+        type: "自動連携",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 200000,
+      },
+    ],
+  };
+
+  test("公式口座カテゴリに従って預金と暗号資産を分類する", () => {
+    const portfolio = {
+      totalAssets: 300000,
+      items: [
+        {
+          name: "Deposit A",
+          type: "預金・現金",
+          institution: "Bank A",
+          balance: 100000,
+        },
+        {
+          accountMfId: "crypto-a",
+          name: "Crypto Asset A",
+          type: "預金・現金",
+          institution: "Different Display Name",
+          balance: 200000,
+        },
+      ],
+    };
+
+    const result = normalizePortfolioCategories(
+      portfolio,
+      registeredAccounts,
+      new Map([
+        ["bank-a", "銀行"],
+        ["crypto-a", "暗号資産・FX・貴金属"],
+      ]),
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ name: "Deposit A", type: "預金・現金" }),
+      expect.objectContaining({ name: "Crypto Asset A", type: "暗号資産" }),
+    ]);
+  });
+
+  test("預金以外のカテゴリは口座カテゴリなしでも変更しない", () => {
+    const portfolio = {
+      totalAssets: 200000,
+      items: [
+        {
+          name: "Crypto Asset A",
+          type: "暗号資産",
+          institution: "",
+          balance: 200000,
+        },
+      ],
+    };
+
+    expect(normalizePortfolioCategories(portfolio, registeredAccounts)).toEqual(portfolio);
+  });
+
+  test.each([
+    {
+      name: "口座が取得対象外",
+      portfolioAccountMfId: "stale-account",
+      institution: "Bank A",
+      institutionCategories: new Map([["stale-account", "暗号資産・FX・貴金属"]]),
+    },
+    {
+      name: "公式口座カテゴリがない",
+      portfolioAccountMfId: "crypto-a",
+      institution: "",
+      institutionCategories: new Map<string, string>(),
+    },
+  ])(
+    "$nameの場合は預金を分類せず保存しない",
+    ({ portfolioAccountMfId, institution, institutionCategories }) => {
+      const portfolio = {
+        totalAssets: 100000,
+        items: [
+          {
+            accountMfId: portfolioAccountMfId,
+            name: "Asset A",
+            type: "預金・現金",
+            institution,
+            balance: 100000,
+          },
+        ],
+      };
+
+      expect(() =>
+        normalizePortfolioCategories(portfolio, registeredAccounts, institutionCategories),
+      ).toThrow("Cannot classify a deposit");
+    },
+  );
+
+  test("同名口座が複数ある場合は名称で推測しない", () => {
+    const duplicateAccounts = {
+      accounts: [
+        registeredAccounts.accounts[0]!,
+        { ...registeredAccounts.accounts[1]!, name: "Bank A" },
+      ],
+    };
+    const portfolio = {
+      totalAssets: 100000,
+      items: [
+        {
+          name: "Asset A",
+          type: "預金・現金",
+          institution: "Bank A",
+          balance: 100000,
+        },
+      ],
+    };
+
+    expect(() =>
+      normalizePortfolioCategories(
+        portfolio,
+        duplicateAccounts,
+        new Map([
+          ["bank-a", "銀行"],
+          ["crypto-a", "暗号資産・FX・貴金属"],
+        ]),
+      ),
+    ).toThrow("Cannot classify a deposit");
+  });
+});
+
 describe("saveScrapedData", () => {
+  test("空の当月取得結果で同月の既存トランザクションを削除する", async () => {
+    const populatedData = createScrapedData();
+    populatedData.cashFlow.items = [
+      {
+        mfId: "transaction-a",
+        date: "2026-07-01",
+        category: "Category A",
+        subCategory: null,
+        description: "Transaction A",
+        amount: 1_000,
+        type: "expense",
+        isTransfer: false,
+        isExcludedFromCalculation: false,
+      },
+    ];
+    await saveScrapedData(db, populatedData);
+    expect(await db.select().from(schema.transactions).all()).toHaveLength(1);
+
+    const emptyData = createScrapedData();
+    await saveScrapedData(db, emptyData);
+
+    await expect(db.select().from(schema.transactions).all()).resolves.toEqual([]);
+  });
+
   test("ポートフォリオの全詳細フィールドを保持して保存する", async () => {
     const data = createScrapedData();
 
@@ -103,6 +276,330 @@ describe("saveScrapedData", () => {
       unrealizedGain: 234500,
       unrealizedGainPct: 23.45,
     });
+  });
+
+  test("預金カテゴリは公式口座カテゴリなしで保存しない", async () => {
+    const data = createScrapedData();
+    data.portfolio.items[0]!.type = "預金・現金";
+
+    await expect(saveScrapedData(db, data)).rejects.toThrow("Cannot classify a deposit");
+    await expect(db.select().from(schema.holdings).all()).resolves.toEqual([]);
+  });
+
+  test("公式口座カテゴリで正規化した暗号資産カテゴリを保存する", async () => {
+    const data = createScrapedData();
+    data.portfolio.items[0] = {
+      ...data.portfolio.items[0]!,
+      accountMfId: "account-a",
+      type: "預金・現金",
+    };
+
+    await saveScrapedData(db, data, new Map([["account-a", "暗号資産・FX・貴金属"]]));
+
+    const savedHolding = await db
+      .select({
+        holdingName: schema.holdings.name,
+        categoryName: schema.assetCategories.name,
+      })
+      .from(schema.holdings)
+      .innerJoin(schema.assetCategories, eq(schema.assetCategories.id, schema.holdings.categoryId))
+      .get();
+
+    expect(savedHolding).toEqual({
+      holdingName: "Fund A",
+      categoryName: "暗号資産",
+    });
+  });
+
+  test("accountMfIdが今回取得した口座と一致する手入力資産を紐づける", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-account-a",
+      name: "Manual Account A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 500000,
+    });
+    data.portfolio.items.push({
+      accountMfId: "manual-account-a",
+      name: "Manual Asset A",
+      type: "保険",
+      institution: "",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const manualAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "manual-account-a"))
+      .get();
+    const manualHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Asset A"))
+      .get();
+
+    expect(manualHolding?.accountId).toBe(manualAccount?.id);
+    await expect(
+      db
+        .select()
+        .from(schema.groupAccounts)
+        .where(eq(schema.groupAccounts.accountId, manualAccount!.id))
+        .get(),
+    ).resolves.toMatchObject({ groupId: "group-a" });
+  });
+
+  test("通常口座詳細由来の年金をaccountMfIdで自動連携口座へ紐づける", async () => {
+    const data = createScrapedData();
+    data.portfolio.items.push({
+      accountMfId: "account-a",
+      name: "Pension A",
+      type: "年金",
+      institution: "",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const linkedAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "account-a"))
+      .get();
+    const pensionHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Pension A"))
+      .get();
+
+    expect(pensionHolding?.accountId).toBe(linkedAccount?.id);
+  });
+
+  test("accountMfIdを金融機関名より優先する", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-account-a",
+      name: "Manual Account A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 500000,
+    });
+    data.portfolio.items.push({
+      accountMfId: "manual-account-a",
+      name: "Manual Asset A",
+      type: "保険",
+      institution: "Institution A",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const manualAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "manual-account-a"))
+      .get();
+    const manualHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Asset A"))
+      .get();
+
+    expect(manualHolding?.accountId).toBe(manualAccount?.id);
+  });
+
+  test("accountMfIdがない資産は同名の登録口座へ推測で紐づけない", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-account-a",
+      name: "Manual Asset A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 500000,
+    });
+    data.portfolio.items.push({
+      name: "Manual Asset A",
+      type: "保険",
+      institution: "",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+    const unmatchedHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Asset A"))
+      .get();
+
+    expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
+  });
+
+  test("未登録の金融機関名がある資産は同名口座へ誤って紐づけない", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-account-a",
+      name: "Manual Account A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 0,
+    });
+    data.portfolio.items.push({
+      name: "Manual Account A",
+      type: "保険",
+      institution: "Unregistered Institution A",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+    const unmatchedHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Account A"))
+      .get();
+
+    expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
+  });
+
+  test("今回の取得対象外にある旧accountMfIdへ手入力資産を紐づけない", async () => {
+    const now = new Date().toISOString();
+    await db.insert(schema.accounts).values({
+      mfId: "stale-account-a",
+      name: "Manual Account A",
+      type: "手動",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const data = createScrapedData();
+    data.portfolio.items.push({
+      accountMfId: "stale-account-a",
+      name: "Manual Asset A",
+      type: "保険",
+      institution: "Institution A",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+    const unmatchedHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Asset A"))
+      .get();
+
+    expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
+  });
+
+  test("同名の登録口座が複数ある場合は手入力資産をどちらにも紐づけない", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push(
+      {
+        mfId: "manual-account-a",
+        name: "Shared Account",
+        type: "手動",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 250000,
+      },
+      {
+        mfId: "manual-account-b",
+        name: "Shared Account",
+        type: "手動",
+        status: "ok",
+        lastUpdated: "2026-07-17",
+        url: "",
+        totalAssets: 250000,
+      },
+    );
+    data.portfolio.items.push({
+      name: "Shared Account",
+      type: "保険",
+      institution: "",
+      balance: 500000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+    const unmatchedHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Shared Account"))
+      .get();
+
+    expect(unmatchedHolding?.accountId).toBe(fallbackAccount?.id);
+  });
+
+  test("金融機関名がない手入力負債を同名の登録口座へ推測で紐づけない", async () => {
+    const data = createScrapedData();
+    data.registeredAccounts.accounts.push({
+      mfId: "manual-liability-a",
+      name: "Manual Liability A",
+      type: "手動",
+      status: "ok",
+      lastUpdated: "2026-07-17",
+      url: "",
+      totalAssets: 0,
+    });
+    data.liabilities.items.push({
+      name: "Manual Liability A",
+      category: "ローン",
+      institution: "",
+      balance: 300000,
+    });
+
+    await saveScrapedData(db, data);
+
+    const manualAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "manual-liability-a"))
+      .get();
+    const manualHolding = await db
+      .select()
+      .from(schema.holdings)
+      .where(eq(schema.holdings.name, "Manual Liability A"))
+      .get();
+
+    const fallbackAccount = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.mfId, "unknown"))
+      .get();
+
+    expect(manualHolding?.accountId).not.toBe(manualAccount?.id);
+    expect(manualHolding?.accountId).toBe(fallbackAccount?.id);
   });
 
   test("保存途中に失敗した場合は公開対象をすべてrollbackする", async () => {

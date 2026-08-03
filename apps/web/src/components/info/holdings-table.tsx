@@ -1,11 +1,18 @@
-import { getAccountByMfId } from "@mf-dashboard/db";
-import { getLatestTotalAssets } from "@mf-dashboard/db";
-import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
+import {
+  getAccountByMfId,
+  getHoldingsByAccountId,
+  getHoldingsWithLatestValues,
+  getLatestTotalAssets,
+} from "@mf-dashboard/db";
 import { LucideIcon, PiggyBankIcon, LandmarkIcon } from "lucide-react";
-import { sortAssetCategories } from "../../lib/asset-category-order";
+import { sortByAmountDescending } from "../../lib/amount-order";
 import { Card, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
-import { HoldingsTableClient, HoldingsTableTotal } from "./holdings-table.client";
+import {
+  type CategoryGroup,
+  HoldingsTableClient,
+  HoldingsTableTotal,
+} from "./holdings-table.client";
 
 interface HoldingsTableProps {
   type: "asset" | "liability";
@@ -47,47 +54,19 @@ export async function HoldingsTable({
     return <EmptyState icon={Icon} title={config.title} />;
   }
 
-  // Calculate total based on type
-  let total: number;
-  if (mfId) {
-    total = holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  } else if (type === "asset") {
-    // Use asset_history for total assets
-    total =
-      (await getLatestTotalAssets(groupId)) ??
-      holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  } else {
-    // For liabilities, sum from holdings
-    total = holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  }
+  const holdingsTotal = holdings.reduce((sum, holding) => sum + (holding.amount ?? 0), 0);
+  const total =
+    !mfId && type === "asset"
+      ? ((await getLatestTotalAssets(groupId)) ?? holdingsTotal)
+      : holdingsTotal;
 
   // Group holdings by category
-  const grouped = holdings.reduce<
-    Record<
-      string,
-      Array<{
-        id: number;
-        name: string;
-        accountName: string | null;
-        institution: string | null;
-        categoryName: string | null;
-        amount: number | null;
-        unrealizedGain: number | null;
-        unrealizedGainPct: number | null;
-        dailyChange: number | null;
-        avgCostPrice: number | null;
-        quantity: number | null;
-        unitPrice: number | null;
-      }>
-    >
-  >((acc, holding) => {
+  const grouped = holdings.reduce<Record<string, CategoryGroup["items"]>>((acc, holding) => {
     const category =
       holding.type === "liability"
         ? holding.liabilityCategory || "その他"
         : holding.categoryName || "その他";
-    if (!acc[category]) {
-      acc[category] = [];
-    }
+    acc[category] ??= [];
     acc[category].push({
       id: holding.id,
       name: holding.name,
@@ -105,14 +84,19 @@ export async function HoldingsTable({
     return acc;
   }, {});
 
-  const categories = Object.entries(grouped)
-    .map(([category, items]) => ({
+  const orderedCategories = sortByAmountDescending(
+    Object.entries(grouped).map(([category, items]) => ({
       category,
-      items: items.sort((a, b) => (b.amount || 0) - (a.amount || 0)),
-      total: items.reduce((sum, h) => sum + (h.amount || 0), 0),
-    }))
-    .sort((a, b) => b.total - a.total);
-  const orderedCategories = type === "asset" ? sortAssetCategories(categories) : categories;
+      items: sortByAmountDescending(
+        items,
+        (item) => item.amount,
+        (item) => `${item.name}\u0000${item.id}`,
+      ),
+      total: items.reduce((sum, h) => sum + (h.amount ?? 0), 0),
+    })),
+    (category) => category.total,
+    (category) => category.category,
+  );
 
   return (
     <Card>

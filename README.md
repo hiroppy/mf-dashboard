@@ -64,7 +64,7 @@ Docker Composeで次の3サービスを動かす。
 
 ```mermaid
 flowchart TD
-    U[利用者] -->|Cloudflare Accessで認証| T[cloudflared]
+    U[利用者] -->|Cloudflare Accessで認証| T[Cloudflare]
     T --> W[web]
     W -->|手動更新| C[crawler]
     S[supercronic<br/>6:30 / 15:30 JST] --> C

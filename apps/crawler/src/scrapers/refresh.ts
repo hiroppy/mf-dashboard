@@ -37,21 +37,44 @@ export async function getRefreshStatus(
 ): Promise<{ incompleteAccounts: string[]; remainingCount: number }> {
   const rows = page.locator("#account-table tr:has(td.account-status)");
   const count = await rows.count();
-  const incompleteAccounts: string[] = [];
-  let remainingCount = 0;
+  const refreshRows: RefreshStatusRow[] = [];
 
   for (let i = 0; i < count; i++) {
     const row = rows.nth(i);
-    const statusCells = row.locator("td.account-status");
-    // Multiple td.account-status cells may exist in the same row (e.g., info_msg and normal)
-    const allTexts = await statusCells.allTextContents();
-    if (allTexts.some((text) => text.trim() === "更新中")) {
-      remainingCount++;
-      const nameCell = row.locator("td.service a").first();
-      const name = await nameCell.textContent();
-      if (name) {
-        incompleteAccounts.push(name.trim());
-      }
+    const statuses = await row.locator("td.account-status").allTextContents();
+    const nameLink = row.locator("td.service a").first();
+    refreshRows.push({
+      name: statuses.some((status) => status.trim() === "更新中")
+        ? await ((await nameLink.count()) > 0 ? nameLink : row.locator("td").first()).textContent()
+        : null,
+      statuses,
+    });
+  }
+
+  return summarizeRefreshRows(refreshRows);
+}
+
+export interface RefreshStatusRow {
+  name: string | null;
+  statuses: string[];
+}
+
+export function summarizeRefreshRows(rows: readonly RefreshStatusRow[]): {
+  incompleteAccounts: string[];
+  remainingCount: number;
+} {
+  const incompleteAccounts: string[] = [];
+  let remainingCount = 0;
+
+  for (const row of rows) {
+    if (!row.statuses.some((status) => status.trim() === "更新中")) {
+      continue;
+    }
+
+    remainingCount++;
+    const accountName = row.name?.trim();
+    if (accountName) {
+      incompleteAccounts.push(accountName);
     }
   }
 

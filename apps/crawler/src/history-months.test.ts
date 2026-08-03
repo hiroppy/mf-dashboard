@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { getHistoryMaxMonths, getHistoryMonth } from "./history-months.js";
+import {
+  getHistoryMaxMonths,
+  getHistoryMaxMonthsFromAnchor,
+  getHistoryMonth,
+  getHistoryMonthFromAnchor,
+} from "./history-months.js";
 
 describe("getHistoryMonth", () => {
   test("月末でも前月にロールオーバーしない", () => {
@@ -28,5 +33,10 @@ describe("getHistoryMonth", () => {
     const now = new Date("2026-01-31T16:00:00Z"); // 2026-02-01 01:00 JST
 
     expect(getHistoryMaxMonths(now)).toBe(14);
+  });
+
+  test("締め日後の会計期間月から前年1月までを計算する", () => {
+    expect(getHistoryMaxMonthsFromAnchor("2026-09")).toBe(21);
+    expect(getHistoryMonthFromAnchor("2026-09", 20)).toBe("2025-01");
   });
 });

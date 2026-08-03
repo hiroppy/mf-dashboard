@@ -68,10 +68,7 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   // Acceleration: are the month-over-month changes themselves increasing or decreasing?
   let acceleration: "accelerating" | "decelerating" | "steady" = "steady";
   if (sorted.length >= 3) {
-    const netIncomeDiffs = monthlyComparisons
-      .slice(1)
-      .map((m) => m.netIncomeDiff!)
-      .filter((d) => d != null);
+    const netIncomeDiffs = monthlyComparisons.slice(1).map((month) => month.netIncomeDiff!);
     if (netIncomeDiffs.length >= 2) {
       const recentDiffs = netIncomeDiffs.slice(-3);
       const diffSlope = calcLinearSlope(recentDiffs);
@@ -83,14 +80,12 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   }
 
   // Best/worst months
-  const bestMonth =
-    sorted.length > 0
-      ? sorted.reduce((best, m) => (m.netIncome > best.netIncome ? m : best))
-      : null;
-  const worstMonth =
-    sorted.length > 0
-      ? sorted.reduce((worst, m) => (m.netIncome < worst.netIncome ? m : worst))
-      : null;
+  const bestMonth = sorted.reduce((best, month) =>
+    month.netIncome > best.netIncome ? month : best,
+  );
+  const worstMonth = sorted.reduce((worst, month) =>
+    month.netIncome < worst.netIncome ? month : worst,
+  );
 
   const last3 = sorted.slice(-3);
   const last6 = sorted.slice(-6);
@@ -109,8 +104,8 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   let latestVsThreeMonthAvg: MoMTrendResult["latestVsThreeMonthAvg"] = null;
   const previous3 = sorted.slice(-4, -1);
   const previousThreeMonthAvg = previous3.length >= 3 ? buildAvg(previous3) : null;
-  if (previousThreeMonthAvg && sorted.length > 0) {
-    const latest = sorted[sorted.length - 1];
+  if (previousThreeMonthAvg) {
+    const latest = sorted.at(-1)!;
     latestVsThreeMonthAvg = {
       incomeDiff: latest.totalIncome - previousThreeMonthAvg.income,
       incomeDiffPct:
@@ -145,8 +140,8 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
     streaks,
     overallTrend,
     acceleration,
-    bestMonth: bestMonth ? { month: bestMonth.month, netIncome: bestMonth.netIncome } : null,
-    worstMonth: worstMonth ? { month: worstMonth.month, netIncome: worstMonth.netIncome } : null,
+    bestMonth: { month: bestMonth.month, netIncome: bestMonth.netIncome },
+    worstMonth: { month: worstMonth.month, netIncome: worstMonth.netIncome },
     threeMonthAvg,
     sixMonthAvg,
     latestVsThreeMonthAvg,

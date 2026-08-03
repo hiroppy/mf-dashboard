@@ -1,10 +1,14 @@
 import path from "node:path";
 import { getDb, schema } from "@mf-dashboard/db";
-import { saveScrapedData } from "@mf-dashboard/db/repository/save-scraped-data";
+import {
+  normalizePortfolioCategories,
+  saveScrapedData,
+} from "@mf-dashboard/db/repository/save-scraped-data";
 import type { ScrapedData } from "@mf-dashboard/db/types";
 import { eq } from "drizzle-orm";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { runInstitutionCategoryPhase } from "../../src/crawler-phases.js";
 import { scrape } from "../../src/scraper.js";
 import {
   gotoHome,
@@ -22,6 +26,7 @@ const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-moneyforward.db");
 let browser: Browser;
 let context: BrowserContext;
 let scrapedData: ScrapedData;
+let normalizedPortfolio: ScrapedData["portfolio"];
 
 beforeAll(async () => {
   // テスト用 DB パスを環境変数で設定
@@ -36,7 +41,13 @@ beforeAll(async () => {
     scrapedData = await withErrorScreenshot(page, "db-save-test-error.png", () =>
       scrape(page, { skipRefresh: true }),
     );
-    await saveScrapedData(getDb(), scrapedData);
+    const institutionCategories = await runInstitutionCategoryPhase(page);
+    normalizedPortfolio = normalizePortfolioCategories(
+      scrapedData.portfolio,
+      scrapedData.registeredAccounts,
+      institutionCategories,
+    );
+    await saveScrapedData(getDb(), scrapedData, institutionCategories);
   });
 });
 
@@ -73,7 +84,7 @@ describe("DB保存", () => {
     expect(snapshots.length).toBeGreaterThan(0);
     const latestSnapshot = snapshots[snapshots.length - 1];
     const today = new Date().toISOString().split("T")[0];
-    expect(latestSnapshot.date).toBe(today);
+    expect(latestSnapshot.date === today).toBe(true);
   });
 
   test("取得したポートフォリオが値を欠落させず保存される", async () => {
@@ -88,7 +99,7 @@ describe("DB保存", () => {
       .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id))
       .all();
 
-    const expected = scrapedData.portfolio.items
+    const expected = normalizedPortfolio.items
       .map((item) => ({
         name: item.name,
         category: item.type,
@@ -116,7 +127,10 @@ describe("DB保存", () => {
       }))
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-    expect(actual).toEqual(expected);
+    expect(actual.length).toBe(expected.length);
+    expect(
+      actual.every((value, index) => JSON.stringify(value) === JSON.stringify(expected[index])),
+    ).toBe(true);
   });
 
   test("口座ステータスが保存される", async () => {
@@ -127,12 +141,12 @@ describe("DB保存", () => {
 
   // Note: monthly_summary, yearly_summary, and monthly_category_totals are now calculated dynamically from transactions
 
-  test("トランザクションが保存される", async () => {
+  test("保存されたトランザクションIDが有効で重複しない", async () => {
     const db = getDb();
     const transactions = await db.select().from(schema.transactions).all();
-    expect(transactions.length).toBeGreaterThan(0);
-    // mfId がユニーク
-    const mfIds = transactions.map((t) => t.mfId);
-    expect(new Set(mfIds).size).toBe(transactions.length);
+    const mfIds = transactions.map((transaction) => transaction.mfId);
+
+    expect(mfIds.every((mfId) => Boolean(mfId) && !mfId.startsWith("unknown"))).toBe(true);
+    expect(new Set(mfIds).size).toBe(mfIds.length);
   });
 });

@@ -51,19 +51,15 @@ export function parseDecimalNumber(str: string): number {
 export function parsePercentage(str: string): number | undefined {
   if (!str) return undefined;
   const isNegative = str.includes("-") || str.includes("−") || str.includes("▲");
-  // Remove percentage symbol and parse
   const cleaned = str.replace(/[%％\s+\-−▲]/g, "");
   const value = parseFloat(cleaned);
-  return isNaN(value) ? undefined : isNegative ? -value : value;
+  if (Number.isNaN(value)) return undefined;
+  return isNegative ? -value : value;
 }
 
 export function calculateChange(current: string, previous: string): string {
   const currentNum = parseJapaneseNumber(current);
   const previousNum = parseJapaneseNumber(previous);
-
-  if (isNaN(currentNum) || isNaN(previousNum)) {
-    return "-";
-  }
 
   const diff = currentNum - previousNum;
   const sign = diff >= 0 ? "+" : "";

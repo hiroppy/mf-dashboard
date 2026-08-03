@@ -20,7 +20,8 @@ import {
   NO_GROUP_ID,
 } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
-import { getPortfolio } from "./scrapers/portfolio.js";
+import { getManualHoldingAccountMap } from "./scrapers/manual-holding-accounts.js";
+import { getLinkedAccountPnsSource, getPortfolio } from "./scrapers/portfolio.js";
 import { clickRefreshButton, getMaxWaitMinutes } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
@@ -136,7 +137,11 @@ async function scrapeGlobalData(
   const portfolio = await runCrawlerStep(
     progress,
     CRAWLER_STEPS.portfolio,
-    () => getPortfolio(page),
+    async () => {
+      const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
+      const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
+      return getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
+    },
     { failureCode: "portfolio_failed" },
   );
   log(`Portfolio: ${portfolio.items.length} items`);
@@ -183,7 +188,7 @@ async function scrapeGroupData(page: Page, group: Group): Promise<GroupData> {
 
   // Asset Summary
   const summary = await getAssetSummary(page);
-  log(`Asset summary: ${summary.totalAssets}`);
+  log("Asset summary scraped");
 
   // Asset Items
   const items = await getAssetItems(page);
@@ -228,12 +233,12 @@ async function runPhase2(
   phase("Scrape: Group Data");
   const groupDataList: GroupData[] = [];
 
-  for (const groupEntry of groupsToProcess) {
+  for (const [groupIndex, groupEntry] of groupsToProcess.entries()) {
     const groupId = groupEntry.id;
     const groupName = groupEntry.name;
 
     const groupStep = await progress.startStep(CRAWLER_STEPS.groupData, { groupName });
-    log(`--- ${groupName} ---`);
+    log(`--- Group ${groupIndex + 1}${isNoGroup(groupId) ? " (no group)" : ""} ---`);
     const group: Group = {
       id: groupId,
       name: groupName,
@@ -277,7 +282,7 @@ export async function scrapeAllGroups(
     CRAWLER_STEPS.groupList,
     async () => {
       const defaultGroup = await getCurrentGroup(page);
-      log(`Default group: ${defaultGroup?.name ?? "none"}`);
+      log(defaultGroup ? "Default group state captured" : "No default group found");
 
       const allGroups = await getAllGroups(page);
       log(`Found ${allGroups.length} groups`);
@@ -316,10 +321,12 @@ export async function scrape(page: Page, options: ScrapeOptions = {}): Promise<S
   const summary = await getAssetSummary(page);
   const items = await getAssetItems(page);
   const cashFlow = await getCashFlow(page);
-  const portfolio = await getPortfolio(page);
   const liabilities = await getLiabilities(page);
   const assetHistory = await getAssetHistory(page);
   const registeredAccounts = await getRegisteredAccounts(page);
+  const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
+  const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
+  const portfolio = await getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
   const spendingTargets = await getSpendingTargets(page).catch(() => null);
 
   const updatedAt = formatJstDateTimeForDisplay();

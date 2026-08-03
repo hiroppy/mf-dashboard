@@ -49,6 +49,10 @@ export interface CashFlowItem {
 
 export interface CashFlowSummary {
   month: string;
+  periodStart?: string;
+  periodEnd?: string;
+  /** True only after the scraper verified the complete rendered period, including a valid empty one. */
+  isComplete?: boolean;
   totalIncome: number;
   totalExpense: number;
   balance: number;
@@ -57,7 +61,9 @@ export interface CashFlowSummary {
 
 // --- Portfolio (/bs/portfolio) ---
 export interface PortfolioItem {
-  mfId?: string;
+  mfId?: string; // Money Forward上の保有項目ID
+  accountMfId?: string; // 明示キーで解決した登録口座ID
+  subAccountMfId?: string; // 手動入力資産のsub-account ID
   name: string;
   code?: string; // 銘柄コード（株式のみ）
   type: string;

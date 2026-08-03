@@ -1,11 +1,12 @@
-/**
- * /cf/monthly ページから月次収支サマリーを取得
- * 6ヶ月分のデータを1回のアクセスで取得できる
- */
+import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { log, debug } from "../logger.js";
 import { parseJapaneseNumber } from "../parsers.js";
 
+/**
+ * /cf/monthly ページから月次収支サマリーを取得
+ * 6ヶ月分のデータを1回のアクセスで取得できる
+ */
 export interface MonthlySummaryItem {
   month: string; // YYYY-MM
   totalIncome: number;
@@ -29,7 +30,7 @@ export function parseMonthlySummaryMonths(headers: string[]): string[] {
 export async function scrapeMonthlySummary(page: Page): Promise<MonthlySummaryItem[]> {
   log("Scraping monthly summary from /cf/monthly...");
 
-  await page.goto("https://moneyforward.com/cf/monthly", {
+  await page.goto(mfUrls.monthlyCashFlow, {
     waitUntil: "domcontentloaded",
   });
   // テーブルが表示されるまで待機

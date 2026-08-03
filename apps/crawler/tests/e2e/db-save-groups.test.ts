@@ -7,11 +7,13 @@ import { saveScrapedData, saveGroupOnlyData } from "@mf-dashboard/db/repository/
 import { eq } from "drizzle-orm";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { runInstitutionCategoryPhase } from "../../src/crawler-phases.js";
 import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import { buildScrapedData, buildGroupOnlyScrapedData } from "../../src/data-builder.js";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { scrapeAllGroups } from "../../src/scraper.js";
-import { isNoGroup, createGroupScope } from "../../src/scrapers/group.js";
+import { isNoGroup } from "../../src/scrapers/group.js";
+import { createAnonymousGroupScope } from "./group-state.js";
 import {
   gotoHome,
   launchLoggedInContext,
@@ -41,7 +43,7 @@ beforeAll(async () => {
     await saveScreenshot(page, "db-save-groups-test-before-scrape.png");
 
     return withErrorScreenshot(page, "db-save-groups-test-error.png", async () => {
-      await using _scope = await createGroupScope(page);
+      await using _scope = await createAnonymousGroupScope(page);
 
       const progress = await createCrawlerProgressReporter(PROGRESS_STATE_PATH, {
         id: randomUUID(),
@@ -52,12 +54,13 @@ beforeAll(async () => {
 
       // 保存処理（index.ts と同じフロー）
       const db = getDb();
+      const institutionCategories = await runInstitutionCategoryPhase(page);
 
       // 「グループ選択なし」のデータを保存
       const noGroupData = result.groupDataList.find((gd) => isNoGroup(gd.group.id));
       if (noGroupData) {
         const scrapedData = buildScrapedData(result.globalData, noGroupData);
-        await saveScrapedData(db, scrapedData);
+        await saveScrapedData(db, scrapedData, institutionCategories);
       }
 
       // 各グループはグループ固有データのみ保存
@@ -91,7 +94,7 @@ describe("グループ保存（新フロー）", () => {
     const db = getDb();
     const groups = await db.select().from(schema.groups).all();
     const currentGroups = groups.filter((g) => g.isCurrent);
-    expect(currentGroups).toHaveLength(1);
+    expect(currentGroups.length).toBe(1);
   });
 
   test("isCurrentのグループはdefaultGroupと一致する", async () => {
@@ -104,7 +107,7 @@ describe("グループ保存（新フロー）", () => {
       .where(eq(schema.groups.isCurrent, true))
       .get();
 
-    expect(currentGroup?.id).toBe(scrapeResult.defaultGroup.id);
+    expect(currentGroup?.id === scrapeResult.defaultGroup.id).toBe(true);
   });
 });
 

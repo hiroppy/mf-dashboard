@@ -15,6 +15,12 @@
   "additionalBranchPrefix": "{{baseBranch}}-",
   "packageRules": [
     {
+      "description": "Match pnpm's one-day dependency cooldown",
+      "matchDatasources": ["npm"],
+      "minimumReleaseAge": "1 day",
+      "internalChecksFilter": "strict"
+    },
+    {
       "groupName": "npm patch dependencies",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["patch"],

@@ -34,7 +34,6 @@ export const EXPENSE_LARGE_CATEGORIES = [
 
 /** 資産カテゴリ名 */
 export const ASSET_CATEGORIES = [
-  "預金・現金・暗号資産",
   "預金・現金",
   "暗号資産",
   "電子マネー・プリペイド",

@@ -1,6 +1,12 @@
-import { chromium, type Browser, type Page } from "playwright";
-import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { getMaxWaitMinutes, getRefreshStatus, navigateToAccountsPage } from "./refresh.js";
+import type { Page } from "playwright";
+import { describe, expect, test, vi } from "vitest";
+import {
+  getMaxWaitMinutes,
+  getRefreshStatus,
+  navigateToAccountsPage,
+  summarizeRefreshRows,
+  type RefreshStatusRow,
+} from "./refresh.js";
 
 describe("getMaxWaitMinutes", () => {
   test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(
@@ -15,342 +21,100 @@ describe("getMaxWaitMinutes", () => {
   });
 });
 
-describe("refresh - 更新中セレクタ", () => {
-  let browser: Browser;
-  let page: Page;
-
-  beforeAll(async () => {
-    browser = await chromium.launch();
-    page = await browser.newPage();
+describe("summarizeRefreshRows", () => {
+  test.each<{
+    expected: { incompleteAccounts: string[]; remainingCount: number };
+    name: string;
+    rows: RefreshStatusRow[];
+  }>([
+    {
+      name: "更新中のアカウント名と件数を返す",
+      rows: [
+        { name: "Institution A", statuses: ["更新中"] },
+        { name: "Institution B", statuses: ["正常"] },
+        { name: "Institution C", statuses: ["更新中"] },
+      ],
+      expected: {
+        incompleteAccounts: ["Institution A", "Institution C"],
+        remainingCount: 2,
+      },
+    },
+    {
+      name: "複数の状態セルに更新中があれば1件として数える",
+      rows: [{ name: "Institution A", statuses: ["更新中", "正常"] }],
+      expected: { incompleteAccounts: ["Institution A"], remainingCount: 1 },
+    },
+    {
+      name: "完全一致しない状態は更新中として数えない",
+      rows: [
+        { name: "Institution A", statuses: ["更新中 → 一時停止中"] },
+        { name: "Institution B", statuses: ["再更新中"] },
+      ],
+      expected: { incompleteAccounts: [], remainingCount: 0 },
+    },
+    {
+      name: "空の行一覧は0件を返す",
+      rows: [],
+      expected: { incompleteAccounts: [], remainingCount: 0 },
+    },
+    {
+      name: "名称がない更新中行も件数には含める",
+      rows: [{ name: null, statuses: [" 更新中 "] }],
+      expected: { incompleteAccounts: [], remainingCount: 1 },
+    },
+    {
+      name: "空白のみの名称は除外し更新中行を件数には含める",
+      rows: [{ name: " \t ", statuses: ["更新中"] }],
+      expected: { incompleteAccounts: [], remainingCount: 1 },
+    },
+  ])("$name", ({ rows, expected }) => {
+    expect(summarizeRefreshRows(rows)).toEqual(expected);
   });
+});
 
-  afterAll(async () => {
-    await browser.close();
-  });
-
-  test("更新中のアカウントを正しくカウントする", async () => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-  <table id="account-table">
-    <thead>
-      <tr>
-        <th>金融機関</th>
-        <th>残高</th>
-        <th>前回取得日</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>SBI銀行</td>
-        <td>¥1,000,000</td>
-        <td>2026/01/29</td>
-        <td>更新中</td>
-      </tr>
-      <tr>
-        <td>三井住友銀行</td>
-        <td>¥500,000</td>
-        <td>2026/01/29</td>
-        <td>正常</td>
-      </tr>
-      <tr>
-        <td>SBI証券</td>
-        <td>¥2,000,000</td>
-        <td>2026/01/29</td>
-        <td>更新中</td>
-      </tr>
-    </tbody>
-  </table>
-</body>
-</html>
-    `;
-
-    await page.setContent(html);
-
-    const statusCells = page.locator("#account-table td:nth-child(4)");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
-    expect(updatingCount).toBe(2);
-  });
-
-  test("同じ行に非表示の正常セルがあっても更新中として数える", async () => {
-    await page.setContent(`
-      <table id="account-table"><tbody><tr>
-        <td class="service"><a>Institution A</a></td>
-        <td class="account-status">更新中</td>
-        <td class="account-status" hidden>正常</td>
-      </tr></tbody></table>
-    `);
+describe("getRefreshStatus", () => {
+  test("service linkがない更新中行は先頭セルの名称を使う", async () => {
+    const statusCells = {
+      allTextContents: vi.fn<() => Promise<string[]>>().mockResolvedValue(["更新中"]),
+    };
+    const nameLink = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    };
+    const firstCell = {
+      textContent: vi.fn<() => Promise<string | null>>().mockResolvedValue(" Institution A "),
+    };
+    const allCells = {
+      first: vi.fn<() => typeof firstCell>().mockReturnValue(firstCell),
+    };
+    const nameLinkLocator = {
+      first: vi.fn<() => typeof nameLink>().mockReturnValue(nameLink),
+    };
+    const row = {
+      locator: vi.fn<
+        (selector: string) => typeof statusCells | typeof nameLinkLocator | typeof allCells
+      >((selector) => {
+        if (selector === "td.account-status") return statusCells;
+        if (selector === "td.service a") return nameLinkLocator;
+        return allCells;
+      }),
+    };
+    const rows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
+      nth: vi.fn<() => typeof row>().mockReturnValue(row),
+    };
+    const page = {
+      locator: vi.fn<() => typeof rows>().mockReturnValue(rows),
+    } as unknown as Page;
 
     await expect(getRefreshStatus(page)).resolves.toEqual({
       incompleteAccounts: ["Institution A"],
       remainingCount: 1,
     });
+    expect(firstCell.textContent).toHaveBeenCalledOnce();
   });
+});
 
-  test("更新中のアカウントがない場合は0を返す", async () => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-  <table id="account-table">
-    <thead>
-      <tr>
-        <th>金融機関</th>
-        <th>残高</th>
-        <th>前回取得日</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>SBI銀行</td>
-        <td>¥1,000,000</td>
-        <td>2026/01/29</td>
-        <td>正常</td>
-      </tr>
-      <tr>
-        <td>三井住友銀行</td>
-        <td>¥500,000</td>
-        <td>2026/01/29</td>
-        <td>正常</td>
-      </tr>
-    </tbody>
-  </table>
-</body>
-</html>
-    `;
-
-    await page.setContent(html);
-
-    const statusCells = page.locator("#account-table td:nth-child(4)");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
-    expect(updatingCount).toBe(0);
-  });
-
-  test("すべてのアカウントが更新中の場合", async () => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-  <table id="account-table">
-    <thead>
-      <tr>
-        <th>金融機関</th>
-        <th>残高</th>
-        <th>前回取得日</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>SBI銀行</td>
-        <td>¥1,000,000</td>
-        <td>2026/01/29</td>
-        <td>更新中</td>
-      </tr>
-      <tr>
-        <td>三井住友銀行</td>
-        <td>¥500,000</td>
-        <td>2026/01/29</td>
-        <td>更新中</td>
-      </tr>
-      <tr>
-        <td>SBI証券</td>
-        <td>¥2,000,000</td>
-        <td>2026/01/29</td>
-        <td>更新中</td>
-      </tr>
-    </tbody>
-  </table>
-</body>
-</html>
-    `;
-
-    await page.setContent(html);
-
-    const statusCells = page.locator("#account-table td:nth-child(4)");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
-    expect(updatingCount).toBe(3);
-  });
-
-  test("他のカラムに更新中という文字があっても状態カラムのみをカウントする", async () => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-  <table id="account-table">
-    <thead>
-      <tr>
-        <th>金融機関</th>
-        <th>残高</th>
-        <th>前回取得日</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>更新中銀行</td>
-        <td>¥1,000,000</td>
-        <td>2026/01/29</td>
-        <td>正常</td>
-      </tr>
-      <tr>
-        <td>三井住友銀行</td>
-        <td>¥500,000</td>
-        <td>更新中</td>
-        <td>正常</td>
-      </tr>
-    </tbody>
-  </table>
-</body>
-</html>
-    `;
-
-    await page.setContent(html);
-
-    const statusCells = page.locator("#account-table td:nth-child(4)");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
-    // 状態カラム（4番目）には「更新中」がないので0
-    expect(updatingCount).toBe(0);
-  });
-
-  test("空のテーブルの場合は0を返す", async () => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-  <table id="account-table">
-    <thead>
-      <tr>
-        <th>金融機関</th>
-        <th>残高</th>
-        <th>前回取得日</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-    </tbody>
-  </table>
-</body>
-</html>
-    `;
-
-    await page.setContent(html);
-
-    const statusCells = page.locator("#account-table td:nth-child(4)");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
-    expect(updatingCount).toBe(0);
-  });
-
-  test("一時停止中のアカウントは更新中としてカウントしない", async () => {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><title>Test</title></head>
-<body>
-  <table id="account-table">
-    <thead>
-      <tr>
-        <th>金融機関</th>
-        <th>残高</th>
-        <th>前回取得日</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>SBI銀行</td>
-        <td>¥1,000,000</td>
-        <td>2026/01/29</td>
-        <td>更新中</td>
-      </tr>
-      <tr>
-        <td>エポスカード</td>
-        <td>¥500,000</td>
-        <td>2026/01/29</td>
-        <td>更新中 → 一時停止中</td>
-      </tr>
-      <tr>
-        <td>三井住友銀行</td>
-        <td>¥2,000,000</td>
-        <td>2026/01/29</td>
-        <td>正常</td>
-      </tr>
-    </tbody>
-  </table>
-</body>
-</html>
-    `;
-
-    await page.setContent(html);
-
-    // 実際のコードと同じロジックでカウント
-    const statusCells = page.locator("#account-table td:nth-child(4)");
-    const cellCount = await statusCells.count();
-    let updatingCount = 0;
-
-    for (let i = 0; i < cellCount; i++) {
-      const text = await statusCells.nth(i).textContent();
-      if (text?.trim() === "更新中") {
-        updatingCount++;
-      }
-    }
-
-    expect(updatingCount).toBe(1);
-  });
-
+describe("navigateToAccountsPage", () => {
   test("accountsページへの遷移がERR_ABORTEDでも1回だけ再試行する", async () => {
     const goto = vi.fn<(...args: any[]) => any>().mockImplementationOnce(() => {
       throw new Error("page.goto: net::ERR_ABORTED at https://moneyforward.com/accounts");

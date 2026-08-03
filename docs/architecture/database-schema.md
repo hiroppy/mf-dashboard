@@ -118,6 +118,16 @@ erDiagram
         text updated_at
     }
 
+    cash_flow_periods {
+        integer id PK
+        text month UK "accounting month"
+        text period_start
+        text period_end
+        integer transaction_count
+        text created_at
+        text updated_at
+    }
+
     %% 資産履歴系
     asset_history {
         integer id PK
@@ -196,6 +206,7 @@ erDiagram
 | accounts                 | accounts_category_id_idx                      | INDEX  | category_id                     |
 | transactions             | transactions_date_idx                         | INDEX  | date                            |
 | transactions             | transactions_account_id_idx                   | INDEX  | account_id                      |
+| cash_flow_periods        | cash_flow_periods_month_idx                   | UNIQUE | month                           |
 | asset_history            | asset_history_group_date_idx                  | UNIQUE | group_id, date                  |
 | asset_history            | asset_history_group_id_idx                    | INDEX  | group_id                        |
 | asset_history_categories | asset_history_categories_history_category_idx | UNIQUE | asset_history_id, category_name |

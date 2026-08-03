@@ -2,47 +2,59 @@ import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { debug } from "../logger.js";
 
+export type InstitutionCategoryEntry =
+  | { type: "account"; mfId: string | null }
+  | { type: "category"; category: string };
+
 /**
- * Parse institution categories from the DOM.
  * Passed to page.evaluate() — must be self-contained (no external references).
  */
-export function parseInstitutionCategories(): Array<{
-  mfId: string;
-  category: string;
-}> {
-  const results: Array<{ mfId: string; category: string }> = [];
-
-  // There are multiple .facilities.accounts-list elements on the page:
-  // one for manual accounts and one for auto-linked accounts
+function extractInstitutionCategoryEntries(): InstitutionCategoryEntry[][] {
   const accountsLists = document.querySelectorAll(".facilities.accounts-list");
+  const lists: InstitutionCategoryEntry[][] = [];
 
   for (const accountsList of accountsLists) {
-    let currentCategory = "";
+    const entries: InstitutionCategoryEntry[] = [];
 
     for (const child of accountsList.children) {
       if (child.classList.contains("heading-category-name")) {
-        currentCategory = child.textContent?.trim() || "";
+        entries.push({
+          type: "category",
+          category: child.textContent?.trim() || "",
+        });
         continue;
       }
 
       if (child.classList.contains("account")) {
-        // Try account name link first (/accounts/show/ or /accounts/show_manual/)
-        // Some accounts (e.g. 携帯) have no name link; fall back to edit link
         const showLink = child.querySelector<HTMLAnchorElement>(
           ".heading-accounts a[href*='/accounts/show']",
         );
         const editLink = child.querySelector<HTMLAnchorElement>("a[href*='/accounts/edit/']");
-        const accountLink = showLink || editLink;
-        if (!accountLink) continue;
-
-        const href = accountLink.getAttribute("href") || "";
+        const href = (showLink || editLink)?.getAttribute("href") || "";
         const match = href.match(/\/accounts\/(?:show(?:_manual)?|edit)\/([^/?]+)/);
-        if (match && match[1] && currentCategory) {
-          results.push({
-            mfId: match[1],
-            category: currentCategory,
-          });
-        }
+        entries.push({ type: "account", mfId: match?.[1] || null });
+      }
+    }
+
+    lists.push(entries);
+  }
+
+  return lists;
+}
+
+export function associateInstitutionCategories(
+  lists: readonly (readonly InstitutionCategoryEntry[])[],
+): Array<{ mfId: string; category: string }> {
+  const results: Array<{ mfId: string; category: string }> = [];
+
+  for (const entries of lists) {
+    let currentCategory = "";
+
+    for (const entry of entries) {
+      if (entry.type === "category") {
+        currentCategory = entry.category;
+      } else if (entry.mfId && currentCategory) {
+        results.push({ mfId: entry.mfId, category: currentCategory });
       }
     }
   }
@@ -60,7 +72,8 @@ export async function scrapeInstitutionCategories(page: Page): Promise<Map<strin
   await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
   await page.locator(".facilities.accounts-list").first().waitFor({ state: "attached" });
 
-  const categoryData = await page.evaluate(parseInstitutionCategories);
+  const entries = await page.evaluate(extractInstitutionCategoryEntries);
+  const categoryData = associateInstitutionCategories(entries);
 
   debug(`  - Found ${categoryData.length} accounts with category information`);
 
