@@ -25,6 +25,7 @@ interface SeedAssetHistoryInput {
   now: Now;
   randInt: RandInt;
   totalAssets: number;
+  asOfDate: string;
   groupMonthlyData: Record<string, GroupMonthlyData>;
   accountCategoryMap: Record<string, string>;
   getGroupsForAccount: (accountName: string) => string[];
@@ -36,6 +37,7 @@ export async function seedAssetHistory({
   now,
   randInt,
   totalAssets,
+  asOfDate,
   groupMonthlyData,
   accountCategoryMap,
   getGroupsForAccount,
@@ -78,9 +80,9 @@ export async function seedAssetHistory({
 
     forEachMonth(range, (y, m, idx) => {
       const ms = monthStr(y, m);
-      const maxDay = daysInMonth(y, m);
-      const startAsset = monthlyAssets[ms];
       const isLastMonth = idx === monthKeys.length - 1;
+      const maxDay = isLastMonth ? Number(asOfDate.slice(-2)) : daysInMonth(y, m);
+      const startAsset = monthlyAssets[ms];
       const nextMs = monthKeys[idx + 1];
       const endAsset = isLastMonth ? finalAssets : nextMs ? monthlyAssets[nextMs] : finalAssets;
 
@@ -88,10 +90,10 @@ export async function seedAssetHistory({
         const isFirstDay = d === 1;
         const isLastDay = isLastMonth && d === maxDay;
 
-        if (isFirstDay) {
-          data.push({ date: dateStr(y, m, d), total: startAsset });
-        } else if (isLastDay) {
+        if (isLastDay) {
           data.push({ date: dateStr(y, m, d), total: finalAssets });
+        } else if (isFirstDay) {
+          data.push({ date: dateStr(y, m, d), total: startAsset });
         } else {
           const frac = (d - 1) / maxDay;
           const base = startAsset + (endAsset - startAsset) * frac;

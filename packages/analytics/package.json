@@ -10,6 +10,8 @@
     "./chat/tools": "./src/chat/tools.ts",
     "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
+    "./bank-balance-forecast": "./src/bank-balance-forecast.ts",
+    "./recurring-candidates": "./src/recurring-candidates.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {

@@ -209,6 +209,44 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   });
 
   describe("資産整合性", () => {
+    test("資産履歴はスナップショット日を超えず、同日の合計と一致する", async () => {
+      const snapshot = await db
+        .select()
+        .from(schema.dailySnapshots)
+        .orderBy(sql`${schema.dailySnapshots.date} DESC`)
+        .limit(1)
+        .get();
+      expect(snapshot).toBeDefined();
+
+      const futureHistory = await db
+        .select({ id: schema.assetHistory.id })
+        .from(schema.assetHistory)
+        .where(sql`${schema.assetHistory.date} > ${snapshot!.date}`)
+        .all();
+      expect(futureHistory).toHaveLength(0);
+
+      const history = await db
+        .select()
+        .from(schema.assetHistory)
+        .where(
+          and(
+            eq(schema.assetHistory.groupId, snapshot!.groupId),
+            eq(schema.assetHistory.date, snapshot!.date),
+          ),
+        )
+        .get();
+      const assetTotal = await db
+        .select({ total: sql<number>`SUM(${schema.holdingValues.amount})` })
+        .from(schema.holdingValues)
+        .innerJoin(schema.holdings, eq(schema.holdingValues.holdingId, schema.holdings.id))
+        .where(
+          and(eq(schema.holdingValues.snapshotId, snapshot!.id), eq(schema.holdings.type, "asset")),
+        )
+        .get();
+
+      expect(history?.totalAssets).toBe(assetTotal?.total);
+    });
+
     test("含み益と含み損の保有資産が存在する", async () => {
       const gains = (
         await db

@@ -2,6 +2,7 @@ import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq, and, like, sql, inArray, or, notInArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import { createNormalTransactionMirrorKeys, hasNormalTransactionMirror } from "../shared/transfer";
 import { generateMonthRange } from "../shared/utils";
 
 /**
@@ -262,6 +263,23 @@ export async function getDeduplicatedTransferExpense(
     );
 
   const transfers = await query.all();
+  const normalTransactions = await db
+    .select({
+      accountId: schema.transactions.accountId,
+      date: schema.transactions.date,
+      amount: schema.transactions.amount,
+      type: schema.transactions.type,
+    })
+    .from(schema.transactions)
+    .where(
+      and(
+        inArray(schema.transactions.accountId, accountIds),
+        sql`${schema.transactions.type} IN ('income', 'expense')`,
+        dateCondition ? like(schema.transactions.date, `${dateCondition}%`) : sql`1=1`,
+      ),
+    )
+    .all();
+  const normalTransactionKeys = createNormalTransactionMirrorKeys(normalTransactions);
 
   // 重複除外: (date, amount, accountId, transferTargetAccountId) でユニーク化
   const seen = new Set<string>();
@@ -270,22 +288,7 @@ export async function getDeduplicatedTransferExpense(
   for (const t of transfers) {
     if (!t.date || !t.transferTargetAccountId || t.accountId === null) continue;
 
-    // 振替先アカウントで同一日・同一金額の通常トランザクションがある場合は除外
-    // （既に通常支出としてカウントされているため）
-    const existingNormalTx = await db
-      .select({ id: schema.transactions.id })
-      .from(schema.transactions)
-      .where(
-        and(
-          eq(schema.transactions.accountId, t.transferTargetAccountId),
-          eq(schema.transactions.date, t.date),
-          eq(schema.transactions.amount, t.amount),
-          sql`${schema.transactions.type} IN ('income', 'expense')`,
-        ),
-      )
-      .get();
-
-    if (existingNormalTx) continue;
+    if (hasNormalTransactionMirror(t, normalTransactionKeys)) continue;
 
     const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
     if (seen.has(key)) continue;

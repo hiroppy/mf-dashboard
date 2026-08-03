@@ -1,5 +1,46 @@
 import { describe, it, expect } from "vitest";
-import { transformTransferToIncome } from "./transfer";
+import {
+  createNormalTransactionMirrorKeys,
+  hasNormalTransactionMirror,
+  transformTransferToIncome,
+} from "./transfer";
+
+describe("transfer mirror detection", () => {
+  const normalTransactions = [
+    { accountId: 1, date: "2025-04-15", amount: 10_000, type: "expense" },
+  ];
+  const normalTransactionKeys = createNormalTransactionMirrorKeys(normalTransactions);
+
+  it("振替先口座・日付・金額が同じ通常明細を検出する", () => {
+    expect(
+      hasNormalTransactionMirror(
+        { transferTargetAccountId: 1, date: "2025-04-15", amount: 10_000 },
+        normalTransactionKeys,
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    { transferTargetAccountId: 2, date: "2025-04-15", amount: 10_000 },
+    { transferTargetAccountId: 1, date: "2025-04-16", amount: 10_000 },
+    { transferTargetAccountId: 1, date: "2025-04-15", amount: 20_000 },
+  ])("口座・日付・金額のいずれかが違う場合は別取引として扱う", (transfer) => {
+    expect(hasNormalTransactionMirror(transfer, normalTransactionKeys)).toBe(false);
+  });
+
+  it("振替フラグ付きの明細は通常明細として扱わない", () => {
+    const keys = createNormalTransactionMirrorKeys([
+      { ...normalTransactions[0]!, isTransfer: true },
+    ]);
+
+    expect(
+      hasNormalTransactionMirror(
+        { transferTargetAccountId: 1, date: "2025-04-15", amount: 10_000 },
+        keys,
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("transformTransferToIncome", () => {
   const baseTransaction = {

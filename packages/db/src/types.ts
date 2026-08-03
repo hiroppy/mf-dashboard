@@ -103,6 +103,8 @@ export interface AccountStatus {
   lastUpdated: string;
   url: string;
   totalAssets: number;
+  scheduledWithdrawalAmount?: number;
+  scheduledWithdrawalConfirmed?: boolean;
   errorMessage?: string;
 }
 

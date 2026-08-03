@@ -78,6 +78,8 @@ export async function getAccountsWithAssets(groupIdParam?: string, db: Db = getD
       status: schema.accountStatuses.status,
       lastUpdated: schema.accountStatuses.lastUpdated,
       totalAssets: schema.accountStatuses.totalAssets,
+      scheduledWithdrawalAmount: schema.accountStatuses.scheduledWithdrawalAmount,
+      scheduledWithdrawalConfirmed: schema.accountStatuses.scheduledWithdrawalConfirmed,
       categoryId: schema.accounts.categoryId,
       categoryName: schema.institutionCategories.name,
       categoryDisplayOrder: schema.institutionCategories.displayOrder,
@@ -160,7 +162,13 @@ export async function getAccountByMfId(mfId: string, groupIdParam?: string, db: 
   };
 }
 
-type AccountWithCategory = Awaited<ReturnType<typeof getAccountsWithAssets>>[number];
+type AccountWithCategory = Omit<
+  Awaited<ReturnType<typeof getAccountsWithAssets>>[number],
+  "scheduledWithdrawalAmount" | "scheduledWithdrawalConfirmed"
+> & {
+  scheduledWithdrawalAmount?: number | null;
+  scheduledWithdrawalConfirmed?: boolean | null;
+};
 
 /**
  * アカウントをカテゴリでグループ化

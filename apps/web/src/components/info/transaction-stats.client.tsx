@@ -1,14 +1,18 @@
 "use client";
 
-import { X } from "lucide-react";
 import { useState } from "react";
 import { getCategoryColor } from "../../lib/colors";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { PieChart } from "../charts/pie-chart";
 import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
+import {
+  Dialog,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../ui/dialog";
 import { Select } from "../ui/select";
 import {
   calculateCompositionPercentage,
@@ -113,15 +117,7 @@ export function TransactionStatsClient({ year, income, expense }: TransactionSta
                   value={sortBy}
                   onChange={(value) => setSortBy(value as TransactionSort)}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="明細を閉じる"
-                  onClick={() => setSelection(null)}
-                >
-                  <X aria-hidden="true" />
-                </Button>
+                <DialogCloseButton ariaLabel="明細を閉じる" />
               </div>
             </div>
 

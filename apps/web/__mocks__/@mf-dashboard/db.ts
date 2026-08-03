@@ -16,6 +16,8 @@ export const getAccountIdsForGroup = fn(() => []);
 
 // Shared utilities - transfer
 export const transformTransferToIncome = fn((tx: unknown) => tx);
+export const createNormalTransactionMirrorKeys = fn(() => new Set());
+export const hasNormalTransactionMirror = fn(() => false);
 
 // Shared utilities - utils
 export const generateMonthRange = fn(() => []);

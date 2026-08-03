@@ -5,7 +5,7 @@ import { createManualHoldingKey } from "./manual-holding-accounts.js";
 import {
   attachManualHoldingReference,
   createLinkedPnsRowFingerprint,
-  getLinkedAccountPnsSource,
+  getLinkedAccountDetailSource,
   hasRequiredPnsColumns,
   haveSamePnsRowMultiset,
   identifyTableTypeFromTitle,
@@ -232,11 +232,12 @@ describe("linked insurance and pension candidates", () => {
     } as unknown as Page;
 
     await expect(
-      getLinkedAccountPnsSource(page, { accounts: [registeredAccounts.accounts[0]!] }),
+      getLinkedAccountDetailSource(page, { accounts: [registeredAccounts.accounts[0]!] }),
     ).resolves.toEqual({
       complete: false,
       fingerprints: [],
       items: [],
+      scheduledWithdrawals: new Map(),
     });
     expect(goto).toHaveBeenCalledOnce();
   });

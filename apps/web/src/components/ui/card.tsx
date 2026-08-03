@@ -1,8 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import type { HTMLAttributes, Ref } from "react";
+import type { ButtonHTMLAttributes, HTMLAttributes, Ref } from "react";
 import { cn } from "../../lib/utils";
+
+const cardBaseClassName = "rounded-xl border bg-card text-card-foreground shadow-sm";
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   href?: string;
@@ -15,7 +17,7 @@ function Card({ className, href, target, children, ref, ...props }: CardProps) {
     <div
       ref={ref}
       className={cn(
-        "rounded-xl border bg-card text-card-foreground shadow-sm",
+        cardBaseClassName,
         href && "transition-colors hover:bg-muted/50 h-full",
         className,
       )}
@@ -39,6 +41,22 @@ function Card({ className, href, target, children, ref, ...props }: CardProps) {
     <Link href={href as Route} className="block h-full">
       {card}
     </Link>
+  );
+}
+
+type CardButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
+
+function CardButton({ className, type = "button", ...props }: CardButtonProps) {
+  return (
+    <button
+      type={type}
+      className={cn(
+        cardBaseClassName,
+        "h-full w-full cursor-pointer text-left transition-colors hover:bg-muted/50",
+        className,
+      )}
+      {...props}
+    />
   );
 }
 
@@ -110,4 +128,4 @@ function CardFooter({ className, ref, ...props }: CardFooterProps) {
   );
 }
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };
+export { Card, CardButton, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };

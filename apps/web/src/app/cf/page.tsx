@@ -2,6 +2,7 @@ import { getMonthlySummaries } from "@mf-dashboard/db";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { BankCashFlowForecast } from "../../components/info/bank-cashflow-forecast";
 import { MonthlyIncomeExpenseChart } from "../../components/info/monthly-income-expense-chart";
 import { MonthlySummaryCard } from "../../components/info/monthly-summary-card";
 import { TransactionStats } from "../../components/info/transaction-stats";
@@ -37,6 +38,8 @@ export async function CFContent({ groupId }: { groupId?: string }) {
     <>
       {/* Monthly chart */}
       <MonthlyIncomeExpenseChart groupId={groupId} />
+
+      <BankCashFlowForecast groupId={groupId} />
 
       {/* Monthly summaries list by year */}
       {Object.entries(summariesByYear)
