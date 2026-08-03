@@ -45,7 +45,7 @@ describe("classifyRecurringTransaction", () => {
     ).toBe("salary");
   });
 
-  it.each(["Taxi fare", "Current account", "Discarded item"])(
+  it.each(["Taxi fare", "Current account", "Discarded item", "cardé", "étax", "rentß"])(
     "does not classify an English keyword substring in %s",
     (description) => {
       expect(classifyRecurringTransaction({ description })).toBe("other");
@@ -1017,6 +1017,37 @@ describe("generateRecurringCandidates", () => {
       confidence: "high",
       description: "RENAMED SERVICE",
       evidence: { occurrenceCount: 3 },
+    });
+  });
+
+  it("ranks tied amount groups before applying the candidate limit", () => {
+    const decoys = Array.from({ length: 8 }, (_, index) => {
+      const description = `DECOY SERVICE ${String.fromCharCode(65 + index)}`;
+      return [
+        transaction("2026-04-10", 100, description),
+        transaction("2026-05-10", 100, description),
+        transaction("2026-06-10", 100, description),
+      ];
+    }).flat();
+    const result = generateRecurringCandidates(
+      [
+        ...decoys,
+        transaction("2026-05-10", 100, "TARGET ALPHA"),
+        transaction("2026-06-10", 100, "TARGET ALPHA"),
+        transaction("2026-07-10", 100, "TARGET ALPHAX"),
+      ],
+      "2026-08",
+      { amountToleranceRatio: 0.5, descriptionSimilarityThreshold: 0 },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      description: "TARGET ALPHAX",
+      evidence: {
+        amountRange: { min: 100, max: 100 },
+        dateRange: { from: "2026-05-10", to: "2026-07-10" },
+        occurrenceCount: 3,
+      },
     });
   });
 
