@@ -997,6 +997,29 @@ describe("generateRecurringCandidates", () => {
     });
   });
 
+  it("ignores stale amount groups before applying the candidate limit", () => {
+    const stale = Array.from({ length: 8 }, (_, index) =>
+      transaction("2026-01-10", 20_000, `OLD SERVICE ${String.fromCharCode(65 + index)}`),
+    );
+    const result = generateRecurringCandidates(
+      [
+        ...stale,
+        transaction("2026-05-10", 20_000, "CURRENT SERVICE"),
+        transaction("2026-06-10", 20_000, "CURRENT SERVICE"),
+        transaction("2026-07-10", 20_000, "RENAMED SERVICE"),
+      ],
+      "2026-08",
+      { descriptionSimilarityThreshold: 0 },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      confidence: "high",
+      description: "RENAMED SERVICE",
+      evidence: { occurrenceCount: 3 },
+    });
+  });
+
   it("jointly assigns same-month rows across compatible recurring schedules", () => {
     const result = generateRecurringCandidates(
       [
@@ -1026,6 +1049,23 @@ describe("generateRecurringCandidates", () => {
     );
 
     expect(result).toHaveLength(3);
+  });
+
+  it("bounds augmenting assignment for an unassignable extra row", () => {
+    const descriptions = Array.from(
+      { length: 9 },
+      (_, index) => `SERVICE PLAN ${String.fromCharCode(65 + index)}`,
+    );
+    const result = generateRecurringCandidates(
+      [
+        ...descriptions.map((description) => transaction("2026-06-10", 20_000, description)),
+        ...descriptions.map((description) => transaction("2026-07-10", 20_000, description)),
+        transaction("2026-07-10", 20_000, "SERVICE PLAN EXTRA"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(9);
   });
 
   it("reassigns same-day rows across amount-compatible schedules", () => {

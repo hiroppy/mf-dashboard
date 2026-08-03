@@ -415,6 +415,27 @@ interface GroupMatchScore {
   replacedTransactions: NormalizedTransaction[];
 }
 
+function getContinuityDistance(
+  transaction: NormalizedTransaction,
+  representative: NormalizedTransaction,
+  boundaryPattern: boolean,
+): number | null {
+  const representativePosition = boundaryPosition(representative);
+  const transactionPosition = boundaryPosition(transaction);
+  const crossesDelayedBoundary =
+    representativePosition?.side === "end" && transactionPosition?.side === "start";
+  const representativeOccurrenceMonth = crossesDelayedBoundary
+    ? representativePosition.occurrenceMonth
+    : getOccurrenceMonth(representative, boundaryPattern);
+  const transactionOccurrenceMonth = crossesDelayedBoundary
+    ? transactionPosition.occurrenceMonth
+    : getOccurrenceMonth(transaction, boundaryPattern);
+  if (representativeOccurrenceMonth === transactionOccurrenceMonth) return 1;
+  return shiftYearMonthKey(representativeOccurrenceMonth, 1) === transactionOccurrenceMonth
+    ? 0
+    : null;
+}
+
 function getGroupMatchScore(
   transaction: NormalizedTransaction,
   group: TransactionGroup,
@@ -432,22 +453,8 @@ function getGroupMatchScore(
   ) {
     return null;
   }
-  const representativePosition = boundaryPosition(representative);
-  const transactionPosition = boundaryPosition(transaction);
-  const crossesDelayedBoundary =
-    representativePosition?.side === "end" && transactionPosition?.side === "start";
-  const representativeOccurrenceMonth = crossesDelayedBoundary
-    ? representativePosition.occurrenceMonth
-    : getOccurrenceMonth(representative, boundaryPattern);
-  const transactionOccurrenceMonth = crossesDelayedBoundary
-    ? transactionPosition.occurrenceMonth
-    : getOccurrenceMonth(transaction, boundaryPattern);
-  if (
-    representativeOccurrenceMonth !== transactionOccurrenceMonth &&
-    shiftYearMonthKey(representativeOccurrenceMonth, 1) !== transactionOccurrenceMonth
-  ) {
-    return null;
-  }
+  const continuityDistance = getContinuityDistance(transaction, representative, boundaryPattern);
+  if (continuityDistance === null) return null;
   if (conflictsWithBoundaryOccurrence(transaction, group.transactions)) return null;
   const postingMonthConflicts = getPostingMonthConflicts(transaction, group.transactions);
   if (postingMonthConflicts.length > 0) {
@@ -510,8 +517,7 @@ function getGroupMatchScore(
   }
   return {
     amountDistance,
-    continuityDistance:
-      representativeOccurrenceMonth === shiftYearMonthKey(transactionOccurrenceMonth, -1) ? 0 : 1,
+    continuityDistance,
     dateDistance: groupDayDistance,
     descriptionDistance: 1 - descriptionSimilarity,
     replacedTransactions: [],
@@ -657,20 +663,6 @@ interface AugmentingAssignment {
   score: GroupMatchScore;
 }
 
-function compareAugmentingPaths(
-  left: AugmentingAssignment[],
-  right: AugmentingAssignment[],
-): number {
-  for (let index = 1; index <= Math.min(left.length, right.length); index++) {
-    const scoreComparison = compareGroupMatchScores(
-      left[left.length - index].score,
-      right[right.length - index].score,
-    );
-    if (scoreComparison !== 0) return scoreComparison;
-  }
-  return left.length - right.length;
-}
-
 function findAugmentingPath(
   transaction: NormalizedTransaction,
   candidateGroups: TransactionGroup[],
@@ -678,43 +670,42 @@ function findAugmentingPath(
   options: Required<GenerateRecurringCandidatesOptions>,
   visitedGroups = new Set<TransactionGroup>(),
 ): AugmentingAssignment[] | undefined {
-  let bestPath: AugmentingAssignment[] | undefined;
-  for (const group of candidateGroups) {
-    if (visitedGroups.has(group)) continue;
-    const conflicts = getPostingMonthConflicts(transaction, group.transactions);
-    if (conflicts.length === 0) {
-      const score = getGroupMatchScore(transaction, group, options);
-      const path = score ? [{ transaction, group, score }] : undefined;
-      if (path && (!bestPath || compareAugmentingPaths(path, bestPath) < 0)) bestPath = path;
-      continue;
-    }
-    if (conflicts.length > 1) continue;
+  const candidates = candidateGroups
+    .filter((group) => !visitedGroups.has(group))
+    .map((group) => {
+      const conflicts = getPostingMonthConflicts(transaction, group.transactions);
+      if (conflicts.length > 1) return null;
+      const conflict = conflicts[0];
+      const historyGroup = conflict
+        ? { transactions: group.transactions.filter((existing) => existing !== conflict) }
+        : group;
+      const score = getGroupMatchScore(transaction, historyGroup, options);
+      return score ? { conflict, group, score } : null;
+    })
+    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+    .sort((left, right) => compareGroupMatchScores(left.score, right.score));
 
-    const displacedTransaction = conflicts[0];
-    const historyGroup = {
-      transactions: group.transactions.filter((existing) => existing !== displacedTransaction),
-    };
-    const score = getGroupMatchScore(transaction, historyGroup, options);
-    if (!score) continue;
+  for (const { conflict, group, score } of candidates) {
+    if (visitedGroups.has(group)) continue;
+    visitedGroups.add(group);
+    if (!conflict) return [{ transaction, group, score }];
 
     const alternativeGroups = [
       ...new Set([
-        ...getOptimizedGroups(partition, displacedTransaction, options, true),
-        ...getFuzzyIndexedGroups(partition, displacedTransaction, options),
+        ...getOptimizedGroups(partition, conflict, options, true),
+        ...getFuzzyIndexedGroups(partition, conflict, options),
       ]),
     ].filter((candidate) => candidate !== group);
     const displacedPath = findAugmentingPath(
-      displacedTransaction,
+      conflict,
       alternativeGroups,
       partition,
       options,
-      new Set([...visitedGroups, group]),
+      visitedGroups,
     );
-    if (!displacedPath) continue;
-    const path = [...displacedPath, { transaction, group, score }];
-    if (!bestPath || compareAugmentingPaths(path, bestPath) < 0) bestPath = path;
+    if (displacedPath) return [...displacedPath, { transaction, group, score }];
   }
-  return bestPath;
+  return undefined;
 }
 
 function lowerBound(values: number[], target: number): number {
@@ -740,6 +731,7 @@ function getAmountIndexedGroups(
   if (!groupsByDay || !amountKeysByDay) return [];
 
   const candidates = new Set<TransactionGroup>();
+  const previousMonth = shiftYearMonthKey(transaction.month, -1);
   for (const [day, groupsByAmount] of groupsByDay) {
     let dayCandidateCount = 0;
     const amountKeys = amountKeysByDay.get(day) ?? [];
@@ -761,8 +753,19 @@ function getAmountIndexedGroups(
       const amount = amountKeys[index];
       if (Math.min(leftRatio, rightRatio) > tolerance) break;
       for (const group of groupsByAmount.get(amount) ?? []) {
+        const latestMonth = partition.latestMonths.get(group);
+        if (latestMonth !== transaction.month && latestMonth !== previousMonth) {
+          const boundaryPattern = isMonthBoundaryPattern(group.transactions);
+          const representative = deduplicateOccurrences(group.transactions, boundaryPattern).at(-1);
+          if (
+            !representative ||
+            getContinuityDistance(transaction, representative, boundaryPattern) === null
+          ) {
+            continue;
+          }
+        }
         if (
-          partition.latestMonths.get(group) !== transaction.month ||
+          latestMonth !== transaction.month ||
           includePostingMonthConflicts ||
           !conflictsWithPostingMonthSchedule(transaction, group.transactions)
         ) {
