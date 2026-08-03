@@ -105,6 +105,7 @@ const DEFAULT_OPTIONS = {
 const MONTH_BOUNDARY_WINDOW_DAYS = 3;
 const MAX_GROUPS_PER_AMOUNT_BUCKET = 8;
 const MAX_FUZZY_CANDIDATE_GROUPS = 64;
+const MAX_FUZZY_PRE_SCORE_GROUPS = 256;
 const MAX_INELIGIBLE_CURRENT_MONTH_GROUPS = 64;
 const GENERIC_DESCRIPTIONS = new Set(["payment", "振込", "支払", "支払い"]);
 
@@ -650,7 +651,7 @@ function getFuzzyIndexedGroups(
     (left, right) => (candidateCounts.get(left) ?? 0) - (candidateCounts.get(right) ?? 0),
   );
   const candidateSimilarities = new Map<TransactionGroup, number>();
-  for (const bigram of indexedBigrams) {
+  candidateSearch: for (const bigram of indexedBigrams) {
     const groupsByDescription = partition.groupsByBigramAndMonth.get(bigram)?.get(previousMonth);
     for (const [description, groups] of groupsByDescription ?? []) {
       if (description === transaction.normalizedDescription) continue;
@@ -659,9 +660,12 @@ function getFuzzyIndexedGroups(
         const anchorBigrams = partition.anchorBigrams.get(group);
         if (!anchorBigrams) continue;
         const similarity = calculateBigramSimilarity(transactionBigrams, anchorBigrams);
-        if (similarity >= similarityThreshold) candidateSimilarities.set(group, similarity);
+        if (similarity < similarityThreshold) continue;
+        candidateSimilarities.set(group, similarity);
+        if (candidateSimilarities.size >= MAX_FUZZY_PRE_SCORE_GROUPS) break candidateSearch;
       }
     }
+    if (candidateSimilarities.size >= MAX_FUZZY_CANDIDATE_GROUPS) break;
   }
   const scoredCandidates = [...candidateSimilarities].map(([group, similarity]) => ({
     group,
