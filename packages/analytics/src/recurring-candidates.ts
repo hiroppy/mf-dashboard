@@ -293,6 +293,16 @@ function median(values: number[]): number {
   return lower + (sorted[middle] - lower) / 2;
 }
 
+function inferFixedCalendarDay(occurrences: NormalizedTransaction[]): number | null {
+  if (occurrences.length < 2) return null;
+  const fixedDay = Math.max(...occurrences.map(({ day }) => day));
+  const isFixedDay = occurrences.every((occurrence) => {
+    const { year, month } = parseIsoDateKey(occurrence.date);
+    return occurrence.day === Math.min(fixedDay, getDaysInMonth(year, month));
+  });
+  return isFixedDay ? fixedDay : null;
+}
+
 function daysFromMonthEnd(transaction: NormalizedTransaction): number {
   const { year, month } = parseIsoDateKey(transaction.date);
   return getDaysInMonth(year, month) - transaction.day;
@@ -496,9 +506,15 @@ function getGroupMatchScore(
   const allWithinBoundaryWindow = [transaction, ...monthlyTransactions].every(
     (item) => boundaryPosition(item) !== null,
   );
-  const groupDayDistance = allWithinBoundaryWindow
-    ? Math.min(...dayDistances)
-    : median(dayDistances);
+  const fixedCalendarDay = inferFixedCalendarDay(monthlyTransactions);
+  let groupDayDistance = median(dayDistances);
+  if (fixedCalendarDay) {
+    const { year, month } = parseIsoDateKey(transaction.date);
+    const expectedDay = Math.min(fixedCalendarDay, getDaysInMonth(year, month));
+    groupDayDistance = Math.abs(transaction.day - expectedDay);
+  } else if (allWithinBoundaryWindow) {
+    groupDayDistance = Math.min(...dayDistances);
+  }
   const medianAmount = median(monthlyTransactions.map(({ amount }) => amount));
   const amountDistance =
     Math.abs(transaction.amount - medianAmount) / Math.max(transaction.amount, medianAmount);
@@ -852,6 +868,18 @@ function indexGroupMonth(partition: GroupPartition, group: TransactionGroup, mon
   partition.latestMonths.set(group, month);
 }
 
+function getIndexedAmounts(monthlyTransactions: NormalizedTransaction[]): number[] {
+  const amounts = new Set([median(monthlyTransactions.map(({ amount }) => amount))]);
+  const latestPostingMonth = monthlyTransactions.at(-1)?.month;
+  const historicalTransactions = monthlyTransactions.filter(
+    ({ month }) => month !== latestPostingMonth,
+  );
+  if (historicalTransactions.length > 0) {
+    amounts.add(median(historicalTransactions.map(({ amount }) => amount)));
+  }
+  return [...amounts];
+}
+
 function indexGroupAmount(partition: GroupPartition, group: TransactionGroup): void {
   removeGroupAmountEntries(
     partition.amountGroupsByDay,
@@ -864,9 +892,9 @@ function indexGroupAmount(partition: GroupPartition, group: TransactionGroup): v
   const boundaryPattern = isMonthBoundaryPattern(group.transactions);
   const monthlyTransactions = deduplicateOccurrences(group.transactions, boundaryPattern);
   if (monthlyTransactions.length === 0) return;
-  const amount = median(monthlyTransactions.map((transaction) => transaction.amount));
-  const entries = [...new Set(monthlyTransactions.map((transaction) => transaction.day))].map(
-    (day) => ({ amount, day }),
+  const amounts = getIndexedAmounts(monthlyTransactions);
+  const entries = [...new Set(monthlyTransactions.map((transaction) => transaction.day))].flatMap(
+    (day) => amounts.map((amount) => ({ amount, day })),
   );
   for (const entry of entries) {
     indexGroupByDayAndAmount(
@@ -936,7 +964,7 @@ function reindexDescriptionAmount(partition: GroupPartition, group: TransactionG
   const boundaryPattern = isMonthBoundaryPattern(group.transactions);
   const monthlyTransactions = deduplicateOccurrences(group.transactions, boundaryPattern);
   if (monthlyTransactions.length === 0) return;
-  const amount = median(monthlyTransactions.map((transaction) => transaction.amount));
+  const amounts = getIndexedAmounts(monthlyTransactions);
   const days = new Set(monthlyTransactions.map((transaction) => transaction.day));
   const descriptions = new Set(
     monthlyTransactions.map((transaction) => transaction.normalizedDescription),
@@ -944,8 +972,10 @@ function reindexDescriptionAmount(partition: GroupPartition, group: TransactionG
   const entries = [...descriptions].flatMap((description) => {
     const groupsByDay = partition.amountGroupsByDescriptionAndDay.get(description) ?? new Map();
     const amountKeysByDay = partition.amountKeysByDescriptionAndDay.get(description) ?? new Map();
-    const descriptionEntries = [...days].map((day) => ({ amount, day, description }));
-    for (const { day } of descriptionEntries) {
+    const descriptionEntries = [...days].flatMap((day) =>
+      amounts.map((amount) => ({ amount, day, description })),
+    );
+    for (const { amount, day } of descriptionEntries) {
       indexGroupByDayAndAmount(groupsByDay, amountKeysByDay, group, day, amount);
     }
     partition.amountGroupsByDescriptionAndDay.set(description, groupsByDay);
@@ -1258,12 +1288,8 @@ function predictDay(
 ): number {
   const days = occurrences.map(({ day }) => day);
   if (days.every((day) => day === days[0])) return Math.min(days[0], targetMonthDays);
-  const fixedCalendarDay = Math.max(...days);
-  const isClippedFixedCalendarDay = occurrences.every((occurrence) => {
-    const { year, month } = parseIsoDateKey(occurrence.date);
-    return occurrence.day === Math.min(fixedCalendarDay, getDaysInMonth(year, month));
-  });
-  if (isClippedFixedCalendarDay) return Math.min(fixedCalendarDay, targetMonthDays);
+  const fixedCalendarDay = inferFixedCalendarDay(occurrences);
+  if (fixedCalendarDay) return Math.min(fixedCalendarDay, targetMonthDays);
   const allMonthEndSide = occurrences.every(
     (occurrence) => daysFromMonthEnd(occurrence) <= MONTH_BOUNDARY_WINDOW_DAYS,
   );

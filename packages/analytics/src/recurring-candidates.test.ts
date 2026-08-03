@@ -529,6 +529,20 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ confidence: "medium", predictedDate: "2026-03-30" });
   });
 
+  it("does not let a clipped month override an inferred fixed calendar day", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-01-30", 80_000, "家賃"),
+        transaction("2026-02-28", 80_000, "家賃"),
+        transaction("2026-03-31", 80_000, "家賃"),
+      ],
+      "2026-04",
+      { dateDriftDays: 0 },
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it("groups stable calendar days when date drift is zero", () => {
     const result = generateRecurringCandidates(
       [transaction("2026-01-28", 80_000, "家賃"), transaction("2026-02-28", 80_000, "家賃")],
@@ -1106,6 +1120,21 @@ describe("generateRecurringCandidates", () => {
         transaction("2026-06-10", 110, "MERCHANT PLAN CCC"),
         transaction("2026-07-10", 100, "MERCHANT PLAN BBB"),
         transaction("2026-07-10", 110, "MERCHANT PLAN CCC"),
+      ],
+      "2026-08",
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map(({ evidence }) => evidence.occurrenceCount)).toEqual([2, 2]);
+  });
+
+  it("uses conflict-free historical amounts when reassigning same-month rows", () => {
+    const result = generateRecurringCandidates(
+      [
+        transaction("2026-06-10", 80, "MERCHANT PLAN AAA"),
+        transaction("2026-06-10", 88, "MERCHANT PLAN CCC"),
+        transaction("2026-07-10", 84, "MERCHANT PLAN BBB"),
+        transaction("2026-07-10", 96, "MERCHANT PLAN CCC"),
       ],
       "2026-08",
     );
