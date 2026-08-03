@@ -118,7 +118,6 @@ function getExclusionReason(event: BankCashFlowEventInput): BankCashFlowExclusio
 }
 
 function validateEvent(event: BankCashFlowEventInput, currentDate: string): void {
-  parseIsoDateKey(event.date);
   assertMoney(event.amount, `Event ${event.id} amount`);
   if (event.amount < 0) {
     throw new Error(`Event ${event.id} amount must be non-negative`);
@@ -241,6 +240,8 @@ export function calculateMonthlyBankBalanceForecasts(
   const eventIds = new Set<string>();
   const eventsByAccount = new Map<BankAccountId, IndexedEvent[]>();
   events.forEach((event, index) => {
+    parseIsoDateKey(event.date);
+    if (event.date < monthStartDate || event.date > monthEndDate) return;
     validateEvent(event, currentDate);
     if (eventIds.has(event.id)) {
       throw new Error(`Duplicate event id: ${event.id}`);

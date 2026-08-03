@@ -183,8 +183,8 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
     const [forecast] = calculateMonthlyBankBalanceForecasts(
       [accountA],
       [
-        event("previous-month", "2026-07-31", 50_000, "income", "actual"),
-        event("next-month", "2026-09-01", 50_000, "expense", "forecast"),
+        event("cached-forecast", "2026-07-31", 50_000, "income", "forecast"),
+        event("future-actual", "2026-09-01", 50_000, "expense", "actual"),
       ],
       currentDate,
     );
