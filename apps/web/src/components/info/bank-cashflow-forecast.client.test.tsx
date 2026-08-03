@@ -61,5 +61,6 @@ describe("BankCashFlowForecastClient", () => {
     expect(screen.getByText("家賃")).toBeTruthy();
     expect(screen.getByText(/入出金後残高:/).textContent).toContain("90,000円");
     expect(screen.getByText(/過去3回/).textContent).toContain("10,000円");
+    expect(screen.getByText("-10,000円").className).not.toMatch(/text-(?:income|expense)/);
   });
 });

@@ -67,7 +67,12 @@ function ForecastEvent({ event }: { event: CalculatedBankCashFlowEvent }) {
         <p className="text-xs leading-relaxed text-muted-foreground">{getEvidenceText(event)}</p>
       </div>
       <div className="space-y-1 text-left sm:text-right">
-        <AmountDisplay amount={signedAmount} type={event.direction} showSign weight="semibold" />
+        <AmountDisplay
+          amount={signedAmount}
+          type={event.status === "actual" ? event.direction : "neutral"}
+          showSign
+          weight="semibold"
+        />
         <p className="text-xs text-muted-foreground">
           入出金後残高: <AmountDisplay amount={event.balanceAfter} type="balance" size="sm" />
         </p>

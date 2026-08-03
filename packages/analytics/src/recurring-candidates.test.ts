@@ -71,6 +71,7 @@ describe("generateRecurringCandidates", () => {
         classification: "other",
         confidence: "low",
         description: "新規振込",
+        recurringIdentity: "新規振込",
         predictedDate: "2026-08-10",
         predictedAmount: 150_000,
         evidence: {
@@ -86,6 +87,7 @@ describe("generateRecurringCandidates", () => {
         classification: "salary",
         confidence: "high",
         description: "給与 7月",
+        recurringIdentity: "給与",
         predictedDate: "2026-08-25",
         predictedAmount: 305_000,
         evidence: {
@@ -101,6 +103,7 @@ describe("generateRecurringCandidates", () => {
         classification: "rent",
         confidence: "medium",
         description: "家賃",
+        recurringIdentity: "家賃",
         predictedDate: "2026-08-28",
         predictedAmount: 81_000,
         evidence: {

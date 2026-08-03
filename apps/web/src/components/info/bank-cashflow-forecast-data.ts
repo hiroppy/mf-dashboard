@@ -7,6 +7,7 @@ import {
 import {
   classifyRecurringTransaction,
   generateRecurringCandidates,
+  matchesRecurringCandidateIdentity,
   type RecurringCandidate,
   type RecurringTransaction,
 } from "@mf-dashboard/analytics/recurring-candidates";
@@ -69,10 +70,6 @@ function toActualEvent(transaction: ForecastTransaction): BankCashFlowEventInput
   };
 }
 
-function normalizeDescription(description: string | null | undefined): string {
-  return description?.normalize("NFKC").trim().toLocaleLowerCase("ja-JP") ?? "";
-}
-
 function getBalanceAsOfDate(lastUpdated: string | null, currentDate: string): string | null {
   const date = lastUpdated?.slice(0, 10);
   if (!date || date < `${currentDate.slice(0, 7)}-01` || date > currentDate) return null;
@@ -89,6 +86,8 @@ function matchesRecordedCandidate(
   candidate: RecurringCandidate,
   transaction: ForecastTransaction,
 ): boolean {
+  if (transaction.accountId === null) return false;
+
   const amountDifference = Math.abs(Math.abs(transaction.amount) - candidate.predictedAmount);
   const amountTolerance = Math.max(
     1,
@@ -100,12 +99,22 @@ function matchesRecordedCandidate(
   return (
     transaction.accountId === candidate.accountId &&
     transaction.type === candidate.type &&
-    normalizeDescription(transaction.description) === normalizeDescription(candidate.description) &&
+    matchesRecurringCandidateIdentity(candidate, transaction) &&
     classifyRecurringTransaction(transaction) === candidate.classification &&
     amountDifference <= amountTolerance &&
     transaction.date >= earliestDate &&
     transaction.date <= latestDate
   );
+}
+
+function getBalanceAtForecastBoundary(forecast: BankBalanceForecast): number {
+  let balance = forecast.openingBalance;
+  for (const day of forecast.days) {
+    for (const event of day.events) {
+      if (event.status === "actual") balance = event.balanceAfter;
+    }
+  }
+  return balance;
 }
 
 function excludeRecordedCandidates(
@@ -178,6 +187,7 @@ export function buildBankCashFlowForecastViews(
 
   return forecasts.map((forecast) => ({
     ...forecast,
+    currentBalance: getBalanceAtForecastBoundary(forecast),
     accountName: accountNames.get(Number(forecast.accountId)) ?? "銀行口座",
   }));
 }

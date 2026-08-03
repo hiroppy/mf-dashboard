@@ -118,9 +118,33 @@ describe("buildBankCashFlowForecastViews", () => {
 
     expect(forecasts[0]).toMatchObject({
       balanceAsOfDate: "2026-08-01",
+      currentBalance: 105_000,
       openingBalance: 100_000,
       monthEndBalance: 105_000,
     });
+  });
+
+  it("候補生成と同じ正規化 identity で説明の月次差分を照合する", () => {
+    const actual = transaction(1, {
+      date: "2026-08-03",
+      amount: -10_000,
+      type: "expense",
+      description: "UTILITY INVOICE 1003",
+      category: null,
+      subCategory: null,
+    });
+    const forecasts = buildBankCashFlowForecastViews(accounts, [actual], "2026-08-03", [
+      candidate({
+        classification: "other",
+        description: "UTILITY INVOICE 1002",
+        recurringIdentity: "utility invoice",
+        predictedDate: "2026-08-03",
+      }),
+    ]);
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-1", status: "actual" },
+    ]);
   });
 
   it("説明なしの記録済み候補だけを一度だけ除外する", () => {
@@ -133,8 +157,16 @@ describe("buildBankCashFlowForecastViews", () => {
       subCategory: null,
     });
     const forecasts = buildBankCashFlowForecastViews(accounts, [actual], "2026-08-03", [
-      candidate({ description: null, predictedDate: "2026-08-03" }),
-      candidate({ description: null, predictedDate: "2026-08-03" }),
+      candidate({
+        description: null,
+        recurringIdentity: "家賃categorysep",
+        predictedDate: "2026-08-03",
+      }),
+      candidate({
+        description: null,
+        recurringIdentity: "家賃categorysep",
+        predictedDate: "2026-08-03",
+      }),
     ]);
 
     expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
