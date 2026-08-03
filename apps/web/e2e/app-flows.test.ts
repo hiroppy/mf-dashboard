@@ -92,6 +92,13 @@ test.describe("App flows", () => {
         await expect(actualBank.getByText("実績").first()).toBeVisible();
       });
     }
+
+    await test.step("Exclude banks outside the selected group", async () => {
+      await page.goto("/demo_group_001");
+      await expectHeading(page, "ダッシュボード");
+      await expect(page.getByText(/^\d+月の銀行別予測$/)).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "三井住友銀行" })).toHaveCount(0);
+    });
   });
 
   test("navigates between primary pages from the sidebar", async ({ page }) => {

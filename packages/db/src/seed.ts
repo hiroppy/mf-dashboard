@@ -14,6 +14,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { createClient } from "@libsql/client";
+import { getJstYearMonthKey, parseYearMonthKey } from "@mf-dashboard/date-utils";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "./schema/schema";
@@ -89,9 +90,7 @@ if (period && !/^\d{4}-\d{2}$/.test(period)) {
   console.error("--period must be in YYYY-MM format (e.g., --period=2026-03)");
   process.exit(1);
 }
-const currentDate = new Date();
-const YEAR_END = period ? Number(period.split("-")[0]) : currentDate.getFullYear();
-const MONTH_END = period ? Number(period.split("-")[1]) : currentDate.getMonth() + 1;
+const { year: YEAR_END, month: MONTH_END } = parseYearMonthKey(period ?? getJstYearMonthKey());
 const DEMO_FORECAST_AS_OF_DAY = 3;
 const today = new Date(dateStr(YEAR_END, MONTH_END, DEMO_FORECAST_AS_OF_DAY));
 fixedTimestamp = `${dateStr(YEAR_END, MONTH_END, DEMO_FORECAST_AS_OF_DAY)}T00:00:00.000Z`;
