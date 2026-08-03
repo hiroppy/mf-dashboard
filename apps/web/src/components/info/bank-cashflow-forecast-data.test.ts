@@ -1,6 +1,9 @@
 import type { RecurringCandidate } from "@mf-dashboard/analytics/recurring-candidates";
 import { describe, expect, it } from "vitest";
-import { buildBankCashFlowForecastViews } from "./bank-cashflow-forecast-data";
+import {
+  buildBankCashFlowForecastViews,
+  getBankForecastCurrentDate,
+} from "./bank-cashflow-forecast-data";
 
 const accounts = [
   {
@@ -220,5 +223,15 @@ describe("buildBankCashFlowForecastViews", () => {
     expect(
       buildBankCashFlowForecastViews([accounts[1]!], [transaction(1)], "2026-08-03", []),
     ).toEqual([]);
+  });
+});
+
+describe("getBankForecastCurrentDate", () => {
+  it("通常表示では当日を使う", () => {
+    expect(getBankForecastCurrentDate("2026-08-28", false)).toBe("2026-08-28");
+  });
+
+  it("demo 表示では代表候補を再現できる月初の基準日を使う", () => {
+    expect(getBankForecastCurrentDate("2026-08-28", true)).toBe("2026-08-03");
   });
 });

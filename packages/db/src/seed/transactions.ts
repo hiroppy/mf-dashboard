@@ -85,6 +85,28 @@ export const txTemplates: TxTemplate[] = [
     frequency: "monthly",
     fixedDay: 27,
   },
+  {
+    category: "その他",
+    subCategory: "カード支払い",
+    description: "デビットカード支払い",
+    type: "expense",
+    minAmount: 15000,
+    maxAmount: 15000,
+    accountName: "三井住友銀行",
+    frequency: "monthly",
+    fixedDay: 26,
+  },
+  {
+    category: "住宅",
+    subCategory: "ローン返済",
+    description: "ローン返済",
+    type: "expense",
+    minAmount: 20000,
+    maxAmount: 20000,
+    accountName: "楽天銀行",
+    frequency: "monthly",
+    fixedDay: 28,
+  },
   ...[3, 4, 5, 6, 10, 11].map(
     (mo): TxTemplate => ({
       category: "水道・光熱費",

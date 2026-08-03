@@ -40,6 +40,11 @@ export interface BankCashFlowForecastView extends BankBalanceForecast {
 
 const CANDIDATE_DATE_DRIFT_DAYS = 3;
 const CANDIDATE_AMOUNT_TOLERANCE_RATIO = 0.1;
+const DEMO_FORECAST_AS_OF_DAY = "03";
+
+export function getBankForecastCurrentDate(today: string, demoMode: boolean): string {
+  return demoMode ? `${today.slice(0, 7)}-${DEMO_FORECAST_AS_OF_DAY}` : today;
+}
 
 function isRecurringTransactionType(type: string): type is RecurringTransaction["type"] {
   return type === "income" || type === "expense" || type === "transfer";

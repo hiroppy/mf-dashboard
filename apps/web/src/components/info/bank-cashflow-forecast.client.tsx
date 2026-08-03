@@ -163,7 +163,48 @@ export function BankCashFlowForecastClient({ forecasts }: BankCashFlowForecastCl
           現在残高と、定期的な入出金を反映した月末残高の見込みです。
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <section
+          className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm"
+          aria-labelledby="bank-forecast-guide"
+        >
+          <h3 id="bank-forecast-guide" className="font-semibold">
+            表示の見方
+          </h3>
+          <dl className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1">
+              <dt>
+                <Badge variant={statusDetails.actual.variant}>{statusDetails.actual.label}</Badge>
+              </dt>
+              <dd className="text-xs leading-relaxed text-muted-foreground">
+                Money Forwardから取得済みの入出金です。
+              </dd>
+            </div>
+            <div className="space-y-1">
+              <dt>
+                <Badge variant={statusDetails.forecast.variant}>
+                  {statusDetails.forecast.label}
+                </Badge>
+              </dt>
+              <dd className="text-xs leading-relaxed text-muted-foreground">
+                過去の定期的な入出金から日付と金額を推定しています。
+              </dd>
+            </div>
+            <div className="space-y-1">
+              <dt>
+                <Badge variant={statusDetails.needs_review.variant}>
+                  {statusDetails.needs_review.label}
+                </Badge>
+              </dt>
+              <dd className="text-xs leading-relaxed text-muted-foreground">
+                根拠が少ない候補です。予定日と金額を確認してください。
+              </dd>
+            </div>
+          </dl>
+          <p className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">
+            今月だけの参考値です。未登録の臨時入出金や振替などは反映されず、将来の残高を保証しません。過去月表示と任意月への切替は対象外です。
+          </p>
+        </section>
         <div className="grid gap-4 lg:grid-cols-2">
           {forecasts.map((forecast) => (
             <BankForecastCard key={forecast.accountId} forecast={forecast} />
