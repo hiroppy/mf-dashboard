@@ -11,6 +11,7 @@
     "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
     "./forecast-assistance": "./src/forecast-assistance.ts",
+    "./bank-balance-forecast": "./src/bank-balance-forecast.ts",
     "./recurring-candidates": "./src/recurring-candidates.ts",
     "./types": "./src/types.ts"
   },
