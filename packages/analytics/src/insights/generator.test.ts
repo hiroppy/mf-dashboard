@@ -206,6 +206,22 @@ describe("generateInsights", () => {
     });
   });
 
+  it("should preserve substantive text surrounding colons", async () => {
+    const output = {
+      ...validOutput,
+      summary: "1月の収支は収入：50万円、支出：30万円です。",
+      savingsInsight: "総資産に対する現金と投資の比率は2:3です。",
+    };
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(output));
+
+    const result = await generateInsights(mockDb, groupId);
+
+    expect(result.summary).toBe("1月の収支は収入、50万円、支出、30万円です。");
+    expect(result.savingsInsight).toBe("総資産に対する現金と投資の比率は2、3です。");
+  });
+
   it("should throw when Stage 2 output is null", async () => {
     mockGenerateText
       .mockResolvedValueOnce(mockStage1Result("memo"))
