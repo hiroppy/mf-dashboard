@@ -137,6 +137,25 @@ describe("generateInsights", () => {
     expect(stage2Args).toHaveProperty("system");
   });
 
+  it("should request concise insights without template labels", async () => {
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(validOutput));
+
+    await generateInsights(mockDb, groupId);
+
+    const stage2Args = mockGenerateText.mock.calls[1][0];
+    expect(stage2Args.system).toContain("最初の1文で、その分野で最も重要な結論");
+    expect(stage2Args.system).toContain("見出しやラベルを一切付けず");
+    expect(stage2Args.system).toContain("短い語句＋コロン");
+    expect(stage2Args.system).toContain("網羅性より重要度を優先する");
+    expect(stage2Args.system).toContain("行動を変えるべき場合だけ");
+    expect(stage2Args.system).toContain("重要性の高い事実だけを伝える");
+    expect(stage2Args.system).toContain("推測、一般論、定型的な助言は書かない");
+    expect(stage2Args.system).toContain("大きな変化はない");
+    expect(stage2Args.system).toContain("改善効果の数値を作ること");
+  });
+
   it("should use JST date context across UTC year boundary", async () => {
     vi.useFakeTimers({ now: new Date("2025-12-31T15:00:00.000Z") });
     mockGenerateText
@@ -160,6 +179,31 @@ describe("generateInsights", () => {
 
     const result = await generateInsights(mockDb, groupId);
     expect(result).toEqual(validOutput);
+  });
+
+  it("should remove leading labels from every generated insight", async () => {
+    const labeledOutput = {
+      summary: "結論：家計は安定しています。要点：支出も横ばいです。補足（例：臨時収入）です。",
+      savingsInsight: "最重要結論：予備資金は十分です。",
+      investmentInsight: "評価: 分散されています。",
+      spendingInsight: "比較事実：支出は前月比で減少しました。",
+      balanceInsight: "収支：黒字を維持しています。",
+      liabilityInsight: "アクション：追加対応は不要です。",
+    };
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(labeledOutput));
+
+    const result = await generateInsights(mockDb, groupId);
+
+    expect(result).toEqual({
+      summary: "家計は安定しています。支出も横ばいです。補足（例、臨時収入）です。",
+      savingsInsight: "予備資金は十分です。",
+      investmentInsight: "分散されています。",
+      spendingInsight: "支出は前月比で減少しました。",
+      balanceInsight: "黒字を維持しています。",
+      liabilityInsight: "追加対応は不要です。",
+    });
   });
 
   it("should throw when Stage 2 output is null", async () => {
