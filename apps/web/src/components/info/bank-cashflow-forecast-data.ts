@@ -161,7 +161,6 @@ function isMirroredCandidateForConfirmedCard(
   if (
     candidate.accountId !== confirmed.accountId ||
     candidate.type !== confirmed.type ||
-    candidate.classification !== "card" ||
     !confirmed.recurringIdentity?.startsWith(CONFIRMED_CARD_IDENTITY_PREFIX)
   ) {
     return false;

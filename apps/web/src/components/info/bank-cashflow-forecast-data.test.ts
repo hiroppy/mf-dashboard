@@ -311,6 +311,45 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("最新月で分類と投稿日が変わっても同じ定期候補を重複生成しない", () => {
+    const history = [
+      transaction(1, {
+        date: "2026-05-05",
+        amount: 10_000,
+        type: "expense",
+        description: "定期サービス",
+        category: "家賃",
+        subCategory: null,
+      }),
+      transaction(2, {
+        date: "2026-06-05",
+        amount: 10_000,
+        type: "expense",
+        description: "定期サービス",
+        category: "家賃",
+        subCategory: null,
+      }),
+      transaction(3, {
+        date: "2026-07-10",
+        amount: 10_000,
+        type: "expense",
+        description: "定期サービス",
+        category: "その他",
+        subCategory: null,
+      }),
+    ];
+
+    const forecasts = buildBankCashFlowForecastViews(accounts, history, "2026-08-03");
+    const events = forecasts[0]?.days.flatMap(({ events }) => events) ?? [];
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      status: "forecast",
+      description: "定期サービス",
+      classification: "other",
+    });
+  });
+
   it("銀行を振替元とする定期的なカード引落しを支出として予測する", () => {
     const transfers = ["2026-05-20", "2026-06-20", "2026-07-20"].map((date, index) =>
       transaction(index + 1, {
@@ -587,6 +626,55 @@ describe("buildBankCashFlowForecastViews", () => {
               subCategory: null,
             }),
           ]),
+    ]);
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, cardAccount],
+      transactions,
+      "2026-08-03",
+    );
+    const events = forecasts[0]?.days.flatMap(({ events }) => events) ?? [];
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      status: "forecast",
+      amount: 42_000,
+      amountSource: "scheduled_withdrawal",
+    });
+  });
+
+  it("一般カテゴリの銀行明細がカード振替のミラーでも確定予測と二重計上しない", () => {
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transactions = ["2026-05-20", "2026-06-20", "2026-07-20"].flatMap((date, index) => [
+      transaction(index * 2 + 1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date,
+        amount: 30_000,
+        type: "transfer",
+        description: "カード利用代金",
+        category: null,
+        subCategory: null,
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+      }),
+      transaction(index * 2 + 2, {
+        accountId: 1,
+        date,
+        amount: 30_000,
+        type: "expense",
+        description: "口座振替",
+        category: "その他",
+        subCategory: "定期支払",
+      }),
     ]);
 
     const forecasts = buildBankCashFlowForecastViews(

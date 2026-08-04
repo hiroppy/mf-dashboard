@@ -106,7 +106,6 @@ export function generateBankForecastCandidates(
           (currentCandidate) =>
             currentCandidate.accountId === staleCandidate.accountId &&
             currentCandidate.type === staleCandidate.type &&
-            currentCandidate.classification === staleCandidate.classification &&
             currentCandidate.recurringIdentity === staleCandidate.recurringIdentity,
         ),
     )
