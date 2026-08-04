@@ -34,7 +34,31 @@ it("取得した予定額を対応する口座だけに反映する", () => {
   ).toEqual({
     accounts: [
       { ...account, scheduledWithdrawalAmount: 20_000, scheduledWithdrawalConfirmed: true },
-      { ...account, mfId: "account-b" },
+      {
+        ...account,
+        mfId: "account-b",
+        scheduledWithdrawalAmount: 0,
+        scheduledWithdrawalConfirmed: false,
+      },
     ],
+  });
+});
+
+it("今回確認できなかった古い予定額を未確定へ戻す", () => {
+  const account = {
+    mfId: "account-a",
+    name: "Institution A",
+    type: "自動連携",
+    status: "ok" as const,
+    lastUpdated: "",
+    url: "/accounts/show/account-a",
+    totalAssets: 0,
+    scheduledWithdrawalAmount: 42_000,
+    scheduledWithdrawalConfirmed: true,
+  };
+
+  expect(applyScheduledWithdrawals({ accounts: [account] }, new Map()).accounts[0]).toMatchObject({
+    scheduledWithdrawalAmount: 0,
+    scheduledWithdrawalConfirmed: false,
   });
 });

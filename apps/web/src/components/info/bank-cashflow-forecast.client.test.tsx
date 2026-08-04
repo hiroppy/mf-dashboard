@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefreshMo
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   routerRefreshMock.mockReset();
 });
 
@@ -185,6 +186,22 @@ describe("BankCashFlowForecastClient", () => {
           groupId: "group-a",
         }),
       }),
+    );
+  });
+
+  it("base path配下のAPIへ予測除外を送信する", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/dashboard");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    render(<BankCashFlowForecastClient forecasts={[forecast]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "銀行 Aの入出金詳細を開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "予測から除外" }));
+    fireEvent.click(screen.getByRole("button", { name: "除外する" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/dashboard/api/bank-forecast/dismiss",
+      expect.any(Object),
     );
   });
 

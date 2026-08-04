@@ -45,7 +45,7 @@ describe("accounts page structure", () => {
     });
   });
 
-  test("代表カード口座の詳細に引き落とし予定額の合計と表構造が存在する", async () => {
+  test("代表カード口座の詳細に引き落とし予定額の合計と表構造が存在する", async (testContext) => {
     await withNewPage(context, async (page) => {
       // Production checks every linked detail page. This read-only E2E inspects at most one
       // representative card page and skips when the current account set has no card candidate.
@@ -53,7 +53,10 @@ describe("accounts page structure", () => {
       const candidate = selectLinkedPnsAccounts(await getRegisteredAccounts(page)).find(
         ({ mfId }) => categories.get(mfId) === "カード",
       );
-      if (!candidate) return;
+      if (!candidate) {
+        testContext.skip();
+        return;
+      }
 
       const response = await page.goto(mfUrls.accountDetail(candidate.mfId), {
         waitUntil: "domcontentloaded",

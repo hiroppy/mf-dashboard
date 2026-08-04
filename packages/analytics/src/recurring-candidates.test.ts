@@ -143,6 +143,21 @@ describe("generateRecurringCandidates", () => {
     expect(result[0]).toMatchObject({ classification: "salary", predictedAmount: 300_000 });
   });
 
+  it("does not forecast a one-off bonus after one occurrence", () => {
+    expect(
+      generateRecurringCandidates(
+        [
+          {
+            ...transaction("2026-07-10", 500_000, "振込", "income"),
+            category: "収入",
+            subCategory: "賞与",
+          },
+        ],
+        "2026-08",
+      ),
+    ).toEqual([]);
+  });
+
   it("does not treat one unstructured transaction as recurring", () => {
     expect(
       generateRecurringCandidates(

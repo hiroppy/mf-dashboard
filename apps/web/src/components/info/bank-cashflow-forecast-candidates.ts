@@ -169,6 +169,7 @@ export function generateConfirmedWithdrawalCandidates(
       .sort((left, right) => left.date.localeCompare(right.date));
     const latest = transfers.at(-1);
     if (!latest?.transferTargetAccountId) continue;
+    if (transfers.some(({ date }) => date.startsWith(month))) continue;
 
     const transferHistory = transfers.map((transaction) => ({
       ...transaction,

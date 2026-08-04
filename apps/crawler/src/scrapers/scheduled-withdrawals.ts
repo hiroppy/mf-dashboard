@@ -40,7 +40,11 @@ export function applyScheduledWithdrawals(
             scheduledWithdrawalAmount: status.amount,
             scheduledWithdrawalConfirmed: status.confirmed,
           }
-        : account;
+        : {
+            ...account,
+            scheduledWithdrawalAmount: 0,
+            scheduledWithdrawalConfirmed: false,
+          };
     }),
   };
 }

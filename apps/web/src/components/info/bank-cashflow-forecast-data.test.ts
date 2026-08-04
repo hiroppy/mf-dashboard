@@ -336,6 +336,25 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("同じ振替行が重複しても銀行残高へ一度だけ反映する", () => {
+    const duplicate = transaction(1, {
+      accountId: 2,
+      transferTargetAccountId: 1,
+      type: "transfer",
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+    });
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [duplicate, { ...duplicate, id: 2 }],
+      "2026-08-03",
+      [],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toHaveLength(1);
+    expect(forecasts[0]?.currentBalance).toBe(100_000);
+  });
+
   it("同日同額の通常明細がある振替は通常明細を優先して予測する", () => {
     const transactions = ["2026-05-25", "2026-06-25", "2026-07-25"].flatMap((date, index) => [
       transaction(index * 2 + 1, {
@@ -434,6 +453,41 @@ describe("buildBankCashFlowForecastViews", () => {
       },
     ]);
     expect(forecasts[0]?.monthEndBalance).toBe(58_000);
+  });
+
+  it("確定カード引落しが当月実績済みなら予測を追加しない", () => {
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transfers = ["2026-06-20", "2026-07-20", "2026-08-02"].map((date, index) =>
+      transaction(index + 1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date,
+        amount: 42_000,
+        type: "transfer",
+        description: "カード利用代金",
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+      }),
+    );
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, cardAccount],
+      transfers,
+      "2026-08-03",
+    );
+    const events = forecasts[0]?.days.flatMap(({ events }) => events) ?? [];
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ status: "actual", amount: 42_000 });
+    expect(forecasts[0]?.monthEndBalance).toBe(100_000);
   });
 
   it("引き落とし予定額が未定ならカード利用残高を参考額にする", () => {

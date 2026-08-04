@@ -1,10 +1,15 @@
-import { desc, eq, and, gte, sql, inArray } from "drizzle-orm";
+import { desc, eq, and, gte, sql, inArray, or } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 import { transformTransferToIncome } from "../shared/transfer";
 
 export async function getTransactions(
-  options?: { limit?: number; groupId?: string; startDate?: string },
+  options?: {
+    limit?: number;
+    groupId?: string;
+    startDate?: string;
+    includeTransferTargetAccounts?: boolean;
+  },
   db: Db = getDb(),
 ) {
   const groupId = await resolveGroupId(db, options?.groupId);
@@ -33,7 +38,12 @@ export async function getTransactions(
     .leftJoin(schema.accounts, eq(schema.accounts.id, schema.transactions.accountId))
     .where(
       and(
-        inArray(schema.transactions.accountId, accountIds),
+        options?.includeTransferTargetAccounts
+          ? or(
+              inArray(schema.transactions.accountId, accountIds),
+              inArray(schema.transactions.transferTargetAccountId, accountIds),
+            )
+          : inArray(schema.transactions.accountId, accountIds),
         options?.startDate ? gte(schema.transactions.date, options.startDate) : undefined,
       ),
     )

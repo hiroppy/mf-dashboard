@@ -50,6 +50,7 @@ function toBankCashFlowTransactions(
 ): BankCashFlowTransaction[] {
   const cashFlows: BankCashFlowTransaction[] = [];
   const normalTransactionKeys = createNormalTransactionMirrorKeys(transactions);
+  const seenTransferKeys = new Set<string>();
 
   for (const transaction of transactions) {
     if (
@@ -74,6 +75,15 @@ function toBankCashFlowTransactions(
       }
       continue;
     }
+
+    const transferKey = [
+      transaction.accountId,
+      transaction.transferTargetAccountId,
+      transaction.date,
+      Math.abs(transaction.amount),
+    ].join(":");
+    if (seenTransferKeys.has(transferKey)) continue;
+    seenTransferKeys.add(transferKey);
 
     if (transaction.accountId !== null && bankAccountIds.has(transaction.accountId)) {
       cashFlows.push({

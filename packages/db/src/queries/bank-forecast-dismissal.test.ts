@@ -59,6 +59,11 @@ describe("bank forecast dismissals", () => {
       TEST_GROUP_ID,
       db,
     );
+    await dismissBankForecastCandidate(
+      { ...input, dismissedThroughDate: "2026-06-20" },
+      TEST_GROUP_ID,
+      db,
+    );
 
     await expect(getBankForecastDismissals(TEST_GROUP_ID, db)).resolves.toMatchObject([
       { ...input, dismissedThroughDate: "2026-08-20" },

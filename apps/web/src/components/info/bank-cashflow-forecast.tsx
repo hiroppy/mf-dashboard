@@ -27,7 +27,7 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
   const historyStartDate = `${shiftYearMonthKey(currentDate.slice(0, 7), -12)}-01`;
   const [accounts, transactions, holdings, dismissals] = await Promise.all([
     getAccountsWithAssets(groupId),
-    getTransactions({ groupId, startDate: historyStartDate }),
+    getTransactions({ groupId, startDate: historyStartDate, includeTransferTargetAccounts: true }),
     getHoldingsWithLatestValues(groupId),
     getBankForecastDismissals(groupId),
   ]);

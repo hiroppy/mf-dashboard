@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { getAccountIdsForGroup, resolveGroupId } from "../shared/group-filter";
 
@@ -49,7 +49,10 @@ export async function dismissBankForecastCandidate(
         schema.bankForecastDismissals.direction,
         schema.bankForecastDismissals.recurringIdentity,
       ],
-      set: { dismissedThroughDate: input.dismissedThroughDate, updatedAt: now },
+      set: {
+        dismissedThroughDate: sql`max(${schema.bankForecastDismissals.dismissedThroughDate}, excluded.dismissed_through_date)`,
+        updatedAt: now,
+      },
     });
   return true;
 }

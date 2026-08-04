@@ -8,6 +8,7 @@ import type { RecurringCandidateClassification } from "@mf-dashboard/analytics/r
 import { CircleHelp, EyeOff, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { withBasePath } from "../../lib/base-path";
 import { formatCurrency, formatDateShort } from "../../lib/format";
 import { cn } from "../../lib/utils";
 import { AmountDisplay } from "../ui/amount-display";
@@ -119,7 +120,7 @@ function ForecastEvent({
     if (!dismissal) return;
     setError(false);
     startTransition(async () => {
-      const response = await fetch("/api/bank-forecast/dismiss", {
+      const response = await fetch(withBasePath("/api/bank-forecast/dismiss"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...dismissal, groupId }),
