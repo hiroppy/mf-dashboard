@@ -8,9 +8,13 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:mutation": "stryker run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/typescript-checker": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

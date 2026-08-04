@@ -14,6 +14,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:mutation": "stryker run",
     "typecheck": "tsc --noEmit",
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
   },
@@ -27,6 +28,9 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/typescript-checker": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

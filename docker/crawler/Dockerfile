@@ -28,6 +28,7 @@ RUN arch="$(dpkg --print-architecture)" \
     && rm -f /tmp/supercronic
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY patches ./patches
 COPY apps/crawler/package.json ./apps/crawler/
 COPY packages/db/package.json ./packages/db/
 COPY packages/date-utils/package.json ./packages/date-utils/

@@ -1,0 +1,54 @@
+name: Mutation Testing
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-testing-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'full' }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: crawler
+            path: apps/crawler
+          - workspace: web
+            path: apps/web
+          - workspace: analytics
+            path: packages/analytics
+          - workspace: date-utils
+            path: packages/date-utils
+          - workspace: db
+            path: packages/db
+          - workspace: meta
+            path: packages/meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - run: pnpm --filter @mf-dashboard/${{ matrix.workspace }} test:mutation
+      - name: Verify mutation reports
+        run: |
+          test -s "${{ matrix.path }}/reports/mutation/mutation.html"
+          test -s "${{ matrix.path }}/reports/mutation/mutation.json"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: mutation-report-${{ matrix.workspace }}
+          path: |
+            ${{ matrix.path }}/reports/mutation/mutation.html
+            ${{ matrix.path }}/reports/mutation/mutation.json
+          if-no-files-found: error
+          retention-days: 7

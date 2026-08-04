@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  JST_TIME_ZONE,
   addDaysToIsoDateKey,
   addMonthsToIsoDateKey,
   formatIsoDateKey,
@@ -8,6 +9,7 @@ import {
   getDayOfWeekIsoDateKey,
   getDaysInMonth,
   getEndOfPreviousMonthIsoDateKey,
+  getJstDateParts,
   getJstTodayIsoDate,
   getJstYearMonthKey,
   parseIsoDateKey,
@@ -16,6 +18,15 @@ import {
 } from "./date-utils";
 
 describe("JST date keys", () => {
+  it("uses the Asia/Tokyo timezone", () => {
+    expect(JST_TIME_ZONE).toBe("Asia/Tokyo");
+    expect(getJstDateParts(new Date("2025-03-31T15:00:00.000Z"))).toEqual({
+      year: 2025,
+      month: 4,
+      day: 1,
+    });
+  });
+
   it("uses JST today across the UTC day boundary", () => {
     expect(getJstTodayIsoDate(new Date("2025-03-31T14:59:59.000Z"))).toBe("2025-03-31");
     expect(getJstTodayIsoDate(new Date("2025-03-31T15:00:00.000Z"))).toBe("2025-04-01");
@@ -36,6 +47,7 @@ describe("ISO date key helpers", () => {
   it("preserves four-digit years below 1000", () => {
     expect(formatIsoDateKey({ year: 20, month: 1, day: 1 })).toBe("0020-01-01");
     expect(formatYearMonthKey({ year: 20, month: 1 })).toBe("0020-01");
+    expect(formatYearMonthKey({ year: 9999, month: 12 })).toBe("9999-12");
   });
 
   it("preserves years 0-99 in UTC calendar arithmetic", () => {
@@ -50,8 +62,29 @@ describe("ISO date key helpers", () => {
 
   it("rejects invalid date keys", () => {
     expect(() => formatIsoDateKey({ year: 2025, month: 2, day: 29 })).toThrow("Invalid day");
+    expect(() => formatIsoDateKey({ year: 2025, month: 1, day: 0 })).toThrow("Invalid day: 0");
+    expect(() => formatIsoDateKey({ year: 2025.5, month: 1, day: 1 })).toThrow(
+      "Invalid year: 2025.5",
+    );
+    expect(() => formatIsoDateKey({ year: 2025, month: 1.5, day: 1 })).toThrow(
+      "Invalid month: 1.5",
+    );
+    expect(() => formatIsoDateKey({ year: 2025, month: 1, day: 1.5 })).toThrow("Invalid day: 1.5");
+    expect(() => formatYearMonthKey({ year: -1, month: 1 })).toThrow("Invalid year: -1");
+    expect(() => formatYearMonthKey({ year: 10_000, month: 1 })).toThrow("Invalid year: 10000");
+    expect(() => formatYearMonthKey({ year: 2025, month: 0 })).toThrow("Invalid month: 0");
     expect(() => parseIsoDateKey("2025-2-9")).toThrow("Invalid ISO date key");
+    expect(() => parseIsoDateKey("x2025-02-09")).toThrow("Invalid ISO date key");
+    expect(() => parseIsoDateKey("2025-02-09x")).toThrow("Invalid ISO date key");
+    expect(() => parseYearMonthKey("x2025-02")).toThrow("Invalid year-month key");
+    expect(() => parseYearMonthKey("2025-02x")).toThrow("Invalid year-month key");
     expect(() => parseYearMonthKey("2025-13")).toThrow("Invalid month");
+  });
+
+  it("rejects non-integer shifts", () => {
+    expect(() => addDaysToIsoDateKey("2025-01-01", 1.5)).toThrow("Invalid days: 1.5");
+    expect(() => addMonthsToIsoDateKey("2025-01-01", 1.5)).toThrow("Invalid months: 1.5");
+    expect(() => shiftYearMonthKey("2025-01", 1.5)).toThrow("Invalid months: 1.5");
   });
 
   it("adds days over month and year boundaries in calendar-date space", () => {
@@ -84,6 +117,12 @@ describe("ISO date key helpers", () => {
 });
 
 describe("JST display formatter", () => {
+  it("includes the year and seconds by default", () => {
+    expect(formatJstDateTimeForDisplay(new Date("2025-04-30T01:30:00.000Z"))).toBe(
+      "2025/4/30 10:30:00",
+    );
+  });
+
   it("formats date-time for display in JST", () => {
     expect(
       formatJstDateTimeForDisplay(new Date("2025-04-30T01:30:00.000Z"), {

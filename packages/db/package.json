@@ -25,6 +25,7 @@
   "scripts": {
     "build:demo": "DB_PATH=../../data/demo.db tsx src/seed.ts",
     "test": "vitest run",
+    "test:mutation": "stryker run",
     "typecheck": "tsc --noEmit",
     "studio": "drizzle-kit studio"
   },
@@ -34,6 +35,9 @@
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/typescript-checker": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "@types/node": "catalog:",
     "drizzle-kit": "0.31.10",
     "typescript": "catalog:",

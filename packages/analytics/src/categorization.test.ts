@@ -116,4 +116,41 @@ describe("generateCategoryDecisionWithLLM", () => {
       reason: "subscription service",
     });
   });
+
+  test.each([
+    { confidence: 0, valid: true },
+    { confidence: 1, valid: true },
+    { confidence: -0.01, valid: false },
+    { confidence: 1.01, valid: false },
+  ])("confidence=$confidence の境界を検証する", async ({ confidence, valid }) => {
+    vi.mocked(generateText).mockResolvedValue({ output: null } as Awaited<
+      ReturnType<typeof generateText>
+    >);
+
+    await generateCategoryDecisionWithLLM({ transaction, candidates });
+
+    const request = vi.mocked(generateText).mock.calls[0]?.[0];
+    const output = request?.output as
+      | {
+          schema?: {
+            safeParse(value: unknown): { success: boolean };
+          };
+        }
+      | undefined;
+    const parsed = output?.schema?.safeParse({
+      largeCategoryId: "11",
+      middleCategoryId: "41",
+      confidence,
+      reason: "matched candidate",
+    });
+    expect(parsed?.success).toBe(valid);
+  });
+
+  test("LLMが構造化出力を返さない場合はnullを返す", async () => {
+    vi.mocked(generateText).mockResolvedValue({ output: null } as Awaited<
+      ReturnType<typeof generateText>
+    >);
+
+    await expect(generateCategoryDecisionWithLLM({ transaction, candidates })).resolves.toBeNull();
+  });
 });

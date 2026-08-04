@@ -24,9 +24,11 @@ secrets/
 
 playwright-report
 test-results
+reports/
 storybook-static/
 .playwright-mcp
 apps/crawler/tests/e2e/screenshots/
+apps/crawler/data/
 
 .worktrees/
 docs/plans
