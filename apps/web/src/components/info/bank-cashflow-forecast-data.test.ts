@@ -845,6 +845,38 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("予測月より未来のカード振替を現在月の確定予測に使わない", () => {
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transfers = ["2026-05-25", "2026-06-25", "2026-07-25", "2026-09-10"].map((date, index) =>
+      transaction(index + 1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date,
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+    );
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, cardAccount],
+      transfers,
+      "2026-08-03",
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { date: "2026-08-25", amountSource: "scheduled_withdrawal" },
+    ]);
+  });
+
   it("カードの引落先が対象外銀行へ変わった場合は旧銀行に確定予測を出さない", () => {
     const cardAccount = {
       id: 3,

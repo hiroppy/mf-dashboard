@@ -145,6 +145,10 @@ export function generateConfirmedWithdrawalCandidates(
   asOfDate: string,
 ): RecurringCandidate[] {
   const targetMonth = parseYearMonthKey(month);
+  const targetMonthEnd = formatIsoDateKey({
+    ...targetMonth,
+    day: getDaysInMonth(targetMonth.year, targetMonth.month),
+  });
   const candidates: RecurringCandidate[] = [];
 
   for (const account of accounts) {
@@ -158,6 +162,7 @@ export function generateConfirmedWithdrawalCandidates(
         (transaction) =>
           transaction.accountId === account.id &&
           transaction.transferTargetAccountId !== null &&
+          transaction.date <= targetMonthEnd &&
           (transaction.type === "transfer" || transaction.isTransfer),
       )
       .sort((left, right) => left.date.localeCompare(right.date));
