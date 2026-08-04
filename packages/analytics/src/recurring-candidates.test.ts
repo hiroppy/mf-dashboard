@@ -181,20 +181,23 @@ describe("generateRecurringCandidates", () => {
     ).toEqual([]);
   });
 
-  it("does not forecast a one-off bonus described as bonus under a salary category", () => {
-    expect(
-      generateRecurringCandidates(
-        [
-          {
-            ...transaction("2026-07-10", 500_000, "夏季賞与", "income"),
-            category: "収入",
-            subCategory: "給与",
-          },
-        ],
-        "2026-08",
-      ),
-    ).toEqual([]);
-  });
+  it.each(["夏季賞与", "特別ボーナス", "Annual Bonus"])(
+    "does not forecast a one-off bonus described as %s under a salary category",
+    (description) => {
+      expect(
+        generateRecurringCandidates(
+          [
+            {
+              ...transaction("2026-07-10", 500_000, description, "income"),
+              category: "収入",
+              subCategory: "給与",
+            },
+          ],
+          "2026-08",
+        ),
+      ).toEqual([]);
+    },
+  );
 
   it("does not treat one unstructured transaction as recurring", () => {
     expect(

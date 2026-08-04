@@ -61,6 +61,7 @@ interface NormalizedTransaction extends RecurringTransaction {
 
 const DEFAULT_LOOKBACK_MONTHS = 12;
 const GENERIC_DESCRIPTIONS = new Set(["payment", "入出金", "振替", "振込", "口座振替", "自動振替"]);
+const BONUS_TERMS = ["賞与", "ボーナス", "bonus"];
 
 const classificationRules: Array<{
   classification: RecurringCandidateClassification;
@@ -187,7 +188,7 @@ function hasStructuredIncomeClassification(transaction: NormalizedTransaction): 
   const structuredText = normalizeText(
     [transaction.category, transaction.subCategory, transaction.description].join(" "),
   );
-  if (structuredText.includes("賞与")) return false;
+  if (BONUS_TERMS.some((term) => includesTerm(structuredText, term))) return false;
   const classification = classifyRecurringTransaction({
     category: transaction.category,
     subCategory: transaction.subCategory,
