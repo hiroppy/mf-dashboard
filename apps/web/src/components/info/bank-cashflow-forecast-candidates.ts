@@ -105,6 +105,7 @@ export function generateBankForecastCandidates(
   )
     .filter(
       (staleCandidate) =>
+        staleCandidate.evidence.occurrenceCount >= 2 &&
         !currentCandidates.some(
           (currentCandidate) =>
             currentCandidate.accountId === staleCandidate.accountId &&

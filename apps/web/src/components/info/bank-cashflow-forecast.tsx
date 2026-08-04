@@ -1,10 +1,8 @@
 import { getJstTodayIsoDate, shiftYearMonthKey } from "@mf-dashboard/date-utils";
-import {
-  getAccountsWithAssets,
-  getHoldingsWithLatestValues,
-  getTransactions,
-} from "@mf-dashboard/db";
+import { getAccountsWithAssets } from "@mf-dashboard/db/queries/account";
 import { getBankForecastDismissals } from "@mf-dashboard/db/queries/bank-forecast-dismissal";
+import { getHoldingsWithLatestValues } from "@mf-dashboard/db/queries/holding";
+import { getTransactions } from "@mf-dashboard/db/queries/transaction";
 import { Landmark } from "lucide-react";
 import { EmptyState } from "../ui/empty-state";
 import {
