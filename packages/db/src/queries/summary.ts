@@ -269,6 +269,7 @@ export async function getDeduplicatedTransferExpense(
       date: schema.transactions.date,
       amount: schema.transactions.amount,
       type: schema.transactions.type,
+      isTransfer: schema.transactions.isTransfer,
     })
     .from(schema.transactions)
     .where(

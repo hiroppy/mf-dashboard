@@ -218,6 +218,18 @@ describe("BankCashFlowForecastClient", () => {
     expect(screen.getByRole("button", { name: "予測から除外" })).toBeTruthy();
   });
 
+  it("通信失敗時は予測除外エラーを表示する", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("network error"));
+    render(<BankCashFlowForecastClient forecasts={[forecast]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "銀行 Aの入出金詳細を開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "予測から除外" }));
+    fireEvent.click(screen.getByRole("button", { name: "除外する" }));
+
+    expect(await screen.findByText("予測を除外できませんでした。")).toBeTruthy();
+    expect(routerRefreshMock).not.toHaveBeenCalled();
+  });
+
   it("書き込み不可のデモでは除外操作を表示しない", () => {
     render(<BankCashFlowForecastClient forecasts={[forecast]} allowForecastDismissal={false} />);
 

@@ -120,12 +120,17 @@ function ForecastEvent({
     if (!dismissal) return;
     setError(false);
     startTransition(async () => {
-      const response = await fetch(withBasePath("/api/bank-forecast/dismiss"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...dismissal, groupId }),
-      });
-      if (!response.ok) {
+      try {
+        const response = await fetch(withBasePath("/api/bank-forecast/dismiss"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...dismissal, groupId }),
+        });
+        if (!response.ok) {
+          setError(true);
+          return;
+        }
+      } catch {
         setError(true);
         return;
       }

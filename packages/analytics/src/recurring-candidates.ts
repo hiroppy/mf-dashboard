@@ -162,7 +162,10 @@ function median(values: number[]): number {
 
 function getConsecutiveSuffix(transactions: NormalizedTransaction[]): NormalizedTransaction[] {
   const byMonth = new Map<string, NormalizedTransaction>();
-  for (const transaction of transactions) byMonth.set(transaction.month, transaction);
+  for (const transaction of transactions) {
+    const existing = byMonth.get(transaction.month);
+    if (!existing || transaction.date >= existing.date) byMonth.set(transaction.month, transaction);
+  }
 
   const occurrences = [...byMonth.values()].sort((left, right) =>
     left.date.localeCompare(right.date),

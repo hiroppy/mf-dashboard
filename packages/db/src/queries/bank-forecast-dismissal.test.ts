@@ -71,10 +71,36 @@ describe("bank forecast dismissals", () => {
   });
 
   it("rejects an account outside the selected group", async () => {
+    const now = new Date().toISOString();
+    const externalAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "account-b",
+        name: "Account B",
+        type: "automatic",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: schema.accounts.id })
+      .get();
+    await db.insert(schema.groups).values({
+      id: "other-group",
+      name: "Other Group",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.groupAccounts).values({
+      groupId: "other-group",
+      accountId: externalAccount.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     await expect(
       dismissBankForecastCandidate(
         {
-          accountId: accountId + 1,
+          accountId: externalAccount.id,
           direction: "income",
           recurringIdentity: "deposit",
           dismissedThroughDate: "2026-07-20",

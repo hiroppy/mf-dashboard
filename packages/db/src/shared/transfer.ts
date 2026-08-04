@@ -12,7 +12,7 @@ interface NormalTransactionMirror {
   date: string | null;
   amount: number;
   type: string;
-  isTransfer?: boolean;
+  isTransfer: boolean;
 }
 
 interface TransferMirror {

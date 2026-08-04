@@ -42,6 +42,23 @@ describe("POST /api/bank-forecast/dismiss", () => {
     expect(dismissMock).not.toHaveBeenCalled();
   });
 
+  it.each(["2026-02-31", "2026-99-99"])("rejects invalid calendar date %s", async (date) => {
+    const response = await POST(
+      new Request("http://localhost/api/bank-forecast/dismiss", {
+        method: "POST",
+        body: JSON.stringify({
+          accountId: 1,
+          direction: "expense",
+          recurringIdentity: "rent",
+          dismissedThroughDate: date,
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(dismissMock).not.toHaveBeenCalled();
+  });
+
   it("saves the dismissal watermark and revalidates forecasts", async () => {
     dismissMock.mockResolvedValue(true);
     const response = await POST(

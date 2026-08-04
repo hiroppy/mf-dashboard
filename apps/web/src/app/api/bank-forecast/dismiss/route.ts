@@ -1,3 +1,4 @@
+import { parseIsoDateKey } from "@mf-dashboard/date-utils";
 import { dismissBankForecastCandidate } from "@mf-dashboard/db";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
@@ -12,6 +13,16 @@ interface DismissRequest {
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
+function isIsoDate(value: string): boolean {
+  if (!ISO_DATE_PATTERN.test(value)) return false;
+  try {
+    parseIsoDateKey(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   if (process.env.VERCEL === "1") {
     return NextResponse.json({ error: "not available in demo" }, { status: 403 });
@@ -25,7 +36,7 @@ export async function POST(request: Request) {
     typeof body.recurringIdentity !== "string" ||
     body.recurringIdentity.length === 0 ||
     typeof body.dismissedThroughDate !== "string" ||
-    !ISO_DATE_PATTERN.test(body.dismissedThroughDate) ||
+    !isIsoDate(body.dismissedThroughDate) ||
     (body.groupId !== undefined && typeof body.groupId !== "string")
   ) {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });

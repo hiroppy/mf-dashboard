@@ -7,7 +7,7 @@ import {
 
 describe("transfer mirror detection", () => {
   const normalTransactions = [
-    { accountId: 1, date: "2025-04-15", amount: 10_000, type: "expense" },
+    { accountId: 1, date: "2025-04-15", amount: 10_000, type: "expense", isTransfer: false },
   ];
   const normalTransactionKeys = createNormalTransactionMirrorKeys(normalTransactions);
 

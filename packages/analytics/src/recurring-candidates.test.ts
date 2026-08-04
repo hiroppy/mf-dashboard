@@ -128,6 +128,20 @@ describe("generateRecurringCandidates", () => {
     ).toEqual([]);
   });
 
+  it("keeps the latest transaction per month regardless of input order", () => {
+    const earlier = transaction("2026-07-05", 20_000, "Service");
+    const latest = transaction("2026-07-25", 40_000, "Service");
+    const history = [transaction("2026-06-20", 30_000, "Service")];
+
+    expect(generateRecurringCandidates([...history, latest, earlier], "2026-08")).toEqual(
+      generateRecurringCandidates([...history, earlier, latest], "2026-08"),
+    );
+    expect(generateRecurringCandidates([...history, latest, earlier], "2026-08")[0]).toMatchObject({
+      predictedAmount: 40_000,
+      predictedDate: "2026-08-23",
+    });
+  });
+
   it("keeps a structured salary after one occurrence", () => {
     const result = generateRecurringCandidates(
       [
