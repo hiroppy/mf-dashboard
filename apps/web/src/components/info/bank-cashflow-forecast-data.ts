@@ -14,7 +14,7 @@ import {
   createNormalTransactionMirrorKeys,
   createTransferMovementKey,
   hasNormalTransactionMirror,
-} from "@mf-dashboard/db";
+} from "@mf-dashboard/db/shared/transfer";
 import {
   excludeRecordedCandidates,
   generateBankForecastCandidates,
