@@ -35,8 +35,14 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node
       - run: pnpm --filter @mf-dashboard/${{ matrix.workspace }} test:mutation
+      - name: Verify mutation reports
+        run: |
+          test -s "${{ matrix.path }}/reports/mutation/mutation.html"
+          test -s "${{ matrix.path }}/reports/mutation/mutation.json"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -44,4 +50,5 @@ jobs:
           path: |
             ${{ matrix.path }}/reports/mutation/mutation.html
             ${{ matrix.path }}/reports/mutation/mutation.json
+          if-no-files-found: error
           retention-days: 7
