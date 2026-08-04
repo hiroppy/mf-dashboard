@@ -1,5 +1,5 @@
 import { parseIsoDateKey } from "@mf-dashboard/date-utils";
-import { dismissBankForecastCandidate } from "@mf-dashboard/db";
+import { dismissBankForecastCandidate } from "@mf-dashboard/db/queries/bank-forecast-dismissal";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 

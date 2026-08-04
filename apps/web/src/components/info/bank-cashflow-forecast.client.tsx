@@ -241,6 +241,7 @@ function BankForecastCard({
   allowForecastDismissal: boolean;
   onForecastDismissed: () => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
   const eventCount = getEventCount(forecast);
   const summary = (
     <span className="flex items-start justify-between gap-4">
@@ -254,12 +255,12 @@ function BankForecastCard({
     </span>
   );
 
-  if (eventCount === 0) {
+  if (eventCount === 0 && !isOpen) {
     return <Card className="p-4">{summary}</Card>;
   }
 
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger>
         <CardButton
           aria-label={`${forecast.accountName}の入出金詳細を開く`}
@@ -286,6 +287,11 @@ function BankForecastCard({
           />
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+          {eventCount === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              表示する入出金はありません。
+            </p>
+          ) : null}
           {forecast.days.map((day) => (
             <section key={day.date}>
               <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">

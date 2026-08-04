@@ -149,6 +149,27 @@ describe("BankCashFlowForecastClient", () => {
     expect(screen.queryByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeNull();
   });
 
+  it("開いたダイアログで最後の入出金がなくなっても空状態を表示し続ける", () => {
+    const { rerender } = render(<BankCashFlowForecastClient forecasts={[forecast]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "銀行 Aの入出金詳細を開く" }));
+    expect(screen.getByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeTruthy();
+
+    rerender(
+      <BankCashFlowForecastClient
+        forecasts={[{ ...forecast, days: [], monthEndBalance: forecast.currentBalance }]}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "銀行 Aの入出金詳細" });
+    expect(within(dialog).getByText("表示する入出金はありません。")).toBeTruthy();
+    expect(screen.getByText("8月3日時点（0件）")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "明細を閉じる" }));
+    expect(screen.queryByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "銀行 Aの入出金詳細を開く" })).toBeNull();
+  });
+
   it("Money Forwardの引き落とし予定額を根拠として表示する", () => {
     const confirmedForecast = structuredClone(forecast);
     confirmedForecast.days[0]!.events[0]!.amountSource = "scheduled_withdrawal";

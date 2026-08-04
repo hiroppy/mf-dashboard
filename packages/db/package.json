@@ -17,6 +17,7 @@
     "./repository/holdings": "./src/repositories/holdings.ts",
     "./repository/spending-targets": "./src/repositories/spending-targets.ts",
     "./repository/analytics": "./src/repositories/analytics.ts",
+    "./queries/bank-forecast-dismissal": "./src/queries/bank-forecast-dismissal.ts",
     "./queries/read-only-query": "./src/queries/read-only-query.ts",
     "./types": "./src/types.ts",
     "./utils": "./src/utils.ts",

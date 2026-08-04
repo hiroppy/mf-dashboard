@@ -1,10 +1,12 @@
-import type { BankForecastDismissalInput } from "@mf-dashboard/db";
+import type { BankForecastDismissalInput } from "@mf-dashboard/db/queries/bank-forecast-dismissal";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dismissMock =
   vi.fn<(input: BankForecastDismissalInput, groupId?: string) => Promise<boolean>>();
 const revalidatePathMock = vi.fn<(path: string, type?: "layout" | "page") => void>();
-vi.mock("@mf-dashboard/db", () => ({ dismissBankForecastCandidate: dismissMock }));
+vi.mock("@mf-dashboard/db/queries/bank-forecast-dismissal", () => ({
+  dismissBankForecastCandidate: dismissMock,
+}));
 vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 
 const { POST } = await import("./route");
