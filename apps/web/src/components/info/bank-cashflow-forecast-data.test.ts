@@ -109,6 +109,35 @@ describe("buildBankCashFlowForecastViews", () => {
     expect(forecasts[0]?.monthEndBalance).toBe(100_000);
   });
 
+  it("変動額の当月実績が同じ定期候補を二重計上しない", () => {
+    const actual = transaction(1, {
+      date: "2026-08-03",
+      amount: 25_000,
+      type: "expense",
+      description: "電気料金",
+      category: "光熱費",
+      subCategory: null,
+    });
+    const forecasts = buildBankCashFlowForecastViews(accounts, [actual], "2026-08-03", [
+      candidate({
+        classification: "other",
+        description: "電気料金",
+        recurringIdentity: "電気料金",
+        predictedDate: "2026-08-03",
+        predictedAmount: 10_000,
+        evidence: {
+          occurrenceCount: 3,
+          dateRange: { from: "2026-05-03", to: "2026-07-03" },
+          amountRange: { min: 8_000, max: 15_000 },
+        },
+      }),
+    ]);
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-1", status: "actual", amount: 25_000 },
+    ]);
+  });
+
   it("却下時点までの候補を除外し、新しい同名実績があれば復帰する", () => {
     const recurringCandidate = candidate({ recurringIdentity: "investment transfer" });
     const dismissal = {
@@ -453,6 +482,113 @@ describe("buildBankCashFlowForecastViews", () => {
       },
     ]);
     expect(forecasts[0]?.monthEndBalance).toBe(58_000);
+  });
+
+  it("カード通常明細とミラー振替の履歴があっても確定予測を一度だけ追加する", () => {
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transactions = ["2026-05-20", "2026-06-20", "2026-07-20"].flatMap((date, index) => [
+      transaction(index * 2 + 1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date,
+        amount: 30_000,
+        type: "transfer",
+        description: "カード利用代金",
+        category: null,
+        subCategory: null,
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+      }),
+      transaction(index * 2 + 2, {
+        accountId: 1,
+        date,
+        amount: 30_000,
+        type: "expense",
+        description: "カード利用代金",
+        category: "カード",
+        subCategory: null,
+      }),
+    ]);
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, cardAccount],
+      transactions,
+      "2026-08-03",
+    );
+    const events = forecasts[0]?.days.flatMap(({ events }) => events) ?? [];
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      status: "forecast",
+      amount: 42_000,
+      amountSource: "scheduled_withdrawal",
+    });
+  });
+
+  it("カードの引落銀行変更後は最新銀行の支払日を使う", () => {
+    const newBank = {
+      id: 4,
+      name: "銀行 B",
+      categoryName: "銀行",
+      totalAssets: 200_000,
+      lastUpdated: "2026-08-03T08:00:00",
+    };
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transfers = [
+      transaction(1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date: "2026-05-10",
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+      transaction(2, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date: "2026-06-10",
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+      transaction(3, {
+        accountId: 3,
+        transferTargetAccountId: 4,
+        date: "2026-07-25",
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+    ];
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, newBank, cardAccount],
+      transfers,
+      "2026-08-03",
+    );
+    const newBankEvents = forecasts
+      .find(({ accountId }) => accountId === 4)
+      ?.days.flatMap(({ events }) => events);
+
+    expect(newBankEvents).toMatchObject([
+      { date: "2026-08-25", amountSource: "scheduled_withdrawal" },
+    ]);
   });
 
   it("確定カード引落しが当月実績済みなら予測を追加しない", () => {

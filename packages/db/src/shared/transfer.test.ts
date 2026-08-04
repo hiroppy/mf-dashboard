@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   createNormalTransactionMirrorKeys,
+  createTransferMovementKey,
   hasNormalTransactionMirror,
   transformTransferToIncome,
 } from "./transfer";
@@ -39,6 +40,31 @@ describe("transfer mirror detection", () => {
         keys,
       ),
     ).toBe(false);
+  });
+});
+
+describe("transfer movement identity", () => {
+  it("normalizes the amount sign", () => {
+    const movement = {
+      accountId: 1,
+      transferTargetAccountId: 2,
+      date: "2025-04-15",
+      amount: 10_000,
+    };
+    expect(createTransferMovementKey(movement)).toBe(
+      createTransferMovementKey({ ...movement, amount: -10_000 }),
+    );
+  });
+
+  it("returns null for an incomplete movement", () => {
+    expect(
+      createTransferMovementKey({
+        accountId: null,
+        transferTargetAccountId: 2,
+        date: "2025-04-15",
+        amount: 10_000,
+      }),
+    ).toBeNull();
   });
 });
 

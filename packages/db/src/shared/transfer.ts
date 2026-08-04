@@ -21,6 +21,24 @@ interface TransferMirror {
   amount: number;
 }
 
+interface TransferMovement {
+  accountId: number | null;
+  transferTargetAccountId: number | null;
+  date: string | null;
+  amount: number;
+}
+
+export function createTransferMovementKey(transfer: TransferMovement): string | null {
+  if (
+    transfer.accountId === null ||
+    transfer.transferTargetAccountId === null ||
+    transfer.date === null
+  ) {
+    return null;
+  }
+  return `${transfer.accountId}:${transfer.transferTargetAccountId}:${transfer.date}:${Math.abs(transfer.amount)}`;
+}
+
 function getTransactionMirrorKey(accountId: number, date: string, amount: number): string {
   return `${accountId}:${date}:${Math.abs(amount)}`;
 }

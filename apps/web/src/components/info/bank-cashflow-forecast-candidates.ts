@@ -51,7 +51,6 @@ export interface BankForecastDismissal {
 }
 
 const DATE_DRIFT_DAYS = 3;
-const AMOUNT_TOLERANCE_RATIO = 0.1;
 
 function matchesRecordedCandidate(
   candidate: RecurringCandidate,
@@ -59,11 +58,6 @@ function matchesRecordedCandidate(
 ): boolean {
   if (transaction.accountId === null) return false;
 
-  const amountDifference = Math.abs(Math.abs(transaction.amount) - candidate.predictedAmount);
-  const amountTolerance = Math.max(
-    1,
-    Math.round(candidate.predictedAmount * AMOUNT_TOLERANCE_RATIO),
-  );
   const earliestDate = addDaysToIsoDateKey(candidate.predictedDate, -DATE_DRIFT_DAYS);
   const latestDate = addDaysToIsoDateKey(candidate.predictedDate, DATE_DRIFT_DAYS);
 
@@ -72,7 +66,6 @@ function matchesRecordedCandidate(
     transaction.type === candidate.type &&
     matchesRecurringCandidateIdentity(candidate, transaction) &&
     classifyRecurringTransaction(transaction) === candidate.classification &&
-    amountDifference <= amountTolerance &&
     transaction.date >= earliestDate &&
     transaction.date <= latestDate
   );
@@ -178,7 +171,9 @@ export function generateConfirmedWithdrawalCandidates(
       isTransfer: false,
       isExcludedFromCalculation: false,
     }));
-    const generated = generateBankForecastCandidates(transferHistory, month).at(0);
+    const generated = generateBankForecastCandidates(transferHistory, month).find(
+      ({ accountId }) => accountId === latest.transferTargetAccountId,
+    );
     const historyDates = transfers.map(({ date }) => date);
     const historyAmounts = transfers.map(({ amount }) => Math.abs(amount));
 

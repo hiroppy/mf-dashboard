@@ -9,7 +9,11 @@ import {
   type RecurringCandidate,
 } from "@mf-dashboard/analytics/recurring-candidates";
 import { parseIsoDateKey } from "@mf-dashboard/date-utils";
-import { createNormalTransactionMirrorKeys, hasNormalTransactionMirror } from "@mf-dashboard/db";
+import {
+  createNormalTransactionMirrorKeys,
+  createTransferMovementKey,
+  hasNormalTransactionMirror,
+} from "@mf-dashboard/db";
 import {
   excludeRecordedCandidates,
   generateBankForecastCandidates,
@@ -76,12 +80,8 @@ function toBankCashFlowTransactions(
       continue;
     }
 
-    const transferKey = [
-      transaction.accountId,
-      transaction.transferTargetAccountId,
-      transaction.date,
-      Math.abs(transaction.amount),
-    ].join(":");
+    const transferKey = createTransferMovementKey(transaction);
+    if (!transferKey) continue;
     if (seenTransferKeys.has(transferKey)) continue;
     seenTransferKeys.add(transferKey);
 
@@ -192,16 +192,32 @@ export function buildBankCashFlowForecastViews(
     transactions.filter((transaction) => !hasAuthoritativeCardWithdrawal(transaction)),
     bankAccountIds,
   );
-  const forecastCandidates = candidates ?? [
-    ...generateBankForecastCandidates(candidateTransactions, month),
-    ...generateConfirmedWithdrawalCandidates(
-      accounts,
-      transactions,
-      bankAccountIds,
-      month,
-      cardLiabilityAmounts,
-    ),
-  ];
+  const forecastCandidates =
+    candidates ??
+    (() => {
+      const confirmedCandidates = generateConfirmedWithdrawalCandidates(
+        accounts,
+        transactions,
+        bankAccountIds,
+        month,
+        cardLiabilityAmounts,
+      );
+      const recurringCandidates = generateBankForecastCandidates(
+        candidateTransactions,
+        month,
+      ).filter(
+        (candidate) =>
+          !confirmedCandidates.some(
+            (confirmed) =>
+              candidate.accountId === confirmed.accountId &&
+              candidate.type === confirmed.type &&
+              candidate.classification === "card" &&
+              candidate.evidence.dateRange.from === confirmed.evidence.dateRange.from &&
+              candidate.evidence.dateRange.to === confirmed.evidence.dateRange.to,
+          ),
+      );
+      return [...recurringCandidates, ...confirmedCandidates];
+    })();
   const actualTransactions = bankTransactions.filter(
     ({ date }) => date.startsWith(month) && date <= currentDate,
   );

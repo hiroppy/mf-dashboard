@@ -182,7 +182,9 @@ function getConsecutiveSuffix(transactions: NormalizedTransaction[]): Normalized
 
 function hasStructuredIncomeClassification(transaction: NormalizedTransaction): boolean {
   if (transaction.type !== "income") return false;
-  const structuredText = normalizeText([transaction.category, transaction.subCategory].join(" "));
+  const structuredText = normalizeText(
+    [transaction.category, transaction.subCategory, transaction.description].join(" "),
+  );
   if (structuredText.includes("賞与")) return false;
   const classification = classifyRecurringTransaction({
     category: transaction.category,

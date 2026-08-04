@@ -2,7 +2,11 @@ import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq, and, like, sql, inArray, or, notInArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
-import { createNormalTransactionMirrorKeys, hasNormalTransactionMirror } from "../shared/transfer";
+import {
+  createNormalTransactionMirrorKeys,
+  createTransferMovementKey,
+  hasNormalTransactionMirror,
+} from "../shared/transfer";
 import { generateMonthRange } from "../shared/utils";
 
 /**
@@ -199,7 +203,8 @@ export async function getDeduplicatedTransferIncome(
     );
     if (classification !== "income") continue;
 
-    const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
+    const key = createTransferMovementKey(t);
+    if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -291,7 +296,8 @@ export async function getDeduplicatedTransferExpense(
 
     if (hasNormalTransactionMirror(t, normalTransactionKeys)) continue;
 
-    const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
+    const key = createTransferMovementKey(t);
+    if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
 
