@@ -139,6 +139,30 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("安定した identity の当月実績は予測日から四日以上ずれても二重計上しない", () => {
+    const actual = transaction(1, {
+      date: "2026-08-10",
+      amount: 10_000,
+      type: "expense",
+      description: "定期サービス",
+      category: "その他",
+      subCategory: null,
+    });
+    const forecasts = buildBankCashFlowForecastViews(accounts, [actual], "2026-08-10", [
+      candidate({
+        classification: "other",
+        description: "定期サービス",
+        recurringIdentity: "定期サービス",
+        predictedDate: "2026-08-05",
+      }),
+    ]);
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-1", status: "actual" },
+    ]);
+    expect(forecasts[0]?.monthEndBalance).toBe(90_000);
+  });
+
   it("却下時点までの候補を除外し、新しい同名実績があれば復帰する", () => {
     const recurringCandidate = candidate({ recurringIdentity: "investment transfer" });
     const dismissal = {

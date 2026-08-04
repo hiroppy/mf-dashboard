@@ -59,13 +59,16 @@ function matchesRecordedCandidate(
 
   const earliestDate = addDaysToIsoDateKey(candidate.predictedDate, -DATE_DRIFT_DAYS);
   const latestDate = addDaysToIsoDateKey(candidate.predictedDate, DATE_DRIFT_DAYS);
+  const isWithinOccurrenceWindow =
+    candidate.recurringIdentity !== undefined
+      ? transaction.date.startsWith(candidate.predictedDate.slice(0, 7))
+      : transaction.date >= earliestDate && transaction.date <= latestDate;
 
   return (
     transaction.accountId === candidate.accountId &&
     transaction.type === candidate.type &&
     matchesRecurringCandidateIdentity(candidate, transaction) &&
-    transaction.date >= earliestDate &&
-    transaction.date <= latestDate
+    isWithinOccurrenceWindow
   );
 }
 
