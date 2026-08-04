@@ -222,6 +222,20 @@ describe("generateInsights", () => {
     expect(result.savingsInsight).toBe("総資産に対する現金と投資の比率は2、3です。");
   });
 
+  it("should remove labels after line breaks and indentation", async () => {
+    const output = {
+      ...validOutput,
+      summary: "結論：家計は安定しています。\n  要点：支出も横ばいです。",
+    };
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(output));
+
+    const result = await generateInsights(mockDb, groupId);
+
+    expect(result.summary).toBe("家計は安定しています。\n  支出も横ばいです。");
+  });
+
   it("should throw when Stage 2 output is null", async () => {
     mockGenerateText
       .mockResolvedValueOnce(mockStage1Result("memo"))

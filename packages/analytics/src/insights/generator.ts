@@ -166,7 +166,7 @@ const STAGE2_SYSTEM_PROMPT = `あなたはプロの個人財務アドバイザ�
 - 英語の技術用語（netIncome, savingsRate 等）をそのまま出力すること。必ず日本語（純収入、貯蓄率 等）に置き換える`;
 
 const LEADING_LABEL_PATTERN =
-  /(^|[。！？]\s*)(?:比較事実|解釈・因果|アクション|結論|最重要結論|要点|評価|収支)[：:]\s*/g;
+  /(^\s*|[。！？\n]\s*)(?:比較事実|解釈・因果|アクション|結論|最重要結論|要点|評価|収支)[：:]\s*/g;
 
 function normalizeInsight(text: string): string {
   return text.replace(LEADING_LABEL_PATTERN, "$1").replace(/[：:]/g, "、");
