@@ -25,7 +25,7 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
     process.env.DEMO_MODE === "true",
   );
   const historyStartDate = `${shiftYearMonthKey(currentDate.slice(0, 7), -12)}-01`;
-  const [selectedAccounts, transactions, selectedHoldings, dismissals] = await Promise.all([
+  const [selectedAccounts, selectedTransactions, selectedHoldings, dismissals] = await Promise.all([
     getAccountsWithAssets(groupId),
     getTransactions({ groupId, startDate: historyStartDate, includeTransferTargetAccounts: true }),
     getHoldingsWithLatestValues(groupId),
@@ -35,7 +35,7 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
     selectedAccounts.filter(({ categoryName }) => categoryName === "銀行").map(({ id }) => id),
   );
   const counterpartCardIds = new Set(
-    transactions.flatMap((transaction) =>
+    selectedTransactions.flatMap((transaction) =>
       transaction.accountId !== null &&
       transaction.transferTargetAccountId !== null &&
       selectedBankIds.has(transaction.transferTargetAccountId) &&
@@ -44,10 +44,18 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
         : [],
     ),
   );
-  const [globalAccounts, globalHoldings] =
+  const [globalAccounts, globalHoldings, globalTransactions] =
     counterpartCardIds.size === 0
-      ? [[], []]
-      : await Promise.all([getAccountsWithAssets("0"), getHoldingsWithLatestValues("0")]);
+      ? [[], [], []]
+      : await Promise.all([
+          getAccountsWithAssets("0"),
+          getHoldingsWithLatestValues("0"),
+          getTransactions({
+            groupId: "0",
+            startDate: historyStartDate,
+            includeTransferTargetAccounts: true,
+          }),
+        ]);
   const counterpartCards = globalAccounts.filter(
     ({ id, categoryName }) => categoryName === "カード" && counterpartCardIds.has(id),
   );
@@ -67,6 +75,19 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
         !selectedHoldings.some((selectedHolding) => selectedHolding.id === holding.id),
     ),
   ];
+  const transactionsById = new Map(
+    selectedTransactions.map((transaction) => [transaction.id, transaction]),
+  );
+  for (const transaction of globalTransactions) {
+    if (
+      transaction.accountId !== null &&
+      counterpartCardIds.has(transaction.accountId) &&
+      (transaction.type === "transfer" || transaction.isTransfer)
+    ) {
+      transactionsById.set(transaction.id, transaction);
+    }
+  }
+  const transactions = [...transactionsById.values()];
   const liabilityAmounts = new Map<number, number>();
   for (const holding of holdings) {
     if (

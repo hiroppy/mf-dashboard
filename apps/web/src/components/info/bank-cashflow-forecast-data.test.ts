@@ -733,6 +733,53 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("カードの引落先が対象外銀行へ変わった場合は旧銀行に確定予測を出さない", () => {
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transfers = [
+      transaction(1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date: "2026-05-10",
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+      transaction(2, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date: "2026-06-10",
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+      transaction(3, {
+        accountId: 3,
+        transferTargetAccountId: 4,
+        date: "2026-07-25",
+        amount: 30_000,
+        type: "transfer",
+        isTransfer: true,
+      }),
+    ];
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, cardAccount],
+      transfers,
+      "2026-08-03",
+    );
+
+    expect(forecasts[0]?.days).toEqual([]);
+    expect(forecasts[0]?.monthEndBalance).toBe(100_000);
+  });
+
   it("確定カード引落しが当月実績済みなら予測を追加しない", () => {
     const cardAccount = {
       id: 3,

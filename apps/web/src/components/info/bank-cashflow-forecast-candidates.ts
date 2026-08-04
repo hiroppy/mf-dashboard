@@ -155,12 +155,12 @@ export function generateConfirmedWithdrawalCandidates(
         (transaction) =>
           transaction.accountId === account.id &&
           transaction.transferTargetAccountId !== null &&
-          bankAccountIds.has(transaction.transferTargetAccountId) &&
           (transaction.type === "transfer" || transaction.isTransfer),
       )
       .sort((left, right) => left.date.localeCompare(right.date));
     const latest = transfers.at(-1);
     if (!latest?.transferTargetAccountId) continue;
+    if (!bankAccountIds.has(latest.transferTargetAccountId)) continue;
     if (transfers.some(({ date }) => date.startsWith(month) && date <= asOfDate)) continue;
 
     const transferHistory = transfers.map((transaction) => ({
