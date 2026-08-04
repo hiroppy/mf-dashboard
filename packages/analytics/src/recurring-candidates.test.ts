@@ -68,6 +68,15 @@ describe("matchesRecurringCandidateIdentity", () => {
       ),
     ).toBe(false);
   });
+
+  it("does not fall back to a generic description for generated identities", () => {
+    expect(
+      matchesRecurringCandidateIdentity(
+        { description: "口座振替", recurringIdentity: "家賃categorysep住居費" },
+        { category: "通信費", subCategory: "利用料", description: "口座振替" },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("generateRecurringCandidates", () => {

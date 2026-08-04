@@ -25,12 +25,48 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
     process.env.DEMO_MODE === "true",
   );
   const historyStartDate = `${shiftYearMonthKey(currentDate.slice(0, 7), -12)}-01`;
-  const [accounts, transactions, holdings, dismissals] = await Promise.all([
+  const [selectedAccounts, transactions, selectedHoldings, dismissals] = await Promise.all([
     getAccountsWithAssets(groupId),
     getTransactions({ groupId, startDate: historyStartDate, includeTransferTargetAccounts: true }),
     getHoldingsWithLatestValues(groupId),
     getBankForecastDismissals(groupId),
   ]);
+  const selectedBankIds = new Set(
+    selectedAccounts.filter(({ categoryName }) => categoryName === "銀行").map(({ id }) => id),
+  );
+  const counterpartCardIds = new Set(
+    transactions.flatMap((transaction) =>
+      transaction.accountId !== null &&
+      transaction.transferTargetAccountId !== null &&
+      selectedBankIds.has(transaction.transferTargetAccountId) &&
+      (transaction.type === "transfer" || transaction.isTransfer)
+        ? [transaction.accountId]
+        : [],
+    ),
+  );
+  const [globalAccounts, globalHoldings] =
+    counterpartCardIds.size === 0
+      ? [[], []]
+      : await Promise.all([getAccountsWithAssets("0"), getHoldingsWithLatestValues("0")]);
+  const counterpartCards = globalAccounts.filter(
+    ({ id, categoryName }) => categoryName === "カード" && counterpartCardIds.has(id),
+  );
+  const accounts = [
+    ...selectedAccounts,
+    ...counterpartCards.filter(
+      ({ id }) => !selectedAccounts.some((selectedAccount) => selectedAccount.id === id),
+    ),
+  ];
+  const counterpartCardIdSet = new Set(counterpartCards.map(({ id }) => id));
+  const holdings = [
+    ...selectedHoldings,
+    ...globalHoldings.filter(
+      (holding) =>
+        holding.accountId !== null &&
+        counterpartCardIdSet.has(holding.accountId) &&
+        !selectedHoldings.some((selectedHolding) => selectedHolding.id === holding.id),
+    ),
+  ];
   const liabilityAmounts = new Map<number, number>();
   for (const holding of holdings) {
     if (

@@ -130,7 +130,7 @@ function toActualEvent(transaction: BankCashFlowTransaction): BankCashFlowEventI
 
 function getBalanceAsOfDate(lastUpdated: string | null, currentDate: string): string | null {
   const date = lastUpdated?.slice(0, 10);
-  if (!date || date > currentDate) return null;
+  if (!date || date > currentDate || !date.startsWith(currentDate.slice(0, 7))) return null;
 
   try {
     parseIsoDateKey(date);
@@ -201,6 +201,7 @@ export function buildBankCashFlowForecastViews(
         bankAccountIds,
         month,
         cardLiabilityAmounts,
+        currentDate,
       );
       const recurringCandidates = generateBankForecastCandidates(
         candidateTransactions,
@@ -212,8 +213,8 @@ export function buildBankCashFlowForecastViews(
               candidate.accountId === confirmed.accountId &&
               candidate.type === confirmed.type &&
               candidate.classification === "card" &&
-              candidate.evidence.dateRange.from === confirmed.evidence.dateRange.from &&
-              candidate.evidence.dateRange.to === confirmed.evidence.dateRange.to,
+              candidate.evidence.dateRange.from <= confirmed.evidence.dateRange.to &&
+              confirmed.evidence.dateRange.from <= candidate.evidence.dateRange.to,
           ),
       );
       return [...recurringCandidates, ...confirmedCandidates];
@@ -234,12 +235,20 @@ export function buildBankCashFlowForecastViews(
     return (
       typeof candidate.accountId === "number" &&
       bankAccountIds.has(candidate.accountId) &&
-      candidate.predictedDate >= currentDate &&
       !isDismissed
     );
   });
   const forecastEvents = excludeRecordedCandidates(eligibleCandidates, actualTransactions).map(
-    (candidate) => recurringCandidateToBankCashFlowEvent(getForecastEventId(candidate), candidate),
+    (candidate) => {
+      const scheduledCandidate =
+        candidate.predictedDate < currentDate
+          ? { ...candidate, predictedDate: currentDate }
+          : candidate;
+      return recurringCandidateToBankCashFlowEvent(
+        getForecastEventId(scheduledCandidate),
+        scheduledCandidate,
+      );
+    },
   );
 
   const forecasts = calculateMonthlyBankBalanceForecasts(

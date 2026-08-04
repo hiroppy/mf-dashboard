@@ -1,6 +1,5 @@
 import type { BankCashFlowDirection } from "@mf-dashboard/analytics/bank-balance-forecast";
 import {
-  classifyRecurringTransaction,
   generateRecurringCandidates,
   matchesRecurringCandidateIdentity,
   type RecurringCandidate,
@@ -65,7 +64,6 @@ function matchesRecordedCandidate(
     transaction.accountId === candidate.accountId &&
     transaction.type === candidate.type &&
     matchesRecurringCandidateIdentity(candidate, transaction) &&
-    classifyRecurringTransaction(transaction) === candidate.classification &&
     transaction.date >= earliestDate &&
     transaction.date <= latestDate
   );
@@ -141,6 +139,7 @@ export function generateConfirmedWithdrawalCandidates(
   bankAccountIds: Set<number>,
   month: string,
   cardLiabilities: Map<number, number>,
+  asOfDate: string,
 ): RecurringCandidate[] {
   const targetMonth = parseYearMonthKey(month);
   const candidates: RecurringCandidate[] = [];
@@ -162,7 +161,7 @@ export function generateConfirmedWithdrawalCandidates(
       .sort((left, right) => left.date.localeCompare(right.date));
     const latest = transfers.at(-1);
     if (!latest?.transferTargetAccountId) continue;
-    if (transfers.some(({ date }) => date.startsWith(month))) continue;
+    if (transfers.some(({ date }) => date.startsWith(month) && date <= asOfDate)) continue;
 
     const transferHistory = transfers.map((transaction) => ({
       ...transaction,

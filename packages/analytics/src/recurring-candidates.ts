@@ -145,6 +145,8 @@ export function matchesRecurringCandidateIdentity(
   const transactionIdentity = getRecurringIdentity(transaction);
   if (candidateIdentity === transactionIdentity) return true;
 
+  if (candidate.recurringIdentity !== undefined) return false;
+
   const candidateDescription = normalizeDescription(candidate.description);
   return (
     candidateDescription !== "" &&
