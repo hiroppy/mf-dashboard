@@ -26,11 +26,11 @@
   "devDependencies": {
     "knip": "6.31.0",
     "lefthook": "2.1.10",
-    "oxfmt": "0.61.0",
-    "oxlint": "1.76.0",
+    "oxfmt": "0.62.0",
+    "oxlint": "1.77.0",
     "oxlint-tsgolint": "7.0.2001",
-    "tsx": "4.23.1",
+    "tsx": "4.23.5",
     "turbo": "2.10.8"
   },
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "pnpm@11.19.0"
 }
