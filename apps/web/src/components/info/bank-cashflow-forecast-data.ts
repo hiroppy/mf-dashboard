@@ -6,6 +6,7 @@ import {
 } from "@mf-dashboard/analytics/bank-balance-forecast";
 import {
   classifyRecurringTransaction,
+  matchesRecurringCandidateIdentity,
   type RecurringCandidate,
 } from "@mf-dashboard/analytics/recurring-candidates";
 import { parseIsoDateKey } from "@mf-dashboard/date-utils";
@@ -150,6 +151,46 @@ function getBalanceAtForecastBoundary(forecast: BankBalanceForecast): number {
   return balance;
 }
 
+const CONFIRMED_CARD_IDENTITY_PREFIX = "confirmed-card-";
+
+function isMirroredCandidateForConfirmedCard(
+  candidate: RecurringCandidate,
+  confirmed: RecurringCandidate,
+  transactions: ForecastTransaction[],
+): boolean {
+  if (
+    candidate.accountId !== confirmed.accountId ||
+    candidate.type !== confirmed.type ||
+    candidate.classification !== "card" ||
+    !confirmed.recurringIdentity?.startsWith(CONFIRMED_CARD_IDENTITY_PREFIX)
+  ) {
+    return false;
+  }
+
+  const cardAccountId = Number(
+    confirmed.recurringIdentity.slice(CONFIRMED_CARD_IDENTITY_PREFIX.length),
+  );
+  if (!Number.isInteger(cardAccountId)) return false;
+
+  return transactions.some(
+    (normalTransaction) =>
+      normalTransaction.accountId === candidate.accountId &&
+      normalTransaction.type !== "transfer" &&
+      !normalTransaction.isTransfer &&
+      normalTransaction.date >= candidate.evidence.dateRange.from &&
+      normalTransaction.date <= candidate.evidence.dateRange.to &&
+      matchesRecurringCandidateIdentity(candidate, normalTransaction) &&
+      transactions.some(
+        (transfer) =>
+          transfer.accountId === cardAccountId &&
+          transfer.transferTargetAccountId === candidate.accountId &&
+          (transfer.type === "transfer" || transfer.isTransfer) &&
+          transfer.date === normalTransaction.date &&
+          Math.abs(transfer.amount) === Math.abs(normalTransaction.amount),
+      ),
+  );
+}
+
 export function buildBankCashFlowForecastViews(
   accounts: ForecastAccount[],
   transactions: ForecastTransaction[],
@@ -208,13 +249,8 @@ export function buildBankCashFlowForecastViews(
         month,
       ).filter(
         (candidate) =>
-          !confirmedCandidates.some(
-            (confirmed) =>
-              candidate.accountId === confirmed.accountId &&
-              candidate.type === confirmed.type &&
-              candidate.classification === "card" &&
-              candidate.evidence.dateRange.from <= confirmed.evidence.dateRange.to &&
-              confirmed.evidence.dateRange.from <= candidate.evidence.dateRange.to,
+          !confirmedCandidates.some((confirmed) =>
+            isMirroredCandidateForConfirmedCard(candidate, confirmed, transactions),
           ),
       );
       return [...recurringCandidates, ...confirmedCandidates];

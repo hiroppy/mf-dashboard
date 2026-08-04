@@ -604,6 +604,77 @@ describe("buildBankCashFlowForecastViews", () => {
     });
   });
 
+  it("同じ銀行から引き落とす別カードの定期予測を確定カードと混同しない", () => {
+    const confirmedCard = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 42_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const recurringCard = {
+      id: 4,
+      name: "カード B",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 0,
+      scheduledWithdrawalConfirmed: false,
+    };
+    const transactions = ["2026-05", "2026-06", "2026-07"].flatMap((month, index) => [
+      transaction(index * 3 + 1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date: `${month}-20`,
+        amount: 30_000,
+        type: "transfer",
+        description: "カード A 利用代金",
+        category: null,
+        subCategory: null,
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+      }),
+      transaction(index * 3 + 2, {
+        accountId: 1,
+        date: `${month}-20`,
+        amount: 30_000,
+        type: "expense",
+        description: "カード A 利用代金",
+        category: "カード",
+        subCategory: null,
+      }),
+      transaction(index * 3 + 3, {
+        accountId: 4,
+        transferTargetAccountId: 1,
+        date: `${month}-25`,
+        amount: 20_000,
+        type: "transfer",
+        description: "カード B 利用代金",
+        category: null,
+        subCategory: null,
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+      }),
+    ]);
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, confirmedCard, recurringCard],
+      transactions,
+      "2026-08-03",
+    );
+    const events = forecasts[0]?.days.flatMap(({ events }) => events) ?? [];
+
+    expect(events).toHaveLength(2);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ amount: 42_000, amountSource: "scheduled_withdrawal" }),
+        expect.objectContaining({ amount: 20_000, description: "カード B 利用代金" }),
+      ]),
+    );
+  });
+
   it("カードの引落銀行変更後は最新銀行の支払日を使う", () => {
     const newBank = {
       id: 4,
