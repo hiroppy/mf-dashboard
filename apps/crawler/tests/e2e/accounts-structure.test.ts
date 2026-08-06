@@ -65,7 +65,7 @@ describe("accounts page structure", () => {
 
       const summaryCount = await page
         .locator("h1.heading-small")
-        .filter({ hasText: "引き落とし予定額：" })
+        .filter({ hasText: /引き落とし予定額(?:合計)?：/u })
         .count();
       expect(summaryCount).toBe(1);
     });

@@ -2,7 +2,7 @@ import type { RegisteredAccounts } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
 import { parseJapaneseNumber } from "../parsers.js";
 
-const WITHDRAWAL_SUMMARY_PREFIX = "引き落とし予定額：";
+const WITHDRAWAL_SUMMARY_PREFIXES = ["引き落とし予定額：", "引き落とし予定額合計："];
 
 export interface ScheduledWithdrawalStatus {
   amount: number;
@@ -13,9 +13,10 @@ export function parseScheduledWithdrawalSummary(
   text: string,
 ): ScheduledWithdrawalStatus | undefined {
   const normalized = text.trim();
-  if (!normalized.startsWith(WITHDRAWAL_SUMMARY_PREFIX)) return undefined;
+  const prefix = WITHDRAWAL_SUMMARY_PREFIXES.find((label) => normalized.startsWith(label));
+  if (!prefix) return undefined;
 
-  const value = normalized.slice(WITHDRAWAL_SUMMARY_PREFIX.length).trim().normalize("NFKC");
+  const value = normalized.slice(prefix.length).trim().normalize("NFKC");
   if (!/\d/u.test(value)) return { amount: 0, confirmed: false };
   return { amount: Math.max(0, parseJapaneseNumber(value)), confirmed: true };
 }

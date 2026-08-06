@@ -9,6 +9,7 @@ describe("parseScheduledWithdrawalSummary", () => {
     ["引き落とし予定額：42,000円", { amount: 42_000, confirmed: true }],
     [" 引き落とし予定額： １２，０００円 ", { amount: 12_000, confirmed: true }],
     ["引き落とし予定額：未定", { amount: 0, confirmed: false }],
+    ["引き落とし予定額合計：42,000円", { amount: 42_000, confirmed: true }],
     ["利用残高：42,000円", undefined],
   ])("合計見出し %s を解析する", (text, expected) => {
     expect(parseScheduledWithdrawalSummary(text)).toEqual(expected);
