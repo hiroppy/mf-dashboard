@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.55",
-    "@base-ui/react": "1.6.0",
+    "@base-ui/react": "1.7.0",
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
@@ -34,7 +34,7 @@
     "cmdk": "1.1.1",
     "jose": "6.2.8",
     "lucide-react": "1.28.0",
-    "next": "16.2.12",
+    "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "3.10.1",
