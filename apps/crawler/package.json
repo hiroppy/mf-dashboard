@@ -31,7 +31,7 @@
     "@slack/web-api": "8.0.0",
     "drizzle-orm": "catalog:",
     "playwright": "catalog:",
-    "tsx": "4.23.8"
+    "tsx": "4.23.9"
   },
   "devDependencies": {
     "@types/node": "catalog:",
