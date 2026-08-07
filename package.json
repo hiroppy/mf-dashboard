@@ -24,7 +24,7 @@
     "knip": "knip"
   },
   "devDependencies": {
-    "knip": "6.31.0",
+    "knip": "6.32.0",
     "lefthook": "2.1.10",
     "oxfmt": "0.62.0",
     "oxlint": "1.77.0",
