@@ -239,6 +239,25 @@ export const bankForecastDismissals = sqliteTable(
   ],
 );
 
+export const bankForecastManualEvents = sqliteTable(
+  "bank_forecast_manual_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    amount: integer("amount").notNull(),
+    direction: text("direction", { enum: ["income", "expense"] }).notNull(),
+    description: text("description").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("bank_forecast_manual_events_account_date_idx").on(table.accountId, table.date),
+  ],
+);
+
 // ============================================================================
 // 資産履歴系
 // ============================================================================
@@ -336,6 +355,7 @@ export const accountsRelations = relations(accounts, ({ many, one }) => ({
   transactions: many(transactions),
   groupAccounts: many(groupAccounts),
   bankForecastDismissals: many(bankForecastDismissals),
+  bankForecastManualEvents: many(bankForecastManualEvents),
 }));
 
 export const accountStatusesRelations = relations(accountStatuses, ({ one }) => ({
@@ -386,6 +406,13 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
 export const bankForecastDismissalsRelations = relations(bankForecastDismissals, ({ one }) => ({
   account: one(accounts, {
     fields: [bankForecastDismissals.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const bankForecastManualEventsRelations = relations(bankForecastManualEvents, ({ one }) => ({
+  account: one(accounts, {
+    fields: [bankForecastManualEvents.accountId],
     references: [accounts.id],
   }),
 }));

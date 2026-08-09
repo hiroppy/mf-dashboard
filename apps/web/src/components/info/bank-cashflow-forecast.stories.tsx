@@ -16,8 +16,9 @@ const forecasts: BankCashFlowForecastView[] = [
     currentBalance: 420_000,
     forecastBoundaryDate: "2026-08-03",
     monthStartDate: "2026-08-01",
+    forecastEndDate: "2026-08-31",
     openingBalance: 415_000,
-    monthEndBalance: 560_000,
+    forecastEndBalance: 560_000,
     days: [
       {
         date: "2026-08-02",
@@ -113,8 +114,9 @@ const forecasts: BankCashFlowForecastView[] = [
     currentBalance: 85_000,
     forecastBoundaryDate: "2026-08-03",
     monthStartDate: "2026-08-01",
+    forecastEndDate: "2026-08-31",
     openingBalance: 85_000,
-    monthEndBalance: 85_000,
+    forecastEndBalance: 85_000,
     days: [],
   },
 ];
@@ -158,7 +160,7 @@ export const NegativeForecast: Story = {
         ...forecasts[0]!,
         accountName: "銀行 C",
         currentBalance: 20_000,
-        monthEndBalance: -60_000,
+        forecastEndBalance: -60_000,
       },
     ],
   },

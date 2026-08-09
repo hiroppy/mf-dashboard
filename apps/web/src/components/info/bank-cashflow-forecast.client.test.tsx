@@ -21,8 +21,9 @@ const forecast: BankCashFlowForecastView = {
   currentBalance: 100_000,
   forecastBoundaryDate: "2026-08-03",
   monthStartDate: "2026-08-01",
+  forecastEndDate: "2026-08-31",
   openingBalance: 100_000,
-  monthEndBalance: 90_000,
+  forecastEndBalance: 90_000,
   days: [
     {
       date: "2026-08-20",
@@ -60,7 +61,7 @@ describe("BankCashFlowForecastClient", () => {
             accountId: 2,
             accountName: "銀行 B",
             days: [],
-            monthEndBalance: forecast.currentBalance,
+            forecastEndBalance: forecast.currentBalance,
           },
           {
             ...forecast,
@@ -68,15 +69,15 @@ describe("BankCashFlowForecastClient", () => {
             accountName: "銀行 C",
             currentBalance: 200_000,
             days: [],
-            monthEndBalance: 200_000,
+            forecastEndBalance: 200_000,
           },
           forecast,
         ]}
       />,
     );
 
-    expect(screen.getByText("銀行 A")).toBeTruthy();
-    expect(screen.getByText("銀行 B")).toBeTruthy();
+    expect(screen.getAllByText("銀行 A").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("銀行 B").length).toBeGreaterThan(0);
     expect(screen.getAllByText("8月3日時点（0件）")).toHaveLength(2);
     expect(
       screen
@@ -90,7 +91,9 @@ describe("BankCashFlowForecastClient", () => {
   it("スマホでも口座名と残高を横並びにする", () => {
     render(<BankCashFlowForecastClient forecasts={[forecast]} />);
 
-    const header = screen.getByText("銀行 A").parentElement?.parentElement;
+    const header = screen
+      .getByRole("button", { name: "銀行 Aの入出金詳細を開く" })
+      .querySelector(".justify-between");
     expect(header?.className).toContain("justify-between");
     expect(header?.className).not.toContain("flex-col");
     const card = screen.getByRole("button", { name: "銀行 Aの入出金詳細を開く" });
@@ -210,7 +213,7 @@ describe("BankCashFlowForecastClient", () => {
     window.history.replaceState(null, "", "/cf#bank-forecast-account-1");
     render(
       <BankCashFlowForecastClient
-        forecasts={[{ ...forecast, days: [], monthEndBalance: forecast.currentBalance }]}
+        forecasts={[{ ...forecast, days: [], forecastEndBalance: forecast.currentBalance }]}
       />,
     );
 
@@ -226,7 +229,7 @@ describe("BankCashFlowForecastClient", () => {
 
     rerender(
       <BankCashFlowForecastClient
-        forecasts={[{ ...forecast, days: [], monthEndBalance: forecast.currentBalance }]}
+        forecasts={[{ ...forecast, days: [], forecastEndBalance: forecast.currentBalance }]}
       />,
     );
 
@@ -321,7 +324,7 @@ describe("BankCashFlowForecastClient", () => {
   });
 
   it("書き込み不可のデモでは除外操作を表示しない", () => {
-    render(<BankCashFlowForecastClient forecasts={[forecast]} allowForecastDismissal={false} />);
+    render(<BankCashFlowForecastClient forecasts={[forecast]} allowForecastChanges={false} />);
 
     fireEvent.click(screen.getByRole("button", { name: "銀行 Aの入出金詳細を開く" }));
 

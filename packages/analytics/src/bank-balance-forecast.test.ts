@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateBankBalanceForecasts,
   calculateMonthlyBankBalanceForecasts,
   recurringCandidateToBankCashFlowEvent,
   type BankBalanceAccount,
@@ -68,7 +69,7 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
       forecastBoundaryDate: currentDate,
       monthStartDate: "2026-08-01",
       openingBalance: 85_000,
-      monthEndBalance: 50_000,
+      forecastEndBalance: 50_000,
     });
     expect(forecast.days.flatMap(({ events }) => events)).toMatchObject([
       { id: "opening-income", status: "actual", balanceAfter: 105_000 },
@@ -132,7 +133,7 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
     );
 
     expect(forecast.days).toEqual([]);
-    expect(forecast.monthEndBalance).toBe(100_000);
+    expect(forecast.forecastEndBalance).toBe(100_000);
   });
 
   it("separates accounts and applies actual events posted after a stale balance anchor", () => {
@@ -152,14 +153,14 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
     );
 
     expect(
-      result.map(({ accountId, openingBalance, monthEndBalance }) => ({
+      result.map(({ accountId, openingBalance, forecastEndBalance }) => ({
         accountId,
         openingBalance,
-        monthEndBalance,
+        forecastEndBalance,
       })),
     ).toEqual([
-      { accountId: "account-a", openingBalance: 100_000, monthEndBalance: 101_000 },
-      { accountId: 2, openingBalance: 10_000, monthEndBalance: 0 },
+      { accountId: "account-a", openingBalance: 100_000, forecastEndBalance: 101_000 },
+      { accountId: 2, openingBalance: 10_000, forecastEndBalance: 0 },
     ]);
   });
 
@@ -175,7 +176,7 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
 
     expect(forecast).toMatchObject({
       openingBalance: 100_000,
-      monthEndBalance: 95_000,
+      forecastEndBalance: 95_000,
     });
   });
 
@@ -189,7 +190,39 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
       currentDate,
     );
 
-    expect(forecast).toMatchObject({ days: [], openingBalance: 100_000, monthEndBalance: 100_000 });
+    expect(forecast).toMatchObject({
+      days: [],
+      openingBalance: 100_000,
+      forecastEndBalance: 100_000,
+    });
+  });
+
+  it("extends a forecast through a future one-off event when an end date is provided", () => {
+    const [forecast] = calculateBankBalanceForecasts(
+      [accountA],
+      [event("future-tax", "2026-10-15", 30_000, "expense", "forecast")],
+      currentDate,
+      "2026-10-15",
+    );
+
+    expect(forecast).toMatchObject({
+      forecastEndDate: "2026-10-15",
+      openingBalance: 100_000,
+      forecastEndBalance: 70_000,
+      days: [
+        {
+          date: "2026-10-15",
+          closingBalance: 70_000,
+          events: [{ id: "future-tax", balanceAfter: 70_000 }],
+        },
+      ],
+    });
+  });
+
+  it("rejects a forecast end before the boundary", () => {
+    expect(() => calculateBankBalanceForecasts([accountA], [], currentDate, "2026-08-02")).toThrow(
+      "forecastEndDate cannot be before",
+    );
   });
 
   it.each([
@@ -216,7 +249,7 @@ describe("calculateMonthlyBankBalanceForecasts", () => {
       currentDate,
     );
 
-    expect(forecast).toMatchObject({ openingBalance: 95_000, monthEndBalance: 0 });
+    expect(forecast).toMatchObject({ openingBalance: 95_000, forecastEndBalance: 0 });
     expect(forecast.days[0]?.events).toMatchObject([
       { id: "today-actual", balanceAfter: 100_000 },
       { id: "today-forecast", balanceAfter: 0 },

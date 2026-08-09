@@ -34,6 +34,8 @@ export async function resetTestDb(db: Db): Promise<void> {
   await db.delete(schema.accountStatuses).run();
   await db.delete(schema.transactions).run();
   await db.delete(schema.cashFlowPeriods).run();
+  await db.delete(schema.bankForecastManualEvents).run();
+  await db.delete(schema.bankForecastDismissals).run();
   await db.delete(schema.assetHistoryCategories).run();
   await db.delete(schema.assetHistory).run();
   await db.delete(schema.spendingTargets).run();

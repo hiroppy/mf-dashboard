@@ -5,7 +5,7 @@ import type { BankCashFlowForecastView } from "./bank-cashflow-forecast-data";
 function forecast(
   accountId: number,
   accountName: string,
-  monthEndBalance: number,
+  forecastEndBalance: number,
   hasBalanceTrend = true,
 ): BankCashFlowForecastView {
   return {
@@ -14,13 +14,14 @@ function forecast(
     currentBalance: 150_000,
     forecastBoundaryDate: "2026-08-03",
     monthStartDate: "2026-08-01",
+    forecastEndDate: "2026-08-31",
     openingBalance: 150_000,
-    monthEndBalance,
+    forecastEndBalance,
     days: hasBalanceTrend
       ? [
           {
             date: "2026-08-20",
-            closingBalance: monthEndBalance,
+            closingBalance: forecastEndBalance,
             events: [
               {
                 id: `forecast-${accountId}`,
@@ -29,7 +30,7 @@ function forecast(
                 amount: 50_000,
                 direction: "expense",
                 status: "forecast",
-                balanceAfter: monthEndBalance,
+                balanceAfter: forecastEndBalance,
               },
             ],
           },

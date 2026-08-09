@@ -1,5 +1,5 @@
 import {
-  calculateMonthlyBankBalanceForecasts,
+  calculateBankBalanceForecasts,
   recurringCandidateToBankCashFlowEvent,
   type BankBalanceForecast,
   type BankCashFlowEventInput,
@@ -9,7 +9,8 @@ import {
   matchesRecurringCandidateIdentity,
   type RecurringCandidate,
 } from "@mf-dashboard/analytics/recurring-candidates";
-import { parseIsoDateKey } from "@mf-dashboard/date-utils";
+import { formatIsoDateKey, getDaysInMonth, parseIsoDateKey } from "@mf-dashboard/date-utils";
+import type { BankForecastManualEvent } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import {
   createNormalTransactionMirrorKeys,
   createTransferMovementKey,
@@ -197,6 +198,7 @@ export function buildBankCashFlowForecastViews(
   candidates?: RecurringCandidate[],
   cardLiabilities: ForecastCardLiability[] = [],
   dismissals: BankForecastDismissal[] = [],
+  manualEvents: BankForecastManualEvent[] = [],
 ): BankCashFlowForecastView[] {
   const bankAccounts = accounts.flatMap((account) => {
     if (account.categoryName !== "銀行") return [];
@@ -286,14 +288,39 @@ export function buildBankCashFlowForecastViews(
     },
   );
 
-  const forecasts = calculateMonthlyBankBalanceForecasts(
+  const eligibleManualEvents = manualEvents.filter(
+    (event) => bankAccountIds.has(event.accountId) && event.date >= currentDate,
+  );
+  const manualForecastEvents: BankCashFlowEventInput[] = eligibleManualEvents.map((event) => ({
+    id: `manual-${event.id}`,
+    accountId: event.accountId,
+    date: event.date,
+    amount: event.amount,
+    direction: event.direction,
+    status: "forecast",
+    description: event.description,
+    amountSource: "manual",
+  }));
+  const { year, month: monthNumber } = parseIsoDateKey(currentDate);
+  const currentMonthEnd = formatIsoDateKey({
+    year,
+    month: monthNumber,
+    day: getDaysInMonth(year, monthNumber),
+  });
+  const forecastEndDate = eligibleManualEvents.reduce(
+    (latest, event) => (event.date > latest ? event.date : latest),
+    currentMonthEnd,
+  );
+
+  const forecasts = calculateBankBalanceForecasts(
     bankAccounts.map(({ id, totalAssets, balanceAsOfDate }) => ({
       accountId: id,
       currentBalance: totalAssets,
       balanceAsOfDate,
     })),
-    [...actualEvents, ...forecastEvents],
+    [...actualEvents, ...forecastEvents, ...manualForecastEvents],
     currentDate,
+    forecastEndDate,
   );
   const accountNames = new Map(bankAccounts.map(({ id, name }) => [id, name]));
 

@@ -21,7 +21,7 @@ describe("NotificationPopover", () => {
     expect(balanceSection.parentElement?.className).toContain("max-h-[calc(100dvh-6rem)]");
     expect(balanceSection.parentElement?.className).toContain("overflow-y-auto");
     expect(within(balanceSection).getByText("銀行 B")).toBeTruthy();
-    expect(balanceSection.textContent).toContain("月末予測残高-60,000円");
+    expect(balanceSection.textContent).toContain("予測残高-60,000円");
     expect(within(balanceSection).getByText("-60,000円").className).toContain(
       "text-balance-negative",
     );

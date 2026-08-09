@@ -76,7 +76,7 @@ export function NotificationPopover({
               >
                 <span className="block font-medium">{alert.accountName}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                  月末予測残高
+                  予測残高
                   <AmountDisplay
                     amount={alert.forecastBalance}
                     type="balance"

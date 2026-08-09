@@ -1,6 +1,7 @@
 import { getJstTodayIsoDate, shiftYearMonthKey } from "@mf-dashboard/date-utils";
 import { getAccountsWithAssets } from "@mf-dashboard/db/queries/account";
 import { getBankForecastDismissals } from "@mf-dashboard/db/queries/bank-forecast-dismissal";
+import { getBankForecastManualEvents } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import { getHoldingsWithLatestValues } from "@mf-dashboard/db/queries/holding";
 import { getTransactions } from "@mf-dashboard/db/queries/transaction";
 import { Landmark } from "lucide-react";
@@ -24,12 +25,18 @@ export const getBankCashFlowForecastViews = cache(async (groupId?: string) => {
     process.env.DEMO_MODE === "true",
   );
   const historyStartDate = `${shiftYearMonthKey(currentDate.slice(0, 7), -12)}-01`;
-  const [selectedAccounts, selectedTransactions, selectedHoldings, dismissals] = await Promise.all([
-    getAccountsWithAssets(groupId),
-    getTransactions({ groupId, startDate: historyStartDate, includeTransferTargetAccounts: true }),
-    getHoldingsWithLatestValues(groupId),
-    getBankForecastDismissals(groupId),
-  ]);
+  const [selectedAccounts, selectedTransactions, selectedHoldings, dismissals, manualEvents] =
+    await Promise.all([
+      getAccountsWithAssets(groupId),
+      getTransactions({
+        groupId,
+        startDate: historyStartDate,
+        includeTransferTargetAccounts: true,
+      }),
+      getHoldingsWithLatestValues(groupId),
+      getBankForecastDismissals(groupId),
+      getBankForecastManualEvents(groupId),
+    ]);
   const selectedBankIds = new Set(
     selectedAccounts.filter(({ categoryName }) => categoryName === "銀行").map(({ id }) => id),
   );
@@ -114,11 +121,15 @@ export const getBankCashFlowForecastViews = cache(async (groupId?: string) => {
     undefined,
     cardLiabilities,
     dismissals,
+    manualEvents,
   );
 });
 
 export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
-  const forecasts = await getBankCashFlowForecastViews(groupId);
+  const [forecasts, manualEvents] = await Promise.all([
+    getBankCashFlowForecastViews(groupId),
+    getBankForecastManualEvents(groupId),
+  ]);
 
   if (forecasts.length === 0) {
     return <EmptyState icon={Landmark} title="今月の銀行別予測" />;
@@ -127,8 +138,9 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
   return (
     <BankCashFlowForecastClient
       forecasts={forecasts}
+      manualEvents={manualEvents}
       groupId={groupId}
-      allowForecastDismissal={process.env.VERCEL !== "1"}
+      allowForecastChanges={process.env.VERCEL !== "1"}
     />
   );
 }

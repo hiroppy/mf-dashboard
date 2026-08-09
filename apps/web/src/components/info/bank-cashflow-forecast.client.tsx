@@ -5,6 +5,7 @@ import type {
   CalculatedBankCashFlowEvent,
 } from "@mf-dashboard/analytics/bank-balance-forecast";
 import type { RecurringCandidateClassification } from "@mf-dashboard/analytics/recurring-candidates";
+import type { BankForecastManualEvent } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import { CircleHelp, EyeOff, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
@@ -29,11 +30,13 @@ import {
   getBankForecastAnchorId,
 } from "./bank-cashflow-forecast-anchor";
 import type { BankCashFlowForecastView } from "./bank-cashflow-forecast-data";
+import { BankForecastManualEventsClient } from "./bank-forecast-manual-events.client";
 
 interface BankCashFlowForecastClientProps {
   forecasts: BankCashFlowForecastView[];
+  manualEvents?: BankForecastManualEvent[];
   groupId?: string;
-  allowForecastDismissal?: boolean;
+  allowForecastChanges?: boolean;
 }
 
 const statusDetails: Record<
@@ -47,6 +50,7 @@ const statusDetails: Record<
 const amountSourceDetails = {
   scheduled_withdrawal: { label: "確定", variant: "default" },
   liability: { label: "残高参考", variant: "warning" },
+  manual: { label: "手入力", variant: "secondary" },
 } as const;
 
 const classificationLabels: Record<RecurringCandidateClassification, string> = {
@@ -67,6 +71,7 @@ function getRecurrencePrefix(intervalMonths: number | undefined): string {
 
 function getEvidenceText(event: CalculatedBankCashFlowEvent): string {
   if (event.status === "actual") return "Money Forwardの実績データ";
+  if (event.amountSource === "manual") return "手入力した入出金予定";
 
   const classification = classificationLabels[event.classification ?? "other"];
   const evidence = event.evidence;
@@ -97,12 +102,12 @@ function getEvidenceText(event: CalculatedBankCashFlowEvent): string {
 function ForecastEvent({
   event,
   groupId,
-  allowForecastDismissal,
+  allowForecastChanges,
   onDismissed,
 }: {
   event: CalculatedBankCashFlowEvent;
   groupId?: string;
-  allowForecastDismissal: boolean;
+  allowForecastChanges: boolean;
   onDismissed: () => void;
 }) {
   const [error, setError] = useState(false);
@@ -113,7 +118,7 @@ function ForecastEvent({
     : statusDetails[event.status];
   const signedAmount = event.direction === "income" ? event.amount : -event.amount;
   const dismissal =
-    allowForecastDismissal &&
+    allowForecastChanges &&
     event.status === "forecast" &&
     !event.amountSource &&
     typeof event.accountId === "number" &&
@@ -229,14 +234,19 @@ function BalanceSummary({
   forecast: BankCashFlowForecastView;
   className?: string;
 }) {
+  const forecastBalanceLabel = forecast.forecastEndDate.startsWith(
+    forecast.monthStartDate.slice(0, 7),
+  )
+    ? "月末予測残高"
+    : `${formatDateShort(forecast.forecastEndDate)}予測残高`;
   return (
     <span
       className={cn("grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 text-right sm:gap-x-6", className)}
     >
       <span className="text-xs text-muted-foreground">現在残高</span>
-      <span className="text-xs text-muted-foreground">月末予測残高</span>
+      <span className="text-xs text-muted-foreground">{forecastBalanceLabel}</span>
       <AmountDisplay amount={forecast.currentBalance} type="balance" weight="semibold" />
-      <AmountDisplay amount={forecast.monthEndBalance} type="balance" weight="bold" />
+      <AmountDisplay amount={forecast.forecastEndBalance} type="balance" weight="bold" />
     </span>
   );
 }
@@ -244,12 +254,12 @@ function BalanceSummary({
 function BankForecastCard({
   forecast,
   groupId,
-  allowForecastDismissal,
+  allowForecastChanges,
   onForecastDismissed,
 }: {
   forecast: BankCashFlowForecastView;
   groupId?: string;
-  allowForecastDismissal: boolean;
+  allowForecastChanges: boolean;
   onForecastDismissed: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -310,7 +320,8 @@ function BankForecastCard({
           <div className="min-w-0">
             <DialogTitle>{forecast.accountName}の入出金詳細</DialogTitle>
             <DialogDescription>
-              {formatDateShort(forecast.monthStartDate)}からの実績と予測
+              {formatDateShort(forecast.monthStartDate)}〜
+              {formatDateShort(forecast.forecastEndDate)}の実績と予測
             </DialogDescription>
           </div>
           <BalanceSummary
@@ -342,7 +353,7 @@ function BankForecastCard({
                     key={event.id}
                     event={event}
                     groupId={groupId}
-                    allowForecastDismissal={allowForecastDismissal}
+                    allowForecastChanges={allowForecastChanges}
                     onDismissed={onForecastDismissed}
                   />
                 ))}
@@ -357,8 +368,9 @@ function BankForecastCard({
 
 export function BankCashFlowForecastClient({
   forecasts,
+  manualEvents = [],
   groupId,
-  allowForecastDismissal = true,
+  allowForecastChanges = true,
 }: BankCashFlowForecastClientProps) {
   const router = useRouter();
   const firstForecast = forecasts[0];
@@ -374,7 +386,7 @@ export function BankCashFlowForecastClient({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
-          <CardTitle icon={Landmark}>{month}月の銀行別予測</CardTitle>
+          <CardTitle icon={Landmark}>{month}月からの銀行別予測</CardTitle>
           <Popover>
             <PopoverTrigger>
               <button
@@ -441,13 +453,24 @@ export function BankCashFlowForecastClient({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <BankForecastManualEventsClient
+          accounts={forecasts.map(({ accountId, accountName }) => ({
+            id: Number(accountId),
+            name: accountName,
+          }))}
+          events={manualEvents}
+          minDate={firstForecast.forecastBoundaryDate}
+          groupId={groupId}
+          allowEditing={allowForecastChanges}
+          onChanged={() => router.refresh()}
+        />
         <div className="grid gap-4 lg:grid-cols-2">
           {sortedForecasts.map((forecast) => (
             <BankForecastCard
               key={forecast.accountId}
               forecast={forecast}
               groupId={groupId}
-              allowForecastDismissal={allowForecastDismissal}
+              allowForecastChanges={allowForecastChanges}
               onForecastDismissed={() => router.refresh()}
             />
           ))}

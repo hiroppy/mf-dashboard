@@ -13,12 +13,13 @@ export function buildBalanceForecastAlerts(
 ): BalanceForecastAlert[] {
   return forecasts
     .filter(
-      ({ days, monthEndBalance }) => days.length > 0 && monthEndBalance <= LOW_BALANCE_THRESHOLD,
+      ({ days, forecastEndBalance }) =>
+        days.length > 0 && forecastEndBalance <= LOW_BALANCE_THRESHOLD,
     )
-    .map(({ accountId, accountName, monthEndBalance }) => ({
+    .map(({ accountId, accountName, forecastEndBalance }) => ({
       accountId,
       accountName,
-      forecastBalance: monthEndBalance,
+      forecastBalance: forecastEndBalance,
     }))
     .sort((left, right) => left.forecastBalance - right.forecastBalance);
 }
