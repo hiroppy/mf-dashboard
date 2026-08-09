@@ -21,7 +21,7 @@ const fanChartData = buildFanChartData(
 );
 
 const billionScaleFanChartData = buildFanChartData(
-  [0, 5, 10, 15, 20, 25, 30].map((year) => {
+  [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((year) => {
     const base = 100_000_000 + year * 9_000_000;
     return {
       year,
@@ -80,6 +80,13 @@ export const Default: Story = {
 export const BillionScale: Story = {
   args: {
     ...Default.args,
+    copyData: {
+      settings: {
+        initialAmount: 100_000_000,
+        monthlyContribution: 500_000,
+        annualReturnRate: 5,
+      },
+    },
     fanChartData: billionScaleFanChartData,
   },
 };

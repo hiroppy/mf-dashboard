@@ -15,7 +15,8 @@ export function formatYAxisAmount(value: number): string {
     return `${oku.toLocaleString("ja-JP")}億`;
   }
 
-  return `${(value / 10_000).toFixed(0)}万`;
+  const man = Number((value / 10_000).toFixed(0));
+  return `${man}万`;
 }
 
 export const MILESTONE_CANDIDATES = [10_000_000, 20_000_000, 50_000_000, 100_000_000, 200_000_000];
