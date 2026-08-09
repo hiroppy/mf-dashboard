@@ -57,6 +57,49 @@ test.describe("App flows", () => {
     expect(releaseWarnings).toEqual([]);
   });
 
+  test("shows the monthly bank cash flow forecast on default and group cash-flow pages", async ({
+    page,
+  }) => {
+    for (const path of ["/cf", "/demo_group_002/cf"]) {
+      await test.step(`Inspect bank cash flow forecast at ${path}`, async () => {
+        await page.goto(path);
+        await expectHeading(page, "収支");
+
+        await expect(page.getByText(/^\d+月の銀行別予測$/)).toBeVisible();
+        await expect(page.getByText("現在残高").first()).toBeVisible();
+        await expect(page.getByText("月末予測残高").first()).toBeVisible();
+        await expect(page.getByRole("combobox", { name: "月を選択" })).toHaveCount(0);
+
+        const details = page.getByRole("button", {
+          name: "三井住友銀行の入出金詳細を開く",
+        });
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+
+        await details.click();
+
+        const dialog = page.getByRole("dialog", { name: "三井住友銀行の入出金詳細" });
+        await expect(dialog.getByText("給与振込")).toBeVisible();
+        await expect(dialog.getByText("予測").first()).toBeVisible();
+        await expect(dialog.getByText(/取引後残高:/).first()).toBeVisible();
+        await dialog.getByRole("button", { name: "明細を閉じる" }).click();
+
+        await page.getByRole("button", { name: "楽天銀行の入出金詳細を開く" }).click();
+        const actualDialog = page.getByRole("dialog", { name: "楽天銀行の入出金詳細" });
+        await expect(actualDialog.getByText("実績").first()).toBeVisible();
+        await actualDialog.getByRole("button", { name: "明細を閉じる" }).click();
+      });
+    }
+
+    await test.step("Exclude banks outside the selected group", async () => {
+      await page.goto("/demo_group_001/cf");
+      await expectHeading(page, "収支");
+      await expect(page.getByText(/^\d+月の銀行別予測$/)).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "三井住友銀行の入出金詳細を開く" }),
+      ).toHaveCount(0);
+    });
+  });
+
   test("navigates between primary pages from the sidebar", async ({ page }) => {
     // This scenario compiles and visits six routes. WebKit on CI can exceed
     // Playwright's 30-second default while the Next.js dev server warms up.

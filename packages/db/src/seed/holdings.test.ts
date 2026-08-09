@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { holdingDefs } from "./holdings";
+import { txTemplates } from "./transactions";
 
 describe("demo holdings", () => {
   it("含み益と含み損の両方を含む", () => {
@@ -9,5 +10,24 @@ describe("demo holdings", () => {
 
     expect(gains.some((gain) => gain > 0)).toBe(true);
     expect(gains.some((gain) => gain < 0)).toBe(true);
+  });
+
+  it("残高注意を確認できる銀行口座の残高と定期振替を含む", () => {
+    const bankHolding = holdingDefs.find(({ accountName }) => accountName === "楽天銀行");
+    const recurringTransfer = txTemplates.find(
+      ({ accountName, transferTarget }) =>
+        accountName === "三井住友銀行" && transferTarget === "楽天銀行",
+    );
+
+    expect(bankHolding).toMatchObject({ amount: 200000 });
+    expect(recurringTransfer).toMatchObject({
+      description: "三井住友銀行へ振替",
+      type: "transfer",
+      minAmount: 150000,
+      maxAmount: 150000,
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+    });
+    expect(bankHolding!.amount - recurringTransfer!.maxAmount).toBeLessThanOrEqual(100000);
   });
 });

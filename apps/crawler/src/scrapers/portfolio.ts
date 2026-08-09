@@ -6,6 +6,10 @@ import { debug, warn } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 import { extractAccountMfIdFromDetailUrl, isExpectedAccountDetailPage } from "./account-detail.js";
 import { createManualHoldingKey, type ManualHoldingAccountMap } from "./manual-holding-accounts.js";
+import {
+  getScheduledWithdrawalStatus,
+  type ScheduledWithdrawalStatus,
+} from "./scheduled-withdrawals.js";
 
 const DEPOSIT_TABLE_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
@@ -253,10 +257,11 @@ export function parsePnsPortfolioItem(
   };
 }
 
-export interface LinkedAccountPnsSource {
+export interface LinkedAccountDetailSource {
   complete: boolean;
   fingerprints: readonly string[];
   items: readonly PortfolioItem[];
+  scheduledWithdrawals: ReadonlyMap<string, ScheduledWithdrawalStatus>;
 }
 
 function normalizePnsCellText(value: string): string {
@@ -327,7 +332,7 @@ export function selectLinkedPnsAccounts(
 export function selectLinkedPnsPortfolioItems(
   globalItems: readonly PortfolioItem[],
   globalFingerprints: readonly string[],
-  linkedAccountPnsSource?: LinkedAccountPnsSource,
+  linkedAccountPnsSource?: Pick<LinkedAccountDetailSource, "complete" | "fingerprints" | "items">,
 ): readonly PortfolioItem[] {
   if (!linkedAccountPnsSource?.complete) return globalItems;
   if (
@@ -380,13 +385,14 @@ async function getRowCellTexts(row: Locator): Promise<string[]> {
  * 通常の自動連携口座詳細を保険・年金項目の権威ソースとして取得する。
  * 口座との対応は表示名や金額ではなく、検証済みの詳細ページURLで確定する。
  */
-export async function getLinkedAccountPnsSource(
+export async function getLinkedAccountDetailSource(
   page: Page,
   registeredAccounts: RegisteredAccounts,
-): Promise<LinkedAccountPnsSource> {
+): Promise<LinkedAccountDetailSource> {
   const linkedAccounts = selectLinkedPnsAccounts(registeredAccounts);
   const items: PortfolioItem[] = [];
   const fingerprints: string[] = [];
+  const scheduledWithdrawals = new Map<string, ScheduledWithdrawalStatus>();
   let failedPageCount = 0;
 
   for (const account of linkedAccounts) {
@@ -399,6 +405,9 @@ export async function getLinkedAccountPnsSource(
         failedPageCount++;
         continue;
       }
+
+      const scheduledWithdrawal = await getScheduledWithdrawalStatus(page);
+      if (scheduledWithdrawal) scheduledWithdrawals.set(account.mfId, scheduledWithdrawal);
 
       const tables = page.locator("table.table-pns");
       for (let tableIndex = 0; tableIndex < (await tables.count()); tableIndex++) {
@@ -430,13 +439,13 @@ export async function getLinkedAccountPnsSource(
   }
 
   debug(
-    `Linked account insurance/pension source: ${items.length} items from ${linkedAccounts.length} current linked accounts`,
+    `Linked account details: ${items.length} insurance/pension items and ${scheduledWithdrawals.size} scheduled withdrawals from ${linkedAccounts.length} accounts`,
   );
   if (failedPageCount > 0) {
     warn(`Linked account insurance/pension source incomplete: ${failedPageCount} failures`);
   }
 
-  return { complete: failedPageCount === 0, fingerprints, items };
+  return { complete: failedPageCount === 0, fingerprints, items, scheduledWithdrawals };
 }
 
 // Parse stocks from .table-eq
@@ -547,7 +556,7 @@ export function identifyTableTypeFromTitle(titleText: string): string {
 export async function parseInsuranceAndPoints(
   page: Page,
   manualHoldingAccountMap: ManualHoldingAccountMap = new Map(),
-  linkedAccountPnsSource?: LinkedAccountPnsSource,
+  linkedAccountPnsSource?: Pick<LinkedAccountDetailSource, "complete" | "fingerprints" | "items">,
 ): Promise<PortfolioItem[]> {
   const items: PortfolioItem[] = [];
   const globalLinkedPnsItems: PortfolioItem[] = [];
@@ -626,7 +635,7 @@ export async function parseInsuranceAndPoints(
 export async function getPortfolio(
   page: Page,
   manualHoldingAccountMap: ManualHoldingAccountMap = new Map(),
-  linkedAccountPnsSource?: LinkedAccountPnsSource,
+  linkedAccountPnsSource?: Pick<LinkedAccountDetailSource, "complete" | "fingerprints" | "items">,
 ): Promise<Portfolio> {
   debug("Getting portfolio from /bs/portfolio page...");
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { Button } from "./button";
 
 interface DialogProps {
   open?: boolean;
@@ -28,6 +30,27 @@ function DialogTrigger({ children, className }: DialogTriggerProps) {
     <BaseDialog.Trigger
       className={className}
       render={children as React.ReactElement<Record<string, unknown>>}
+    />
+  );
+}
+
+interface DialogCloseButtonProps {
+  ariaLabel?: string;
+  className?: string;
+}
+
+function DialogCloseButton({
+  ariaLabel = "ダイアログを閉じる",
+  className,
+}: DialogCloseButtonProps) {
+  return (
+    <BaseDialog.Close
+      className={className}
+      render={
+        <Button type="button" variant="ghost" size="icon" aria-label={ariaLabel}>
+          <X aria-hidden="true" />
+        </Button>
+      }
     />
   );
 }
@@ -98,4 +121,4 @@ function DialogDescription({ children, className, asChild }: DialogDescriptionPr
   );
 }
 
-export { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription };
+export { Dialog, DialogTrigger, DialogCloseButton, DialogContent, DialogTitle, DialogDescription };

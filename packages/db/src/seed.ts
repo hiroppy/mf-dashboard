@@ -14,6 +14,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { createClient } from "@libsql/client";
+import { getJstYearMonthKey, parseYearMonthKey } from "@mf-dashboard/date-utils";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import * as schema from "./schema/schema";
@@ -78,7 +79,6 @@ const pick = createPick(random);
 // ---------------------------------------------------------------------------
 const YEAR_START = 2025;
 const MONTH_START = 2; // 2025-02
-const FIXED_DAY = 24; // 月内の固定日
 
 const { values: args } = parseArgs({
   args: process.argv.slice(2).filter((a) => a !== "--"),
@@ -90,11 +90,9 @@ if (period && !/^\d{4}-\d{2}$/.test(period)) {
   console.error("--period must be in YYYY-MM format (e.g., --period=2026-03)");
   process.exit(1);
 }
-const currentDate = new Date();
-const YEAR_END = period ? Number(period.split("-")[0]) : currentDate.getFullYear();
-const MONTH_END = period ? Number(period.split("-")[1]) : currentDate.getMonth() + 1;
-const today = new Date(dateStr(YEAR_END, MONTH_END, FIXED_DAY));
-fixedTimestamp = `${dateStr(YEAR_END, MONTH_END, FIXED_DAY)}T00:00:00.000Z`;
+const { year: YEAR_END, month: MONTH_END } = parseYearMonthKey(period ?? getJstYearMonthKey());
+const DEMO_FORECAST_AS_OF_DAY = 3;
+fixedTimestamp = `${dateStr(YEAR_END, MONTH_END, DEMO_FORECAST_AS_OF_DAY)}T00:00:00.000Z`;
 const range = {
   yearStart: YEAR_START,
   monthStart: MONTH_START,
@@ -229,7 +227,7 @@ console.log(
   `資産合計: ¥${totalAssets.toLocaleString()} / 負債合計: ¥${totalLiabilities.toLocaleString()} / 純資産: ¥${netAssets.toLocaleString()}`,
 );
 
-const snapshotDate = dateStr(YEAR_END, MONTH_END, today.getDate());
+const snapshotDate = dateStr(YEAR_END, MONTH_END, DEMO_FORECAST_AS_OF_DAY);
 const snapshotResult = await db
   .insert(schema.dailySnapshots)
   .values({
@@ -332,6 +330,7 @@ forEachMonth(range, (y, m) => {
   }
 
   const maxDay = daysInMonth(y, m);
+  const isCurrentPeriod = y === YEAR_END && m === MONTH_END;
 
   for (const tmpl of txTemplates) {
     if (tmpl.description === "夏季賞与" && m !== 6) continue;
@@ -371,6 +370,8 @@ forEachMonth(range, (y, m) => {
 
     if (tmpl.frequency === "monthly") {
       const day = Math.min(tmpl.fixedDay!, maxDay);
+      if (isCurrentPeriod && day > DEMO_FORECAST_AS_OF_DAY) continue;
+
       const amount = randInt(tmpl.minAmount, tmpl.maxAmount);
       const desc = tmpl.description || getDescription(tmpl.category, tmpl.subCategory, pick);
 
@@ -395,6 +396,8 @@ forEachMonth(range, (y, m) => {
       const count = tmpl.occurrences ?? 1;
       for (let i = 0; i < count; i++) {
         const day = randInt(1, maxDay);
+        if (isCurrentPeriod && day > DEMO_FORECAST_AS_OF_DAY) continue;
+
         const amount = randInt(tmpl.minAmount, tmpl.maxAmount);
         const desc = tmpl.description || getDescription(tmpl.category, tmpl.subCategory, pick);
 
@@ -456,6 +459,7 @@ const assetHistoryDays = await seedAssetHistory({
   now,
   randInt,
   totalAssets,
+  asOfDate: snapshotDate,
   groupMonthlyData,
   accountCategoryMap,
   getGroupsForAccount: getGroupsForAccountName,
@@ -475,7 +479,7 @@ const insightCount = await seedInsights({
   now,
   yearEnd: YEAR_END,
   monthEnd: MONTH_END,
-  fixedDay: FIXED_DAY,
+  fixedDay: DEMO_FORECAST_AS_OF_DAY,
 });
 if (insightCount > 0) {
   console.log(`インサイトデータを挿入しました (${insightCount}グループ)`);

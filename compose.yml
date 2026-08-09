@@ -1,4 +1,20 @@
+x-crawler-image: &crawler-image
+  image: mf-dashboard-crawler
+  build:
+    context: .
+    dockerfile: docker/crawler/Dockerfile
+
 services:
+  migrate:
+    <<: *crawler-image
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /app/apps/crawler
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["node", "--import", "tsx", "../../packages/db/src/migrate.ts"]
+    volumes:
+      - ./data:/app/data
+    restart: "no"
+
   web:
     build:
       context: .
@@ -38,6 +54,9 @@ services:
       - ./data:/app/data
     expose:
       - "8765"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   cloudflared:
@@ -51,9 +70,7 @@ services:
     restart: unless-stopped
 
   crawler:
-    build:
-      context: .
-      dockerfile: docker/crawler/Dockerfile
+    <<: *crawler-image
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:
       AI_API_KEY: ${AI_API_KEY:-}

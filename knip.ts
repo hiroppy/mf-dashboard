@@ -9,6 +9,9 @@ const config: KnipConfig = {
       ignore: ["vitest.mutation.config.ts"],
       entry: ["e2e/mock-crawler-server.ts"],
     },
+    "packages/db": {
+      entry: ["src/migrate.ts"],
+    },
   },
 };
 

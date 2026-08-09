@@ -63,19 +63,17 @@ export function createBreakdowns(
             : (transaction.category ?? "その他");
         return memberNameSet.has(transactionCategory);
       })
-      .map(
-        (transaction): CategoryTransaction => ({
-          id: transaction.id,
-          date: transaction.date,
-          description: transaction.description,
-          amount: transaction.amount,
-          accountName: transaction.accountName,
-          category:
-            type === "income"
-              ? (transaction.subCategory ?? "その他")
-              : (transaction.category ?? "その他"),
-        }),
-      )
+      .map((transaction): CategoryTransaction => ({
+        id: transaction.id,
+        date: transaction.date,
+        description: transaction.description,
+        amount: transaction.amount,
+        accountName: transaction.accountName,
+        category:
+          type === "income"
+            ? (transaction.subCategory ?? "その他")
+            : (transaction.category ?? "その他"),
+      }))
       .sort((a, b) => b.amount - a.amount);
 
     return {

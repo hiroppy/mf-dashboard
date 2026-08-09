@@ -212,6 +212,7 @@ Terraformの適用が成功し、`secrets/cloudflared-token`が作成された�
 
 各コンテナの役割は次のとおり。
 
+- **migrate**: 起動時に共有データベースへマイグレーションを適用し、完了後に終了する
 - **web**: ダッシュボードを配信し、共有データベースを読み取る
 - **cloudflared**: Cloudflare Tunnelへ接続する
 - **crawler**: 定期更新と手動更新を受け付け、取得したデータを共有データベースへ保存する
@@ -227,7 +228,7 @@ docker compose logs -f
 
 以下を確認する:
 
-- `docker compose ps`で3サービスすべてが`Up`になっている
+- `docker compose ps --all`で`migrate`が`Exited (0)`、ほかの3サービスが`Up`になっている
 - ログに認証エラーやTunnel接続エラーがない
 - 未ログインで`https://<hostname>/`へアクセスするとGoogleログインへ移動する
 - 許可したアカウントではダッシュボードが表示される

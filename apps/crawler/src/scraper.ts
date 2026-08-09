@@ -1,5 +1,5 @@
 import { formatJstDateTimeForDisplay, getJstDateParts } from "@mf-dashboard/date-utils";
-import type { Group, ScrapedData } from "@mf-dashboard/db/types";
+import type { Group, RegisteredAccounts, ScrapedData } from "@mf-dashboard/db/types";
 import type { Page } from "playwright";
 import {
   CRAWLER_STEPS,
@@ -21,11 +21,27 @@ import {
 } from "./scrapers/group.js";
 import { getLiabilities } from "./scrapers/liabilities.js";
 import { getManualHoldingAccountMap } from "./scrapers/manual-holding-accounts.js";
-import { getLinkedAccountPnsSource, getPortfolio } from "./scrapers/portfolio.js";
+import { getLinkedAccountDetailSource, getPortfolio } from "./scrapers/portfolio.js";
 import { clickRefreshButton, getMaxWaitMinutes } from "./scrapers/refresh.js";
 import { getRegisteredAccounts } from "./scrapers/registered-accounts.js";
+import { applyScheduledWithdrawals } from "./scrapers/scheduled-withdrawals.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
 import type { ScrapeOptions } from "./types.js";
+
+async function getPortfolioWithScheduledWithdrawals(
+  page: Page,
+  registeredAccounts: RegisteredAccounts,
+) {
+  const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
+  const detailSource = await getLinkedAccountDetailSource(page, registeredAccounts);
+  return {
+    portfolio: await getPortfolio(page, manualHoldingAccountMap, detailSource),
+    registeredAccounts: applyScheduledWithdrawals(
+      registeredAccounts,
+      detailSource.scheduledWithdrawals,
+    ),
+  };
+}
 
 // ============================================================
 // Types
@@ -134,16 +150,13 @@ async function scrapeGlobalData(
   );
   log(`Registered accounts: ${registeredAccounts.accounts.length}`);
 
-  const portfolio = await runCrawlerStep(
+  const portfolioResult = await runCrawlerStep(
     progress,
     CRAWLER_STEPS.portfolio,
-    async () => {
-      const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
-      const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
-      return getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
-    },
+    () => getPortfolioWithScheduledWithdrawals(page, registeredAccounts),
     { failureCode: "portfolio_failed" },
   );
+  const { portfolio, registeredAccounts: accountsWithScheduledWithdrawals } = portfolioResult;
   log(`Portfolio: ${portfolio.items.length} items`);
 
   const liabilities = await runCrawlerStep(
@@ -167,7 +180,13 @@ async function scrapeGlobalData(
     throw error;
   }
 
-  return { registeredAccounts, portfolio, liabilities, cashFlow, refreshResult };
+  return {
+    registeredAccounts: accountsWithScheduledWithdrawals,
+    portfolio,
+    liabilities,
+    cashFlow,
+    refreshResult,
+  };
 }
 
 // ============================================================
@@ -323,10 +342,11 @@ export async function scrape(page: Page, options: ScrapeOptions = {}): Promise<S
   const cashFlow = await getCashFlow(page);
   const liabilities = await getLiabilities(page);
   const assetHistory = await getAssetHistory(page);
-  const registeredAccounts = await getRegisteredAccounts(page);
-  const manualHoldingAccountMap = await getManualHoldingAccountMap(page, registeredAccounts);
-  const linkedAccountPnsSource = await getLinkedAccountPnsSource(page, registeredAccounts);
-  const portfolio = await getPortfolio(page, manualHoldingAccountMap, linkedAccountPnsSource);
+  const originalRegisteredAccounts = await getRegisteredAccounts(page);
+  const { portfolio, registeredAccounts } = await getPortfolioWithScheduledWithdrawals(
+    page,
+    originalRegisteredAccounts,
+  );
   const spendingTargets = await getSpendingTargets(page).catch(() => null);
 
   const updatedAt = formatJstDateTimeForDisplay();

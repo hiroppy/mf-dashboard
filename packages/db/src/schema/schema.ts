@@ -82,6 +82,10 @@ export const accountStatuses = sqliteTable("account_statuses", {
   status: text("status").notNull(), // "ok" / "error" / "updating" / "suspended" / "unknown"
   lastUpdated: text("last_updated"), // ISO 8601形式
   totalAssets: integer("total_assets").default(0), // /accountsページから取得した資産額
+  scheduledWithdrawalAmount: integer("scheduled_withdrawal_amount"),
+  scheduledWithdrawalConfirmed: integer("scheduled_withdrawal_confirmed", { mode: "boolean" })
+    .notNull()
+    .default(false),
   errorMessage: text("error_message"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -212,6 +216,29 @@ export const cashFlowPeriods = sqliteTable(
   (table) => [uniqueIndex("cash_flow_periods_month_idx").on(table.month)],
 );
 
+export const bankForecastDismissals = sqliteTable(
+  "bank_forecast_dismissals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    direction: text("direction", { enum: ["income", "expense"] }).notNull(),
+    recurringIdentity: text("recurring_identity").notNull(),
+    dismissedThroughDate: text("dismissed_through_date").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("bank_forecast_dismissals_candidate_idx").on(
+      table.accountId,
+      table.direction,
+      table.recurringIdentity,
+    ),
+    index("bank_forecast_dismissals_account_id_idx").on(table.accountId),
+  ],
+);
+
 // ============================================================================
 // 資産履歴系
 // ============================================================================
@@ -308,6 +335,7 @@ export const accountsRelations = relations(accounts, ({ many, one }) => ({
   }),
   transactions: many(transactions),
   groupAccounts: many(groupAccounts),
+  bankForecastDismissals: many(bankForecastDismissals),
 }));
 
 export const accountStatusesRelations = relations(accountStatuses, ({ one }) => ({
@@ -351,6 +379,13 @@ export const holdingValuesRelations = relations(holdingValues, ({ one }) => ({
 export const transactionsRelations = relations(transactions, ({ one }) => ({
   account: one(accounts, {
     fields: [transactions.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const bankForecastDismissalsRelations = relations(bankForecastDismissals, ({ one }) => ({
+  account: one(accounts, {
+    fields: [bankForecastDismissals.accountId],
     references: [accounts.id],
   }),
 }));

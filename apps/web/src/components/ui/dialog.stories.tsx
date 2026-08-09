@@ -1,5 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "./dialog";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogCloseButton,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "./dialog";
 
 const meta = {
   title: "UI/Dialog",
@@ -30,6 +37,7 @@ export const Default: Story = {
       <DialogContent>
         <DialogTitle>タイトル</DialogTitle>
         <DialogDescription>これはダイアログの説明文です。</DialogDescription>
+        <DialogCloseButton className="absolute right-4 top-4" />
       </DialogContent>
     </Dialog>
   ),

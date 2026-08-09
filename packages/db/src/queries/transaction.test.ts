@@ -123,6 +123,49 @@ describe("getTransactions", () => {
     expect(result).toHaveLength(1);
   });
 
+  it("startDateを指定した場合は対象日以降に制限される", async () => {
+    const accountId = await createTestAccount("Bank A");
+    await createTransaction({ accountId, date: "2025-04-15", amount: 1000, type: "expense" });
+    await createTransaction({ accountId, date: "2025-03-31", amount: 2000, type: "expense" });
+
+    const result = await getTransactions({ startDate: "2025-04-01" }, db);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe("2025-04-15");
+  });
+
+  it("指定時は振替先だけがグループ内の取引も返す", async () => {
+    const bankAccountId = await createTestAccount("Bank A");
+    const now = new Date().toISOString();
+    const externalAccount = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "external-card",
+        name: "Card A",
+        type: "card",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    await createTransaction({
+      accountId: externalAccount.id,
+      transferTargetAccountId: bankAccountId,
+      date: "2025-04-15",
+      amount: 30_000,
+      type: "transfer",
+    });
+
+    await expect(getTransactions(undefined, db)).resolves.toEqual([]);
+    const result = await getTransactions({ includeTransferTargetAccounts: true }, db);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      accountId: externalAccount.id,
+      transferTargetAccountId: bankAccountId,
+      type: "transfer",
+    });
+  });
+
   it("グループがない場合は空配列を返す", async () => {
     await resetTestDb(db);
     expect(await getTransactions(undefined, db)).toEqual([]);

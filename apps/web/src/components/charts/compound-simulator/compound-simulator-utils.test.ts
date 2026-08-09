@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { YearlyProjection } from "./calculate-compound";
 import {
   getLabelMap,
+  formatYAxisAmount,
   selectMilestones,
   getTimelinePattern,
   computeSummaryYear,
@@ -29,6 +30,22 @@ describe("getLabelMap", () => {
   test("returns taxed labels when taxFree is false", () => {
     const map = getLabelMap(false);
     expect(map.interest).toBe("運用益（税引後）");
+  });
+});
+
+describe("formatYAxisAmount", () => {
+  test.each([
+    [0, "0万"],
+    [-1_000, "0万"],
+    [-5_000, "-1万"],
+    [99_999_999, "10000万"],
+    [-99_999_999, "-10000万"],
+    [100_000_000, "1億"],
+    [-100_000_000, "-1億"],
+    [125_000_000, "1.3億"],
+    [1_000_000_000, "10億"],
+  ])("formats %d as %s", (value, expected) => {
+    expect(formatYAxisAmount(value)).toBe(expected);
   });
 });
 

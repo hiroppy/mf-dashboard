@@ -10,6 +10,8 @@
     "./chat/tools": "./src/chat/tools.ts",
     "./config": "./src/config.ts",
     "./categorization": "./src/categorization.ts",
+    "./bank-balance-forecast": "./src/bank-balance-forecast.ts",
+    "./recurring-candidates": "./src/recurring-candidates.ts",
     "./types": "./src/types.ts"
   },
   "scripts": {
@@ -19,12 +21,12 @@
     "generate:demo-insights": "DB_PATH=../../data/demo.db tsx --env-file=../../.env scripts/generate-demo-insights.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.27",
-    "@ai-sdk/google": "4.0.31",
-    "@ai-sdk/openai": "4.0.27",
+    "@ai-sdk/anthropic": "4.0.36",
+    "@ai-sdk/google": "4.0.39",
+    "@ai-sdk/openai": "4.0.36",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "7.0.48",
+    "ai": "7.0.58",
     "zod": "4.4.3"
   },
   "devDependencies": {

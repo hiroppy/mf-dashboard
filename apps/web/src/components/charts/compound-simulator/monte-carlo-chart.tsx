@@ -17,7 +17,7 @@ import { formatCurrency } from "../../../lib/format";
 import { MetricLabel } from "../../ui/metric-label";
 import { Slider } from "../../ui/slider";
 import { chartTooltipStyle } from "../chart-tooltip";
-import type { FanChartDataPoint } from "./compound-simulator-utils";
+import { formatYAxisAmount, type FanChartDataPoint } from "./compound-simulator-utils";
 
 export interface MonteCarloChartProps {
   fanChartData: FanChartDataPoint[];
@@ -33,6 +33,25 @@ export interface MonteCarloChartProps {
   onVolatilityChange: (value: number) => void;
   copyData: unknown;
 }
+
+const LEGEND_ITEMS = [
+  {
+    label: "中央値",
+    markerClassName: "h-0.5 w-5 bg-[var(--color-chart-5)]",
+  },
+  {
+    label: "半数のケースが入る範囲",
+    markerClassName: "h-3 w-5 rounded-sm bg-[var(--color-chart-5)] opacity-25",
+  },
+  {
+    label: "薄い帯を含む8割のケースが入る範囲",
+    markerClassName: "h-3 w-5 rounded-sm bg-[var(--color-chart-5)] opacity-10",
+  },
+  {
+    label: "投入元本",
+    markerClassName: "w-5 border-t border-dashed border-muted-foreground",
+  },
+] as const;
 
 export function MonteCarloChart({
   fanChartData,
@@ -61,9 +80,18 @@ export function MonteCarloChart({
             5,000通りのランダムなシナリオに基づく将来予測。インフレを差し引いた実質値（今の貨幣価値に換算
             {taxDescription}
             ）で表示しています。
-            <br />
-            薄い帯が全シナリオの80%、その内側の濃い帯が中央50%を示します（残り20%は帯の外側）
           </p>
+          <div
+            className="flex flex-wrap gap-x-4 text-xs text-muted-foreground"
+            aria-label="グラフの凡例"
+          >
+            {LEGEND_ITEMS.map((item) => (
+              <span key={item.label} className="inline-flex items-center gap-1.5">
+                <span className={item.markerClassName} aria-hidden="true" />
+                {item.label}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 md:flex md:items-center md:gap-4">
           <div className="space-y-1 md:w-32">
@@ -160,7 +188,7 @@ export function MonteCarloChart({
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `${(value / 10000).toFixed(0)}万`}
+            tickFormatter={formatYAxisAmount}
           />
           <Tooltip content={<FanChartTooltip currentAge={currentAge} />} />
           <Area type="monotone" dataKey="base" stackId="fan" fill="transparent" stroke="none" />
@@ -217,7 +245,7 @@ export function MonteCarloChart({
             <ReferenceLine
               x={contributionYears}
               stroke="var(--color-muted-foreground)"
-              strokeDasharray="4 4"
+              strokeDasharray="2 2"
               label={{
                 value:
                   currentAge != null
@@ -233,7 +261,7 @@ export function MonteCarloChart({
             <ReferenceLine
               x={withdrawalStartYear}
               stroke="var(--color-muted-foreground)"
-              strokeDasharray="4 4"
+              strokeDasharray="2 2"
               label={{
                 value:
                   currentAge != null
@@ -281,12 +309,10 @@ function FanChartTooltip({
   if (!data) return null;
 
   const rows = [
-    { label: "90%タイル", value: data.p90 as number },
-    { label: "75%タイル", value: data.p75 as number },
-    { label: "中央値", value: data.p50 as number },
-    { label: "25%タイル", value: data.p25 as number },
-    { label: "10%タイル", value: data.p10 as number },
-    { label: "元本", value: data.principal as number },
+    { label: "中央値", value: data.p50 as number, emphasized: true },
+    { label: "上振れケース（上位10%）", value: data.p90 as number },
+    { label: "下振れケース（下位10%）", value: data.p10 as number },
+    { label: "投入元本", value: data.principal as number },
   ];
 
   const isContributing = data.isContributing as boolean;
@@ -311,13 +337,17 @@ function FanChartTooltip({
       {rows.map((row) => (
         <div key={row.label} className="flex justify-between gap-4">
           <span className="text-muted-foreground">{row.label}</span>
-          <span className="font-medium">{formatCurrency(row.value)}</span>
+          <span className={row.emphasized ? "font-semibold" : "font-medium"}>
+            {formatCurrency(row.value)}
+          </span>
         </div>
       ))}
-      {depletionRate != null && depletionRate > 0 && (
+      {isWithdrawing && (
         <div className="mt-1 flex justify-between gap-4 border-t pt-1">
           <span className="text-muted-foreground">枯渇率</span>
-          <span className="font-medium text-expense">{(depletionRate * 100).toFixed(1)}%</span>
+          <span className="font-medium text-expense">
+            {((depletionRate ?? 0) * 100).toFixed(1)}%
+          </span>
         </div>
       )}
     </div>

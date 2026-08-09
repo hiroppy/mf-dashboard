@@ -23,6 +23,7 @@ export const NoIssues: Story = {
   args: {
     errorAccounts: [],
     updatingAccounts: [],
+    balanceAlerts: [],
   },
 };
 
@@ -43,6 +44,7 @@ export const ErrorOnly: Story = {
       },
     ],
     updatingAccounts: [],
+    balanceAlerts: [],
   },
 };
 
@@ -57,6 +59,7 @@ export const UpdatingOnly: Story = {
         status: "updating",
       },
     ],
+    balanceAlerts: [],
   },
 };
 
@@ -89,6 +92,18 @@ export const BothErrorAndUpdating: Story = {
         name: "User Dの電子マネー",
         status: "updating",
       },
+    ],
+    balanceAlerts: [],
+  },
+};
+
+export const BalanceAlerts: Story = {
+  args: {
+    errorAccounts: [],
+    updatingAccounts: [],
+    balanceAlerts: [
+      { accountId: 1, accountName: "銀行 A", forecastBalance: -60_000 },
+      { accountId: 2, accountName: "銀行 B", forecastBalance: 85_000 },
     ],
   },
 };
@@ -129,5 +144,6 @@ export const ManyAccounts: Story = {
         status: "updating",
       },
     ],
+    balanceAlerts: [],
   },
 };

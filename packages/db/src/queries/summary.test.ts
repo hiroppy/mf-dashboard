@@ -120,6 +120,7 @@ async function createTransaction(data: {
   subCategory?: string;
   transferTargetAccountId?: number;
   isExcludedFromCalculation?: boolean;
+  isTransfer?: boolean;
 }) {
   const now = new Date().toISOString();
   await db
@@ -133,7 +134,7 @@ async function createTransaction(data: {
       description: "Test transaction",
       amount: data.amount,
       type: data.type,
-      isTransfer: data.type === "transfer",
+      isTransfer: data.isTransfer ?? data.type === "transfer",
       isExcludedFromCalculation: data.isExcludedFromCalculation ?? data.type === "transfer",
       transferTargetAccountId: data.transferTargetAccountId ?? null,
       createdAt: now,
@@ -1435,6 +1436,28 @@ describe("getDeduplicatedTransferExpense", () => {
 
     // 通常TXでカウント済みなので振替は除外される
     expect(result.get("2025-04")).toBeUndefined();
+  });
+
+  it("振替フラグ付きexpense明細は通常明細ミラーとして扱わない", async () => {
+    const groupAccountId = await createTestAccount("Group Bank");
+    const externalAccountId = await createExternalAccount("External Bank");
+    await createTransaction({
+      accountId: externalAccountId,
+      date: "2025-04-15",
+      amount: 10_000,
+      type: "transfer",
+      transferTargetAccountId: groupAccountId,
+    });
+    await createTransaction({
+      accountId: groupAccountId,
+      date: "2025-04-15",
+      amount: 10_000,
+      type: "expense",
+      isTransfer: true,
+    });
+
+    const result = await getDeduplicatedTransferExpense(db, [groupAccountId], "2025-04");
+    expect(result.get("2025-04")).toBe(10_000);
   });
 
   it("重複する振替は1件のみカウント", async () => {

@@ -3,7 +3,12 @@ import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest"
 import * as schema from "../schema/schema";
 import { createTestDb, resetTestDb, closeTestDb } from "../test-helpers";
 import type { AccountStatus } from "../types";
-import { upsertAccount, saveAccountStatus, updateAccountCategory } from "./accounts";
+import {
+  upsertAccount,
+  saveAccountStatus,
+  saveAccountStatuses,
+  updateAccountCategory,
+} from "./accounts";
 
 type Db = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -74,6 +79,39 @@ describe("saveAccountStatus", () => {
     expect(result).toHaveLength(1);
     expect(result[0].status).toBe("ok");
     expect(result[0].totalAssets).toBe(1000000);
+  });
+
+  test("引き落とし予定額を一括ステータス保存時に保持する", async () => {
+    const accountId = await upsertAccount(db, {
+      mfId: "card-a",
+      name: "カード A",
+      type: "自動連携",
+      status: "ok",
+      lastUpdated: "2025-04-01",
+      url: "/accounts/show/card-a",
+      totalAssets: 0,
+    });
+
+    await saveAccountStatuses(db, [
+      {
+        accountId,
+        status: {
+          mfId: "card-a",
+          name: "カード A",
+          type: "自動連携",
+          status: "ok",
+          lastUpdated: "2025-04-01",
+          url: "/accounts/show/card-a",
+          totalAssets: 0,
+          scheduledWithdrawalAmount: 42_000,
+          scheduledWithdrawalConfirmed: true,
+        },
+      },
+    ]);
+
+    const result = await db.select().from(schema.accountStatuses).get();
+    expect(result?.scheduledWithdrawalAmount).toBe(42_000);
+    expect(result?.scheduledWithdrawalConfirmed).toBe(true);
   });
 });
 

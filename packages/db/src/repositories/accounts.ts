@@ -165,4 +165,17 @@ export async function saveAccountStatuses(
       })
       .run();
   }
+
+  for (const { accountId, status } of statuses) {
+    if (status.scheduledWithdrawalAmount === undefined) continue;
+    await db
+      .update(schema.accountStatuses)
+      .set({
+        scheduledWithdrawalAmount: status.scheduledWithdrawalAmount,
+        scheduledWithdrawalConfirmed: status.scheduledWithdrawalConfirmed ?? false,
+        updatedAt: timestamp,
+      })
+      .where(eq(schema.accountStatuses.accountId, accountId))
+      .run();
+  }
 }
