@@ -31,12 +31,15 @@ export function NotificationPopover({
   const statusIssueCount = errorAccounts.length + updatingAccounts.length;
 
   function handleBalanceAlertClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
     const targetUrl = new URL(event.currentTarget.href);
     const targetPath = targetUrl.pathname.replace(/\/$/, "");
     const currentPath = window.location.pathname.replace(/\/$/, "");
     if (targetPath === currentPath) {
       event.preventDefault();
-      window.history.pushState(null, "", targetUrl);
+      window.history.replaceState(null, "", targetUrl);
       window.dispatchEvent(new Event(BANK_FORECAST_ANCHOR_CHANGE_EVENT));
     }
     onNavigate?.();
