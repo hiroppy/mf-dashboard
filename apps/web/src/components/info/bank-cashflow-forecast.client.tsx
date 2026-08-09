@@ -252,6 +252,14 @@ function BankForecastCard({
     window.addEventListener("hashchange", syncOpenStateWithHash);
     return () => window.removeEventListener("hashchange", syncOpenStateWithHash);
   }, [anchorId]);
+
+  function handleOpenChange(open: boolean) {
+    setIsOpen(open);
+    if (!open && window.location.hash === `#${anchorId}`) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }
+
   const summary = (
     <span className="flex items-start justify-between gap-4">
       <span className="min-w-0">
@@ -273,7 +281,7 @@ function BankForecastCard({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger>
         <CardButton
           id={anchorId}

@@ -18,6 +18,8 @@ describe("NotificationPopover", () => {
 
     const balanceSection = screen.getByRole("region", { name: "残高注意" });
     const statusSection = screen.getByRole("region", { name: "ステータス" });
+    expect(balanceSection.parentElement?.className).toContain("max-h-[calc(100dvh-6rem)]");
+    expect(balanceSection.parentElement?.className).toContain("overflow-y-auto");
     expect(within(balanceSection).getByText("銀行 B")).toBeTruthy();
     expect(balanceSection.textContent).toContain("月末予測残高-60,000円");
     expect(within(balanceSection).getByText("-60,000円").className).toContain(

@@ -158,6 +158,16 @@ describe("BankCashFlowForecastClient", () => {
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeTruthy(),
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "明細を閉じる" }));
+    expect(window.location.hash).toBe("");
+
+    window.history.replaceState(null, "", "/cf#bank-forecast-account-1");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "明細を閉じる" }));
   });
 
   it("入出金がない口座もアンカーから予想ダイアログを開く", async () => {

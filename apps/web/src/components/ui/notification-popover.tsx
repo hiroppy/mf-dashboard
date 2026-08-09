@@ -38,7 +38,7 @@ export function NotificationPopover({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="max-h-[calc(100dvh-6rem)] space-y-4 overflow-y-auto">
       {balanceAlerts.length > 0 && (
         <section className="space-y-3" aria-labelledby="balance-alert-heading">
           <div className="flex items-center gap-2">
