@@ -3,6 +3,7 @@
   "concurrency": "50%",
   "checkers": ["typescript"],
   "coverageAnalysis": "perTest",
+  "incremental": true,
   "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/groups.ts", "!src/urls.ts"],
   "packageManager": "pnpm",
   "plugins": ["@stryker-mutator/typescript-checker", "@stryker-mutator/vitest-runner"],

@@ -3,6 +3,7 @@
   "concurrency": "50%",
   "checkers": ["typescript"],
   "coverageAnalysis": "perTest",
+  "incremental": true,
   "ignoreStatic": true,
   "mutate": [
     "src/auth/{credentials,state}.ts",

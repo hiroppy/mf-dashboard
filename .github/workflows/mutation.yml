@@ -38,6 +38,21 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-node
+      - name: Restore incremental mutation report
+        uses: actions/cache@v5
+        with:
+          path: ${{ matrix.path }}/reports/stryker-incremental.json
+          key: mutation-incremental-v1-${{ runner.os }}-${{ matrix.workspace }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**', format('{0}/package.json', matrix.path), format('{0}/stryker.config.json', matrix.path), format('{0}/tsconfig*.json', matrix.path), format('{0}/vitest*.config.ts', matrix.path)) }}-${{ github.sha }}
+          restore-keys: |
+            mutation-incremental-v1-${{ runner.os }}-${{ matrix.workspace }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**', format('{0}/package.json', matrix.path), format('{0}/stryker.config.json', matrix.path), format('{0}/tsconfig*.json', matrix.path), format('{0}/vitest*.config.ts', matrix.path)) }}-
+      - name: Validate incremental mutation report
+        env:
+          INCREMENTAL_REPORT_PATH: ${{ matrix.path }}/reports/stryker-incremental.json
+        run: |
+          if test -f "$INCREMENTAL_REPORT_PATH" && ! node -e 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))' "$INCREMENTAL_REPORT_PATH"; then
+            echo "Ignoring an invalid incremental mutation report"
+            rm -f "$INCREMENTAL_REPORT_PATH"
+          fi
       - run: pnpm --filter @mf-dashboard/${{ matrix.workspace }} test:mutation
       - name: Verify mutation reports
         run: |

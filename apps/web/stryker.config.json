@@ -3,6 +3,7 @@
   "concurrency": "50%",
   "checkers": ["typescript"],
   "coverageAnalysis": "perTest",
+  "incremental": true,
   "ignorePatterns": [
     "**",
     "!.next/types/**/*.ts",
