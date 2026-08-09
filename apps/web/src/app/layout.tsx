@@ -50,7 +50,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             lastScrapedAt: group.lastScrapedAt,
           }))}
           defaultGroupId={defaultGroupId}
-          notifications={<AccountNotifications groupId={currentGroup?.id} />}
+          notifications={<AccountNotifications />}
         />
         <div className="flex pt-14">
           <Sidebar />

@@ -24,7 +24,10 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { getBankForecastAnchorId } from "./bank-cashflow-forecast-anchor";
+import {
+  BANK_FORECAST_ANCHOR_CHANGE_EVENT,
+  getBankForecastAnchorId,
+} from "./bank-cashflow-forecast-anchor";
 import type { BankCashFlowForecastView } from "./bank-cashflow-forecast-data";
 
 interface BankCashFlowForecastClientProps {
@@ -250,7 +253,11 @@ function BankForecastCard({
     const syncOpenStateWithHash = () => setIsOpen(window.location.hash === `#${anchorId}`);
     syncOpenStateWithHash();
     window.addEventListener("hashchange", syncOpenStateWithHash);
-    return () => window.removeEventListener("hashchange", syncOpenStateWithHash);
+    window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, syncOpenStateWithHash);
+    return () => {
+      window.removeEventListener("hashchange", syncOpenStateWithHash);
+      window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, syncOpenStateWithHash);
+    };
   }, [anchorId]);
 
   function handleOpenChange(open: boolean) {

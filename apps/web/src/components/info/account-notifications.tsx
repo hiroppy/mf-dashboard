@@ -3,14 +3,10 @@ import { buildBalanceForecastAlerts } from "./account-notifications-data";
 import { AccountNotificationsClient } from "./account-notifications.client";
 import { getBankCashFlowForecastViews } from "./bank-cashflow-forecast";
 
-interface AccountNotificationsProps {
-  groupId?: string;
-}
-
-export async function AccountNotifications({ groupId }: AccountNotificationsProps) {
+export async function AccountNotifications() {
   const [accounts, forecasts] = await Promise.all([
-    getAccountsWithAssets(groupId),
-    getBankCashFlowForecastViews(groupId),
+    getAccountsWithAssets(),
+    getBankCashFlowForecastViews(),
   ]);
   const errorAccounts = accounts.filter((a) => a.status === "error");
   const updatingAccounts = accounts.filter((a) => a.status === "updating");

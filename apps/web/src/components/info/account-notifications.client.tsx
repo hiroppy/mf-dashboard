@@ -5,6 +5,7 @@ import { NotificationButton } from "../ui/notification-button";
 import { NotificationPopover } from "../ui/notification-popover";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { BalanceForecastAlert } from "./account-notifications-data";
+import { BANK_FORECAST_ANCHOR_CHANGE_EVENT } from "./bank-cashflow-forecast-anchor";
 
 interface Account {
   id: number;
@@ -28,6 +29,13 @@ export function AccountNotificationsClient({
 }: AccountNotificationsClientProps) {
   const [isOpen, setIsOpen] = useState(false);
 
+  function handleForecastNavigate() {
+    setIsOpen(false);
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event(BANK_FORECAST_ANCHOR_CHANGE_EVENT));
+    });
+  }
+
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger>
@@ -38,7 +46,7 @@ export function AccountNotificationsClient({
           errorAccounts={errorAccounts}
           updatingAccounts={updatingAccounts}
           balanceAlerts={balanceAlerts}
-          onNavigate={() => setIsOpen(false)}
+          onNavigate={handleForecastNavigate}
         />
       </PopoverContent>
     </Popover>

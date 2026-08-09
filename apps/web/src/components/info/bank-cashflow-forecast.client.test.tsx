@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BANK_FORECAST_ANCHOR_CHANGE_EVENT } from "./bank-cashflow-forecast-anchor";
 import type { BankCashFlowForecastView } from "./bank-cashflow-forecast-data";
 import { BankCashFlowForecastClient } from "./bank-cashflow-forecast.client";
 
@@ -163,7 +164,7 @@ describe("BankCashFlowForecastClient", () => {
     expect(window.location.hash).toBe("");
 
     window.history.replaceState(null, "", "/cf#bank-forecast-account-1");
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    window.dispatchEvent(new Event(BANK_FORECAST_ANCHOR_CHANGE_EVENT));
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeTruthy(),
     );
