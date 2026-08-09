@@ -6,7 +6,7 @@ import { getBankCashFlowForecastViews } from "./bank-cashflow-forecast";
 export async function AccountNotifications() {
   const [accounts, forecasts] = await Promise.all([
     getAccountsWithAssets(),
-    getBankCashFlowForecastViews(),
+    getBankCashFlowForecastViews(undefined),
   ]);
   const errorAccounts = accounts.filter((a) => a.status === "error");
   const updatingAccounts = accounts.filter((a) => a.status === "updating");
