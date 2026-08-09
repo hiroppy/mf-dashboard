@@ -57,7 +57,6 @@ export function calculateCompound({
 
   let currentTotal = initialAmount;
   let totalPrincipal = initialAmount;
-  let currentMonthlyWithdrawal = monthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
   let rateFirstWithdrawalYear = -1;
   let rateBasedWithdrawalSeeded = false;
@@ -106,21 +105,26 @@ export function calculateCompound({
         if (isRateMode) {
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
-          baseWithdrawal = currentMonthlyWithdrawal;
-          if (inflationAdjustedWithdrawal) {
-            currentMonthlyWithdrawal *= monthlyInflationFactor;
-          }
+          const withdrawalYearIndex = year - withdrawalStartYear - 1;
+          baseWithdrawal = inflationAdjustedWithdrawal
+            ? monthlyWithdrawal * Math.pow(monthlyInflationFactor, withdrawalYearIndex * 12)
+            : monthlyWithdrawal;
         }
         const pensionActive = pensionStartYear != null && year >= pensionStartYear;
         const income = (pensionActive ? monthlyPensionIncome : 0) + monthlyOtherIncome;
-        const netWithdrawal = Math.max(baseWithdrawal - income, 0);
-        yearlyWithdrawalTotal += netWithdrawal;
+        const requestedNetWithdrawal = Math.max(baseWithdrawal - income, 0);
         const gainRatio =
           currentTotal > totalPrincipal ? (currentTotal - totalPrincipal) / currentTotal : 0;
-        const taxOnWithdrawal = netWithdrawal * gainRatio * taxRate;
-        const withdrawalRatio = Math.min(netWithdrawal / currentTotal, 1);
+        const effectiveTaxRate = gainRatio * taxRate;
+        const requiredGrossWithdrawal =
+          requestedNetWithdrawal / Math.max(1 - effectiveTaxRate, Number.EPSILON);
+        const grossWithdrawal = Math.min(requiredGrossWithdrawal, currentTotal);
+        const taxOnWithdrawal = grossWithdrawal * effectiveTaxRate;
+        const actualNetWithdrawal = grossWithdrawal - taxOnWithdrawal;
+        yearlyWithdrawalTotal += actualNetWithdrawal;
+        const withdrawalRatio = grossWithdrawal / currentTotal;
         totalPrincipal *= 1 - withdrawalRatio;
-        currentTotal -= netWithdrawal + taxOnWithdrawal;
+        currentTotal -= grossWithdrawal;
         if (currentTotal < 0) currentTotal = 0;
       }
     }

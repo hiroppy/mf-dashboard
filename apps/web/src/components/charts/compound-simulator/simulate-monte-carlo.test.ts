@@ -566,6 +566,28 @@ describe("simulateMonteCarlo", () => {
         expect(yd.medianYearlyWithdrawal).toBe(firstWithdrawal);
       }
     });
+
+    it("should match a standalone run for a withdrawal-rate sensitivity row", () => {
+      const base = {
+        initialAmount: 10_000_000,
+        monthlyContribution: 50_000,
+        annualReturnRate: 5,
+        volatility: 15,
+        inflationRate: 2,
+        contributionYears: 10,
+        withdrawalStartYear: 10,
+        annualWithdrawalRate: 4,
+        withdrawalYears: 25,
+      };
+      const sensitivity = simulateMonteCarlo({ ...base, rateDeltas: [-1] });
+      const standalone = simulateMonteCarlo({ ...base, annualWithdrawalRate: 3, rateDeltas: [0] });
+      const sensitivityRow = sensitivity.sensitivityRows!.find((row) => row.delta === -1)!;
+      const standaloneRow = standalone.sensitivityRows!.find((row) => row.delta === 0)!;
+
+      expect(sensitivityRow.depletionProbability).toBe(standaloneRow.depletionProbability);
+      expect(sensitivityRow.medianFinalBalance).toBe(standaloneRow.medianFinalBalance);
+      expect(sensitivityRow.securityScore).toBe(standaloneRow.securityScore);
+    });
   });
 
   describe("immediate withdrawal (no contribution)", () => {
@@ -1140,6 +1162,7 @@ describe("simulateMonteCarlo", () => {
       // Same z values, same computation → same results
       expect(row60kFromBase60k!.depletionProbability).toBe(row60kFromBase50k!.depletionProbability);
       expect(row60kFromBase60k!.medianFinalBalance).toBe(row60kFromBase50k!.medianFinalBalance);
+      expect(row60kFromBase60k!.securityScore).toBe(row60kFromBase50k!.securityScore);
     });
 
     it("returns undefined sensitivityRows when no deltas provided", () => {
@@ -1152,6 +1175,23 @@ describe("simulateMonteCarlo", () => {
   });
 
   describe("probability invariant", () => {
+    it("counts only withdrawals that the portfolio can actually fund", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 1_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: -50,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 10_000_000,
+        withdrawalYears: 1,
+      });
+
+      expect(result.depletionProbability).toBe(1);
+      expect(result.failureProbability).toBe(1);
+    });
+
     it("failureProbability accounts for cumulative withdrawals (total return metric)", () => {
       const result = simulateMonteCarlo({
         initialAmount: 5_000_000,
