@@ -6,6 +6,7 @@ function forecast(
   accountId: number,
   accountName: string,
   monthEndBalance: number,
+  hasBalanceTrend = true,
 ): BankCashFlowForecastView {
   return {
     accountId,
@@ -15,7 +16,25 @@ function forecast(
     monthStartDate: "2026-08-01",
     openingBalance: 150_000,
     monthEndBalance,
-    days: [],
+    days: hasBalanceTrend
+      ? [
+          {
+            date: "2026-08-20",
+            closingBalance: monthEndBalance,
+            events: [
+              {
+                id: `forecast-${accountId}`,
+                accountId,
+                date: "2026-08-20",
+                amount: 50_000,
+                direction: "expense",
+                status: "forecast",
+                balanceAfter: monthEndBalance,
+              },
+            ],
+          },
+        ]
+      : [],
   };
 }
 
@@ -35,5 +54,9 @@ describe("buildBalanceForecastAlerts", () => {
 
   it("対象口座がなければ空配列を返す", () => {
     expect(buildBalanceForecastAlerts([forecast(1, "銀行 A", 100_001)])).toEqual([]);
+  });
+
+  it("残高推移がない口座は閾値以下でも返さない", () => {
+    expect(buildBalanceForecastAlerts([forecast(1, "銀行 A", -20_000, false)])).toEqual([]);
   });
 });

@@ -5,7 +5,7 @@ import { NotificationPopover } from "./notification-popover";
 afterEach(cleanup);
 
 describe("NotificationPopover", () => {
-  it("残高注意をステータスとは別のセクションに表示する", () => {
+  it("残高注意を更新ステータスとは別のセクションに表示する", () => {
     const onNavigate = vi.fn<() => void>();
     render(
       <NotificationPopover
@@ -17,7 +17,7 @@ describe("NotificationPopover", () => {
     );
 
     const balanceSection = screen.getByRole("region", { name: "残高注意" });
-    const statusSection = screen.getByRole("region", { name: "ステータス" });
+    const statusSection = screen.getByRole("region", { name: "更新ステータス" });
     expect(balanceSection.parentElement?.className).toContain("max-h-[calc(100dvh-6rem)]");
     expect(balanceSection.parentElement?.className).toContain("overflow-y-auto");
     expect(within(balanceSection).getByText("銀行 B")).toBeTruthy();
@@ -45,7 +45,7 @@ describe("NotificationPopover", () => {
     );
 
     expect(screen.getByRole("region", { name: "残高注意" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "ステータス" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "更新ステータス" })).toBeNull();
     expect(screen.queryByText("通知はありません")).toBeNull();
   });
 

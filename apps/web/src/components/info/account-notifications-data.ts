@@ -12,7 +12,9 @@ export function buildBalanceForecastAlerts(
   forecasts: BankCashFlowForecastView[],
 ): BalanceForecastAlert[] {
   return forecasts
-    .filter(({ monthEndBalance }) => monthEndBalance <= LOW_BALANCE_THRESHOLD)
+    .filter(
+      ({ days, monthEndBalance }) => days.length > 0 && monthEndBalance <= LOW_BALANCE_THRESHOLD,
+    )
     .map(({ accountId, accountName, monthEndBalance }) => ({
       accountId,
       accountName,

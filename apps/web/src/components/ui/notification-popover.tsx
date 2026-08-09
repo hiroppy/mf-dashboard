@@ -75,7 +75,7 @@ export function NotificationPopover({
         <section className="space-y-3" aria-labelledby="status-alert-heading">
           <div className="flex items-center gap-2">
             <h4 id="status-alert-heading" className="text-sm font-semibold">
-              ステータス
+              更新ステータス
             </h4>
             <span className="text-xs text-muted-foreground">({statusIssueCount}件)</span>
           </div>
