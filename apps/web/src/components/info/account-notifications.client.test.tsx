@@ -1,11 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountNotificationsClient } from "./account-notifications.client";
 import { BANK_FORECAST_ANCHOR_CHANGE_EVENT } from "./bank-cashflow-forecast-anchor";
 
 const initialUrl = window.location.href;
+const anchorChangeListener = vi.fn<() => void>();
+
+beforeEach(() => {
+  anchorChangeListener.mockClear();
+  window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
+});
 
 afterEach(() => {
+  window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
   cleanup();
   vi.restoreAllMocks();
   window.history.replaceState(null, "", initialUrl);
@@ -16,8 +23,6 @@ describe("AccountNotificationsClient", () => {
     window.history.replaceState(null, "", "/cf/");
     const pushState = vi.spyOn(window.history, "pushState");
     const replaceState = vi.spyOn(window.history, "replaceState");
-    const anchorChangeListener = vi.fn<() => void>();
-    window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
     render(
       <AccountNotificationsClient
         errorAccounts={[]}
@@ -36,15 +41,12 @@ describe("AccountNotificationsClient", () => {
     expect(window.location.hash).toBe("#bank-forecast-account-1");
     expect(replaceState).toHaveBeenCalledOnce();
     expect(pushState).not.toHaveBeenCalled();
-    window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
   });
 
   it.each(["metaKey", "ctrlKey", "shiftKey", "altKey"] as const)(
     "%s 付きクリックは標準のリンク操作を維持する",
     async (modifierKey) => {
       window.history.replaceState(null, "", "/cf/");
-      const anchorChangeListener = vi.fn<() => void>();
-      window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
       render(
         <AccountNotificationsClient
           errorAccounts={[]}
@@ -56,13 +58,22 @@ describe("AccountNotificationsClient", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "通知 1件" }));
       const alertLink = await screen.findByRole("link", { name: /銀行 A/ });
-      alertLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
-      fireEvent.click(alertLink, { [modifierKey]: true });
+      let defaultPreventedByComponent = false;
+      const suppressBrowserNavigation = (event: MouseEvent) => {
+        defaultPreventedByComponent = event.defaultPrevented;
+        event.preventDefault();
+      };
+      window.addEventListener("click", suppressBrowserNavigation, { once: true });
 
-      expect(anchorChangeListener).not.toHaveBeenCalled();
-      expect(window.location.hash).toBe("");
-      expect(screen.getByRole("link", { name: /銀行 A/ })).toBeTruthy();
-      window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
+      try {
+        fireEvent.click(alertLink, { [modifierKey]: true });
+        expect(defaultPreventedByComponent).toBe(false);
+        expect(anchorChangeListener).not.toHaveBeenCalled();
+        expect(window.location.hash).toBe("");
+        expect(screen.getByRole("link", { name: /銀行 A/ })).toBeTruthy();
+      } finally {
+        window.removeEventListener("click", suppressBrowserNavigation);
+      }
     },
   );
 });
