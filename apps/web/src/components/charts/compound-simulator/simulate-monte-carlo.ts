@@ -108,11 +108,10 @@ export function simulateMonteCarlo({
   const monthlyDrift = (mu - ri - (sigma * sigma) / 2) / 12;
   const monthlySigma = sigma / Math.sqrt(12);
   const isRateMode = annualWithdrawalRate != null && annualWithdrawalRate > 0;
-  // MC operates in real (inflation-adjusted) terms.
-  // - Nominal fixed withdrawal decreases in real terms → deflate each month
-  // - Inflation-adjusted withdrawal stays constant in real terms → no adjustment
-  const monthlyRealWithdrawalFactor =
-    !isRateMode && !inflationAdjustedWithdrawal && ri > 0 ? 1 / Math.pow(1 + ri, 1 / 12) : 1;
+  // MC operates in real (inflation-adjusted) terms. A nominal withdrawal stays
+  // fixed within each year, so its real value declines monthly. An annually
+  // inflation-adjusted withdrawal resets to its starting real value each year.
+  const monthlyRealWithdrawalFactor = !isRateMode && ri > 0 ? 1 / Math.pow(1 + ri, 1 / 12) : 1;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
 
@@ -203,6 +202,9 @@ export function simulateMonteCarlo({
       year > withdrawalStartYear && year <= withdrawalStartYear + withdrawalYears;
 
     if (yearlyWithdrawals) yearlyWithdrawals.fill(0);
+    if (isWithdrawing && !isRateMode && inflationAdjustedWithdrawal) {
+      currentMonthlyWithdrawal = monthlyWithdrawal;
+    }
 
     if (isWithdrawing && isRateMode) {
       if (initialWithdrawalAmount && initialWithdrawalSeeded) {

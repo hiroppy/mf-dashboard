@@ -766,6 +766,28 @@ describe("simulateMonteCarlo", () => {
   });
 
   describe("inflation-adjusted withdrawal", () => {
+    it("should reset the real withdrawal at each annual boundary", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 3,
+        volatility: 0,
+        inflationRate: 3,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 2,
+        inflationAdjustedWithdrawal: true,
+        taxFree: true,
+      });
+
+      const firstYearWithdrawal = result.yearlyData[0].p50 - result.yearlyData[1].p50;
+      const secondYearWithdrawal = result.yearlyData[1].p50 - result.yearlyData[2].p50;
+
+      expect(firstYearWithdrawal).toBeLessThan(1_200_000);
+      expect(secondYearWithdrawal).toBeCloseTo(firstYearWithdrawal, -1);
+    });
+
     it("should deplete faster with inflation-adjusted withdrawal", () => {
       const base = {
         initialAmount: 5_000_000,
