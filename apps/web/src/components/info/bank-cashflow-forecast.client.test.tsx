@@ -52,6 +52,20 @@ const forecast: BankCashFlowForecastView = {
 };
 
 describe("BankCashFlowForecastClient", () => {
+  it("最新残高がなくても銀行口座の手入力予定を管理できる", () => {
+    render(
+      <BankCashFlowForecastClient
+        forecasts={[]}
+        accounts={[{ id: 1, name: "銀行 A" }]}
+        manualEventMinDate="2026-08-10"
+      />,
+    );
+
+    expect(screen.getByText("手入力の入出金予定")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "予定を追加" })).toBeTruthy();
+    expect(screen.getByText("残高予測に必要な最新の口座残高がありません。")).toBeTruthy();
+  });
+
   it("入出金の変動がない口座も表示する", () => {
     render(
       <BankCashFlowForecastClient

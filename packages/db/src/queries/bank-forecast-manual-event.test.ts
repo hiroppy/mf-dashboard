@@ -113,11 +113,43 @@ describe("bank forecast manual events", () => {
       })
       .returning({ id: schema.bankForecastManualEvents.id })
       .get();
+    await expect(getBankForecastManualEvents(TEST_GROUP_ID, db)).resolves.toEqual([]);
     await expect(
       updateBankForecastManualEvent(external.id, input(), TEST_GROUP_ID, db),
     ).resolves.toBeNull();
     await expect(deleteBankForecastManualEvent(external.id, TEST_GROUP_ID, db)).resolves.toBe(
       false,
     );
+  });
+
+  it("rejects an in-group account outside the bank category", async () => {
+    const now = new Date().toISOString();
+    const category = await db
+      .insert(schema.institutionCategories)
+      .values({ name: "証券", createdAt: now, updatedAt: now })
+      .returning({ id: schema.institutionCategories.id })
+      .get();
+    const account = await db
+      .insert(schema.accounts)
+      .values({
+        mfId: "account-securities",
+        name: "Account C",
+        type: "automatic",
+        categoryId: category.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: schema.accounts.id })
+      .get();
+    await db.insert(schema.groupAccounts).values({
+      groupId: TEST_GROUP_ID,
+      accountId: account.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      createBankForecastManualEvent({ ...input(), accountId: account.id }, TEST_GROUP_ID, db),
+    ).resolves.toBeNull();
   });
 });

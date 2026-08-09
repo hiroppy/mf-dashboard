@@ -125,6 +125,82 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("ミラー振替より通常明細を優先し、手入力予定とそれぞれ一度だけ反映する", () => {
+    const mirroredTransfer = transaction(1, {
+      accountId: 2,
+      transferTargetAccountId: 1,
+      amount: 5_000,
+      type: "transfer",
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+    });
+    const normalExpense = transaction(2, {
+      accountId: 1,
+      amount: 5_000,
+      type: "expense",
+      description: "通常明細",
+    });
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [mirroredTransfer, normalExpense],
+      "2026-08-03",
+      [],
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-10-15",
+          amount: 30_000,
+          direction: "expense",
+          description: "予定納税",
+        },
+      ],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-2", description: "通常明細" },
+      { id: "manual-10", amountSource: "manual" },
+    ]);
+    expect(forecasts[0]?.forecastEndBalance).toBe(70_000);
+  });
+
+  it("振替のみの支出と手入力予定をそれぞれ一度だけ反映する", () => {
+    const transfer = transaction(1, {
+      accountId: 2,
+      transferTargetAccountId: 1,
+      amount: 5_000,
+      type: "transfer",
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+    });
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [transfer],
+      "2026-08-03",
+      [],
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-10-15",
+          amount: 30_000,
+          direction: "expense",
+          description: "予定納税",
+        },
+      ],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-1-source", direction: "expense" },
+      { id: "manual-10", amountSource: "manual" },
+    ]);
+    expect(forecasts[0]?.forecastEndBalance).toBe(70_000);
+  });
+
   it("当月に記録済みの候補を二重計上せず、未記録の期日超過候補は基準日に繰り越す", () => {
     const forecasts = buildBankCashFlowForecastViews(accounts, [transaction(1)], "2026-08-03", [
       candidate({

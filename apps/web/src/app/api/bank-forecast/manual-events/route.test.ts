@@ -33,12 +33,19 @@ const { DELETE, PATCH, POST } = await import("./route");
 
 const validBody = {
   accountId: 1,
-  date: "2099-10-15",
+  date: "2030-10-15",
   amount: 120_000,
   direction: "expense",
   description: "予定納税",
   groupId: "group-a",
 } as const;
+const persistedFields = {
+  accountId: validBody.accountId,
+  date: validBody.date,
+  amount: validBody.amount,
+  direction: validBody.direction,
+  description: validBody.description,
+};
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -47,7 +54,7 @@ beforeEach(() => {
 
 describe("/api/bank-forecast/manual-events", () => {
   it("creates a future manual event and revalidates forecasts", async () => {
-    createMock.mockResolvedValue({ id: 1, ...validBody });
+    createMock.mockResolvedValue({ id: 1, ...persistedFields });
     const response = await POST(
       new Request("http://localhost/api/bank-forecast/manual-events", {
         method: "POST",
@@ -59,7 +66,7 @@ describe("/api/bank-forecast/manual-events", () => {
     expect(createMock).toHaveBeenCalledWith(
       {
         accountId: 1,
-        date: "2099-10-15",
+        date: "2030-10-15",
         amount: 120_000,
         direction: "expense",
         description: "予定納税",
@@ -72,11 +79,14 @@ describe("/api/bank-forecast/manual-events", () => {
   it.each([
     [{ ...validBody, accountId: 0 }, "account"],
     [{ ...validBody, date: "2020-01-01" }, "past date"],
-    [{ ...validBody, date: "2099-02-31" }, "calendar date"],
+    [{ ...validBody, date: "2030-02-31" }, "calendar date"],
+    [{ ...validBody, date: "2099-10-15" }, "date beyond forecast horizon"],
     [{ ...validBody, amount: 0 }, "zero amount"],
     [{ ...validBody, amount: Number.MAX_SAFE_INTEGER + 1 }, "unsafe amount"],
+    [{ ...validBody, amount: 1_000_000_000_001 }, "amount above supported maximum"],
     [{ ...validBody, direction: "transfer" }, "direction"],
     [{ ...validBody, description: "   " }, "description"],
+    [{ ...validBody, description: "a".repeat(101) }, "description length"],
   ])("rejects invalid %s (%s)", async (body, _label) => {
     const response = await POST(
       new Request("http://localhost/api/bank-forecast/manual-events", {
@@ -89,7 +99,7 @@ describe("/api/bank-forecast/manual-events", () => {
   });
 
   it("updates an event after trimming its description", async () => {
-    updateMock.mockResolvedValue({ id: 2, ...validBody, description: "予定納税" });
+    updateMock.mockResolvedValue({ id: 2, ...persistedFields, description: "予定納税" });
     const response = await PATCH(
       new Request("http://localhost/api/bank-forecast/manual-events", {
         method: "PATCH",
@@ -102,7 +112,7 @@ describe("/api/bank-forecast/manual-events", () => {
       2,
       {
         accountId: 1,
-        date: "2099-10-15",
+        date: "2030-10-15",
         amount: 120_000,
         direction: "expense",
         description: "予定納税",
@@ -123,6 +133,31 @@ describe("/api/bank-forecast/manual-events", () => {
     expect(response.status).toBe(200);
     expect(deleteMock).toHaveBeenCalledWith(2, "group-a");
   });
+
+  it.each([
+    ["POST", () => createMock.mockResolvedValue(null)],
+    ["PATCH", () => updateMock.mockResolvedValue(null)],
+    ["DELETE", () => deleteMock.mockResolvedValue(false)],
+  ] as const)(
+    "returns 404 when %s targets an event outside the selected group",
+    async (method, mockScopeDenial) => {
+      mockScopeDenial();
+      const body =
+        method === "DELETE"
+          ? { id: 2, groupId: "group-a" }
+          : { ...validBody, ...(method === "PATCH" ? { id: 2 } : {}) };
+      const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
+      const response = await handler(
+        new Request("http://localhost/api/bank-forecast/manual-events", {
+          method,
+          body: JSON.stringify(body),
+        }),
+      );
+
+      expect(response.status).toBe(404);
+      expect(revalidatePathMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects writes on hosted demos", async () => {
     vi.stubEnv("VERCEL", "1");

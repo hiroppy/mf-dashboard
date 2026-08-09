@@ -3,6 +3,10 @@
 import type { BankForecastManualEvent } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
 import { type FormEvent, useState, useTransition } from "react";
+import {
+  getManualEventMaxDate,
+  MAX_MANUAL_EVENT_AMOUNT,
+} from "../../lib/bank-forecast-manual-event";
 import { withBasePath } from "../../lib/base-path";
 import { formatDateShort } from "../../lib/format";
 import { AmountDisplay } from "../ui/amount-display";
@@ -60,6 +64,7 @@ export function BankForecastManualEventsClient({
     value: String(account.id),
     label: account.name,
   }));
+  const maxDate = getManualEventMaxDate(minDate);
 
   function resetForm() {
     setForm(emptyForm(accounts, minDate));
@@ -134,10 +139,10 @@ export function BankForecastManualEventsClient({
       className="space-y-4 rounded-lg border p-4"
     >
       <div>
-        <h3 id="manual-forecast-events-title" className="flex items-center gap-2 font-semibold">
+        <h2 id="manual-forecast-events-title" className="flex items-center gap-2 font-semibold">
           <CalendarPlus className="size-4" aria-hidden="true" />
           手入力の入出金予定
-        </h3>
+        </h2>
         <p className="mt-1 text-xs text-muted-foreground">
           予定納税など、自動予測しづらい将来の入出金を残高予測へ追加できます。
         </p>
@@ -162,6 +167,7 @@ export function BankForecastManualEventsClient({
               aria-label="予定日"
               type="date"
               min={minDate}
+              max={maxDate}
               value={form.date}
               required
               disabled={isPending}
@@ -197,6 +203,7 @@ export function BankForecastManualEventsClient({
               type="number"
               inputMode="numeric"
               min={1}
+              max={MAX_MANUAL_EVENT_AMOUNT}
               step={1}
               value={form.amount}
               required
@@ -241,7 +248,11 @@ export function BankForecastManualEventsClient({
         <p className="text-xs text-muted-foreground">公開デモでは予定を変更できません。</p>
       )}
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
 
       {events.length === 0 ? (
         <p className="rounded-md bg-muted/50 px-3 py-4 text-center text-sm text-muted-foreground">

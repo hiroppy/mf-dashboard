@@ -4,9 +4,7 @@ import { getBankForecastDismissals } from "@mf-dashboard/db/queries/bank-forecas
 import { getBankForecastManualEvents } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import { getHoldingsWithLatestValues } from "@mf-dashboard/db/queries/holding";
 import { getTransactions } from "@mf-dashboard/db/queries/transaction";
-import { Landmark } from "lucide-react";
 import { cache } from "react";
-import { EmptyState } from "../ui/empty-state";
 import {
   buildBankCashFlowForecastViews,
   getBankForecastCurrentDate,
@@ -19,7 +17,7 @@ interface BankCashFlowForecastProps {
 
 const CARD_LIABILITY_CATEGORY = "クレジットカード利用残高";
 
-export const getBankCashFlowForecastViews = cache(async (groupId?: string) => {
+const getBankCashFlowForecastData = cache(async (groupId?: string) => {
   const currentDate = getBankForecastCurrentDate(
     getJstTodayIsoDate(),
     process.env.DEMO_MODE === "true",
@@ -114,7 +112,7 @@ export const getBankCashFlowForecastViews = cache(async (groupId?: string) => {
     accountId,
     amount,
   }));
-  return buildBankCashFlowForecastViews(
+  const forecasts = buildBankCashFlowForecastViews(
     accounts,
     transactions,
     currentDate,
@@ -123,22 +121,25 @@ export const getBankCashFlowForecastViews = cache(async (groupId?: string) => {
     dismissals,
     manualEvents,
   );
+  const bankAccounts = selectedAccounts.flatMap(({ id, name, categoryName }) =>
+    categoryName === "銀行" ? [{ id, name }] : [],
+  );
+  return { forecasts, manualEvents, bankAccounts };
 });
 
-export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
-  const [forecasts, manualEvents] = await Promise.all([
-    getBankCashFlowForecastViews(groupId),
-    getBankForecastManualEvents(groupId),
-  ]);
+export async function getBankCashFlowForecastViews(groupId?: string) {
+  return (await getBankCashFlowForecastData(groupId)).forecasts;
+}
 
-  if (forecasts.length === 0) {
-    return <EmptyState icon={Landmark} title="今月の銀行別予測" />;
-  }
+export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
+  const { forecasts, manualEvents, bankAccounts } = await getBankCashFlowForecastData(groupId);
 
   return (
     <BankCashFlowForecastClient
       forecasts={forecasts}
+      accounts={bankAccounts}
       manualEvents={manualEvents}
+      manualEventMinDate={getJstTodayIsoDate()}
       groupId={groupId}
       allowForecastChanges={process.env.VERCEL !== "1"}
     />

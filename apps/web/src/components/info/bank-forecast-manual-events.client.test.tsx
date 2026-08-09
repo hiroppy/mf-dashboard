@@ -56,12 +56,18 @@ describe("BankForecastManualEventsClient", () => {
     );
   });
 
-  it("loads an existing event for editing", () => {
+  it("loads and submits an existing event for editing", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ event: events[0] }), { status: 200 }));
+    const onChanged = vi.fn<() => void>();
     render(
       <BankForecastManualEventsClient
         accounts={[{ id: 1, name: "銀行 A" }]}
         events={events}
         minDate="2026-08-10"
+        groupId="group-a"
+        onChanged={onChanged}
       />,
     );
 
@@ -69,7 +75,25 @@ describe("BankForecastManualEventsClient", () => {
     expect(screen.getByLabelText<HTMLInputElement>("予定日").value).toBe("2026-10-15");
     expect(screen.getByLabelText<HTMLInputElement>("金額").value).toBe("120000");
     expect(screen.getByLabelText<HTMLInputElement>("内容").value).toBe("予定納税");
-    expect(screen.getByRole("button", { name: "変更を保存" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("金額"), { target: { value: "100000" } });
+    fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/bank-forecast/manual-events",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          id: 1,
+          accountId: 1,
+          date: "2026-10-15",
+          amount: 100_000,
+          direction: "expense",
+          description: "予定納税",
+          groupId: "group-a",
+        }),
+      }),
+    );
   });
 
   it("deletes an event after inline confirmation", async () => {

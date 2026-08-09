@@ -7,6 +7,10 @@ import {
 } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import {
+  getManualEventMaxDate,
+  MAX_MANUAL_EVENT_AMOUNT,
+} from "../../../../lib/bank-forecast-manual-event";
 
 interface ManualEventRequest {
   id?: unknown;
@@ -18,13 +22,12 @@ interface ManualEventRequest {
   groupId?: unknown;
 }
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
-
 function isValidDate(value: unknown): value is string {
-  if (typeof value !== "string" || !ISO_DATE_PATTERN.test(value)) return false;
+  if (typeof value !== "string") return false;
   try {
     parseIsoDateKey(value);
-    return value >= getJstTodayIsoDate();
+    const today = getJstTodayIsoDate();
+    return value >= today && value <= getManualEventMaxDate(today);
   } catch {
     return false;
   }
@@ -38,6 +41,7 @@ function parseInput(body: ManualEventRequest): BankForecastManualEventInput | nu
     !isValidDate(body.date) ||
     !Number.isSafeInteger(body.amount) ||
     (body.amount as number) <= 0 ||
+    (body.amount as number) > MAX_MANUAL_EVENT_AMOUNT ||
     (body.direction !== "income" && body.direction !== "expense") ||
     description.length === 0 ||
     description.length > 100

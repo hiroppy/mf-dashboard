@@ -12,14 +12,17 @@ export function buildBalanceForecastAlerts(
   forecasts: BankCashFlowForecastView[],
 ): BalanceForecastAlert[] {
   return forecasts
-    .filter(
-      ({ days, forecastEndBalance }) =>
-        days.length > 0 && forecastEndBalance <= LOW_BALANCE_THRESHOLD,
-    )
-    .map(({ accountId, accountName, forecastEndBalance }) => ({
-      accountId,
-      accountName,
-      forecastBalance: forecastEndBalance,
-    }))
+    .flatMap(({ accountId, accountName, days, monthStartDate, openingBalance }) => {
+      if (days.length === 0) return [];
+
+      const month = monthStartDate.slice(0, 7);
+      const monthEndBalance = days.reduce(
+        (balance, day) => (day.date.startsWith(month) ? day.closingBalance : balance),
+        openingBalance,
+      );
+      return monthEndBalance <= LOW_BALANCE_THRESHOLD
+        ? [{ accountId, accountName, forecastBalance: monthEndBalance }]
+        : [];
+    })
     .sort((left, right) => left.forecastBalance - right.forecastBalance);
 }

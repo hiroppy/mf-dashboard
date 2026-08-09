@@ -34,7 +34,9 @@ import { BankForecastManualEventsClient } from "./bank-forecast-manual-events.cl
 
 interface BankCashFlowForecastClientProps {
   forecasts: BankCashFlowForecastView[];
+  accounts?: Array<{ id: number; name: string }>;
   manualEvents?: BankForecastManualEvent[];
+  manualEventMinDate?: string;
   groupId?: string;
   allowForecastChanges?: boolean;
 }
@@ -368,15 +370,22 @@ function BankForecastCard({
 
 export function BankCashFlowForecastClient({
   forecasts,
+  accounts,
   manualEvents = [],
+  manualEventMinDate,
   groupId,
   allowForecastChanges = true,
 }: BankCashFlowForecastClientProps) {
   const router = useRouter();
   const firstForecast = forecasts[0];
-  if (!firstForecast) return null;
+  const minDate = manualEventMinDate ?? firstForecast?.forecastBoundaryDate;
+  if (!minDate) return null;
 
-  const month = Number(firstForecast.monthStartDate.slice(5, 7));
+  const month = Number((firstForecast?.monthStartDate ?? minDate).slice(5, 7));
+  const accountOptions =
+    accounts ??
+    forecasts.map(({ accountId, accountName }) => ({ id: Number(accountId), name: accountName }));
+  if (accountOptions.length === 0) return null;
   const sortedForecasts = [...forecasts].sort(
     (left, right) =>
       getEventCount(right) - getEventCount(left) || right.currentBalance - left.currentBalance,
@@ -386,7 +395,7 @@ export function BankCashFlowForecastClient({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
-          <CardTitle icon={Landmark}>{month}月からの銀行別予測</CardTitle>
+          <CardTitle icon={Landmark}>{month}月の銀行別予測</CardTitle>
           <Popover>
             <PopoverTrigger>
               <button
@@ -454,17 +463,19 @@ export function BankCashFlowForecastClient({
       </CardHeader>
       <CardContent className="space-y-4">
         <BankForecastManualEventsClient
-          accounts={forecasts.map(({ accountId, accountName }) => ({
-            id: Number(accountId),
-            name: accountName,
-          }))}
+          accounts={accountOptions}
           events={manualEvents}
-          minDate={firstForecast.forecastBoundaryDate}
+          minDate={minDate}
           groupId={groupId}
           allowEditing={allowForecastChanges}
           onChanged={() => router.refresh()}
         />
         <div className="grid gap-4 lg:grid-cols-2">
+          {forecasts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground lg:col-span-2">
+              残高予測に必要な最新の口座残高がありません。
+            </p>
+          ) : null}
           {sortedForecasts.map((forecast) => (
             <BankForecastCard
               key={forecast.accountId}
