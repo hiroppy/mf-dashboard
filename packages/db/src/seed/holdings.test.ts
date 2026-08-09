@@ -12,14 +12,14 @@ describe("demo holdings", () => {
     expect(gains.some((gain) => gain < 0)).toBe(true);
   });
 
-  it("残高注意を確認できる銀行口座の残高と定期支出を含む", () => {
+  it("残高注意を確認できる銀行口座の残高と定期振替を含む", () => {
     const bankHolding = holdingDefs.find(({ accountName }) => accountName === "楽天銀行");
-    const recurringLoan = txTemplates.find(
-      ({ accountName, description }) => accountName === "楽天銀行" && description === "ローン返済",
+    const recurringTransfer = txTemplates.find(
+      ({ description }) => description === "楽天銀行へ振替",
     );
 
     expect(bankHolding).toMatchObject({ amount: 200000 });
-    expect(recurringLoan).toMatchObject({ minAmount: 120000, maxAmount: 120000 });
-    expect(bankHolding!.amount - recurringLoan!.maxAmount).toBeLessThanOrEqual(100000);
+    expect(recurringTransfer).toMatchObject({ minAmount: 150000, maxAmount: 150000 });
+    expect(bankHolding!.amount - recurringTransfer!.maxAmount).toBeLessThanOrEqual(100000);
   });
 });
