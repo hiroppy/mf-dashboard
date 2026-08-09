@@ -8,6 +8,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefreshMo
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/");
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   routerRefreshMock.mockReset();
@@ -147,6 +148,28 @@ describe("BankCashFlowForecastClient", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "明細を閉じる" }));
     expect(screen.queryByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeNull();
+  });
+
+  it("口座アンカーから対応する予想ダイアログを開く", async () => {
+    window.history.replaceState(null, "", "/cf#bank-forecast-account-1");
+    render(<BankCashFlowForecastClient forecasts={[forecast]} />);
+
+    expect(document.querySelector("#bank-forecast-account-1")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "銀行 Aの入出金詳細" })).toBeTruthy(),
+    );
+  });
+
+  it("入出金がない口座もアンカーから予想ダイアログを開く", async () => {
+    window.history.replaceState(null, "", "/cf#bank-forecast-account-1");
+    render(
+      <BankCashFlowForecastClient
+        forecasts={[{ ...forecast, days: [], monthEndBalance: forecast.currentBalance }]}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "銀行 Aの入出金詳細" });
+    expect(within(dialog).getByText("表示する入出金はありません。")).toBeTruthy();
   });
 
   it("開いたダイアログで最後の入出金がなくなっても空状態を表示し続ける", () => {

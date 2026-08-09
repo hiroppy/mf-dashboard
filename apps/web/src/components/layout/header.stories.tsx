@@ -38,7 +38,12 @@ export const Default: Story = {
     groups: mockGroups,
     defaultGroupId: "1",
     notifications: (
-      <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
+      <AccountNotificationsClient
+        errorAccounts={[]}
+        updatingAccounts={[]}
+        balanceAlerts={[]}
+        totalIssues={0}
+      />
     ),
   },
 };
@@ -48,7 +53,12 @@ export const SingleGroup: Story = {
     groups: [mockGroups[0]],
     defaultGroupId: "1",
     notifications: (
-      <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
+      <AccountNotificationsClient
+        errorAccounts={[]}
+        updatingAccounts={[]}
+        balanceAlerts={[]}
+        totalIssues={0}
+      />
     ),
   },
 };
@@ -58,7 +68,12 @@ export const NoGroup: Story = {
     groups: [],
     defaultGroupId: null,
     notifications: (
-      <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
+      <AccountNotificationsClient
+        errorAccounts={[]}
+        updatingAccounts={[]}
+        balanceAlerts={[]}
+        totalIssues={0}
+      />
     ),
   },
 };
@@ -73,6 +88,7 @@ export const WithNotifications: Story = {
         updatingAccounts={[
           { id: 2, mfId: "account-2", name: "User Bの証券口座", status: "updating" },
         ]}
+        balanceAlerts={[]}
         totalIssues={2}
       />
     ),

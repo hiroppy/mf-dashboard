@@ -4,6 +4,7 @@ import { getBankForecastDismissals } from "@mf-dashboard/db/queries/bank-forecas
 import { getHoldingsWithLatestValues } from "@mf-dashboard/db/queries/holding";
 import { getTransactions } from "@mf-dashboard/db/queries/transaction";
 import { Landmark } from "lucide-react";
+import { cache } from "react";
 import { EmptyState } from "../ui/empty-state";
 import {
   buildBankCashFlowForecastViews,
@@ -17,7 +18,7 @@ interface BankCashFlowForecastProps {
 
 const CARD_LIABILITY_CATEGORY = "クレジットカード利用残高";
 
-export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
+export const getBankCashFlowForecastViews = cache(async (groupId?: string) => {
   const currentDate = getBankForecastCurrentDate(
     getJstTodayIsoDate(),
     process.env.DEMO_MODE === "true",
@@ -106,7 +107,7 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
     accountId,
     amount,
   }));
-  const forecasts = buildBankCashFlowForecastViews(
+  return buildBankCashFlowForecastViews(
     accounts,
     transactions,
     currentDate,
@@ -114,6 +115,10 @@ export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProp
     cardLiabilities,
     dismissals,
   );
+});
+
+export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
+  const forecasts = await getBankCashFlowForecastViews(groupId);
 
   if (forecasts.length === 0) {
     return <EmptyState icon={Landmark} title="今月の銀行別予測" />;

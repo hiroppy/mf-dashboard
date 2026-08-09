@@ -7,7 +7,7 @@ import type {
 import type { RecurringCandidateClassification } from "@mf-dashboard/analytics/recurring-candidates";
 import { CircleHelp, EyeOff, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { withBasePath } from "../../lib/base-path";
 import { formatCurrency, formatDateShort } from "../../lib/format";
 import { cn } from "../../lib/utils";
@@ -24,6 +24,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { getBankForecastAnchorId } from "./bank-cashflow-forecast-anchor";
 import type { BankCashFlowForecastView } from "./bank-cashflow-forecast-data";
 
 interface BankCashFlowForecastClientProps {
@@ -242,7 +243,15 @@ function BankForecastCard({
   onForecastDismissed: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const anchorId = getBankForecastAnchorId(forecast.accountId);
   const eventCount = getEventCount(forecast);
+
+  useEffect(() => {
+    const syncOpenStateWithHash = () => setIsOpen(window.location.hash === `#${anchorId}`);
+    syncOpenStateWithHash();
+    window.addEventListener("hashchange", syncOpenStateWithHash);
+    return () => window.removeEventListener("hashchange", syncOpenStateWithHash);
+  }, [anchorId]);
   const summary = (
     <span className="flex items-start justify-between gap-4">
       <span className="min-w-0">
@@ -256,15 +265,20 @@ function BankForecastCard({
   );
 
   if (eventCount === 0 && !isOpen) {
-    return <Card className="p-4">{summary}</Card>;
+    return (
+      <Card id={anchorId} className="scroll-mt-20 p-4">
+        {summary}
+      </Card>
+    );
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger>
         <CardButton
+          id={anchorId}
           aria-label={`${forecast.accountName}の入出金詳細を開く`}
-          className="border-primary/30 p-4 hover:border-primary"
+          className="scroll-mt-20 border-primary/30 p-4 hover:border-primary"
         >
           {summary}
         </CardButton>

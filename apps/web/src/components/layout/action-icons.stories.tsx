@@ -137,7 +137,12 @@ export const Header: Story = {
   args: {
     variant: "header",
     notifications: (
-      <AccountNotificationsClient errorAccounts={[]} updatingAccounts={[]} totalIssues={0} />
+      <AccountNotificationsClient
+        errorAccounts={[]}
+        updatingAccounts={[]}
+        balanceAlerts={[]}
+        totalIssues={0}
+      />
     ),
   },
   play: async ({ canvasElement }) => {
@@ -163,6 +168,7 @@ export const HeaderWithNotifications: Story = {
         updatingAccounts={[
           { id: 2, mfId: "account-2", name: "User Bの証券口座", status: "updating" },
         ]}
+        balanceAlerts={[]}
         totalIssues={2}
       />
     ),
