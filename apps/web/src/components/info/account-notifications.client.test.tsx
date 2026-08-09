@@ -10,6 +10,7 @@ afterEach(() => {
 
 describe("AccountNotificationsClient", () => {
   it("残高通知の選択後に同一ページの予想カードへアンカー変更を通知する", async () => {
+    window.history.replaceState(null, "", "/cf/");
     const anchorChangeListener = vi.fn<() => void>();
     window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
     render(
@@ -23,11 +24,11 @@ describe("AccountNotificationsClient", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "通知 1件" }));
     const alertLink = await screen.findByRole("link", { name: /銀行 A/ });
-    alertLink.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(alertLink);
 
     await waitFor(() => expect(screen.queryByRole("link", { name: /銀行 A/ })).toBeNull());
     await waitFor(() => expect(anchorChangeListener).toHaveBeenCalledOnce());
+    expect(window.location.hash).toBe("#bank-forecast-account-1");
     window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
   });
 });

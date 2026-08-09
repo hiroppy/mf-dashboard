@@ -27,7 +27,7 @@ export const holdingDefs: HoldingDef[] = [
     name: "普通預金",
     type: "asset",
     assetCategory: "預金・現金",
-    amount: 623718,
+    amount: 100000,
   },
   {
     accountName: "住信SBIネット銀行",

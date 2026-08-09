@@ -1,6 +1,10 @@
 import Link from "next/link";
+import type { MouseEvent } from "react";
 import type { BalanceForecastAlert } from "../info/account-notifications-data";
-import { getBankForecastAnchorId } from "../info/bank-cashflow-forecast-anchor";
+import {
+  BANK_FORECAST_ANCHOR_CHANGE_EVENT,
+  getBankForecastAnchorId,
+} from "../info/bank-cashflow-forecast-anchor";
 import { AmountDisplay } from "./amount-display";
 import { Badge } from "./badge";
 
@@ -25,6 +29,18 @@ export function NotificationPopover({
   onNavigate,
 }: NotificationPopoverProps) {
   const statusIssueCount = errorAccounts.length + updatingAccounts.length;
+
+  function handleBalanceAlertClick(event: MouseEvent<HTMLAnchorElement>) {
+    const targetUrl = new URL(event.currentTarget.href);
+    const targetPath = targetUrl.pathname.replace(/\/$/, "");
+    const currentPath = window.location.pathname.replace(/\/$/, "");
+    if (targetPath === currentPath) {
+      event.preventDefault();
+      window.history.pushState(null, "", targetUrl);
+      window.dispatchEvent(new Event(BANK_FORECAST_ANCHOR_CHANGE_EVENT));
+    }
+    onNavigate?.();
+  }
 
   if (statusIssueCount === 0 && balanceAlerts.length === 0) {
     return (
@@ -52,7 +68,7 @@ export function NotificationPopover({
               <Link
                 key={alert.accountId}
                 href={`/cf#${getBankForecastAnchorId(alert.accountId)}`}
-                onClick={onNavigate}
+                onClick={handleBalanceAlertClick}
                 className="block rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
               >
                 <span className="block font-medium">{alert.accountName}</span>
