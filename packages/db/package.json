@@ -30,6 +30,7 @@
   "scripts": {
     "build:demo": "DB_PATH=../../data/demo.db tsx src/seed.ts",
     "test": "vitest run",
+    "test:demo": "REQUIRE_DEMO_DB=true vitest run src/demo-data.test.ts",
     "typecheck": "tsc --noEmit",
     "studio": "drizzle-kit studio"
   },

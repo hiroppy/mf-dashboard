@@ -276,10 +276,12 @@ export async function seedAssetHistory({
             pension = finalPension;
             crypto = finalCrypto;
           } else {
-            fund = categoryAmount(i, finalFund, fundStartDay);
             stock = stockAmount(i);
             pension = categoryAmount(i, finalPension, pensionStartDay);
             crypto = categoryAmount(i, finalCrypto, cryptoStartDay);
+            // Keep the category breakdown consistent with the generated group total.
+            // Investment trusts are the largest category and absorb daily fluctuations.
+            fund = Math.max(0, total - stock - pension - crypto);
           }
 
           if (fund > 0) await insertCategory("投資信託", fund);

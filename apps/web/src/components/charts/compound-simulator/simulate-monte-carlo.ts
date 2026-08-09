@@ -108,11 +108,10 @@ export function simulateMonteCarlo({
   const monthlyDrift = (mu - ri - (sigma * sigma) / 2) / 12;
   const monthlySigma = sigma / Math.sqrt(12);
   const isRateMode = annualWithdrawalRate != null && annualWithdrawalRate > 0;
-  // MC operates in real (inflation-adjusted) terms.
-  // - Nominal fixed withdrawal decreases in real terms → deflate each month
-  // - Inflation-adjusted withdrawal stays constant in real terms → no adjustment
-  const monthlyRealWithdrawalFactor =
-    !isRateMode && !inflationAdjustedWithdrawal && ri > 0 ? 1 / Math.pow(1 + ri, 1 / 12) : 1;
+  // MC operates in real (inflation-adjusted) terms. A nominal withdrawal stays
+  // fixed within each year, so its real value declines monthly. An annually
+  // inflation-adjusted withdrawal resets to its starting real value each year.
+  const monthlyRealWithdrawalFactor = !isRateMode && ri > 0 ? 1 / Math.pow(1 + ri, 1 / 12) : 1;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
 
@@ -125,11 +124,15 @@ export function simulateMonteCarlo({
   const extraCostBasis: Float64Array[] = [];
   const extraInitialWithdrawal: (Float64Array | null)[] = [];
   const extraInitialWithdrawalSeeded: (Uint8Array | null)[] = [];
+  const extraCumulativeWithdrawals: Float64Array[] = [];
+  const extraWithdrawalNeeded: Uint8Array[] = [];
   for (let d = 0; d < numExtra; d++) {
     extraPaths.push(new Float64Array(NUM_SIMULATIONS).fill(initialAmount));
     extraCostBasis.push(new Float64Array(NUM_SIMULATIONS).fill(initialAmount));
     extraInitialWithdrawal.push(isRateMode ? new Float64Array(NUM_SIMULATIONS) : null);
     extraInitialWithdrawalSeeded.push(isRateMode ? new Uint8Array(NUM_SIMULATIONS) : null);
+    extraCumulativeWithdrawals.push(new Float64Array(NUM_SIMULATIONS));
+    extraWithdrawalNeeded.push(new Uint8Array(NUM_SIMULATIONS));
   }
 
   // Sensitivity analysis: rate variants (for rate mode)
@@ -142,11 +145,15 @@ export function simulateMonteCarlo({
   const rateCostBasis: Float64Array[] = [];
   const rateInitialW: Float64Array[] = [];
   const rateInitialWSeeded: Uint8Array[] = [];
+  const rateCumulativeWithdrawals: Float64Array[] = [];
+  const rateWithdrawalNeeded: Uint8Array[] = [];
   for (let d = 0; d < numRateExtra; d++) {
     ratePaths.push(new Float64Array(NUM_SIMULATIONS).fill(initialAmount));
     rateCostBasis.push(new Float64Array(NUM_SIMULATIONS).fill(initialAmount));
     rateInitialW.push(new Float64Array(NUM_SIMULATIONS));
     rateInitialWSeeded.push(new Uint8Array(NUM_SIMULATIONS));
+    rateCumulativeWithdrawals.push(new Float64Array(NUM_SIMULATIONS));
+    rateWithdrawalNeeded.push(new Uint8Array(NUM_SIMULATIONS));
   }
 
   const paths = new Float64Array(NUM_SIMULATIONS).fill(initialAmount);
@@ -179,6 +186,7 @@ export function simulateMonteCarlo({
   const initialWithdrawalSeeded = isRateMode ? new Uint8Array(NUM_SIMULATIONS) : null;
   // Track cumulative net withdrawals per path for total-return failure metric
   const cumulativeWithdrawals = new Float64Array(NUM_SIMULATIONS);
+  const withdrawalNeeded = new Uint8Array(NUM_SIMULATIONS);
   // Deflate nominal withdrawal by inflation accumulated before withdrawal starts.
   // MC operates in real terms: a nominal fixed withdrawal loses purchasing power
   // over time, so we must account for the inflation during the pre-withdrawal period.
@@ -194,6 +202,12 @@ export function simulateMonteCarlo({
       year > withdrawalStartYear && year <= withdrawalStartYear + withdrawalYears;
 
     if (yearlyWithdrawals) yearlyWithdrawals.fill(0);
+    if (isWithdrawing && !isRateMode && inflationAdjustedWithdrawal) {
+      currentMonthlyWithdrawal = monthlyWithdrawal;
+    }
+    const withdrawalYearIndex = Math.max(year - withdrawalStartYear - 1, 0);
+    let annualRealIncomeFactor =
+      inflationAdjustedWithdrawal && ri > 0 ? Math.pow(1 + ri, -withdrawalYearIndex) : 1;
 
     if (isWithdrawing && isRateMode) {
       if (initialWithdrawalAmount && initialWithdrawalSeeded) {
@@ -233,6 +247,9 @@ export function simulateMonteCarlo({
     for (let month = 0; month < 12; month++) {
       if (isWithdrawing && !isRateMode) {
         currentMonthlyWithdrawal *= monthlyRealWithdrawalFactor;
+        if (inflationAdjustedWithdrawal) {
+          annualRealIncomeFactor *= monthlyRealWithdrawalFactor;
+        }
       }
       for (let i = 0; i < NUM_SIMULATIONS; i++) {
         const z = normalRandom(rng);
@@ -245,7 +262,7 @@ export function simulateMonteCarlo({
           costBasis[i] += monthlyContribution;
         }
 
-        if (isWithdrawing && paths[i] > 0) {
+        if (isWithdrawing) {
           let baseWithdrawal: number;
           if (isRateMode && initialWithdrawalAmount) {
             baseWithdrawal = initialWithdrawalAmount[i];
@@ -253,16 +270,23 @@ export function simulateMonteCarlo({
             baseWithdrawal = currentMonthlyWithdrawal;
           }
           const pensionActive = pensionStartYear != null && year >= pensionStartYear;
-          const income = (pensionActive ? monthlyPensionIncome : 0) + monthlyOtherIncome;
-          const netWithdrawal = Math.max(baseWithdrawal - income, 0);
-          if (yearlyWithdrawals) yearlyWithdrawals[i] += netWithdrawal;
-          cumulativeWithdrawals[i] += netWithdrawal;
-          const gainRatio = paths[i] > costBasis[i] ? (paths[i] - costBasis[i]) / paths[i] : 0;
-          const taxOnWithdrawal = netWithdrawal * gainRatio * taxRate;
-          const withdrawalRatio = Math.min(netWithdrawal / paths[i], 1);
-          costBasis[i] *= 1 - withdrawalRatio;
-          paths[i] = paths[i] - netWithdrawal - taxOnWithdrawal;
-          if (paths[i] < 0) paths[i] = 0;
+          const nominalIncome = (pensionActive ? monthlyPensionIncome : 0) + monthlyOtherIncome;
+          const income = nominalIncome * annualRealIncomeFactor;
+          const requestedNetWithdrawal = Math.max(baseWithdrawal - income, 0);
+          if (requestedNetWithdrawal > 0) withdrawalNeeded[i] = 1;
+          if (paths[i] > 0) {
+            const gainRatio = paths[i] > costBasis[i] ? (paths[i] - costBasis[i]) / paths[i] : 0;
+            const effectiveTaxRate = gainRatio * taxRate;
+            const requiredGrossWithdrawal =
+              requestedNetWithdrawal / Math.max(1 - effectiveTaxRate, Number.EPSILON);
+            const grossWithdrawal = Math.min(requiredGrossWithdrawal, paths[i]);
+            const actualNetWithdrawal = grossWithdrawal * (1 - effectiveTaxRate);
+            if (yearlyWithdrawals) yearlyWithdrawals[i] += actualNetWithdrawal;
+            cumulativeWithdrawals[i] += actualNetWithdrawal;
+            const withdrawalRatio = grossWithdrawal / paths[i];
+            costBasis[i] *= 1 - withdrawalRatio;
+            paths[i] -= grossWithdrawal;
+          }
         }
 
         // Sensitivity analysis: extra contribution variants
@@ -273,7 +297,7 @@ export function simulateMonteCarlo({
             extraPaths[d][i] += mc;
             extraCostBasis[d][i] += mc;
           }
-          if (isWithdrawing && extraPaths[d][i] > 0) {
+          if (isWithdrawing) {
             let baseW: number;
             const ewa = extraInitialWithdrawal[d];
             if (isRateMode && ewa) {
@@ -282,18 +306,25 @@ export function simulateMonteCarlo({
               baseW = currentMonthlyWithdrawal;
             }
             const pensionActiveExtra = pensionStartYear != null && year >= pensionStartYear;
-            const incomeExtra =
+            const nominalIncomeExtra =
               (pensionActiveExtra ? monthlyPensionIncome : 0) + monthlyOtherIncome;
-            const netW = Math.max(baseW - incomeExtra, 0);
-            const gr =
-              extraPaths[d][i] > extraCostBasis[d][i]
-                ? (extraPaths[d][i] - extraCostBasis[d][i]) / extraPaths[d][i]
-                : 0;
-            const tw = netW * gr * taxRate;
-            const wr = Math.min(netW / extraPaths[d][i], 1);
-            extraCostBasis[d][i] *= 1 - wr;
-            extraPaths[d][i] = extraPaths[d][i] - netW - tw;
-            if (extraPaths[d][i] < 0) extraPaths[d][i] = 0;
+            const incomeExtra = nominalIncomeExtra * annualRealIncomeFactor;
+            const requestedNetW = Math.max(baseW - incomeExtra, 0);
+            if (requestedNetW > 0) extraWithdrawalNeeded[d][i] = 1;
+            if (extraPaths[d][i] > 0) {
+              const gr =
+                extraPaths[d][i] > extraCostBasis[d][i]
+                  ? (extraPaths[d][i] - extraCostBasis[d][i]) / extraPaths[d][i]
+                  : 0;
+              const effectiveTaxRate = gr * taxRate;
+              const requiredGrossW = requestedNetW / Math.max(1 - effectiveTaxRate, Number.EPSILON);
+              const grossW = Math.min(requiredGrossW, extraPaths[d][i]);
+              const actualNetW = grossW * (1 - effectiveTaxRate);
+              extraCumulativeWithdrawals[d][i] += actualNetW;
+              const wr = grossW / extraPaths[d][i];
+              extraCostBasis[d][i] *= 1 - wr;
+              extraPaths[d][i] -= grossW;
+            }
           }
         }
 
@@ -304,21 +335,27 @@ export function simulateMonteCarlo({
             ratePaths[d][i] += monthlyContribution;
             rateCostBasis[d][i] += monthlyContribution;
           }
-          if (isWithdrawing && ratePaths[d][i] > 0) {
+          if (isWithdrawing) {
             const rwa = rateInitialW[d];
             const baseW = rwa[i];
             const pensionActiveR = pensionStartYear != null && year >= pensionStartYear;
             const incomeR = (pensionActiveR ? monthlyPensionIncome : 0) + monthlyOtherIncome;
-            const netW = Math.max(baseW - incomeR, 0);
-            const gr =
-              ratePaths[d][i] > rateCostBasis[d][i]
-                ? (ratePaths[d][i] - rateCostBasis[d][i]) / ratePaths[d][i]
-                : 0;
-            const tw = netW * gr * taxRate;
-            const wr = Math.min(netW / ratePaths[d][i], 1);
-            rateCostBasis[d][i] *= 1 - wr;
-            ratePaths[d][i] = ratePaths[d][i] - netW - tw;
-            if (ratePaths[d][i] < 0) ratePaths[d][i] = 0;
+            const requestedNetW = Math.max(baseW - incomeR, 0);
+            if (requestedNetW > 0) rateWithdrawalNeeded[d][i] = 1;
+            if (ratePaths[d][i] > 0) {
+              const gr =
+                ratePaths[d][i] > rateCostBasis[d][i]
+                  ? (ratePaths[d][i] - rateCostBasis[d][i]) / ratePaths[d][i]
+                  : 0;
+              const effectiveTaxRate = gr * taxRate;
+              const requiredGrossW = requestedNetW / Math.max(1 - effectiveTaxRate, Number.EPSILON);
+              const grossW = Math.min(requiredGrossW, ratePaths[d][i]);
+              const actualNetW = grossW * (1 - effectiveTaxRate);
+              rateCumulativeWithdrawals[d][i] += actualNetW;
+              const wr = grossW / ratePaths[d][i];
+              rateCostBasis[d][i] *= 1 - wr;
+              ratePaths[d][i] -= grossW;
+            }
           }
         }
       }
@@ -335,7 +372,7 @@ export function simulateMonteCarlo({
     if (isWithdrawing) {
       for (let i = 0; i < NUM_SIMULATIONS; i++) {
         // 枯渇 = ポートフォリオが0 かつ 実際に引出しが必要だった（収入だけではカバーできない）
-        if (paths[i] <= 0 && cumulativeWithdrawals[i] > 0) yearDepletionCount++;
+        if (paths[i] <= 0 && withdrawalNeeded[i] > 0) yearDepletionCount++;
       }
     }
 
@@ -379,7 +416,7 @@ export function simulateMonteCarlo({
 
   let depletedCnt = 0;
   for (let i = 0; i < NUM_SIMULATIONS; i++) {
-    if (paths[i] <= 0 && cumulativeWithdrawals[i] > 0) depletedCnt++;
+    if (paths[i] <= 0 && withdrawalNeeded[i] > 0) depletedCnt++;
   }
   if (depletedCnt > 0) {
     distribution.push({ rangeEnd: 0, count: depletedCnt, isDepleted: true });
@@ -434,8 +471,10 @@ export function simulateMonteCarlo({
       let rateFailureCount = 0;
       if (withdrawalYears > 0) {
         for (let i = 0; i < NUM_SIMULATIONS; i++) {
-          if (ratePaths[idx][i] <= 0) depletedCount++;
-          if (ratePaths[idx][i] + cumulativeWithdrawals[i] < totalPrincipal) rateFailureCount++;
+          if (ratePaths[idx][i] <= 0 && rateWithdrawalNeeded[idx][i] > 0) depletedCount++;
+          if (ratePaths[idx][i] + rateCumulativeWithdrawals[idx][i] < totalPrincipal) {
+            rateFailureCount++;
+          }
         }
       }
       const dp = withdrawalYears > 0 ? depletedCount / NUM_SIMULATIONS : 0;
@@ -471,12 +510,16 @@ export function simulateMonteCarlo({
         };
       }
       const idx = validExtraDeltas.indexOf(delta);
+      const adjustedTotalPrincipal =
+        initialAmount + (monthlyContribution + delta) * contributionYears * 12;
       let depletedCount = 0;
       let extraFailureCount = 0;
       if (withdrawalYears > 0) {
         for (let i = 0; i < NUM_SIMULATIONS; i++) {
-          if (extraPaths[idx][i] <= 0) depletedCount++;
-          if (extraPaths[idx][i] + cumulativeWithdrawals[i] < totalPrincipal) extraFailureCount++;
+          if (extraPaths[idx][i] <= 0 && extraWithdrawalNeeded[idx][i] > 0) depletedCount++;
+          if (extraPaths[idx][i] + extraCumulativeWithdrawals[idx][i] < adjustedTotalPrincipal) {
+            extraFailureCount++;
+          }
         }
       }
       const dp = withdrawalYears > 0 ? depletedCount / NUM_SIMULATIONS : 0;

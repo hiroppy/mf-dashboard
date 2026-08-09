@@ -19,6 +19,9 @@ const dbPath = join(import.meta.dirname, "..", "..", "..", "data", "demo.db");
 
 // demo.dbが存在しない場合はスキップ
 const demoDbExists = existsSync(dbPath);
+if (!demoDbExists && process.env.REQUIRE_DEMO_DB === "true") {
+  throw new Error(`demo.dbが存在しません。先にbuild:demoを実行してください: ${dbPath}`);
+}
 
 describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   let client: Client;
@@ -209,6 +212,11 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   });
 
   describe("資産整合性", () => {
+    test("外部キー参照に不整合がない", async () => {
+      const result = await client.execute("PRAGMA foreign_key_check");
+      expect(result.rows).toHaveLength(0);
+    });
+
     test("資産履歴はスナップショット日を超えず、同日の合計と一致する", async () => {
       const snapshot = await db
         .select()
@@ -375,6 +383,43 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
         expect(latestAssetHistory).toBeDefined();
         expect(assetHoldingTotal?.total).toBe(latestAssetHistory?.totalAssets);
       }
+    });
+
+    test("資産履歴のカテゴリ合計が日次合計と一致する", async () => {
+      const mismatches = await db
+        .select({ id: schema.assetHistory.id })
+        .from(schema.assetHistory)
+        .leftJoin(
+          schema.assetHistoryCategories,
+          eq(schema.assetHistoryCategories.assetHistoryId, schema.assetHistory.id),
+        )
+        .groupBy(schema.assetHistory.id)
+        .having(
+          sql`COALESCE(SUM(${schema.assetHistoryCategories.amount}), 0) <> ${schema.assetHistory.totalAssets}`,
+        )
+        .all();
+
+      expect(mismatches).toHaveLength(0);
+    });
+
+    test("資産履歴のchangeが同じグループの前日差分と一致する", async () => {
+      const result = await client.execute(`
+        SELECT id
+        FROM (
+          SELECT
+            id,
+            total_assets,
+            change,
+            LAG(total_assets) OVER (PARTITION BY group_id ORDER BY date) AS previous_total
+          FROM asset_history
+        )
+        WHERE change <> CASE
+          WHEN previous_total IS NULL THEN 0
+          ELSE total_assets - previous_total
+        END
+      `);
+
+      expect(result.rows).toHaveLength(0);
     });
 
     test("アカウントごとのholdingが存在する", async () => {

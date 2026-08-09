@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: ./.github/actions/setup-node
       - run: pnpm build:demo --affected
+      - run: pnpm --filter @mf-dashboard/db build:demo
+      - run: pnpm --filter @mf-dashboard/db test:demo
   docker-build:
     name: Docker build (${{ matrix.app }})
     runs-on: ubuntu-latest

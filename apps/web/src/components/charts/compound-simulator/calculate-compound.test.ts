@@ -677,10 +677,26 @@ describe("calculateCompound", () => {
       });
 
       const withdrawals = result.filter((p) => p.isWithdrawing);
-      // First year withdrawal should be slightly above 1.2M (inflated from month 1)
-      expect(withdrawals[0].yearlyWithdrawal).toBeGreaterThan(1_200_000);
-      // Later years should have even higher withdrawal
-      expect(withdrawals[4].yearlyWithdrawal).toBeGreaterThan(withdrawals[0].yearlyWithdrawal);
+      expect(withdrawals[0].yearlyWithdrawal).toBe(1_200_000);
+      expect(withdrawals[1].yearlyWithdrawal).toBe(1_236_000);
+      expect(withdrawals[4].yearlyWithdrawal).toBe(1_350_611);
+    });
+
+    it("should increase the withdrawal only at yearly boundaries", () => {
+      const result = calculateCompound({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear: 2,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 2,
+        inflationRate: 10,
+        inflationAdjustedWithdrawal: true,
+      });
+
+      expect(result[3].yearlyWithdrawal).toBe(1_200_000);
+      expect(result[4].yearlyWithdrawal).toBe(1_320_000);
     });
 
     it("should deplete faster than non-adjusted withdrawal", () => {
