@@ -199,7 +199,7 @@ export function generateSummary(input: SummaryInput): ReactNode {
           grossPortfolio > finalPrincipal && grossPortfolio > 0
             ? (grossPortfolio - finalPrincipal) / grossPortfolio
             : 0;
-        const effectiveRate = withdrawalRate * (1 + gainRatio * TAX_RATE);
+        const effectiveRate = withdrawalRate / (1 - gainRatio * TAX_RATE);
         const taxImpact =
           effectiveRate > withdrawalRate * 1.01
             ? `手取り年${withdrawalRate}%に利益部分への課税が加わり、`

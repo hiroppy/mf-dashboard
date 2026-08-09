@@ -809,7 +809,7 @@ describe("simulateMonteCarlo", () => {
         withIncome.yearlyData[2].p50 - withoutIncome.yearlyData[2].p50 - firstYearIncome;
 
       expect(firstYearIncome).toBeLessThan(90_000 * 12);
-      expect(secondYearIncome).toBeCloseTo(firstYearIncome, -1);
+      expect(secondYearIncome).toBeCloseTo(firstYearIncome / 1.03, -1);
     });
 
     it("should deplete faster with inflation-adjusted withdrawal", () => {

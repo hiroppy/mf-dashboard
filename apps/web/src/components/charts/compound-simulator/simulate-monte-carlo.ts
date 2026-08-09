@@ -205,7 +205,9 @@ export function simulateMonteCarlo({
     if (isWithdrawing && !isRateMode && inflationAdjustedWithdrawal) {
       currentMonthlyWithdrawal = monthlyWithdrawal;
     }
-    let annualRealIncomeFactor = 1;
+    const withdrawalYearIndex = Math.max(year - withdrawalStartYear - 1, 0);
+    let annualRealIncomeFactor =
+      inflationAdjustedWithdrawal && ri > 0 ? Math.pow(1 + ri, -withdrawalYearIndex) : 1;
 
     if (isWithdrawing && isRateMode) {
       if (initialWithdrawalAmount && initialWithdrawalSeeded) {
