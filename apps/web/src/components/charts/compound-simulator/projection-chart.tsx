@@ -15,7 +15,7 @@ import { CHART_INITIAL_DIMENSION } from "../../../lib/chart";
 import { formatCurrency } from "../../../lib/format";
 import { chartTooltipStyle } from "../chart-tooltip";
 import type { YearlyProjection } from "./calculate-compound";
-import { getLabelMap } from "./compound-simulator-utils";
+import { formatYAxisAmount, getLabelMap } from "./compound-simulator-utils";
 
 export interface ProjectionChartProps {
   projections: YearlyProjection[];
@@ -84,7 +84,7 @@ export function ProjectionChart({
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `${(value / 10000).toFixed(0)}万`}
+            tickFormatter={formatYAxisAmount}
           />
           <Tooltip
             formatter={(value, name) => [
