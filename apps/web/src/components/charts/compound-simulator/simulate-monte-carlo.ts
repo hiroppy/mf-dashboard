@@ -205,6 +205,7 @@ export function simulateMonteCarlo({
     if (isWithdrawing && !isRateMode && inflationAdjustedWithdrawal) {
       currentMonthlyWithdrawal = monthlyWithdrawal;
     }
+    let annualRealIncomeFactor = 1;
 
     if (isWithdrawing && isRateMode) {
       if (initialWithdrawalAmount && initialWithdrawalSeeded) {
@@ -244,6 +245,9 @@ export function simulateMonteCarlo({
     for (let month = 0; month < 12; month++) {
       if (isWithdrawing && !isRateMode) {
         currentMonthlyWithdrawal *= monthlyRealWithdrawalFactor;
+        if (inflationAdjustedWithdrawal) {
+          annualRealIncomeFactor *= monthlyRealWithdrawalFactor;
+        }
       }
       for (let i = 0; i < NUM_SIMULATIONS; i++) {
         const z = normalRandom(rng);
@@ -264,7 +268,8 @@ export function simulateMonteCarlo({
             baseWithdrawal = currentMonthlyWithdrawal;
           }
           const pensionActive = pensionStartYear != null && year >= pensionStartYear;
-          const income = (pensionActive ? monthlyPensionIncome : 0) + monthlyOtherIncome;
+          const nominalIncome = (pensionActive ? monthlyPensionIncome : 0) + monthlyOtherIncome;
+          const income = nominalIncome * annualRealIncomeFactor;
           const requestedNetWithdrawal = Math.max(baseWithdrawal - income, 0);
           if (requestedNetWithdrawal > 0) withdrawalNeeded[i] = 1;
           if (paths[i] > 0) {
@@ -299,8 +304,9 @@ export function simulateMonteCarlo({
               baseW = currentMonthlyWithdrawal;
             }
             const pensionActiveExtra = pensionStartYear != null && year >= pensionStartYear;
-            const incomeExtra =
+            const nominalIncomeExtra =
               (pensionActiveExtra ? monthlyPensionIncome : 0) + monthlyOtherIncome;
+            const incomeExtra = nominalIncomeExtra * annualRealIncomeFactor;
             const requestedNetW = Math.max(baseW - incomeExtra, 0);
             if (requestedNetW > 0) extraWithdrawalNeeded[d][i] = 1;
             if (extraPaths[d][i] > 0) {

@@ -788,6 +788,30 @@ describe("simulateMonteCarlo", () => {
       expect(secondYearWithdrawal).toBeCloseTo(firstYearWithdrawal, -1);
     });
 
+    it("should deflate income with the withdrawal within each year", () => {
+      const base = {
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 3,
+        volatility: 0,
+        inflationRate: 3,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 2,
+        inflationAdjustedWithdrawal: true,
+        taxFree: true,
+      };
+      const withoutIncome = simulateMonteCarlo(base);
+      const withIncome = simulateMonteCarlo({ ...base, monthlyOtherIncome: 90_000 });
+      const firstYearIncome = withIncome.yearlyData[1].p50 - withoutIncome.yearlyData[1].p50;
+      const secondYearIncome =
+        withIncome.yearlyData[2].p50 - withoutIncome.yearlyData[2].p50 - firstYearIncome;
+
+      expect(firstYearIncome).toBeLessThan(90_000 * 12);
+      expect(secondYearIncome).toBeCloseTo(firstYearIncome, -1);
+    });
+
     it("should deplete faster with inflation-adjusted withdrawal", () => {
       const base = {
         initialAmount: 5_000_000,
