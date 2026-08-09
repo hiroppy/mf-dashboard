@@ -15,11 +15,19 @@ describe("demo holdings", () => {
   it("残高注意を確認できる銀行口座の残高と定期振替を含む", () => {
     const bankHolding = holdingDefs.find(({ accountName }) => accountName === "楽天銀行");
     const recurringTransfer = txTemplates.find(
-      ({ description }) => description === "楽天銀行へ振替",
+      ({ accountName, transferTarget }) =>
+        accountName === "三井住友銀行" && transferTarget === "楽天銀行",
     );
 
     expect(bankHolding).toMatchObject({ amount: 200000 });
-    expect(recurringTransfer).toMatchObject({ minAmount: 150000, maxAmount: 150000 });
+    expect(recurringTransfer).toMatchObject({
+      description: "三井住友銀行へ振替",
+      type: "transfer",
+      minAmount: 150000,
+      maxAmount: 150000,
+      isTransfer: true,
+      isExcludedFromCalculation: true,
+    });
     expect(bankHolding!.amount - recurringTransfer!.maxAmount).toBeLessThanOrEqual(100000);
   });
 });
