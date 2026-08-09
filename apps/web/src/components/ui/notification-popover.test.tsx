@@ -49,6 +49,25 @@ describe("NotificationPopover", () => {
     expect(screen.queryByText("通知はありません")).toBeNull();
   });
 
+  it("更新ステータスの口座を選択したことを通知する", () => {
+    const onNavigate = vi.fn<() => void>();
+    render(
+      <NotificationPopover
+        errorAccounts={[{ id: 1, mfId: "account-1", name: "銀行 A", status: "error" }]}
+        updatingAccounts={[{ id: 2, mfId: "account-2", name: "カード A", status: "updating" }]}
+        balanceAlerts={[]}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    for (const link of screen.getAllByRole("link")) {
+      link.addEventListener("click", (event) => event.preventDefault());
+      fireEvent.click(link);
+    }
+
+    expect(onNavigate).toHaveBeenCalledTimes(2);
+  });
+
   it("すべての通知がなければ空状態を表示する", () => {
     render(<NotificationPopover errorAccounts={[]} updatingAccounts={[]} balanceAlerts={[]} />);
 

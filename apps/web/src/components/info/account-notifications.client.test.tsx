@@ -26,6 +26,7 @@ describe("AccountNotificationsClient", () => {
     alertLink.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(alertLink);
 
+    await waitFor(() => expect(screen.queryByRole("link", { name: /銀行 A/ })).toBeNull());
     await waitFor(() => expect(anchorChangeListener).toHaveBeenCalledOnce());
     window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
   });

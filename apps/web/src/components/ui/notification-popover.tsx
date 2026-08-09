@@ -89,6 +89,7 @@ export function NotificationPopover({
                     <Link
                       key={account.id}
                       href={`/accounts/${account.mfId}`}
+                      onClick={onNavigate}
                       className="block px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
                     >
                       {account.name}
@@ -106,6 +107,7 @@ export function NotificationPopover({
                     <Link
                       key={account.id}
                       href={`/accounts/${account.mfId}`}
+                      onClick={onNavigate}
                       className="block px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors"
                     >
                       {account.name}
