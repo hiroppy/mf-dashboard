@@ -27,6 +27,11 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   let client: Client;
   let db: ReturnType<typeof drizzle>;
 
+  const findRows = async (query: string) => {
+    const result = await client.execute(query);
+    return result.rows;
+  };
+
   beforeAll(() => {
     client = createClient({ url: `file:${dbPath}` });
     db = drizzle(client, { schema });
@@ -55,6 +60,16 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
         .get();
       expect(currentGroup).toBeDefined();
       expect(currentGroup?.name).toBe("グループ選択なし");
+    });
+
+    test("isCurrent=trueのグループは1つだけである", async () => {
+      const currentGroups = await db
+        .select({ id: schema.groups.id })
+        .from(schema.groups)
+        .where(eq(schema.groups.isCurrent, true))
+        .all();
+
+      expect(currentGroups).toHaveLength(1);
     });
 
     test("全アカウントがグループ選択なしに所属している", async () => {
@@ -217,6 +232,15 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
       expect(result.rows).toHaveLength(0);
     });
 
+    test("全体グループに基準日3日のスナップショットが1件存在する", async () => {
+      const snapshots = await db.select().from(schema.dailySnapshots).all();
+
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]?.groupId).toBe("0");
+      expect(snapshots[0]?.date).toMatch(/^\d{4}-\d{2}-03$/);
+      expect(snapshots[0]?.refreshCompleted).toBe(true);
+    });
+
     test("資産履歴はスナップショット日を超えず、同日の合計と一致する", async () => {
       const snapshot = await db
         .select()
@@ -334,55 +358,33 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
       }
     });
 
-    test("holdingValuesの合計がassetHistoryの最終日と一致する", async () => {
-      const groups = await db.select().from(schema.groups).all();
-
-      for (const group of groups) {
-        // グループの最新スナップショットを取得
-        const snapshot = await db
-          .select()
-          .from(schema.dailySnapshots)
-          .where(eq(schema.dailySnapshots.groupId, group.id))
-          .orderBy(sql`${schema.dailySnapshots.date} DESC`)
-          .limit(1)
-          .get();
-
-        if (!snapshot) continue;
-
-        // holdingValuesの合計
-        const holdingTotal = await db
-          .select({ total: sql<number>`SUM(${schema.holdingValues.amount})` })
-          .from(schema.holdingValues)
-          .innerJoin(schema.holdings, eq(schema.holdingValues.holdingId, schema.holdings.id))
-          .where(eq(schema.holdingValues.snapshotId, snapshot.id))
-          .get();
-
-        // assetHistoryの最終日
-        const latestAssetHistory = await db
-          .select()
-          .from(schema.assetHistory)
-          .where(eq(schema.assetHistory.groupId, group.id))
-          .orderBy(sql`${schema.assetHistory.date} DESC`)
-          .limit(1)
-          .get();
-
-        // 資産のみの合計を比較（負債は除く）
-        const assetHoldingTotal = await db
-          .select({ total: sql<number>`SUM(${schema.holdingValues.amount})` })
-          .from(schema.holdingValues)
-          .innerJoin(schema.holdings, eq(schema.holdingValues.holdingId, schema.holdings.id))
-          .where(
-            and(
-              eq(schema.holdingValues.snapshotId, snapshot.id),
-              eq(schema.holdings.type, "asset"),
-            ),
-          )
-          .get();
-
-        expect(holdingTotal?.total).toBeDefined();
-        expect(latestAssetHistory).toBeDefined();
-        expect(assetHoldingTotal?.total).toBe(latestAssetHistory?.totalAssets);
-      }
+    test("全グループのholding合計がassetHistoryの最終日と一致する", async () => {
+      expect(
+        await findRows(`
+        WITH latest_history AS (
+          SELECT ah.group_id, ah.total_assets
+          FROM asset_history ah
+          INNER JOIN (
+            SELECT group_id, MAX(date) AS date
+            FROM asset_history
+            GROUP BY group_id
+          ) latest ON latest.group_id = ah.group_id AND latest.date = ah.date
+        ), holding_totals AS (
+          SELECT ga.group_id, SUM(hv.amount) AS total_assets
+          FROM group_accounts ga
+          INNER JOIN holdings h ON h.account_id = ga.account_id AND h.type = 'asset'
+          INNER JOIN holding_values hv ON hv.holding_id = h.id
+          GROUP BY ga.group_id
+        )
+        SELECT g.id
+        FROM groups g
+        LEFT JOIN latest_history lh ON lh.group_id = g.id
+        LEFT JOIN holding_totals ht ON ht.group_id = g.id
+        WHERE lh.total_assets IS NULL
+           OR ht.total_assets IS NULL
+           OR lh.total_assets <> ht.total_assets
+      `),
+      ).toHaveLength(0);
     });
 
     test("資産履歴のカテゴリ合計が日次合計と一致する", async () => {
@@ -422,6 +424,39 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
       expect(result.rows).toHaveLength(0);
     });
 
+    test("資産履歴は全グループで開始日からスナップショット日まで日次連続している", async () => {
+      expect(
+        await findRows(`
+        WITH dated_history AS (
+          SELECT
+            group_id,
+            date,
+            LAG(date) OVER (PARTITION BY group_id ORDER BY date) AS previous_date
+          FROM asset_history
+        )
+        SELECT group_id, date
+        FROM dated_history
+        WHERE previous_date IS NOT NULL
+          AND julianday(date) - julianday(previous_date) <> 1
+      `),
+      ).toHaveLength(0);
+
+      expect(
+        await findRows(`
+        SELECT g.id
+        FROM groups g
+        LEFT JOIN (
+          SELECT group_id, MIN(date) AS min_date, MAX(date) AS max_date
+          FROM asset_history
+          GROUP BY group_id
+        ) history ON history.group_id = g.id
+        CROSS JOIN (SELECT MAX(date) AS snapshot_date FROM daily_snapshots) snapshot
+        WHERE history.min_date <> '2025-02-01'
+           OR history.max_date <> snapshot.snapshot_date
+      `),
+      ).toHaveLength(0);
+    });
+
     test("アカウントごとのholdingが存在する", async () => {
       const accounts = await db.select().from(schema.accounts).all();
 
@@ -443,6 +478,31 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
   });
 
   describe("トランザクション整合性", () => {
+    test("取引種別と振替フラグ・計算除外・振替先の組み合わせが正しい", async () => {
+      expect(
+        await findRows(`
+        SELECT id
+        FROM transactions
+        WHERE type NOT IN ('income', 'expense', 'transfer')
+           OR (type = 'transfer') <> (is_transfer = 1)
+           OR (type = 'transfer' AND is_excluded_from_calculation <> 1)
+           OR (type = 'transfer' AND (transfer_target IS NULL OR transfer_target_account_id IS NULL))
+           OR (type <> 'transfer' AND (is_transfer <> 0 OR transfer_target IS NOT NULL OR transfer_target_account_id IS NOT NULL))
+      `),
+      ).toHaveLength(0);
+    });
+
+    test("取引金額は正数でスナップショット日を超えない", async () => {
+      expect(
+        await findRows(`
+        SELECT id
+        FROM transactions
+        WHERE amount <= 0
+           OR date > (SELECT MAX(date) FROM daily_snapshots)
+      `),
+      ).toHaveLength(0);
+    });
+
     test("収入・支出トランザクションにカテゴリが設定されている", async () => {
       const incomeExpense = await db
         .select()
@@ -526,6 +586,78 @@ describe.skipIf(!demoDbExists)("demo.db 整合性テスト", () => {
         .all();
 
       expect(targets).toHaveLength(0);
+    });
+  });
+
+  describe("マスター整合性", () => {
+    test("全アカウントに有効なステータスが1件ずつ存在する", async () => {
+      expect(
+        await findRows(`
+        SELECT a.id
+        FROM accounts a
+        LEFT JOIN account_statuses s ON s.account_id = a.id
+        GROUP BY a.id
+        HAVING COUNT(s.id) <> 1
+           OR SUM(CASE WHEN s.status IN ('ok', 'error', 'updating', 'suspended', 'unknown') THEN 0 ELSE 1 END) <> 0
+      `),
+      ).toHaveLength(0);
+    });
+
+    test("holdingの種別とカテゴリが矛盾せず評価額が負でない", async () => {
+      expect(
+        await findRows(`
+        SELECT h.id
+        FROM holdings h
+        LEFT JOIN holding_values hv ON hv.holding_id = h.id
+        WHERE h.type NOT IN ('asset', 'liability')
+           OR (h.type = 'asset' AND h.category_id IS NULL)
+           OR (h.type = 'liability' AND h.liability_category IS NULL)
+           OR hv.id IS NULL
+           OR hv.amount < 0
+      `),
+      ).toHaveLength(0);
+    });
+
+    test("予算種別は許可値のみである", async () => {
+      expect(
+        await findRows(`
+        SELECT id
+        FROM spending_targets
+        WHERE type NOT IN ('fixed', 'variable')
+      `),
+      ).toHaveLength(0);
+    });
+  });
+
+  describe("分析レポート整合性", () => {
+    test("全グループにスナップショット日付のdemoレポートが存在する", async () => {
+      expect(
+        await findRows(`
+        SELECT g.id
+        FROM groups g
+        LEFT JOIN analytics_reports ar ON ar.group_id = g.id
+        CROSS JOIN (SELECT MAX(date) AS snapshot_date FROM daily_snapshots) snapshot
+        GROUP BY g.id
+        HAVING COUNT(ar.id) <> 1
+           OR MAX(ar.date) <> snapshot.snapshot_date
+           OR COALESCE(MAX(ar.model), '') <> 'demo'
+      `),
+      ).toHaveLength(0);
+    });
+
+    test("分析レポートに少なくとも1つのインサイトがある", async () => {
+      expect(
+        await findRows(`
+        SELECT id
+        FROM analytics_reports
+        WHERE NULLIF(TRIM(summary), '') IS NULL
+          AND NULLIF(TRIM(savings_insight), '') IS NULL
+          AND NULLIF(TRIM(investment_insight), '') IS NULL
+          AND NULLIF(TRIM(spending_insight), '') IS NULL
+          AND NULLIF(TRIM(balance_insight), '') IS NULL
+          AND NULLIF(TRIM(liability_insight), '') IS NULL
+      `),
+      ).toHaveLength(0);
     });
   });
 });
