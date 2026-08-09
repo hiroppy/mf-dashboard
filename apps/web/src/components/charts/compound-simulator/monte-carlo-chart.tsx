@@ -17,7 +17,7 @@ import { formatCurrency } from "../../../lib/format";
 import { MetricLabel } from "../../ui/metric-label";
 import { Slider } from "../../ui/slider";
 import { chartTooltipStyle } from "../chart-tooltip";
-import type { FanChartDataPoint } from "./compound-simulator-utils";
+import { formatYAxisAmount, type FanChartDataPoint } from "./compound-simulator-utils";
 
 export interface MonteCarloChartProps {
   fanChartData: FanChartDataPoint[];
@@ -160,7 +160,7 @@ export function MonteCarloChart({
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `${(value / 10000).toFixed(0)}万`}
+            tickFormatter={formatYAxisAmount}
           />
           <Tooltip content={<FanChartTooltip currentAge={currentAge} />} />
           <Area type="monotone" dataKey="base" stackId="fan" fill="transparent" stroke="none" />

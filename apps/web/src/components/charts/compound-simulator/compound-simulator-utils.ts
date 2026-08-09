@@ -9,6 +9,15 @@ export function getLabelMap(taxFree: boolean): Record<string, string> {
   };
 }
 
+export function formatYAxisAmount(value: number): string {
+  if (Math.abs(value) >= 100_000_000) {
+    const oku = Number((value / 100_000_000).toFixed(1));
+    return `${oku.toLocaleString("ja-JP")}億`;
+  }
+
+  return `${(value / 10_000).toFixed(0)}万`;
+}
+
 export const MILESTONE_CANDIDATES = [10_000_000, 20_000_000, 50_000_000, 100_000_000, 200_000_000];
 
 export function selectMilestones(maxValue: number): number[] {

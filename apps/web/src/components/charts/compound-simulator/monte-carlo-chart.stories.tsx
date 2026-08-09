@@ -20,6 +20,24 @@ const fanChartData = buildFanChartData(
   }),
 );
 
+const billionScaleFanChartData = buildFanChartData(
+  [0, 5, 10, 15, 20, 25, 30].map((year) => {
+    const base = 100_000_000 + year * 9_000_000;
+    return {
+      year,
+      p10: base * 0.65,
+      p25: base * 0.85,
+      p50: base,
+      p75: base * 1.2,
+      p90: base * 1.45,
+      principal: 100_000_000 + year * 6_000_000,
+      isContributing: year > 0 && year <= 25,
+      isWithdrawing: year > 30,
+      depletionRate: year === 30 ? 0.03 : undefined,
+    };
+  }),
+);
+
 const meta = {
   title: "Charts/CompoundSimulator/MonteCarloChart",
   component: MonteCarloChart,
@@ -56,5 +74,12 @@ export const Default: Story = {
         annualReturnRate: 5,
       },
     },
+  },
+};
+
+export const BillionScale: Story = {
+  args: {
+    ...Default.args,
+    fanChartData: billionScaleFanChartData,
   },
 };

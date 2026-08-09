@@ -15,6 +15,18 @@ const projections = calculateCompound({
   inflationRate: 2,
 });
 
+const billionScaleProjections = calculateCompound({
+  initialAmount: 100_000_000,
+  monthlyContribution: 500_000,
+  annualReturnRate: 5,
+  contributionYears: 25,
+  withdrawalStartYear: 30,
+  withdrawalYears: 25,
+  monthlyWithdrawal: 1_800_000,
+  expenseRatio: 0.1,
+  inflationRate: 2,
+});
+
 const meta = {
   title: "Charts/CompoundSimulator/ProjectionChart",
   component: ProjectionChart,
@@ -42,5 +54,14 @@ export const Default: Story = {
     totalYears: 55,
     milestones: selectMilestones(projections.at(30)?.total ?? 0),
     currentTotalAssets: 4_000_000,
+  },
+};
+
+export const BillionScale: Story = {
+  args: {
+    ...Default.args,
+    projections: billionScaleProjections,
+    milestones: selectMilestones(billionScaleProjections.at(30)?.total ?? 0),
+    currentTotalAssets: 100_000_000,
   },
 };
