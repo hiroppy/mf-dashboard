@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountNotificationsClient } from "./account-notifications.client";
 import { BANK_FORECAST_ANCHOR_CHANGE_EVENT } from "./bank-cashflow-forecast-anchor";
 
+const initialUrl = window.location.href;
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", initialUrl);
 });
 
 describe("AccountNotificationsClient", () => {
@@ -36,27 +39,30 @@ describe("AccountNotificationsClient", () => {
     window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
   });
 
-  it("修飾キー付きクリックは標準のリンク操作を維持する", async () => {
-    window.history.replaceState(null, "", "/cf/");
-    const anchorChangeListener = vi.fn<() => void>();
-    window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
-    render(
-      <AccountNotificationsClient
-        errorAccounts={[]}
-        updatingAccounts={[]}
-        balanceAlerts={[{ accountId: 1, accountName: "銀行 A", forecastBalance: -10_000 }]}
-        totalIssues={1}
-      />,
-    );
+  it.each(["metaKey", "ctrlKey", "shiftKey", "altKey"] as const)(
+    "%s 付きクリックは標準のリンク操作を維持する",
+    async (modifierKey) => {
+      window.history.replaceState(null, "", "/cf/");
+      const anchorChangeListener = vi.fn<() => void>();
+      window.addEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
+      render(
+        <AccountNotificationsClient
+          errorAccounts={[]}
+          updatingAccounts={[]}
+          balanceAlerts={[{ accountId: 1, accountName: "銀行 A", forecastBalance: -10_000 }]}
+          totalIssues={1}
+        />,
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: "通知 1件" }));
-    const alertLink = await screen.findByRole("link", { name: /銀行 A/ });
-    alertLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
-    fireEvent.click(alertLink, { metaKey: true });
+      fireEvent.click(screen.getByRole("button", { name: "通知 1件" }));
+      const alertLink = await screen.findByRole("link", { name: /銀行 A/ });
+      alertLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      fireEvent.click(alertLink, { [modifierKey]: true });
 
-    expect(anchorChangeListener).not.toHaveBeenCalled();
-    expect(window.location.hash).toBe("");
-    expect(screen.getByRole("link", { name: /銀行 A/ })).toBeTruthy();
-    window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
-  });
+      expect(anchorChangeListener).not.toHaveBeenCalled();
+      expect(window.location.hash).toBe("");
+      expect(screen.getByRole("link", { name: /銀行 A/ })).toBeTruthy();
+      window.removeEventListener(BANK_FORECAST_ANCHOR_CHANGE_EVENT, anchorChangeListener);
+    },
+  );
 });
