@@ -21,6 +21,7 @@ import {
   generateBankForecastCandidates,
   generateConfirmedWithdrawalCandidates,
   getForecastEventId,
+  projectRecurringCandidatesThroughDate,
   type BankForecastDismissal,
   type ForecastAccount,
   type ForecastTransaction,
@@ -234,7 +235,20 @@ export function buildBankCashFlowForecastViews(
     transactions.filter((transaction) => !hasAuthoritativeCardWithdrawal(transaction)),
     bankAccountIds,
   );
-  const forecastCandidates =
+  const eligibleManualEvents = manualEvents.filter(
+    (event) => bankAccountIds.has(event.accountId) && event.date >= currentDate,
+  );
+  const { year, month: monthNumber } = parseIsoDateKey(currentDate);
+  const currentMonthEnd = formatIsoDateKey({
+    year,
+    month: monthNumber,
+    day: getDaysInMonth(year, monthNumber),
+  });
+  const forecastEndDate = eligibleManualEvents.reduce(
+    (latest, event) => (event.date > latest ? event.date : latest),
+    currentMonthEnd,
+  );
+  const baseForecastCandidates =
     candidates ??
     (() => {
       const confirmedCandidates = generateConfirmedWithdrawalCandidates(
@@ -256,6 +270,10 @@ export function buildBankCashFlowForecastViews(
       );
       return [...recurringCandidates, ...confirmedCandidates];
     })();
+  const forecastCandidates = projectRecurringCandidatesThroughDate(
+    baseForecastCandidates,
+    forecastEndDate,
+  );
   const actualTransactions = bankTransactions.filter(
     ({ date }) => date.startsWith(month) && date <= currentDate,
   );
@@ -288,9 +306,6 @@ export function buildBankCashFlowForecastViews(
     },
   );
 
-  const eligibleManualEvents = manualEvents.filter(
-    (event) => bankAccountIds.has(event.accountId) && event.date >= currentDate,
-  );
   const manualForecastEvents: BankCashFlowEventInput[] = eligibleManualEvents.map((event) => ({
     id: `manual-${event.id}`,
     accountId: event.accountId,
@@ -301,17 +316,6 @@ export function buildBankCashFlowForecastViews(
     description: event.description,
     amountSource: "manual",
   }));
-  const { year, month: monthNumber } = parseIsoDateKey(currentDate);
-  const currentMonthEnd = formatIsoDateKey({
-    year,
-    month: monthNumber,
-    day: getDaysInMonth(year, monthNumber),
-  });
-  const forecastEndDate = eligibleManualEvents.reduce(
-    (latest, event) => (event.date > latest ? event.date : latest),
-    currentMonthEnd,
-  );
-
   const forecasts = calculateBankBalanceForecasts(
     bankAccounts.map(({ id, totalAssets, balanceAsOfDate }) => ({
       accountId: id,

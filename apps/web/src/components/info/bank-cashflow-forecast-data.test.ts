@@ -125,6 +125,34 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("手入力予定までの中間月にも定期入出金を反映する", () => {
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [],
+      "2026-08-03",
+      [candidate({ recurrenceIntervalMonths: 1 })],
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-10-15",
+          amount: 30_000,
+          direction: "expense",
+          description: "予定納税",
+        },
+      ],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "forecast:1:expense:家賃:2026-08-20", date: "2026-08-20" },
+      { id: "forecast:1:expense:家賃:2026-09-20", date: "2026-09-20" },
+      { id: "manual-10", date: "2026-10-15" },
+    ]);
+    expect(forecasts[0]?.forecastEndBalance).toBe(50_000);
+  });
+
   it("ミラー振替より通常明細を優先し、手入力予定とそれぞれ一度だけ反映する", () => {
     const mirroredTransfer = transaction(1, {
       accountId: 2,
@@ -675,6 +703,56 @@ describe("buildBankCashFlowForecastViews", () => {
       },
     ]);
     expect(forecasts[0]?.forecastEndBalance).toBe(58_000);
+  });
+
+  it("手入力予定までの中間月にも確定カード引落しを反映する", () => {
+    const cardAccount = {
+      id: 3,
+      name: "カード A",
+      categoryName: "カード",
+      totalAssets: 0,
+      lastUpdated: "2026-08-03T08:00:00",
+      scheduledWithdrawalAmount: 20_000,
+      scheduledWithdrawalConfirmed: true,
+    };
+    const transfers = ["2026-05-20", "2026-06-20", "2026-07-20"].map((date, index) =>
+      transaction(index + 1, {
+        accountId: 3,
+        transferTargetAccountId: 1,
+        date,
+        amount: 20_000,
+        type: "transfer",
+        description: "カード利用代金",
+        isTransfer: true,
+        isExcludedFromCalculation: true,
+      }),
+    );
+
+    const forecasts = buildBankCashFlowForecastViews(
+      [...accounts, cardAccount],
+      transfers,
+      "2026-08-03",
+      undefined,
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-10-15",
+          amount: 10_000,
+          direction: "expense",
+          description: "予定納税",
+        },
+      ],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { date: "2026-08-20", amountSource: "scheduled_withdrawal" },
+      { date: "2026-09-20", amountSource: "scheduled_withdrawal" },
+      { id: "manual-10", date: "2026-10-15" },
+    ]);
+    expect(forecasts[0]?.forecastEndBalance).toBe(50_000);
   });
 
   it("カード通常明細とミラー振替の履歴があっても確定予測を一度だけ追加する", () => {

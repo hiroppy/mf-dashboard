@@ -122,6 +122,28 @@ export function generateBankForecastCandidates(
   return [...currentCandidates, ...staleCandidates];
 }
 
+export function projectRecurringCandidatesThroughDate(
+  candidates: RecurringCandidate[],
+  endDate: string,
+): RecurringCandidate[] {
+  const projectedCandidates: RecurringCandidate[] = [];
+
+  for (const candidate of candidates) {
+    projectedCandidates.push(candidate);
+
+    const intervalMonths = candidate.recurrenceIntervalMonths;
+    if (!intervalMonths || intervalMonths < 1) continue;
+
+    let predictedDate = addMonthsToIsoDateKey(candidate.predictedDate, intervalMonths);
+    while (predictedDate <= endDate) {
+      projectedCandidates.push({ ...candidate, predictedDate });
+      predictedDate = addMonthsToIsoDateKey(predictedDate, intervalMonths);
+    }
+  }
+
+  return projectedCandidates;
+}
+
 function getCardWithdrawalAmount(
   account: ForecastAccount,
   cardLiabilities: Map<number, number>,
@@ -201,6 +223,7 @@ export function generateConfirmedWithdrawalCandidates(
           ),
         }),
       predictedAmount: withdrawal.amount,
+      recurrenceIntervalMonths: generated?.recurrenceIntervalMonths ?? 1,
       amountSource: withdrawal.source,
       evidence: generated?.evidence ?? {
         occurrenceCount: transfers.length,
