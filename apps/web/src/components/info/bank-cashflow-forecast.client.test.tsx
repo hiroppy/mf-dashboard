@@ -119,6 +119,32 @@ describe("BankCashFlowForecastClient", () => {
     expect(screen.queryByText(/入出金の詳細（/)).toBeNull();
   });
 
+  it("複数年にまたがる予測日を年付きで表示する", () => {
+    const recurringEvent = forecast.days[0]!.events[0]!;
+    render(
+      <BankCashFlowForecastClient
+        forecasts={[
+          {
+            ...forecast,
+            forecastEndDate: "2027-10-15",
+            days: [
+              {
+                date: "2027-10-15",
+                closingBalance: 90_000,
+                events: [{ ...recurringEvent, date: "2027-10-15" }],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("2027年10月15日予測残高")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "銀行 Aの入出金詳細を開く" }));
+    expect(screen.getByText("2026年8月1日〜2027年10月15日の実績と予測")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "2027年10月15日", level: 3 })).toBeTruthy();
+  });
+
   it("実績・予測の意味と今月予測の限界を説明する", () => {
     render(<BankCashFlowForecastClient forecasts={[forecast]} />);
 

@@ -10,7 +10,7 @@ import { CircleHelp, EyeOff, Landmark } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { withBasePath } from "../../lib/base-path";
-import { formatCurrency, formatDateShort } from "../../lib/format";
+import { formatCurrency, formatDate, formatDateShort } from "../../lib/format";
 import { cn } from "../../lib/utils";
 import { AmountDisplay } from "../ui/amount-display";
 import { Badge } from "../ui/badge";
@@ -240,7 +240,7 @@ function BalanceSummary({
     forecast.monthStartDate.slice(0, 7),
   )
     ? "月末予測残高"
-    : `${formatDateShort(forecast.forecastEndDate)}予測残高`;
+    : `${formatDate(forecast.forecastEndDate)}予測残高`;
   return (
     <span
       className={cn("grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 text-right sm:gap-x-6", className)}
@@ -267,6 +267,10 @@ function BankForecastCard({
   const [isOpen, setIsOpen] = useState(false);
   const anchorId = getBankForecastAnchorId(forecast.accountId);
   const eventCount = getEventCount(forecast);
+  const formatForecastDate =
+    forecast.monthStartDate.slice(0, 4) === forecast.forecastEndDate.slice(0, 4)
+      ? formatDateShort
+      : formatDate;
 
   useEffect(() => {
     const syncOpenStateWithHash = () => setIsOpen(window.location.hash === `#${anchorId}`);
@@ -322,8 +326,8 @@ function BankForecastCard({
           <div className="min-w-0">
             <DialogTitle>{forecast.accountName}の入出金詳細</DialogTitle>
             <DialogDescription>
-              {formatDateShort(forecast.monthStartDate)}〜
-              {formatDateShort(forecast.forecastEndDate)}の実績と予測
+              {formatForecastDate(forecast.monthStartDate)}〜
+              {formatForecastDate(forecast.forecastEndDate)}の実績と予測
             </DialogDescription>
           </div>
           <BalanceSummary
@@ -344,7 +348,7 @@ function BankForecastCard({
           {forecast.days.map((day) => (
             <section key={day.date}>
               <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
-                <h3 className="text-sm font-semibold">{formatDateShort(day.date)}</h3>
+                <h3 className="text-sm font-semibold">{formatForecastDate(day.date)}</h3>
                 <span className="text-xs text-muted-foreground">
                   取引後残高: <AmountDisplay amount={day.closingBalance} type="balance" size="sm" />
                 </span>

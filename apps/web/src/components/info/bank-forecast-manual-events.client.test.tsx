@@ -68,6 +68,7 @@ describe("BankForecastManualEventsClient", () => {
     openManualEvents();
     expect(screen.queryByText("過去の予定")).toBeNull();
     expect(screen.getByText("予定納税")).toBeTruthy();
+    expect(screen.getByText(/2026年10月15日/)).toBeTruthy();
   });
 
   it("submits a future expense and reports the change", async () => {

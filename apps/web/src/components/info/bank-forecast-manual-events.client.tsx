@@ -8,7 +8,7 @@ import {
   MAX_MANUAL_EVENT_AMOUNT,
 } from "../../lib/bank-forecast-manual-event";
 import { withBasePath } from "../../lib/base-path";
-import { formatDateShort } from "../../lib/format";
+import { formatDate } from "../../lib/format";
 import { AmountDisplay } from "../ui/amount-display";
 import { Button } from "../ui/button";
 import { FormField } from "../ui/form-field";
@@ -301,7 +301,7 @@ export function BankForecastManualEventsClient({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{event.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatDateShort(event.date)} ·{" "}
+                        {formatDate(event.date)} ·{" "}
                         {accounts.find(({ id }) => id === event.accountId)?.name ?? "銀行口座"}
                       </p>
                     </div>
