@@ -243,6 +243,9 @@ export const bankForecastManualEvents = sqliteTable(
   "bank_forecast_manual_events",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
     accountId: integer("account_id")
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
@@ -254,7 +257,11 @@ export const bankForecastManualEvents = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("bank_forecast_manual_events_account_date_idx").on(table.accountId, table.date),
+    index("bank_forecast_manual_events_group_account_date_idx").on(
+      table.groupId,
+      table.accountId,
+      table.date,
+    ),
   ],
 );
 
@@ -411,6 +418,10 @@ export const bankForecastDismissalsRelations = relations(bankForecastDismissals,
 }));
 
 export const bankForecastManualEventsRelations = relations(bankForecastManualEvents, ({ one }) => ({
+  group: one(groups, {
+    fields: [bankForecastManualEvents.groupId],
+    references: [groups.id],
+  }),
   account: one(accounts, {
     fields: [bankForecastManualEvents.accountId],
     references: [accounts.id],

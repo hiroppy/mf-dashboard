@@ -23,15 +23,15 @@ const eventSelection = {
   description: schema.bankForecastManualEvents.description,
 };
 
-async function getScopedBankAccountIds(
+async function resolveBankForecastScope(
   groupIdParam: string | undefined,
   db: Db,
-): Promise<number[]> {
+): Promise<{ groupId: string; accountIds: number[] } | null> {
   const groupId = await resolveGroupId(db, groupIdParam);
-  if (!groupId) return [];
+  if (!groupId) return null;
 
   const accountIds = await getAccountIdsForGroup(db, groupId);
-  if (accountIds.length === 0) return [];
+  if (accountIds.length === 0) return { groupId, accountIds: [] };
 
   const rows = await db
     .select({ id: schema.accounts.id })
@@ -44,20 +44,25 @@ async function getScopedBankAccountIds(
       and(inArray(schema.accounts.id, accountIds), eq(schema.institutionCategories.name, "銀行")),
     )
     .all();
-  return rows.map(({ id }) => id);
+  return { groupId, accountIds: rows.map(({ id }) => id) };
 }
 
 export async function getBankForecastManualEvents(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<BankForecastManualEvent[]> {
-  const accountIds = await getScopedBankAccountIds(groupIdParam, db);
-  if (accountIds.length === 0) return [];
+  const scope = await resolveBankForecastScope(groupIdParam, db);
+  if (!scope || scope.accountIds.length === 0) return [];
 
   return db
     .select(eventSelection)
     .from(schema.bankForecastManualEvents)
-    .where(inArray(schema.bankForecastManualEvents.accountId, accountIds))
+    .where(
+      and(
+        eq(schema.bankForecastManualEvents.groupId, scope.groupId),
+        inArray(schema.bankForecastManualEvents.accountId, scope.accountIds),
+      ),
+    )
     .orderBy(asc(schema.bankForecastManualEvents.date), asc(schema.bankForecastManualEvents.id))
     .all();
 }
@@ -67,13 +72,13 @@ export async function createBankForecastManualEvent(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<BankForecastManualEvent | null> {
-  const accountIds = await getScopedBankAccountIds(groupIdParam, db);
-  if (!accountIds.includes(input.accountId)) return null;
+  const scope = await resolveBankForecastScope(groupIdParam, db);
+  if (!scope?.accountIds.includes(input.accountId)) return null;
 
   const now = new Date().toISOString();
   return db
     .insert(schema.bankForecastManualEvents)
-    .values({ ...input, createdAt: now, updatedAt: now })
+    .values({ ...input, groupId: scope.groupId, createdAt: now, updatedAt: now })
     .returning(eventSelection)
     .get();
 }
@@ -84,8 +89,8 @@ export async function updateBankForecastManualEvent(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<BankForecastManualEvent | null> {
-  const accountIds = await getScopedBankAccountIds(groupIdParam, db);
-  if (!accountIds.includes(input.accountId)) return null;
+  const scope = await resolveBankForecastScope(groupIdParam, db);
+  if (!scope?.accountIds.includes(input.accountId)) return null;
 
   const updated = await db
     .update(schema.bankForecastManualEvents)
@@ -93,7 +98,7 @@ export async function updateBankForecastManualEvent(
     .where(
       and(
         eq(schema.bankForecastManualEvents.id, id),
-        inArray(schema.bankForecastManualEvents.accountId, accountIds),
+        eq(schema.bankForecastManualEvents.groupId, scope.groupId),
       ),
     )
     .returning(eventSelection)
@@ -106,15 +111,15 @@ export async function deleteBankForecastManualEvent(
   groupIdParam?: string,
   db: Db = getDb(),
 ): Promise<boolean> {
-  const accountIds = await getScopedBankAccountIds(groupIdParam, db);
-  if (accountIds.length === 0) return false;
+  const scope = await resolveBankForecastScope(groupIdParam, db);
+  if (!scope) return false;
 
   const deleted = await db
     .delete(schema.bankForecastManualEvents)
     .where(
       and(
         eq(schema.bankForecastManualEvents.id, id),
-        inArray(schema.bankForecastManualEvents.accountId, accountIds),
+        eq(schema.bankForecastManualEvents.groupId, scope.groupId),
       ),
     )
     .returning({ id: schema.bankForecastManualEvents.id })

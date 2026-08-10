@@ -103,10 +103,18 @@ describe("bank forecast manual events", () => {
     ).resolves.toBeNull();
 
     const now = new Date().toISOString();
+    await db.insert(schema.groups).values({
+      id: "external-group",
+      name: "Group B",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
     const external = await db
       .insert(schema.bankForecastManualEvents)
       .values({
         ...input(),
+        groupId: "external-group",
         accountId: externalAccountId,
         createdAt: now,
         updatedAt: now,
@@ -120,6 +128,34 @@ describe("bank forecast manual events", () => {
     await expect(deleteBankForecastManualEvent(external.id, TEST_GROUP_ID, db)).resolves.toBe(
       false,
     );
+  });
+
+  it("keeps events private when the same account belongs to multiple groups", async () => {
+    const sharedGroupId = "shared-group";
+    const now = new Date().toISOString();
+    await db.insert(schema.groups).values({
+      id: sharedGroupId,
+      name: "Group B",
+      isCurrent: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.groupAccounts).values({
+      groupId: sharedGroupId,
+      accountId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await createBankForecastManualEvent(input(), TEST_GROUP_ID, db);
+
+    await expect(getBankForecastManualEvents(sharedGroupId, db)).resolves.toEqual([]);
+    await expect(
+      updateBankForecastManualEvent(created!.id, input(), sharedGroupId, db),
+    ).resolves.toBeNull();
+    await expect(deleteBankForecastManualEvent(created!.id, sharedGroupId, db)).resolves.toBe(
+      false,
+    );
+    await expect(getBankForecastManualEvents(TEST_GROUP_ID, db)).resolves.toEqual([created]);
   });
 
   it("rejects an in-group account outside the bank category", async () => {

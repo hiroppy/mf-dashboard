@@ -142,6 +142,7 @@ erDiagram
 
     bank_forecast_manual_events {
         integer id PK
+        text group_id FK "INDEX, CASCADE"
         integer account_id FK "INDEX, CASCADE"
         text date "INDEX"
         integer amount
@@ -204,6 +205,7 @@ erDiagram
     groups ||--o{ asset_history : "has many (CASCADE)"
     groups ||--o{ spending_targets : "has many (CASCADE)"
     groups ||--o{ analytics_reports : "has many (CASCADE)"
+    groups ||--o{ bank_forecast_manual_events : "has many (CASCADE)"
     accounts ||--o{ group_accounts : "has many (CASCADE)"
     accounts ||--o{ transactions : "has many (CASCADE)"
     accounts ||--o{ transactions : "transfer target (SET NULL)"
@@ -220,28 +222,28 @@ erDiagram
 
 ## Indexes
 
-| Table                       | Index                                         | Type   | Columns                                   |
-| --------------------------- | --------------------------------------------- | ------ | ----------------------------------------- |
-| group_accounts              | group_accounts_group_account_idx              | UNIQUE | group_id, account_id                      |
-| group_accounts              | group_accounts_group_id_idx                   | INDEX  | group_id                                  |
-| group_accounts              | group_accounts_account_id_idx                 | INDEX  | account_id                                |
-| daily_snapshots             | daily_snapshots_date_idx                      | INDEX  | date                                      |
-| holding_values              | holding_values_holding_snapshot_idx           | UNIQUE | holding_id, snapshot_id                   |
-| holdings                    | holdings_account_id_idx                       | INDEX  | account_id                                |
-| accounts                    | accounts_category_id_idx                      | INDEX  | category_id                               |
-| transactions                | transactions_date_idx                         | INDEX  | date                                      |
-| transactions                | transactions_account_id_idx                   | INDEX  | account_id                                |
-| cash_flow_periods           | cash_flow_periods_month_idx                   | UNIQUE | month                                     |
-| bank_forecast_dismissals    | bank_forecast_dismissals_candidate_idx        | UNIQUE | account_id, direction, recurring_identity |
-| bank_forecast_dismissals    | bank_forecast_dismissals_account_id_idx       | INDEX  | account_id                                |
-| bank_forecast_manual_events | bank_forecast_manual_events_account_date_idx  | INDEX  | account_id, date                          |
-| asset_history               | asset_history_group_date_idx                  | UNIQUE | group_id, date                            |
-| asset_history               | asset_history_group_id_idx                    | INDEX  | group_id                                  |
-| asset_history_categories    | asset_history_categories_history_category_idx | UNIQUE | asset_history_id, category_name           |
-| spending_targets            | spending_targets_group_category_idx           | UNIQUE | group_id, large_category_id               |
-| spending_targets            | spending_targets_group_id_idx                 | INDEX  | group_id                                  |
-| analytics_reports           | analytics_reports_group_date_idx              | UNIQUE | group_id, date                            |
-| analytics_reports           | analytics_reports_group_id_idx                | INDEX  | group_id                                  |
+| Table                       | Index                                              | Type   | Columns                                   |
+| --------------------------- | -------------------------------------------------- | ------ | ----------------------------------------- |
+| group_accounts              | group_accounts_group_account_idx                   | UNIQUE | group_id, account_id                      |
+| group_accounts              | group_accounts_group_id_idx                        | INDEX  | group_id                                  |
+| group_accounts              | group_accounts_account_id_idx                      | INDEX  | account_id                                |
+| daily_snapshots             | daily_snapshots_date_idx                           | INDEX  | date                                      |
+| holding_values              | holding_values_holding_snapshot_idx                | UNIQUE | holding_id, snapshot_id                   |
+| holdings                    | holdings_account_id_idx                            | INDEX  | account_id                                |
+| accounts                    | accounts_category_id_idx                           | INDEX  | category_id                               |
+| transactions                | transactions_date_idx                              | INDEX  | date                                      |
+| transactions                | transactions_account_id_idx                        | INDEX  | account_id                                |
+| cash_flow_periods           | cash_flow_periods_month_idx                        | UNIQUE | month                                     |
+| bank_forecast_dismissals    | bank_forecast_dismissals_candidate_idx             | UNIQUE | account_id, direction, recurring_identity |
+| bank_forecast_dismissals    | bank_forecast_dismissals_account_id_idx            | INDEX  | account_id                                |
+| bank_forecast_manual_events | bank_forecast_manual_events_group_account_date_idx | INDEX  | group_id, account_id, date                |
+| asset_history               | asset_history_group_date_idx                       | UNIQUE | group_id, date                            |
+| asset_history               | asset_history_group_id_idx                         | INDEX  | group_id                                  |
+| asset_history_categories    | asset_history_categories_history_category_idx      | UNIQUE | asset_history_id, category_name           |
+| spending_targets            | spending_targets_group_category_idx                | UNIQUE | group_id, large_category_id               |
+| spending_targets            | spending_targets_group_id_idx                      | INDEX  | group_id                                  |
+| analytics_reports           | analytics_reports_group_date_idx                   | UNIQUE | group_id, date                            |
+| analytics_reports           | analytics_reports_group_id_idx                     | INDEX  | group_id                                  |
 
 ## ON DELETE Actions
 
@@ -259,6 +261,7 @@ erDiagram
 | groups                 | asset_history               | CASCADE  |
 | groups                 | spending_targets            | CASCADE  |
 | groups                 | analytics_reports           | CASCADE  |
+| groups                 | bank_forecast_manual_events | CASCADE  |
 | holdings               | holding_values              | CASCADE  |
 | daily_snapshots        | holding_values              | CASCADE  |
 | asset_history          | asset_history_categories    | CASCADE  |
