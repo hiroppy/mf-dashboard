@@ -139,7 +139,9 @@ export const Default: Story = {
     const guide = await within(canvasElement.ownerDocument.body).findByRole("dialog", {
       name: "表示の見方",
     });
-    await expect(within(guide).getByText(/今月だけの参考値/)).toBeInTheDocument();
+    await expect(
+      within(guide).getByText(/当月末までを基本.*手入力予定がある場合はその日まで表示/),
+    ).toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "表示の見方" }));
     await userEvent.click(canvas.getByRole("button", { name: "銀行 Aの入出金詳細を開く" }));
     const details = await within(canvasElement.ownerDocument.body).findByRole("dialog", {

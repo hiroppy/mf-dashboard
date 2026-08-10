@@ -457,9 +457,19 @@ export function BankCashFlowForecastClient({
                     引き落とし予定額が未定のため、カード利用残高を参考にしています。
                   </dd>
                 </div>
+                <div className="space-y-1">
+                  <dt>
+                    <Badge variant={amountSourceDetails.manual.variant}>
+                      {amountSourceDetails.manual.label}
+                    </Badge>
+                  </dt>
+                  <dd className="text-xs leading-relaxed text-muted-foreground">
+                    登録した将来の入出金予定です。
+                  </dd>
+                </div>
               </dl>
               <p className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">
-                今月だけの参考値です。定期性を判定できない臨時入出金などは反映されず、将来の残高を保証しません。過去月表示と任意月への切替は対象外です。
+                当月末までを基本とし、手入力予定がある場合はその日まで表示します。定期性を判定できない臨時入出金は、手入力しない限り反映されず、将来の残高を保証しません。過去月表示と任意月への切替は対象外です。
               </p>
             </PopoverContent>
           </Popover>

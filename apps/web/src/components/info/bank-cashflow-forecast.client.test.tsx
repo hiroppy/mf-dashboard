@@ -157,7 +157,8 @@ describe("BankCashFlowForecastClient", () => {
     expect(screen.queryByText("要確認")).toBeNull();
     expect(screen.getByText("実績").className).not.toBe(screen.getByText("確定").className);
     expect(screen.getByText("残高参考")).toBeTruthy();
-    expect(screen.getByText(/今月だけの参考値.*過去月表示と任意月への切替は対象外/)).toBeTruthy();
+    expect(screen.getByText("登録した将来の入出金予定です。")).toBeTruthy();
+    expect(screen.getByText(/当月末までを基本.*手入力予定がある場合はその日まで表示/)).toBeTruthy();
   });
 
   it("詳細ボタンで日付別の入出金と取引後残高をダイアログに表示する", () => {
