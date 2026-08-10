@@ -11,6 +11,7 @@ import {
   getManualEventMaxDate,
   MAX_MANUAL_EVENT_AMOUNT,
 } from "../../../../lib/bank-forecast-manual-event";
+import { isSameOriginRequest } from "../../../../lib/request-security";
 
 interface ManualEventRequest {
   id?: unknown;
@@ -75,12 +76,29 @@ function invalidRequest() {
   return NextResponse.json({ error: "invalid request" }, { status: 400 });
 }
 
+function invalidOrigin() {
+  return NextResponse.json({ error: "invalid origin" }, { status: 403 });
+}
+
+function unsupportedMediaType() {
+  return NextResponse.json({ error: "application/json required" }, { status: 415 });
+}
+
+function validateMutationRequest(request: Request): NextResponse | null {
+  if (!isSameOriginRequest(request)) return invalidOrigin();
+
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  return contentType === "application/json" ? null : unsupportedMediaType();
+}
+
 function revalidateForecasts() {
   revalidatePath("/", "layout");
 }
 
 export async function POST(request: Request) {
   if (process.env.VERCEL === "1") return writesUnavailable();
+  const invalidMutation = validateMutationRequest(request);
+  if (invalidMutation) return invalidMutation;
   const body = await getBody(request);
   const input = body ? parseInput(body) : null;
   if (!body || !input) return invalidRequest();
@@ -94,6 +112,8 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   if (process.env.VERCEL === "1") return writesUnavailable();
+  const invalidMutation = validateMutationRequest(request);
+  if (invalidMutation) return invalidMutation;
   const body = await getBody(request);
   const input = body ? parseInput(body) : null;
   if (!body || !Number.isSafeInteger(body.id) || (body.id as number) <= 0 || !input) {
@@ -113,6 +133,8 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   if (process.env.VERCEL === "1") return writesUnavailable();
+  const invalidMutation = validateMutationRequest(request);
+  if (invalidMutation) return invalidMutation;
   const body = await getBody(request);
   if (!body || !Number.isSafeInteger(body.id) || (body.id as number) <= 0) {
     return invalidRequest();

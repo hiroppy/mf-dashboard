@@ -47,6 +47,24 @@ const persistedFields = {
   description: validBody.description,
 };
 
+function mutationRequest(
+  method: "POST" | "PATCH" | "DELETE",
+  body: unknown,
+  headers: HeadersInit = {},
+) {
+  const requestHeaders = new Headers({
+    "content-type": "application/json",
+    origin: "http://localhost",
+  });
+  new Headers(headers).forEach((value, key) => requestHeaders.set(key, value));
+
+  return new Request("http://localhost/api/bank-forecast/manual-events", {
+    method,
+    headers: requestHeaders,
+    body: JSON.stringify(body),
+  });
+}
+
 beforeEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
@@ -55,12 +73,7 @@ beforeEach(() => {
 describe("/api/bank-forecast/manual-events", () => {
   it("creates a future manual event and revalidates forecasts", async () => {
     createMock.mockResolvedValue({ id: 1, ...persistedFields });
-    const response = await POST(
-      new Request("http://localhost/api/bank-forecast/manual-events", {
-        method: "POST",
-        body: JSON.stringify(validBody),
-      }),
-    );
+    const response = await POST(mutationRequest("POST", validBody));
 
     expect(response.status).toBe(201);
     expect(createMock).toHaveBeenCalledWith(
@@ -88,12 +101,7 @@ describe("/api/bank-forecast/manual-events", () => {
     [{ ...validBody, description: "   " }, "description"],
     [{ ...validBody, description: "a".repeat(101) }, "description length"],
   ])("rejects invalid %s (%s)", async (body, _label) => {
-    const response = await POST(
-      new Request("http://localhost/api/bank-forecast/manual-events", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-    );
+    const response = await POST(mutationRequest("POST", body));
     expect(response.status).toBe(400);
     expect(createMock).not.toHaveBeenCalled();
   });
@@ -101,10 +109,7 @@ describe("/api/bank-forecast/manual-events", () => {
   it("updates an event after trimming its description", async () => {
     updateMock.mockResolvedValue({ id: 2, ...persistedFields, description: "予定納税" });
     const response = await PATCH(
-      new Request("http://localhost/api/bank-forecast/manual-events", {
-        method: "PATCH",
-        body: JSON.stringify({ ...validBody, id: 2, description: "  予定納税  " }),
-      }),
+      mutationRequest("PATCH", { ...validBody, id: 2, description: "  予定納税  " }),
     );
 
     expect(response.status).toBe(200);
@@ -123,12 +128,7 @@ describe("/api/bank-forecast/manual-events", () => {
 
   it("deletes an event in the selected group", async () => {
     deleteMock.mockResolvedValue(true);
-    const response = await DELETE(
-      new Request("http://localhost/api/bank-forecast/manual-events", {
-        method: "DELETE",
-        body: JSON.stringify({ id: 2, groupId: "group-a" }),
-      }),
-    );
+    const response = await DELETE(mutationRequest("DELETE", { id: 2, groupId: "group-a" }));
 
     expect(response.status).toBe(200);
     expect(deleteMock).toHaveBeenCalledWith(2, "group-a");
@@ -147,26 +147,40 @@ describe("/api/bank-forecast/manual-events", () => {
           ? { id: 2, groupId: "group-a" }
           : { ...validBody, ...(method === "PATCH" ? { id: 2 } : {}) };
       const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
-      const response = await handler(
-        new Request("http://localhost/api/bank-forecast/manual-events", {
-          method,
-          body: JSON.stringify(body),
-        }),
-      );
+      const response = await handler(mutationRequest(method, body));
 
       expect(response.status).toBe(404);
       expect(revalidatePathMock).not.toHaveBeenCalled();
     },
   );
 
+  it.each([
+    ["POST", POST, validBody],
+    ["PATCH", PATCH, { ...validBody, id: 2 }],
+    ["DELETE", DELETE, { id: 2, groupId: "group-a" }],
+  ] as const)("rejects cross-origin %s mutations", async (_methodName, handler, body) => {
+    const response = await handler(
+      mutationRequest(_methodName, body, { origin: "https://attacker.example" }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(createMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it("requires application/json", async () => {
+    const response = await POST(
+      mutationRequest("POST", validBody, { "content-type": "text/plain" }),
+    );
+
+    expect(response.status).toBe(415);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
   it("rejects writes on hosted demos", async () => {
     vi.stubEnv("VERCEL", "1");
-    const response = await POST(
-      new Request("http://localhost/api/bank-forecast/manual-events", {
-        method: "POST",
-        body: JSON.stringify(validBody),
-      }),
-    );
+    const response = await POST(mutationRequest("POST", validBody));
     expect(response.status).toBe(403);
     expect(createMock).not.toHaveBeenCalled();
   });

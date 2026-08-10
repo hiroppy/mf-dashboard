@@ -4,34 +4,11 @@ import {
   parseCrawlerRefreshStatus,
   unavailableCrawlerRefreshStatus,
 } from "../../../../lib/crawler-refresh-status";
+import { isSameOriginRequest } from "../../../../lib/request-security";
 
 export const dynamic = "force-dynamic";
 
 const REQUEST_TIMEOUT_MS = 5_000;
-
-function readForwardedHeader(request: Request, name: string): string | null {
-  return request.headers.get(name)?.split(",")[0]?.trim() || null;
-}
-
-function isSameOriginRequest(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) {
-    return false;
-  }
-
-  try {
-    const requestUrl = new URL(request.url);
-    const originUrl = new URL(origin);
-    const forwardedHost = readForwardedHeader(request, "x-forwarded-host");
-    const forwardedProto = readForwardedHeader(request, "x-forwarded-proto");
-    const host = forwardedHost ?? request.headers.get("host") ?? requestUrl.host;
-    const protocol = forwardedProto ? `${forwardedProto}:` : requestUrl.protocol;
-
-    return originUrl.protocol === protocol && originUrl.host === host;
-  } catch {
-    return false;
-  }
-}
 
 function isSameOriginRead(request: Request): boolean {
   return request.headers.get("sec-fetch-site") === "same-origin" || isSameOriginRequest(request);
