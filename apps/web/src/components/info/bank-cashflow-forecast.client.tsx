@@ -462,14 +462,6 @@ export function BankCashFlowForecastClient({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <BankForecastManualEventsClient
-          accounts={accountOptions}
-          events={manualEvents}
-          minDate={minDate}
-          groupId={groupId}
-          allowEditing={allowForecastChanges}
-          onChanged={() => router.refresh()}
-        />
         <div className="grid gap-4 lg:grid-cols-2">
           {forecasts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground lg:col-span-2">
@@ -486,6 +478,14 @@ export function BankCashFlowForecastClient({
             />
           ))}
         </div>
+        <BankForecastManualEventsClient
+          accounts={accountOptions}
+          events={manualEvents}
+          minDate={minDate}
+          groupId={groupId}
+          allowEditing={allowForecastChanges}
+          onChanged={() => router.refresh()}
+        />
       </CardContent>
     </Card>
   );

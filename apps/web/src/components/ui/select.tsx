@@ -15,6 +15,7 @@ interface SelectProps {
   placeholder?: string;
   textCenter?: boolean;
   align?: "start" | "center" | "end";
+  id?: string;
 }
 
 function Select({
@@ -28,6 +29,7 @@ function Select({
   placeholder = "選択してください",
   textCenter,
   align = "end",
+  id,
 }: SelectProps) {
   const handleValueChange = (newValue: string | null) => {
     if (newValue !== null && onChange) {
@@ -46,6 +48,7 @@ function Select({
       disabled={disabled}
     >
       <BaseSelect.Trigger
+        id={id}
         aria-label={ariaLabel}
         className={cn(
           "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors",

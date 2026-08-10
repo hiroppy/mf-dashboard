@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCurrency } from "../../../lib/format";
+import { FormField } from "../../ui/form-field";
 import { MetricLabel } from "../../ui/metric-label";
 import { NumberField } from "../../ui/number-field";
 import { Select } from "../../ui/select";
@@ -97,21 +98,22 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   return (
     <div className="rounded-lg border p-4 space-y-4">
-      <div className="sm:max-w-48 space-y-2">
-        <MetricLabel
-          title="現在の年齢"
-          description="設定すると、グラフやサマリーが年齢で表示され、年金の受給設定が有効になります"
-        />
+      <FormField
+        label="現在の年齢"
+        htmlFor="simulator-current-age"
+        className="sm:max-w-48"
+        description="設定すると、グラフやサマリーが年齢で表示され、年金の受給設定が有効になります"
+      >
         <NumberField
+          id="simulator-current-age"
           value={currentAge}
           onValueChange={(v) => onCurrentAgeChange(v ?? undefined)}
           min={0}
           max={100}
           step={1}
           suffix="歳"
-          aria-label="現在の年齢"
         />
-      </div>
+      </FormField>
       <InteractiveTimelineBar
         contributionYears={contributionYears}
         withdrawalStartYear={withdrawalStartYear}
@@ -137,32 +139,35 @@ export function SettingsPanel({
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-        <div className="space-y-2">
-          <MetricLabel
-            title="初期投資額"
-            description="一括で投資する金額。0円でも積立のみで運用できます"
-          />
+        <FormField
+          label="初期投資額"
+          htmlFor="simulator-initial-amount"
+          description="一括で投資する金額。0円でも積立のみで運用できます"
+        >
           <NumberField
+            id="simulator-initial-amount"
             value={initialAmount}
             onValueChange={(v) => onInitialAmountChange(v ?? 0)}
             min={0}
             step={10000}
             largeStep={100000}
             suffix="円"
-            aria-label="初期投資額"
           />
-        </div>
+        </FormField>
 
-        <div className="space-y-2">
-          <MetricLabel title="月額積立額" description="毎月定額で積み立てる金額" />
+        <FormField
+          label="月額積立額"
+          htmlFor="simulator-monthly-contribution"
+          description="毎月定額で積み立てる金額"
+        >
           <NumberField
+            id="simulator-monthly-contribution"
             value={monthlyContribution}
             onValueChange={(v) => onMonthlyContributionChange(v ?? 0)}
             min={0}
             step={1000}
             largeStep={10000}
             suffix="円"
-            aria-label="月額積立額"
             disabled={contributionYears === 0}
           />
           {portfolioContext?.monthlyContributionSource && (
@@ -170,7 +175,7 @@ export function SettingsPanel({
               {portfolioContext.monthlyContributionSource}
             </p>
           )}
-        </div>
+        </FormField>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -554,21 +559,21 @@ export function SettingsPanel({
             </p>
           )}
         </div>
-        <div className="space-y-2">
-          <MetricLabel
-            title="その他の月収"
-            description="パート収入、家賃収入などの手取り額。切り崩し開始時から常に適用されます"
-          />
+        <FormField
+          label="その他の月収"
+          htmlFor="simulator-monthly-other-income"
+          description="パート収入、家賃収入などの手取り額。切り崩し開始時から常に適用されます"
+        >
           <NumberField
+            id="simulator-monthly-other-income"
             value={monthlyOtherIncome}
             onValueChange={(v) => onMonthlyOtherIncomeChange(v ?? 0)}
             min={0}
             step={10000}
             largeStep={50000}
             suffix="円"
-            aria-label="その他の月収"
           />
-        </div>
+        </FormField>
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <div className="flex items-center gap-3">

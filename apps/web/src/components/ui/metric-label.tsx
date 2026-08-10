@@ -9,9 +9,10 @@ interface MetricLabelProps {
   title: string;
   description?: ReactNode;
   className?: string;
+  htmlFor?: string;
 }
 
-export function MetricLabel({ title, description, className }: MetricLabelProps) {
+export function MetricLabel({ title, description, className, htmlFor }: MetricLabelProps) {
   return (
     <div
       className={cn(
@@ -20,7 +21,7 @@ export function MetricLabel({ title, description, className }: MetricLabelProps)
         className,
       )}
     >
-      {title}
+      {htmlFor ? <label htmlFor={htmlFor}>{title}</label> : title}
       {description && (
         <Tooltip content={description} aria-label={`${title}の説明`}>
           <CircleHelp className="h-3.5 w-3.5 text-muted-foreground/60" />

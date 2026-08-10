@@ -18,7 +18,58 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function openManualEvents() {
+  fireEvent.click(screen.getByRole("button", { name: "開く" }));
+}
+
 describe("BankForecastManualEventsClient", () => {
+  it("starts collapsed and toggles the manual event controls", () => {
+    render(
+      <BankForecastManualEventsClient
+        accounts={[{ id: 1, name: "銀行 A" }]}
+        events={[]}
+        minDate="2026-08-10"
+      />,
+    );
+
+    const openButton = screen.getByRole("button", { name: "開く" });
+    expect(openButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("予定日")).toBeNull();
+
+    openManualEvents();
+    expect(screen.getByRole("button", { name: "閉じる" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(screen.getByLabelText("予定日")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "閉じる" }));
+    expect(screen.queryByLabelText("予定日")).toBeNull();
+  });
+
+  it("does not show past manual events in the list", () => {
+    render(
+      <BankForecastManualEventsClient
+        accounts={[{ id: 1, name: "銀行 A" }]}
+        events={[
+          {
+            id: 2,
+            accountId: 1,
+            date: "2026-08-09",
+            amount: 10_000,
+            direction: "expense",
+            description: "過去の予定",
+          },
+          ...events,
+        ]}
+        minDate="2026-08-10"
+      />,
+    );
+
+    openManualEvents();
+    expect(screen.queryByText("過去の予定")).toBeNull();
+    expect(screen.getByText("予定納税")).toBeTruthy();
+  });
+
   it("submits a future expense and reports the change", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -34,6 +85,7 @@ describe("BankForecastManualEventsClient", () => {
       />,
     );
 
+    openManualEvents();
     fireEvent.change(screen.getByLabelText("予定日"), { target: { value: "2026-10-15" } });
     fireEvent.change(screen.getByLabelText("金額"), { target: { value: "120000" } });
     fireEvent.change(screen.getByLabelText("内容"), { target: { value: "予定納税" } });
@@ -71,9 +123,10 @@ describe("BankForecastManualEventsClient", () => {
       />,
     );
 
+    openManualEvents();
     fireEvent.click(screen.getByRole("button", { name: "編集" }));
     expect(screen.getByLabelText<HTMLInputElement>("予定日").value).toBe("2026-10-15");
-    expect(screen.getByLabelText<HTMLInputElement>("金額").value).toBe("120000");
+    expect(screen.getByLabelText<HTMLInputElement>("金額").value).toBe("120,000");
     expect(screen.getByLabelText<HTMLInputElement>("内容").value).toBe("予定納税");
     fireEvent.change(screen.getByLabelText("金額"), { target: { value: "100000" } });
     fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
@@ -111,6 +164,7 @@ describe("BankForecastManualEventsClient", () => {
       />,
     );
 
+    openManualEvents();
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
     fireEvent.click(screen.getByRole("button", { name: "削除する" }));
 
@@ -134,6 +188,7 @@ describe("BankForecastManualEventsClient", () => {
       />,
     );
 
+    openManualEvents();
     expect(screen.getByText("公開デモでは予定を変更できません。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "編集" })).toBeNull();
   });

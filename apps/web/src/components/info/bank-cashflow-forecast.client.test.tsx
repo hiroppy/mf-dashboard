@@ -62,6 +62,7 @@ describe("BankCashFlowForecastClient", () => {
     );
 
     expect(screen.getByText("手入力の入出金予定")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "開く" }));
     expect(screen.getByRole("button", { name: "予定を追加" })).toBeTruthy();
     expect(screen.getByText("残高予測に必要な最新の口座残高がありません。")).toBeTruthy();
   });
