@@ -238,18 +238,23 @@ export function buildBankCashFlowForecastViews(
   const actualTransactions = bankTransactions.filter(
     ({ date }) => date.startsWith(month) && date <= currentDate,
   );
-  const eligibleManualEvents = manualEvents.filter(
-    (event) =>
-      bankAccountIds.has(event.accountId) &&
-      event.date >= currentDate &&
-      !actualTransactions.some(
-        (transaction) =>
-          transaction.accountId === event.accountId &&
-          transaction.date === event.date &&
-          transaction.type === event.direction &&
-          Math.abs(transaction.amount) === event.amount,
-      ),
-  );
+  const matchedActualTransactionIndexes = new Set<number>();
+  const eligibleManualEvents = manualEvents.filter((event) => {
+    if (!bankAccountIds.has(event.accountId) || event.date < currentDate) return false;
+
+    const matchIndex = actualTransactions.findIndex(
+      (transaction, index) =>
+        !matchedActualTransactionIndexes.has(index) &&
+        transaction.accountId === event.accountId &&
+        transaction.date === event.date &&
+        transaction.type === event.direction &&
+        Math.abs(transaction.amount) === event.amount,
+    );
+    if (matchIndex === -1) return true;
+
+    matchedActualTransactionIndexes.add(matchIndex);
+    return false;
+  });
   const { year, month: monthNumber } = parseIsoDateKey(currentDate);
   const currentMonthEnd = formatIsoDateKey({
     year,

@@ -153,7 +153,7 @@ describe("buildBankCashFlowForecastViews", () => {
     expect(forecasts[0]?.forecastEndBalance).toBe(50_000);
   });
 
-  it("当日の一致する実績を手入力予定より優先する", () => {
+  it("当日の一致する実績と手入力予定を1対1で照合する", () => {
     const forecasts = buildBankCashFlowForecastViews(
       accounts,
       [transaction(1, { date: "2026-08-03" })],
@@ -170,14 +170,23 @@ describe("buildBankCashFlowForecastViews", () => {
           direction: "income",
           description: "入金予定",
         },
+        {
+          id: 11,
+          accountId: 1,
+          date: "2026-08-03",
+          amount: 5_000,
+          direction: "income",
+          description: "別の入金予定",
+        },
       ],
     );
 
     expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
       { id: "actual-1", status: "actual" },
+      { id: "manual-11", status: "forecast" },
     ]);
-    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toHaveLength(1);
-    expect(forecasts[0]?.forecastEndBalance).toBe(100_000);
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toHaveLength(2);
+    expect(forecasts[0]?.forecastEndBalance).toBe(105_000);
   });
 
   it("ミラー振替より通常明細を優先し、手入力予定とそれぞれ一度だけ反映する", () => {
