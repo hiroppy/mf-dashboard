@@ -223,7 +223,6 @@ export function generateConfirmedWithdrawalCandidates(
           ),
         }),
       predictedAmount: withdrawal.amount,
-      recurrenceIntervalMonths: generated?.recurrenceIntervalMonths ?? 1,
       amountSource: withdrawal.source,
       evidence: generated?.evidence ?? {
         occurrenceCount: transfers.length,

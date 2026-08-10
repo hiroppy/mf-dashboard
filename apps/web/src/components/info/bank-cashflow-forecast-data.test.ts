@@ -153,6 +153,33 @@ describe("buildBankCashFlowForecastViews", () => {
     expect(forecasts[0]?.forecastEndBalance).toBe(50_000);
   });
 
+  it("当日の一致する実績を手入力予定より優先する", () => {
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [transaction(1, { date: "2026-08-03" })],
+      "2026-08-03",
+      [],
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-08-03",
+          amount: 5_000,
+          direction: "income",
+          description: "入金予定",
+        },
+      ],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-1", status: "actual" },
+    ]);
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toHaveLength(1);
+    expect(forecasts[0]?.forecastEndBalance).toBe(100_000);
+  });
+
   it("ミラー振替より通常明細を優先し、手入力予定とそれぞれ一度だけ反映する", () => {
     const mirroredTransfer = transaction(1, {
       accountId: 2,
@@ -705,7 +732,7 @@ describe("buildBankCashFlowForecastViews", () => {
     expect(forecasts[0]?.forecastEndBalance).toBe(58_000);
   });
 
-  it("手入力予定までの中間月にも確定カード引落しを反映する", () => {
+  it("確定カード引落しは手入力予定で延長された将来月へ反復しない", () => {
     const cardAccount = {
       id: 3,
       name: "カード A",
@@ -749,10 +776,9 @@ describe("buildBankCashFlowForecastViews", () => {
 
     expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
       { date: "2026-08-20", amountSource: "scheduled_withdrawal" },
-      { date: "2026-09-20", amountSource: "scheduled_withdrawal" },
       { id: "manual-10", date: "2026-10-15" },
     ]);
-    expect(forecasts[0]?.forecastEndBalance).toBe(50_000);
+    expect(forecasts[0]?.forecastEndBalance).toBe(70_000);
   });
 
   it("カード通常明細とミラー振替の履歴があっても確定予測を一度だけ追加する", () => {

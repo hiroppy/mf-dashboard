@@ -235,8 +235,20 @@ export function buildBankCashFlowForecastViews(
     transactions.filter((transaction) => !hasAuthoritativeCardWithdrawal(transaction)),
     bankAccountIds,
   );
+  const actualTransactions = bankTransactions.filter(
+    ({ date }) => date.startsWith(month) && date <= currentDate,
+  );
   const eligibleManualEvents = manualEvents.filter(
-    (event) => bankAccountIds.has(event.accountId) && event.date >= currentDate,
+    (event) =>
+      bankAccountIds.has(event.accountId) &&
+      event.date >= currentDate &&
+      !actualTransactions.some(
+        (transaction) =>
+          transaction.accountId === event.accountId &&
+          transaction.date === event.date &&
+          transaction.type === event.direction &&
+          Math.abs(transaction.amount) === event.amount,
+      ),
   );
   const { year, month: monthNumber } = parseIsoDateKey(currentDate);
   const currentMonthEnd = formatIsoDateKey({
@@ -273,9 +285,6 @@ export function buildBankCashFlowForecastViews(
   const forecastCandidates = projectRecurringCandidatesThroughDate(
     baseForecastCandidates,
     forecastEndDate,
-  );
-  const actualTransactions = bankTransactions.filter(
-    ({ date }) => date.startsWith(month) && date <= currentDate,
   );
   const actualEvents = actualTransactions.map(toActualEvent);
   const eligibleCandidates = forecastCandidates.filter((candidate) => {
