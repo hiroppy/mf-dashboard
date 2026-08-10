@@ -9,7 +9,12 @@ import {
   matchesRecurringCandidateIdentity,
   type RecurringCandidate,
 } from "@mf-dashboard/analytics/recurring-candidates";
-import { formatIsoDateKey, getDaysInMonth, parseIsoDateKey } from "@mf-dashboard/date-utils";
+import {
+  formatIsoDateKey,
+  getDaysInMonth,
+  parseIsoDateKey,
+  shiftYearMonthKey,
+} from "@mf-dashboard/date-utils";
 import type { BankForecastManualEvent } from "@mf-dashboard/db/queries/bank-forecast-manual-event";
 import {
   createNormalTransactionMirrorKeys,
@@ -251,32 +256,44 @@ export function buildBankCashFlowForecastViews(
     (latest, event) => (event.date > latest ? event.date : latest),
     currentMonthEnd,
   );
-  const baseForecastCandidates =
-    candidates ??
-    (() => {
-      const confirmedCandidates = generateConfirmedWithdrawalCandidates(
-        accounts,
-        transactions,
-        bankAccountIds,
-        month,
-        cardLiabilityAmounts,
-        currentDate,
-      );
-      const recurringCandidates = generateBankForecastCandidates(
-        candidateTransactions,
-        month,
-      ).filter(
-        (candidate) =>
-          !confirmedCandidates.some((confirmed) =>
-            isMirroredCandidateForConfirmedCard(candidate, confirmed, transactions),
-          ),
-      );
-      return [...recurringCandidates, ...confirmedCandidates];
-    })();
-  const forecastCandidates = projectRecurringCandidatesThroughDate(
-    baseForecastCandidates,
-    forecastEndDate,
-  );
+  let forecastCandidates: RecurringCandidate[];
+  if (candidates !== undefined) {
+    forecastCandidates = projectRecurringCandidatesThroughDate(candidates, forecastEndDate);
+  } else {
+    const confirmedCandidates = generateConfirmedWithdrawalCandidates(
+      accounts,
+      transactions,
+      bankAccountIds,
+      month,
+      cardLiabilityAmounts,
+      currentDate,
+    );
+    const recurringSeeds: RecurringCandidate[] = [];
+    const forecastEndMonth = forecastEndDate.slice(0, 7);
+    for (
+      let targetMonth = month;
+      targetMonth <= forecastEndMonth;
+      targetMonth = shiftYearMonthKey(targetMonth, 1)
+    ) {
+      recurringSeeds.push(...generateBankForecastCandidates(candidateTransactions, targetMonth));
+    }
+
+    const uniqueCandidates = new Map<string, RecurringCandidate>();
+    for (const candidate of projectRecurringCandidatesThroughDate(
+      [...recurringSeeds, ...confirmedCandidates],
+      forecastEndDate,
+    )) {
+      const mirrorsCurrentConfirmedWithdrawal =
+        candidate.predictedDate <= currentMonthEnd &&
+        confirmedCandidates.some((confirmed) =>
+          isMirroredCandidateForConfirmedCard(candidate, confirmed, transactions),
+        );
+      if (!mirrorsCurrentConfirmedWithdrawal) {
+        uniqueCandidates.set(getForecastEventId(candidate), candidate);
+      }
+    }
+    forecastCandidates = [...uniqueCandidates.values()];
+  }
   const actualEvents = actualTransactions.map(toActualEvent);
   const eligibleCandidates = forecastCandidates.filter((candidate) => {
     const isDismissed = dismissals.some(
