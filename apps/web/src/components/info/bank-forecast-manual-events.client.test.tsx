@@ -87,6 +87,7 @@ describe("BankForecastManualEventsClient", () => {
     );
 
     openManualEvents();
+    expect(screen.getByLabelText<HTMLInputElement>("金額").id).toBe("manual-forecast-amount");
     fireEvent.change(screen.getByLabelText("予定日"), { target: { value: "2026-10-15" } });
     fireEvent.change(screen.getByLabelText("金額"), { target: { value: "120000" } });
     fireEvent.change(screen.getByLabelText("内容"), { target: { value: "予定納税" } });
