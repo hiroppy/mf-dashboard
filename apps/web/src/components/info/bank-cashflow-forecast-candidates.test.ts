@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { generateBankForecastCandidates } from "./bank-cashflow-forecast-candidates";
+import {
+  generateBankForecastCandidates,
+  projectRecurringCandidatesThroughDate,
+} from "./bank-cashflow-forecast-candidates";
 
 describe("generateBankForecastCandidates", () => {
   it("隔月候補を予定月の翌月へ繰り越さない", () => {
@@ -42,5 +45,33 @@ describe("generateBankForecastCandidates", () => {
     );
 
     expect(candidates).toEqual([]);
+  });
+
+  it("月末を丸めた後も元の周期日へ戻す", () => {
+    const projected = projectRecurringCandidatesThroughDate(
+      [
+        {
+          accountId: 1,
+          type: "expense",
+          classification: "other",
+          description: "月末支払い",
+          recurrenceIntervalMonths: 1,
+          predictedDate: "2026-08-31",
+          predictedAmount: 10_000,
+          evidence: {
+            occurrenceCount: 3,
+            dateRange: { from: "2026-05-31", to: "2026-07-31" },
+            amountRange: { min: 10_000, max: 10_000 },
+          },
+        },
+      ],
+      "2026-10-31",
+    );
+
+    expect(projected.map(({ predictedDate }) => predictedDate)).toEqual([
+      "2026-08-31",
+      "2026-09-30",
+      "2026-10-31",
+    ]);
   });
 });

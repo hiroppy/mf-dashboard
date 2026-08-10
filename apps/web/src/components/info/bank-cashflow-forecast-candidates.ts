@@ -134,10 +134,10 @@ export function projectRecurringCandidatesThroughDate(
     const intervalMonths = candidate.recurrenceIntervalMonths;
     if (!intervalMonths || intervalMonths < 1) continue;
 
-    let predictedDate = addMonthsToIsoDateKey(candidate.predictedDate, intervalMonths);
-    while (predictedDate <= endDate) {
+    for (let monthOffset = intervalMonths; ; monthOffset += intervalMonths) {
+      const predictedDate = addMonthsToIsoDateKey(candidate.predictedDate, monthOffset);
+      if (predictedDate > endDate) break;
       projectedCandidates.push({ ...candidate, predictedDate });
-      predictedDate = addMonthsToIsoDateKey(predictedDate, intervalMonths);
     }
   }
 
