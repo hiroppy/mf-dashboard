@@ -125,6 +125,42 @@ describe("buildBankCashFlowForecastViews", () => {
     ]);
   });
 
+  it("demo の手入力予定は UI と同じ実日付 cutoff で予測へ反映する", () => {
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [],
+      "2026-08-03",
+      [],
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-08-05",
+          amount: 10_000,
+          direction: "expense",
+          description: "経過済み予定",
+        },
+        {
+          id: 11,
+          accountId: 1,
+          date: "2026-08-10",
+          amount: 20_000,
+          direction: "expense",
+          description: "当日予定",
+        },
+      ],
+      "2026-08-10",
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "manual-11", date: "2026-08-10" },
+    ]);
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toHaveLength(1);
+    expect(forecasts[0]?.forecastEndBalance).toBe(80_000);
+  });
+
   it("手入力予定までの中間月にも定期入出金を反映する", () => {
     const forecasts = buildBankCashFlowForecastViews(
       accounts,

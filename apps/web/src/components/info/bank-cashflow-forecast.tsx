@@ -18,8 +18,9 @@ interface BankCashFlowForecastProps {
 const CARD_LIABILITY_CATEGORY = "クレジットカード利用残高";
 
 const getBankCashFlowForecastData = cache(async (groupId?: string) => {
+  const manualEventMinDate = getJstTodayIsoDate();
   const currentDate = getBankForecastCurrentDate(
-    getJstTodayIsoDate(),
+    manualEventMinDate,
     process.env.DEMO_MODE === "true",
   );
   const historyStartDate = `${shiftYearMonthKey(currentDate.slice(0, 7), -12)}-01`;
@@ -120,11 +121,12 @@ const getBankCashFlowForecastData = cache(async (groupId?: string) => {
     cardLiabilities,
     dismissals,
     manualEvents,
+    manualEventMinDate,
   );
   const bankAccounts = selectedAccounts.flatMap(({ id, name, categoryName }) =>
     categoryName === "銀行" ? [{ id, name }] : [],
   );
-  return { forecasts, manualEvents, bankAccounts };
+  return { forecasts, manualEvents, manualEventMinDate, bankAccounts };
 });
 
 export async function getBankCashFlowForecastViews(groupId?: string) {
@@ -132,14 +134,15 @@ export async function getBankCashFlowForecastViews(groupId?: string) {
 }
 
 export async function BankCashFlowForecast({ groupId }: BankCashFlowForecastProps) {
-  const { forecasts, manualEvents, bankAccounts } = await getBankCashFlowForecastData(groupId);
+  const { forecasts, manualEvents, manualEventMinDate, bankAccounts } =
+    await getBankCashFlowForecastData(groupId);
 
   return (
     <BankCashFlowForecastClient
       forecasts={forecasts}
       accounts={bankAccounts}
       manualEvents={manualEvents}
-      manualEventMinDate={getJstTodayIsoDate()}
+      manualEventMinDate={manualEventMinDate}
       groupId={groupId}
       allowForecastChanges={process.env.VERCEL !== "1"}
     />

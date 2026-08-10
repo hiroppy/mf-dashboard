@@ -205,6 +205,7 @@ export function buildBankCashFlowForecastViews(
   cardLiabilities: ForecastCardLiability[] = [],
   dismissals: BankForecastDismissal[] = [],
   manualEvents: BankForecastManualEvent[] = [],
+  manualEventMinDate: string = currentDate,
 ): BankCashFlowForecastView[] {
   const bankAccounts = accounts.flatMap((account) => {
     if (account.categoryName !== "銀行") return [];
@@ -244,7 +245,7 @@ export function buildBankCashFlowForecastViews(
     ({ date }) => date.startsWith(month) && date <= currentDate,
   );
   const candidateManualEvents = manualEvents.filter(
-    (event) => bankAccountIds.has(event.accountId) && event.date >= currentDate,
+    (event) => bankAccountIds.has(event.accountId) && event.date >= manualEventMinDate,
   );
   const { year, month: monthNumber } = parseIsoDateKey(currentDate);
   const currentMonthEnd = formatIsoDateKey({
