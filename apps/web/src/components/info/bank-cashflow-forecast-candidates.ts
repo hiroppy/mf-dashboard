@@ -75,9 +75,8 @@ function matchesRecordedCandidate(
 export function excludeRecordedCandidates(
   candidates: RecurringCandidate[],
   actualTransactions: ForecastTransaction[],
+  matchedTransactionIndexes = new Set<number>(),
 ): RecurringCandidate[] {
-  const matchedTransactionIndexes = new Set<number>();
-
   return candidates.filter((candidate) => {
     const matchIndex = actualTransactions.findIndex(
       (transaction, index) =>

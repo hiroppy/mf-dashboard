@@ -238,30 +238,16 @@ export function buildBankCashFlowForecastViews(
   const actualTransactions = bankTransactions.filter(
     ({ date }) => date.startsWith(month) && date <= currentDate,
   );
-  const matchedActualTransactionIndexes = new Set<number>();
-  const eligibleManualEvents = manualEvents.filter((event) => {
-    if (!bankAccountIds.has(event.accountId) || event.date < currentDate) return false;
-
-    const matchIndex = actualTransactions.findIndex(
-      (transaction, index) =>
-        !matchedActualTransactionIndexes.has(index) &&
-        transaction.accountId === event.accountId &&
-        transaction.date === event.date &&
-        transaction.type === event.direction &&
-        Math.abs(transaction.amount) === event.amount,
-    );
-    if (matchIndex === -1) return true;
-
-    matchedActualTransactionIndexes.add(matchIndex);
-    return false;
-  });
+  const candidateManualEvents = manualEvents.filter(
+    (event) => bankAccountIds.has(event.accountId) && event.date >= currentDate,
+  );
   const { year, month: monthNumber } = parseIsoDateKey(currentDate);
   const currentMonthEnd = formatIsoDateKey({
     year,
     month: monthNumber,
     day: getDaysInMonth(year, monthNumber),
   });
-  const forecastEndDate = eligibleManualEvents.reduce(
+  const forecastEndDate = candidateManualEvents.reduce(
     (latest, event) => (event.date > latest ? event.date : latest),
     currentMonthEnd,
   );
@@ -307,18 +293,36 @@ export function buildBankCashFlowForecastViews(
       !isDismissed
     );
   });
-  const forecastEvents = excludeRecordedCandidates(eligibleCandidates, actualTransactions).map(
-    (candidate) => {
-      const scheduledCandidate =
-        candidate.predictedDate < currentDate
-          ? { ...candidate, predictedDate: currentDate }
-          : candidate;
-      return recurringCandidateToBankCashFlowEvent(
-        getForecastEventId(scheduledCandidate),
-        scheduledCandidate,
-      );
-    },
-  );
+  const matchedActualTransactionIndexes = new Set<number>();
+  const forecastEvents = excludeRecordedCandidates(
+    eligibleCandidates,
+    actualTransactions,
+    matchedActualTransactionIndexes,
+  ).map((candidate) => {
+    const scheduledCandidate =
+      candidate.predictedDate < currentDate
+        ? { ...candidate, predictedDate: currentDate }
+        : candidate;
+    return recurringCandidateToBankCashFlowEvent(
+      getForecastEventId(scheduledCandidate),
+      scheduledCandidate,
+    );
+  });
+
+  const eligibleManualEvents = candidateManualEvents.filter((event) => {
+    const matchIndex = actualTransactions.findIndex(
+      (transaction, index) =>
+        !matchedActualTransactionIndexes.has(index) &&
+        transaction.accountId === event.accountId &&
+        transaction.date === event.date &&
+        transaction.type === event.direction &&
+        Math.abs(transaction.amount) === event.amount,
+    );
+    if (matchIndex === -1) return true;
+
+    matchedActualTransactionIndexes.add(matchIndex);
+    return false;
+  });
 
   const manualForecastEvents: BankCashFlowEventInput[] = eligibleManualEvents.map((event) => ({
     id: `manual-${event.id}`,
