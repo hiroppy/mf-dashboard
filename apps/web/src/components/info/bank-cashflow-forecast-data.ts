@@ -309,18 +309,22 @@ export function buildBankCashFlowForecastViews(
     );
   });
 
+  const matchedManualTransactionIndexes = new Set<number>();
   const eligibleManualEvents = candidateManualEvents.filter((event) => {
     const matchIndex = actualTransactions.findIndex(
       (transaction, index) =>
-        !matchedActualTransactionIndexes.has(index) &&
+        !matchedManualTransactionIndexes.has(index) &&
         transaction.accountId === event.accountId &&
         transaction.date === event.date &&
         transaction.type === event.direction &&
-        Math.abs(transaction.amount) === event.amount,
+        Math.abs(transaction.amount) === event.amount &&
+        (!matchedActualTransactionIndexes.has(index) ||
+          matchesRecurringCandidateIdentity({ description: event.description }, transaction)),
     );
     if (matchIndex === -1) return true;
 
     matchedActualTransactionIndexes.add(matchIndex);
+    matchedManualTransactionIndexes.add(matchIndex);
     return false;
   });
 

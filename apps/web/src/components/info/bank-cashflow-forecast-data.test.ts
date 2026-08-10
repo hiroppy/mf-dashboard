@@ -226,6 +226,42 @@ describe("buildBankCashFlowForecastViews", () => {
     expect(forecasts[0]?.forecastEndBalance).toBe(105_000);
   });
 
+  it("定期候補と同じ内容の手入力予定は同じ実績で二重計上を防ぐ", () => {
+    const forecasts = buildBankCashFlowForecastViews(
+      accounts,
+      [transaction(1, { date: "2026-08-03" })],
+      "2026-08-03",
+      [
+        candidate({
+          type: "income",
+          classification: "salary",
+          description: "給与振込",
+          recurringIdentity: "給与振込",
+          predictedDate: "2026-08-03",
+          predictedAmount: 5_000,
+        }),
+      ],
+      [],
+      [],
+      [
+        {
+          id: 10,
+          accountId: 1,
+          date: "2026-08-03",
+          amount: 5_000,
+          direction: "income",
+          description: "給与振込",
+        },
+      ],
+    );
+
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toMatchObject([
+      { id: "actual-1", status: "actual" },
+    ]);
+    expect(forecasts[0]?.days.flatMap(({ events }) => events)).toHaveLength(1);
+    expect(forecasts[0]?.forecastEndBalance).toBe(100_000);
+  });
+
   it("ミラー振替より通常明細を優先し、手入力予定とそれぞれ一度だけ反映する", () => {
     const mirroredTransfer = transaction(1, {
       accountId: 2,
