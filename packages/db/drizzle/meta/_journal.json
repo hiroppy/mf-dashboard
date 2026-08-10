@@ -33,15 +33,8 @@
     {
       "idx": 4,
       "version": "6",
-      "when": 1786316015559,
-      "tag": "0004_cloudy_polaris",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1786339567096,
-      "tag": "0005_magenta_romulus",
+      "when": 1786339953751,
+      "tag": "0004_short_thunderbolt",
       "breakpoints": true
     }
   ]
