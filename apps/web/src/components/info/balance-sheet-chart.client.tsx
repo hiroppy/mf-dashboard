@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } fro
 import { sortByAmountDescending } from "../../lib/amount-order";
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
+import { formatPercent } from "../../lib/format";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -14,6 +15,11 @@ interface BalanceSheetChartProps {
   assets: Array<{ category: string; amount: number }>;
   liabilities: Array<{ category: string; amount: number }>;
   netAssets: number;
+}
+
+export function formatAssetShare(amount: number, totalAssets: number) {
+  const percentage = totalAssets === 0 ? 0 : (amount / totalAssets) * 100;
+  return `(${formatPercent(percentage)})`;
 }
 
 export function getBalanceSheetChartOrder(
@@ -111,7 +117,14 @@ export function BalanceSheetChartClient({
               <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: p.fill }} />
               {p.name}
             </span>
-            <AmountDisplay amount={p.value} weight="medium" />
+            <span className="flex items-baseline gap-1">
+              <AmountDisplay amount={p.value} weight="medium" />
+              {isAssetSide && (
+                <span className="text-muted-foreground">
+                  {formatAssetShare(p.value, totalAssets)}
+                </span>
+              )}
+            </span>
           </div>
         ))}
         <div className="flex justify-between gap-4 mt-2 pt-2 border-t font-bold">
