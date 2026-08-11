@@ -372,12 +372,12 @@ function LastUpdatedAt({ lastScrapedAt }: LastUpdatedAtProps) {
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5 border-l pl-2">
-      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-        <span className="hidden sm:inline">更新 </span>
-        <time dateTime={lastScrapedAt ?? undefined}>{formattedLastScrapedAt}</time>
-      </span>
-    </div>
+    <time
+      className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground"
+      dateTime={lastScrapedAt ?? undefined}
+    >
+      {formattedLastScrapedAt}
+    </time>
   );
 }
 
