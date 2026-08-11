@@ -16,8 +16,12 @@ vi.mock("./credentials.js", () => ({
 
 import { login } from "./login.js";
 
-function createPage(finalUrl: string, viaPassword = false): Page {
+function createPage(
+  finalUrl: string,
+  { abortAccountsOnce = false, viaPassword = false } = {},
+): Page {
   let currentUrl: string = mfUrls.auth.signIn;
+  let accountsNavigationAborted = false;
   const locator = {
     click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     fill: vi.fn<(value: string) => Promise<void>>().mockResolvedValue(undefined),
@@ -38,14 +42,21 @@ function createPage(finalUrl: string, viaPassword = false): Page {
       if (url === mfUrls.signIn) {
         currentUrl = viaPassword ? mfUrls.auth.password : finalUrl;
       } else if (url === mfUrls.accounts) {
+        if (abortAccountsOnce && !accountsNavigationAborted) {
+          accountsNavigationAborted = true;
+          throw new Error("page.goto: net::ERR_ABORTED");
+        }
         currentUrl = finalUrl;
       }
       return null;
     }),
+    isClosed: vi.fn<() => boolean>(() => false),
     locator: vi.fn<(selector: string) => unknown>((selector) =>
       selector.includes("one-time-code") ? otpLocator : locator,
     ),
     url: vi.fn<() => string>(() => currentUrl),
+    waitForLoadState: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    waitForTimeout: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     waitForURL: vi.fn<(matcher: unknown) => Promise<void>>((matcher) => {
       if (typeof matcher === "function") {
         return Promise.reject(new Error("URL did not change"));
@@ -75,7 +86,7 @@ describe("login", () => {
   });
 
   test("resolves when the browser reaches Money Forward ME", async () => {
-    const page = createPage(mfUrls.accounts, true);
+    const page = createPage(mfUrls.accounts, { viaPassword: true });
 
     await expect(login(page)).resolves.toBeUndefined();
     expect(log).toHaveBeenCalledWith("Login successful!");
@@ -86,6 +97,16 @@ describe("login", () => {
 
     await expect(login(page)).rejects.toThrow("Login failed");
     expect(log).not.toHaveBeenCalledWith("Login successful!");
+  });
+
+  test("retries the authenticated-page probe after aborted navigation", async () => {
+    const page = createPage(mfUrls.accounts, {
+      abortAccountsOnce: true,
+      viaPassword: true,
+    });
+
+    await expect(login(page)).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith("Login successful!");
   });
 
   test("rejects a lookalike Money Forward origin", async () => {

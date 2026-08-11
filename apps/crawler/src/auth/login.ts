@@ -1,6 +1,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { BrowserContext, Page } from "playwright";
 import { log, debug } from "../logger.js";
+import { navigateToAccountsPage } from "../scrapers/refresh.js";
 import { getCredentials, getOTP } from "./credentials.js";
 import { hasAuthState, saveAuthState } from "./state.js";
 
@@ -90,10 +91,7 @@ async function isSessionValid(page: Page): Promise<boolean> {
   try {
     // Navigate to a page that requires an authenticated Money Forward ME session.
     // The public home page cannot prove that the session is valid.
-    await page.goto(mfUrls.accounts, {
-      waitUntil: "domcontentloaded",
-      timeout: TIMEOUTS.long,
-    });
+    await navigateToAccountsPage(page);
 
     // Wait a bit for potential redirects
     await waitForUrlChange(page);
@@ -254,10 +252,7 @@ export async function login(page: Page): Promise<void> {
 
   // Recheck against an authenticated-only page. moneyforward.com/ itself is
   // publicly accessible and therefore cannot be used as proof of login.
-  await page.goto(mfUrls.accounts, {
-    waitUntil: "domcontentloaded",
-    timeout: TIMEOUTS.long,
-  });
+  await navigateToAccountsPage(page);
   await waitForUrlChange(page);
 
   if (!isLoggedInUrl(page.url())) {
