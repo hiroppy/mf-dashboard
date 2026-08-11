@@ -323,12 +323,43 @@ describe("UnrealizedGainCardClient", () => {
   });
 
   it.each([
-    ["フィルターなし", "all" as const, "__all__", 3],
-    ["損益区分あり", "gain" as const, "__all__", 6],
-    ["金融機関あり", "all" as const, "金融機関 A", 6],
-    ["両方あり", "loss" as const, "金融機関 B", 6],
-  ])("%sではランキング上限を切り替える", (_label, gainFilter, institutionFilter, expected) => {
-    expect(getRankingLimit(gainFilter, institutionFilter)).toBe(expected);
+    ["損益すべて", "all" as const, 3],
+    ["含み益", "gain" as const, 6],
+    ["含み損", "loss" as const, 6],
+  ])("%sではランキング上限を切り替える", (_label, gainFilter, expected) => {
+    expect(getRankingLimit(gainFilter)).toBe(expected);
+  });
+
+  it("金融機関を選択しても損益区分に応じたランキング上限を維持する", () => {
+    const holdings = Array.from({ length: 7 }, (_, index) => ({
+      name: `含み益銘柄 ${index + 1}`,
+      amount: 100,
+      unrealizedGain: 70 - index * 10,
+      unrealizedGainPct: 10,
+      institution: "金融機関 A",
+      categoryName: "株式(現物)",
+    }));
+
+    render(
+      <HoldingsFilterProvider>
+        <FilterButton value="金融機関 A">金融機関 A に絞る</FilterButton>
+        <GainFilterButton value="gain">含み益に絞る</GainFilterButton>
+        <UnrealizedGainCardClient
+          holdings={holdings}
+          filterOptions={[
+            { value: "金融機関 A", label: "金融機関 A" },
+            { value: "金融機関 B", label: "金融機関 B" },
+          ]}
+        />
+      </HoldingsFilterProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "金融機関 A に絞る" }));
+    expect(screen.queryByText("含み益銘柄 4")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "含み益に絞る" }));
+    expect(screen.getByText("含み益銘柄 6")).not.toBeNull();
+    expect(screen.queryByText("含み益銘柄 7")).toBeNull();
   });
 
   it("損益区分を金融機関の左に表示する", () => {
