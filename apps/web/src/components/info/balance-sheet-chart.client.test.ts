@@ -3,7 +3,7 @@ import { formatAssetShare, getBalanceSheetChartOrder } from "./balance-sheet-cha
 
 describe("formatAssetShare", () => {
   it.each([
-    [3_000_000, 11_500_000, "(26.1%)"],
+    [3_000_000, 12_000_000, "(25.0%)"],
     [-100, 1_000, "(-10.0%)"],
     [100, 0, "(0.0%)"],
   ])("%s円 / %s円を%sと表示する", (amount, totalAssets, expected) => {

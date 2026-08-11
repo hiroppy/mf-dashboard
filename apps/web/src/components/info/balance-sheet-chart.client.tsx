@@ -15,6 +15,7 @@ interface BalanceSheetChartProps {
   assets: Array<{ category: string; amount: number }>;
   liabilities: Array<{ category: string; amount: number }>;
   netAssets: number;
+  totalAssets: number;
 }
 
 export function formatAssetShare(amount: number, totalAssets: number) {
@@ -56,6 +57,7 @@ export function BalanceSheetChartClient({
   assets,
   liabilities,
   netAssets,
+  totalAssets,
 }: BalanceSheetChartProps) {
   const [isMobile, setIsMobile] = useState(false);
 
@@ -66,7 +68,6 @@ export function BalanceSheetChartClient({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const totalAssets = assets.reduce((sum, a) => sum + a.amount, 0);
   const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
   const { orderedAssets, stackedAssetKeys, legendKeys, stackedBalanceKeys } =
     getBalanceSheetChartOrder(assets, totalLiabilities, netAssets);

@@ -24,6 +24,11 @@ export async function BalanceSheetChart({ groupId }: BalanceSheetChartProps) {
   const netAssets = totalAssets - totalLiabilities;
 
   return (
-    <BalanceSheetChartClient assets={assets} liabilities={liabilities} netAssets={netAssets} />
+    <BalanceSheetChartClient
+      assets={assets}
+      liabilities={liabilities}
+      netAssets={netAssets}
+      totalAssets={totalAssets}
+    />
   );
 }
