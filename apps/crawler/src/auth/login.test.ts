@@ -37,6 +37,8 @@ function createPage(finalUrl: string, viaPassword = false): Page {
     goto: vi.fn<(url: string) => Promise<null>>().mockImplementation(async (url) => {
       if (url === mfUrls.signIn) {
         currentUrl = viaPassword ? mfUrls.auth.password : finalUrl;
+      } else if (url === mfUrls.accounts) {
+        currentUrl = finalUrl;
       }
       return null;
     }),
@@ -73,10 +75,17 @@ describe("login", () => {
   });
 
   test("resolves when the browser reaches Money Forward ME", async () => {
-    const page = createPage(mfUrls.home, true);
+    const page = createPage(mfUrls.accounts, true);
 
     await expect(login(page)).resolves.toBeUndefined();
     expect(log).toHaveBeenCalledWith("Login successful!");
+  });
+
+  test("rejects the public Money Forward home page", async () => {
+    const page = createPage(mfUrls.home);
+
+    await expect(login(page)).rejects.toThrow("Login failed");
+    expect(log).not.toHaveBeenCalledWith("Login successful!");
   });
 
   test("rejects a lookalike Money Forward origin", async () => {

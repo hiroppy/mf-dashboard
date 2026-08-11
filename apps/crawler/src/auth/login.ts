@@ -13,6 +13,7 @@ const TIMEOUTS = {
 };
 
 const MONEY_FORWARD_ME_ORIGIN = new URL(mfUrls.home).origin;
+const AUTHENTICATED_PATHNAME = new URL(mfUrls.accounts).pathname;
 
 const SELECTORS = {
   mfidEmail: 'input[name="mfid_user[email]"]',
@@ -28,7 +29,9 @@ function isLoggedInUrl(url: string): boolean {
   try {
     const currentUrl = new URL(url);
     return (
-      currentUrl.origin === MONEY_FORWARD_ME_ORIGIN && !currentUrl.pathname.includes("/sign_in")
+      currentUrl.origin === MONEY_FORWARD_ME_ORIGIN &&
+      (currentUrl.pathname === AUTHENTICATED_PATHNAME ||
+        currentUrl.pathname.startsWith(`${AUTHENTICATED_PATHNAME}/`))
     );
   } catch {
     return false;
@@ -85,8 +88,9 @@ async function isSessionValid(page: Page): Promise<boolean> {
   debug("Checking if session is valid...");
 
   try {
-    // Navigate to Money Forward home
-    await page.goto(mfUrls.home, {
+    // Navigate to a page that requires an authenticated Money Forward ME session.
+    // The public home page cannot prove that the session is valid.
+    await page.goto(mfUrls.accounts, {
       waitUntil: "domcontentloaded",
       timeout: TIMEOUTS.long,
     });
@@ -247,6 +251,14 @@ export async function login(page: Page): Promise<void> {
   } else {
     debug("Already redirected to ME (session exists)");
   }
+
+  // Recheck against an authenticated-only page. moneyforward.com/ itself is
+  // publicly accessible and therefore cannot be used as proof of login.
+  await page.goto(mfUrls.accounts, {
+    waitUntil: "domcontentloaded",
+    timeout: TIMEOUTS.long,
+  });
+  await waitForUrlChange(page);
 
   if (!isLoggedInUrl(page.url())) {
     throw new Error("Login failed: browser did not reach Money Forward ME");
