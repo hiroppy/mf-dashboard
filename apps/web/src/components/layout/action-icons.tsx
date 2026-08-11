@@ -375,6 +375,7 @@ function LastUpdatedAt({ lastScrapedAt }: LastUpdatedAtProps) {
     <time
       className="shrink-0 whitespace-nowrap text-[11px] text-muted-foreground"
       dateTime={lastScrapedAt ?? undefined}
+      aria-label={`最終更新 ${formattedLastScrapedAt}`}
     >
       {formattedLastScrapedAt}
     </time>
