@@ -243,5 +243,9 @@ export async function login(page: Page): Promise<void> {
     debug("Already redirected to ME (session exists)");
   }
 
+  if (!isLoggedInUrl(page.url())) {
+    throw new Error("Login failed: browser did not reach Money Forward ME");
+  }
+
   log("Login successful!");
 }

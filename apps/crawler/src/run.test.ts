@@ -110,6 +110,26 @@ afterEach(async () => {
 });
 
 describe("runCrawler progress", () => {
+  test("認証失敗時はスクレイプを開始しない", async () => {
+    const authError = new Error("Login failed");
+    vi.mocked(runAuthPhase).mockRejectedValueOnce(authError);
+    const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
+      id: "run-a",
+      source: "test",
+      startedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    await expect(runCrawler(progress)).rejects.toBe(authError);
+
+    expect(runScrapePhase).not.toHaveBeenCalled();
+    expect(createGroupScope).not.toHaveBeenCalled();
+    expect(handleCrawlerFailure).toHaveBeenCalledWith(
+      authError,
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   test("atomic database save失敗を database save step に記録する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
