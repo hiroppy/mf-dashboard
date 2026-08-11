@@ -105,6 +105,26 @@ afterEach(() => {
 });
 
 describe("ActionIcons", () => {
+  it("shows only the last updated date and time without a divider or label", () => {
+    const { container } = render(
+      <ActionIcons variant="header" lastScrapedAt="2025-04-30T01:30:00.000Z" />,
+    );
+
+    const time = screen.getByText("4/30 10:30");
+    expect(time.tagName).toBe("TIME");
+    expect(time.getAttribute("datetime")).toBe("2025-04-30T01:30:00.000Z");
+    expect(screen.getByLabelText("最終更新 4/30 10:30")).toBe(time);
+    expect(time.closest(".border-l")).toBeNull();
+    expect(screen.queryByText("更新")).toBeNull();
+    expect(container.querySelectorAll("time")).toHaveLength(1);
+  });
+
+  it("does not show the last updated area when no date is available", () => {
+    const { container } = render(<ActionIcons variant="header" lastScrapedAt={null} />);
+
+    expect(container.querySelector("time")).toBeNull();
+  });
+
   it("describes the in-app AI assistant in the help dialog", () => {
     render(<ActionIcons variant="header" />);
 
