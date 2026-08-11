@@ -3,11 +3,15 @@ import { formatBalanceSheetShare, getBalanceSheetChartOrder } from "./balance-sh
 
 describe("formatBalanceSheetShare", () => {
   it.each([
+    [2, 1_000, "(0.2%)"],
+    [11, 1_000, "(1.1%)"],
+    [67, 1_000, "(6.7%)"],
+    [100, 1_000, "(10.0%)"],
     [3_000_000, 12_000_000, "(25.0%)"],
-    [67, 1_000, "(06.7%)"],
     [1_000, 1_000, "(100.0%)"],
+    [-11, 1_000, "(-1.1%)"],
     [-100, 1_000, "(-10.0%)"],
-    [100, 0, "(00.0%)"],
+    [100, 0, "(0.0%)"],
   ])("%s円 / %s円を%sと表示する", (amount, total, expected) => {
     expect(formatBalanceSheetShare(amount, total)).toBe(expected);
   });

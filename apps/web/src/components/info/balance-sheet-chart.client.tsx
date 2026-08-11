@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } fro
 import { sortByAmountDescending } from "../../lib/amount-order";
 import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { getAssetCategoryColor, semanticColors } from "../../lib/colors";
+import { formatPercent } from "../../lib/format";
 import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -19,9 +20,7 @@ interface BalanceSheetChartProps {
 
 export function formatBalanceSheetShare(amount: number, total: number) {
   const percentage = total === 0 ? 0 : (amount / total) * 100;
-  const sign = percentage < 0 ? "-" : "";
-  const paddedPercentage = Math.abs(percentage).toFixed(1).padStart(4, "0");
-  return `(${sign}${paddedPercentage}%)`;
+  return `(${formatPercent(percentage)})`;
 }
 
 export function getBalanceSheetChartOrder(
