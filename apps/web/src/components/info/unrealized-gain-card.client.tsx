@@ -85,8 +85,8 @@ export function matchesGainFilter(gain: number | null, gainFilter: GainFilter): 
   return gainFilter === "gain" ? gain > 0 : gain < 0;
 }
 
-export function getRankingLimit(gainFilter: GainFilter, institutionFilter: string): number {
-  return gainFilter === "all" && institutionFilter === ALL_FILTER ? 3 : 6;
+export function getRankingLimit(gainFilter: GainFilter): number {
+  return gainFilter === "all" ? 3 : 6;
 }
 
 export function filterHoldings(
@@ -189,7 +189,7 @@ export function UnrealizedGainCardClient({
   const treemapData = groupSmallHoldings(filteredHoldings, totalMarketValue);
 
   const selectOptions = [{ value: ALL_FILTER, label: "金融機関すべて" }, ...filterOptions];
-  const rankingLimit = getRankingLimit(gainFilter, selectedFilter);
+  const rankingLimit = getRankingLimit(gainFilter);
 
   // Sort by gain for top/bottom lists
   const sortedByGain = [...filteredHoldings].sort((a, b) => b.unrealizedGain - a.unrealizedGain);
