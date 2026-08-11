@@ -1,3 +1,4 @@
+import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -15,7 +16,8 @@ vi.mock("./credentials.js", () => ({
 
 import { login } from "./login.js";
 
-function createPage(url: string): Page {
+function createPage(finalUrl: string, viaPassword = false): Page {
+  let currentUrl: string = mfUrls.auth.signIn;
   const locator = {
     click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     fill: vi.fn<(value: string) => Promise<void>>().mockResolvedValue(undefined),
@@ -32,14 +34,22 @@ function createPage(url: string): Page {
   otpLocator.first.mockReturnValue(otpLocator);
 
   return {
-    goto: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+    goto: vi.fn<(url: string) => Promise<null>>().mockImplementation(async (url) => {
+      if (url === mfUrls.signIn) {
+        currentUrl = viaPassword ? mfUrls.auth.password : finalUrl;
+      }
+      return null;
+    }),
     locator: vi.fn<(selector: string) => unknown>((selector) =>
       selector.includes("one-time-code") ? otpLocator : locator,
     ),
-    url: vi.fn<() => string>(() => url),
+    url: vi.fn<() => string>(() => currentUrl),
     waitForURL: vi.fn<(matcher: unknown) => Promise<void>>((matcher) => {
       if (typeof matcher === "function") {
         return Promise.reject(new Error("URL did not change"));
+      }
+      if (typeof matcher === "string") {
+        currentUrl = finalUrl;
       }
       return Promise.resolve();
     }),
@@ -63,8 +73,16 @@ describe("login", () => {
   });
 
   test("resolves when the browser reaches Money Forward ME", async () => {
-    const page = createPage("https://moneyforward.com/");
+    const page = createPage(mfUrls.home, true);
 
     await expect(login(page)).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith("Login successful!");
+  });
+
+  test("rejects a lookalike Money Forward origin", async () => {
+    const page = createPage("https://moneyforward.com.attacker.example/");
+
+    await expect(login(page)).rejects.toThrow("Login failed");
+    expect(log).not.toHaveBeenCalledWith("Login successful!");
   });
 });

@@ -12,6 +12,8 @@ const TIMEOUTS = {
   login: 30000,
 };
 
+const MONEY_FORWARD_ME_ORIGIN = new URL(mfUrls.home).origin;
+
 const SELECTORS = {
   mfidEmail: 'input[name="mfid_user[email]"]',
   mfidPassword: 'input[name="mfid_user[password]"]',
@@ -23,11 +25,14 @@ const SELECTORS = {
 };
 
 function isLoggedInUrl(url: string): boolean {
-  return (
-    url.includes("moneyforward.com") &&
-    !url.includes("id.moneyforward.com") &&
-    !url.includes("/sign_in")
-  );
+  try {
+    const currentUrl = new URL(url);
+    return (
+      currentUrl.origin === MONEY_FORWARD_ME_ORIGIN && !currentUrl.pathname.includes("/sign_in")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function buildAccountSelector(username: string): string {
