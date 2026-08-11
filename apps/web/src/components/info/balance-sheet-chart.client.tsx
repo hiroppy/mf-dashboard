@@ -17,8 +17,8 @@ interface BalanceSheetChartProps {
   totalAssets: number;
 }
 
-export function formatAssetShare(amount: number, totalAssets: number) {
-  const percentage = totalAssets === 0 ? 0 : (amount / totalAssets) * 100;
+export function formatBalanceSheetShare(amount: number, total: number) {
+  const percentage = total === 0 ? 0 : (amount / total) * 100;
   const sign = percentage < 0 ? "-" : "";
   const paddedPercentage = Math.abs(percentage).toFixed(1).padStart(4, "0");
   return `(${sign}${paddedPercentage}%)`;
@@ -121,11 +121,9 @@ export function BalanceSheetChartClient({
             </span>
             <span className="flex items-baseline gap-1">
               <AmountDisplay amount={p.value} weight="medium" />
-              {isAssetSide && (
-                <span className="text-muted-foreground lining-nums tabular-nums">
-                  {formatAssetShare(p.value, totalAssets)}
-                </span>
-              )}
+              <span className="text-muted-foreground lining-nums tabular-nums">
+                {formatBalanceSheetShare(p.value, total)}
+              </span>
             </span>
           </div>
         ))}

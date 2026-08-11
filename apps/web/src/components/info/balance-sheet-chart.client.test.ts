@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatAssetShare, getBalanceSheetChartOrder } from "./balance-sheet-chart.client";
+import { formatBalanceSheetShare, getBalanceSheetChartOrder } from "./balance-sheet-chart.client";
 
-describe("formatAssetShare", () => {
+describe("formatBalanceSheetShare", () => {
   it.each([
     [3_000_000, 12_000_000, "(25.0%)"],
     [67, 1_000, "(06.7%)"],
     [1_000, 1_000, "(100.0%)"],
     [-100, 1_000, "(-10.0%)"],
     [100, 0, "(00.0%)"],
-  ])("%s円 / %s円を%sと表示する", (amount, totalAssets, expected) => {
-    expect(formatAssetShare(amount, totalAssets)).toBe(expected);
+  ])("%s円 / %s円を%sと表示する", (amount, total, expected) => {
+    expect(formatBalanceSheetShare(amount, total)).toBe(expected);
   });
 });
 
