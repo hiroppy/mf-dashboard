@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
 
   cloudflared:
-    image: cloudflare/cloudflared:2026.8.1
+    image: cloudflare/cloudflared:2026.8.2
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     command: tunnel --no-autoupdate run --token-file /run/secrets/tunnel_token
     secrets:
