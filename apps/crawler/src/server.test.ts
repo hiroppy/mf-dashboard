@@ -7,6 +7,7 @@ import {
   createCrawlerTriggerServer,
   listenCrawlerTriggerServer,
   recordManualRunFailure,
+  shouldNotifyCrawlerStateChange,
 } from "./server.js";
 
 const runningState: CrawlerRunState = {
@@ -54,6 +55,19 @@ async function listen(testServer: Server): Promise<string> {
 }
 
 describe("crawler trigger server", () => {
+  test.each([
+    ["crawler-run-state.json", true],
+    ["crawler-run.lock", true],
+    ["crawler-run.lock.mutation-pending-run-1", false],
+    ["crawler-run.lock.mutation-owner-run-1", false],
+    ["unrelated.json", false],
+    [undefined, true],
+  ])("filters filesystem change %s", (changedFilename, expected) => {
+    const watchedFilenames = new Set(["crawler-run-state.json", "crawler-run.lock"]);
+
+    expect(shouldNotifyCrawlerStateChange(changedFilename, watchedFilenames)).toBe(expected);
+  });
+
   test("binds to localhost by default", async () => {
     server = listenCrawlerTriggerServer(0);
     await once(server, "listening");

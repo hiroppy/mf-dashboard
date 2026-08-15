@@ -61,7 +61,6 @@ async function watchCrawlerState(
 ): Promise<() => void> {
   const statePath = process.env.CRAWLER_STATE_PATH ?? getCrawlerRunStatePath();
   const lockPath = getCrawlerRunLockPath();
-  const lockFilename = path.basename(lockPath);
   const watchedPaths = [statePath, lockPath];
   const targetsByDirectory = new Map<string, string[]>();
   for (const filePath of watchedPaths) {
@@ -87,11 +86,7 @@ async function watchCrawlerState(
       const filenames = new Set(targets.map((target) => path.basename(target)));
       const watcher = watch(directory, (_event, filename) => {
         const changedFilename = filename?.toString();
-        if (
-          !changedFilename ||
-          filenames.has(changedFilename) ||
-          changedFilename.startsWith(`${lockFilename}.mutation-`)
-        ) {
+        if (shouldNotifyCrawlerStateChange(changedFilename, filenames)) {
           onChange();
         }
       });
@@ -104,6 +99,16 @@ async function watchCrawlerState(
   }
 
   return closeWatchers;
+}
+
+export function shouldNotifyCrawlerStateChange(
+  changedFilename: string | undefined,
+  watchedFilenames: ReadonlySet<string>,
+): boolean {
+  // Some platforms omit the filename, so conservatively re-read in that case.
+  // Mutation guard files are deliberately excluded: reading idle state creates
+  // and removes them, and observing those writes would trigger an endless loop.
+  return !changedFilename || watchedFilenames.has(changedFilename);
 }
 
 async function streamCrawlerState(
