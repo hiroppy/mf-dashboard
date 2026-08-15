@@ -563,10 +563,7 @@ export async function getCrawlerRunState(
   let snapshot = await readLockSnapshot(resolved.lockPath);
 
   if (!snapshot) {
-    const mutationGuard = await tryAcquireLockMutationGuard(resolved);
-    if (!mutationGuard) {
-      return toUnknownRunningState();
-    }
+    const mutationGuard = await waitForLockMutationGuard(resolved);
     try {
       await recoverQuarantinedLock(resolved.lockPath);
       snapshot = await readLockSnapshot(resolved.lockPath);

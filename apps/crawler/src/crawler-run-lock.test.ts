@@ -309,6 +309,47 @@ describe("crawler run lock", () => {
     await lock.release();
   });
 
+  test("waits for a concurrent idle status check instead of reporting an unknown run", async () => {
+    let markFirstGuardAcquired!: () => void;
+    const firstGuardAcquired = new Promise<void>((resolve) => {
+      markFirstGuardAcquired = resolve;
+    });
+    let releaseFirstGuard!: () => void;
+    const firstGuardMayFinish = new Promise<void>((resolve) => {
+      releaseFirstGuard = resolve;
+    });
+    const firstState = getCrawlerRunState({
+      afterLockMutationGuardAcquired: async () => {
+        markFirstGuardAcquired();
+        await firstGuardMayFinish;
+      },
+      lockPath,
+    });
+    await firstGuardAcquired;
+
+    let markSecondGuardBlocked!: () => void;
+    const secondGuardBlocked = new Promise<void>((resolve) => {
+      markSecondGuardBlocked = resolve;
+    });
+    const secondState = getCrawlerRunState({
+      afterLockMutationGuardBlocked: async () => markSecondGuardBlocked(),
+      lockPath,
+    });
+    await secondGuardBlocked;
+    releaseFirstGuard();
+
+    const expectedIdleState = {
+      running: false,
+      pid: null,
+      source: null,
+      startedAt: null,
+    };
+    await expect(Promise.all([firstState, secondState])).resolves.toEqual([
+      expectedIdleState,
+      expectedIdleState,
+    ]);
+  });
+
   test("acquires when a mutation guard was left without a lock", async () => {
     await writeFile(`${lockPath}.mutation`, "");
     await writeFile(

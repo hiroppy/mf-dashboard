@@ -17,8 +17,6 @@ import { error, info } from "./logger.js";
 
 const DEFAULT_PORT = 8766;
 const DEFAULT_HOST = "127.0.0.1";
-const STATE_READ_RETRY_DELAY_MS = 10;
-const STATE_READ_MAX_ATTEMPTS = 3;
 
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
@@ -112,25 +110,6 @@ export function shouldNotifyCrawlerStateChange(
   return changedFilename !== undefined && watchedFilenames.has(changedFilename);
 }
 
-function isUnknownRunningState(state: CrawlerRunState): boolean {
-  return state.running && state.pid === null && state.source === null && state.startedAt === null;
-}
-
-export async function readCrawlerStateWithRetry(
-  getState: () => Promise<CrawlerRunState>,
-): Promise<CrawlerRunState> {
-  let state = await getState();
-  for (
-    let attempt = 1;
-    attempt < STATE_READ_MAX_ATTEMPTS && isUnknownRunningState(state);
-    attempt++
-  ) {
-    await new Promise<void>((resolve) => setTimeout(resolve, STATE_READ_RETRY_DELAY_MS));
-    state = await getState();
-  }
-  return state;
-}
-
 async function streamCrawlerState(
   request: IncomingMessage,
   response: ServerResponse,
@@ -161,7 +140,7 @@ async function streamCrawlerState(
     try {
       while (!closed && sentVersion !== requestedVersion) {
         const version = requestedVersion;
-        const state = await readCrawlerStateWithRetry(getState);
+        const state = await getState();
         if (!closed) {
           response.write(`data: ${JSON.stringify(state)}\n\n`);
           sentVersion = version;
