@@ -18,6 +18,9 @@ export default function createNextConfig(phase: string): NextConfig {
     basePath,
     output: isStaticDemoBuild ? "export" : "standalone",
     outputFileTracingRoot: join(import.meta.dirname, "../.."),
+    outputFileTracingIncludes: {
+      "/*": ["../../node_modules/@swc/helpers/**/*"],
+    },
     pageExtensions: isStaticDemoBuild ? ["tsx"] : ["tsx", "ts"],
     env: {
       NEXT_PUBLIC_STATIC_DEMO_BUILD: isStaticDemoBuild ? "true" : "false",
