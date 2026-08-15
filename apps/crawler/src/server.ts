@@ -17,6 +17,8 @@ import { error, info } from "./logger.js";
 
 const DEFAULT_PORT = 8766;
 const DEFAULT_HOST = "127.0.0.1";
+const STATE_READ_RETRY_DELAY_MS = 10;
+const STATE_READ_MAX_ATTEMPTS = 3;
 
 interface CrawlerTriggerServerOptions {
   getState?: () => Promise<CrawlerRunState>;
@@ -105,10 +107,28 @@ export function shouldNotifyCrawlerStateChange(
   changedFilename: string | undefined,
   watchedFilenames: ReadonlySet<string>,
 ): boolean {
-  // Some platforms omit the filename, so conservatively re-read in that case.
-  // Mutation guard files are deliberately excluded: reading idle state creates
-  // and removes them, and observing those writes would trigger an endless loop.
-  return !changedFilename || watchedFilenames.has(changedFilename);
+  // A missing filename cannot distinguish state changes from mutation guard
+  // activity. The heartbeat supplies the fallback state synchronization.
+  return changedFilename !== undefined && watchedFilenames.has(changedFilename);
+}
+
+function isUnknownRunningState(state: CrawlerRunState): boolean {
+  return state.running && state.pid === null && state.source === null && state.startedAt === null;
+}
+
+export async function readCrawlerStateWithRetry(
+  getState: () => Promise<CrawlerRunState>,
+): Promise<CrawlerRunState> {
+  let state = await getState();
+  for (
+    let attempt = 1;
+    attempt < STATE_READ_MAX_ATTEMPTS && isUnknownRunningState(state);
+    attempt++
+  ) {
+    await new Promise<void>((resolve) => setTimeout(resolve, STATE_READ_RETRY_DELAY_MS));
+    state = await getState();
+  }
+  return state;
 }
 
 async function streamCrawlerState(
@@ -141,7 +161,7 @@ async function streamCrawlerState(
     try {
       while (!closed && sentVersion !== requestedVersion) {
         const version = requestedVersion;
-        const state = await getState();
+        const state = await readCrawlerStateWithRetry(getState);
         if (!closed) {
           response.write(`data: ${JSON.stringify(state)}\n\n`);
           sentVersion = version;
@@ -176,7 +196,11 @@ async function streamCrawlerState(
   });
   response.flushHeaders();
   heartbeat = setInterval(() => {
-    if (!closed) response.write(": heartbeat\n\n");
+    if (closed) return;
+    void sendLatestState().catch((err) => {
+      error("Failed to stream crawler heartbeat state:", err);
+      response.destroy(err instanceof Error ? err : undefined);
+    });
   }, 15_000);
   heartbeat.unref();
 

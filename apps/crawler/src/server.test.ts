@@ -6,6 +6,7 @@ import { CrawlerAlreadyRunningError, type CrawlerRunState } from "./crawler-run-
 import {
   createCrawlerTriggerServer,
   listenCrawlerTriggerServer,
+  readCrawlerStateWithRetry,
   recordManualRunFailure,
   shouldNotifyCrawlerStateChange,
 } from "./server.js";
@@ -19,6 +20,13 @@ const runningState: CrawlerRunState = {
 
 const idleState: CrawlerRunState = {
   running: false,
+  pid: null,
+  source: null,
+  startedAt: null,
+};
+
+const unknownRunningState: CrawlerRunState = {
+  running: true,
   pid: null,
   source: null,
   startedAt: null,
@@ -61,11 +69,28 @@ describe("crawler trigger server", () => {
     ["crawler-run.lock.mutation-pending-run-1", false],
     ["crawler-run.lock.mutation-owner-run-1", false],
     ["unrelated.json", false],
-    [undefined, true],
+    [undefined, false],
   ])("filters filesystem change %s", (changedFilename, expected) => {
     const watchedFilenames = new Set(["crawler-run-state.json", "crawler-run.lock"]);
 
     expect(shouldNotifyCrawlerStateChange(changedFilename, watchedFilenames)).toBe(expected);
+  });
+
+  test("retries a state read that lost mutation guard contention", async () => {
+    const getState = vi
+      .fn<() => Promise<CrawlerRunState>>()
+      .mockResolvedValueOnce(unknownRunningState)
+      .mockResolvedValueOnce(idleState);
+
+    await expect(readCrawlerStateWithRetry(getState)).resolves.toEqual(idleState);
+    expect(getState).toHaveBeenCalledTimes(2);
+  });
+
+  test("bounds retries while mutation guard contention continues", async () => {
+    const getState = vi.fn<() => Promise<CrawlerRunState>>(async () => unknownRunningState);
+
+    await expect(readCrawlerStateWithRetry(getState)).resolves.toEqual(unknownRunningState);
+    expect(getState).toHaveBeenCalledTimes(3);
   });
 
   test("binds to localhost by default", async () => {
