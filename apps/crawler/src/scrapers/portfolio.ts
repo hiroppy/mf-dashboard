@@ -12,6 +12,7 @@ import {
 } from "./scheduled-withdrawals.js";
 
 const DEPOSIT_TABLE_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
+const BOND_CATEGORY = "債券";
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
 const INSURANCE_CATEGORY = "保険";
@@ -23,7 +24,8 @@ export const PNS_CORE_COLUMN_COUNT = 6;
 // Column indices for each table type
 const CELL_TIMEOUT = 1000;
 
-const DEPOSIT_COLUMNS = { NAME: 0, BALANCE: 1, INSTITUTION: 2 } as const;
+// 預金・現金と債券は「名称・残高・保有金融機関」の同じ3列構造を持つ
+const BALANCE_ONLY_COLUMNS = { NAME: 0, BALANCE: 1, INSTITUTION: 2 } as const;
 const STOCK_COLUMNS = {
   CODE: 0,
   NAME: 1,
@@ -112,7 +114,7 @@ export function resolveDepositTableCategory(titleText: string): string {
   return DEPOSIT_TABLE_CATEGORIES.has(category) ? category : "預金・現金";
 }
 
-export function parseDepositPortfolioItem(
+export function parseBalanceOnlyPortfolioItem(
   category: string,
   nameText: string,
   institution: string,
@@ -131,17 +133,20 @@ export function parseDepositPortfolioItem(
   };
 }
 
-// Parse deposits from .table-depo
-async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
-  const tables = page.locator("table.table-depo");
+async function parseBalanceOnlyTable(
+  page: Page,
+  selector: string,
+  resolveCategory: (sectionTitle: string) => string,
+): Promise<PortfolioItem[]> {
+  const tables = page.locator(selector);
   const tableCount = await tables.count();
   const items: PortfolioItem[] = [];
 
   for (let t = 0; t < tableCount; t++) {
     const table = tables.nth(t);
     const sectionTitle = await getPrecedingSectionTitle(table);
-    const category = resolveDepositTableCategory(sectionTitle);
-    debug(`  .table-depo[${t}] title: "${sectionTitle}" -> ${category}`);
+    const category = resolveCategory(sectionTitle);
+    debug(`  ${selector}[${t}] title: "${sectionTitle}" -> ${category}`);
 
     const rows = table.locator("tbody tr");
     const count = await rows.count();
@@ -150,16 +155,32 @@ async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
       const cells = rows.nth(i).locator("td");
       // 並列取得
       const [name, institution, balanceText, accountMfId] = await Promise.all([
-        getCellText(cells, DEPOSIT_COLUMNS.NAME),
-        getInstitutionFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
-        getCellText(cells, DEPOSIT_COLUMNS.BALANCE, "0"),
-        getAccountMfIdFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
+        getCellText(cells, BALANCE_ONLY_COLUMNS.NAME),
+        getInstitutionFromCell(cells, BALANCE_ONLY_COLUMNS.INSTITUTION),
+        getCellText(cells, BALANCE_ONLY_COLUMNS.BALANCE, "0"),
+        getAccountMfIdFromCell(cells, BALANCE_ONLY_COLUMNS.INSTITUTION),
       ]);
-      const item = parseDepositPortfolioItem(category, name, institution, balanceText, accountMfId);
+      const item = parseBalanceOnlyPortfolioItem(
+        category,
+        name,
+        institution,
+        balanceText,
+        accountMfId,
+      );
       if (item) items.push(item);
     }
   }
   return items;
+}
+
+// Parse deposits from .table-depo
+async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
+  return parseBalanceOnlyTable(page, "table.table-depo", resolveDepositTableCategory);
+}
+
+// Parse bonds from .table-bd
+async function parseBonds(page: Page): Promise<PortfolioItem[]> {
+  return parseBalanceOnlyTable(page, "table.table-bd", () => BOND_CATEGORY);
 }
 
 // Helper to convert 0 to undefined only for optional numeric fields
@@ -659,20 +680,28 @@ export async function getPortfolio(
   // ポートフォリオコンテンツが表示されるまで待機
   await page.locator("h1.heading-normal").first().waitFor({ state: "visible", timeout: 10000 });
 
-  // 4つのパース関数を並列実行
-  const [deposits, stocks, funds, insuranceAndPoints] = await Promise.all([
+  // 5つのパース関数を並列実行
+  const [deposits, stocks, funds, bonds, insuranceAndPoints] = await Promise.all([
     parseDeposits(page),
     parseStocks(page),
     parseFunds(page),
+    parseBonds(page),
     parseInsuranceAndPoints(page, manualHoldingAccountMap, linkedAccountPnsSource),
   ]);
 
   debug(`  .table-depo rows: ${deposits.length}`);
   debug(`  .table-eq rows: ${stocks.length}`);
   debug(`  .table-mf rows: ${funds.length}`);
+  debug(`  .table-bd rows: ${bonds.length}`);
   debug(`  .table-pns items: ${insuranceAndPoints.length}`);
 
-  const items: PortfolioItem[] = [...deposits, ...stocks, ...funds, ...insuranceAndPoints];
+  const items: PortfolioItem[] = [
+    ...deposits,
+    ...stocks,
+    ...funds,
+    ...bonds,
+    ...insuranceAndPoints,
+  ];
 
   if (totalAssets === 0) {
     totalAssets = items.reduce((sum, item) => sum + (item.balance || 0), 0);

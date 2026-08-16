@@ -10,7 +10,7 @@ import { createAnonymousGroupScope, switchGroupAnonymously } from "./group-state
 import { launchLoggedInContext, withNewPage } from "./helpers.js";
 
 const PORTFOLIO_TABLE_SELECTOR =
-  "table.table-depo, table.table-eq, table.table-mf, table.table-pns";
+  "table.table-depo, table.table-eq, table.table-mf, table.table-bd, table.table-pns";
 
 let browser: Browser;
 let context: BrowserContext;
@@ -137,6 +137,35 @@ describe("portfolio page structure", () => {
         ).toBe(true);
       }
     });
+  });
+
+  test("債券行は預金行と同じ名称・評価額・保有金融機関のセル構造を持つ", async (ctx) => {
+    const bondRowCount = await withNewPage(context, async (page) => {
+      await gotoPortfolio(page);
+      const rows = page.locator("table.table-bd tbody tr");
+      const rowCount = await rows.count();
+
+      for (let index = 0; index < rowCount; index++) {
+        const cells = rows.nth(index).locator("td");
+        expect(await cells.count()).toBeGreaterThanOrEqual(3);
+        expect(((await cells.nth(0).textContent())?.trim().length ?? 0) > 0).toBe(true);
+        expect(((await cells.nth(1).textContent())?.trim().length ?? 0) > 0).toBe(true);
+
+        const detailLinks = cells.nth(2).locator("a");
+        expect(await detailLinks.count()).toBeLessThanOrEqual(1);
+        expect(
+          await detailLinks.evaluateAll((links) =>
+            links.every(({ href }) => new URL(href).pathname.startsWith("/accounts/show/")),
+          ),
+        ).toBe(true);
+      }
+
+      return rowCount;
+    });
+
+    if (bondRowCount === 0) {
+      ctx.skip("The account has no bond row");
+    }
   });
 
   test("通常口座詳細の保険・年金表はparserが必要とする主要列を持つ", async () => {

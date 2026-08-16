@@ -6,6 +6,7 @@ const CATEGORY_VAR_MAP: Record<CategoryName, string> = {
   "電子マネー・プリペイド": "--color-asset-prepaid",
   "株式(現物)": "--color-asset-stock",
   投資信託: "--color-asset-fund",
+  債券: "--color-asset-bond",
   保険: "--color-asset-insurance",
   年金: "--color-asset-pension",
   "ポイント・マイル": "--color-asset-point",
