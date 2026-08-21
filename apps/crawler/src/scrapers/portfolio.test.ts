@@ -10,7 +10,7 @@ import {
   haveSamePnsRowMultiset,
   identifyTableTypeFromTitle,
   isPointCategory,
-  parseDepositPortfolioItem,
+  parseBalanceOnlyPortfolioItem,
   parseFundPortfolioItem,
   parseOptionalJapaneseNumber,
   parsePnsPortfolioItem,
@@ -328,9 +328,9 @@ describe("resolveDepositTableCategory", () => {
   });
 });
 
-describe("parseDepositPortfolioItem", () => {
+describe("parseBalanceOnlyPortfolioItem", () => {
   test("section title由来のsplitカテゴリと明示口座IDを保持する", () => {
-    const item = parseDepositPortfolioItem(
+    const item = parseBalanceOnlyPortfolioItem(
       "暗号資産",
       "Crypto Asset A",
       "Institution A",
@@ -347,8 +347,19 @@ describe("parseDepositPortfolioItem", () => {
     });
   });
 
+  test("債券カテゴリも同じ3列構造でパースする", () => {
+    expect(
+      parseBalanceOnlyPortfolioItem("債券", " Bond A ", "Institution A", "10,500,000"),
+    ).toEqual({
+      name: "Bond A",
+      type: "債券",
+      institution: "Institution A",
+      balance: 10500000,
+    });
+  });
+
   test("名前が空の行は無視する", () => {
-    expect(parseDepositPortfolioItem("預金・現金", " ", "Institution A", "1,234")).toBeNull();
+    expect(parseBalanceOnlyPortfolioItem("預金・現金", " ", "Institution A", "1,234")).toBeNull();
   });
 });
 
