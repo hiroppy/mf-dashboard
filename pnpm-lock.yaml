@@ -143,8 +143,8 @@ importers:
   apps/web:
     dependencies:
       '@ai-sdk/react':
-        specifier: 4.0.76
-        version: 4.0.76(react@19.2.8)(zod@4.4.3)
+        specifier: 4.0.77
+        version: 4.0.77(react@19.2.8)(zod@4.4.3)
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -167,8 +167,8 @@ importers:
         specifier: 1.0.3
         version: 1.0.3(@types/mdast@4.0.4)(micromark-util-types@2.0.2)(micromark@4.0.2(supports-color@10.2.2))(react@19.2.8)(supports-color@10.2.2)(unified@11.0.5)
       ai:
-        specifier: 7.0.73
-        version: 7.0.73(zod@4.4.3)
+        specifier: 7.0.74
+        version: 7.0.74(zod@4.4.3)
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -285,8 +285,8 @@ importers:
         specifier: workspace:*
         version: link:../db
       ai:
-        specifier: 7.0.73
-        version: 7.0.73(zod@4.4.3)
+        specifier: 7.0.74
+        version: 7.0.74(zod@4.4.3)
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -383,8 +383,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@4.0.59':
-    resolution: {integrity: sha512-9MPyBBXU5snhuvqMa3OSOYtHP+wlyepJ+E0E+9lVNoxLGmi4sZqGeLbIxSYZeTf7qQ2xPshtfo5qDJHaOmAHvw==}
+  '@ai-sdk/gateway@4.0.60':
+    resolution: {integrity: sha512-t6nc44aG2LsGGia0Udxf3p/S5SkIQqK4bFo8ruqvD3C75Mpt0+hzbGNItrD2BIiOKjr2r15ymYTRHZBVCusQeQ==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -417,8 +417,8 @@ packages:
     resolution: {integrity: sha512-6or44XprPzKbr8zkmzosowSE0pxkvJcoojBL+mCZvPUt3kvXp3XSNqeVun9golb1acEfSo6yaEBRT18h2VU+1Q==}
     engines: {node: '>=22'}
 
-  '@ai-sdk/react@4.0.76':
-    resolution: {integrity: sha512-CVzR29UV0mR69G6VZJUyM+GI28G5GOO/dmgD3K7MRBi4rbMxLC0WD6OuQjXNK/GaaVUuj6PiRbh2nPUOgPfaWQ==}
+  '@ai-sdk/react@4.0.77':
+    resolution: {integrity: sha512-0mDumefU1ibK5xGKhK/0ugyDb6Mrof6q7d8aaEM+FNn+p2ad6Wf8GaJskTIxLdM4EXziGlOH9L2hzDKoLP/Hng==}
     engines: {node: '>=22'}
     peerDependencies:
       react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
@@ -3605,8 +3605,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  ai@7.0.73:
-    resolution: {integrity: sha512-rm2Rk68seeyhfgXl1JA/oaHcQHL018AfgydkJWx7Bgz0wGDHyvl30SnRIU2V7ZVR60A5K0SOLyP78EZmEJ2tOw==}
+  ai@7.0.74:
+    resolution: {integrity: sha512-TX5OVjJCRuhUl9Dwi2riKs5178mLccUtQ7JvMFpSwc0mGJxBPJzupgTDzvPMKDtK6aaPqAHZgJj+0VIrOzn/BA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -5918,7 +5918,7 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/gateway@4.0.59(zod@4.4.3)':
+  '@ai-sdk/gateway@4.0.60(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.28(zod@4.4.3)
@@ -5957,12 +5957,12 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@4.0.76(react@19.2.8)(zod@4.4.3)':
+  '@ai-sdk/react@4.0.77(react@19.2.8)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/mcp': 2.0.34(zod@4.4.3)
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.28(zod@4.4.3)
-      ai: 7.0.73(zod@4.4.3)
+      ai: 7.0.74(zod@4.4.3)
       react: 19.2.8
       swr: 2.4.2(react@19.2.8)
       throttleit: 2.1.0
@@ -8360,9 +8360,9 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai@7.0.73(zod@4.4.3):
+  ai@7.0.74(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 4.0.59(zod@4.4.3)
+      '@ai-sdk/gateway': 4.0.60(zod@4.4.3)
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.28(zod@4.4.3)
       zod: 4.4.3

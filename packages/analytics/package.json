@@ -25,7 +25,7 @@
     "@ai-sdk/openai": "4.0.45",
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
-    "ai": "7.0.73",
+    "ai": "7.0.74",
     "zod": "4.4.3"
   },
   "devDependencies": {
