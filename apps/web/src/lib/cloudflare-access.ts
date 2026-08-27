@@ -12,6 +12,18 @@ function hasLocalDevelopmentAccess(request: Request): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
+/**
+ * Trust the network boundary instead of an edge identity provider.
+ *
+ * The dashboard pages themselves carry no auth check, so the only boundary is
+ * wherever the port is reachable from. Enable this mode only when the app is
+ * published to a private network such as a tailnet, and never bind the port to
+ * 0.0.0.0.
+ */
+function isTrustedNetwork(): boolean {
+  return process.env.AUTH_MODE === "trusted-network";
+}
+
 function getTeamDomain(): string | null {
   const configuredDomain = process.env.CLOUDFLARE_ACCESS_TEAM_DOMAIN?.trim();
   if (!configuredDomain) return null;
@@ -38,7 +50,8 @@ function getJwks(teamDomain: string): ReturnType<typeof createRemoteJWKSet> {
 }
 
 export async function hasValidCloudflareAccess(request: Request): Promise<boolean> {
-  if (process.env.DEMO_MODE === "true" || hasLocalDevelopmentAccess(request)) return true;
+  if (process.env.DEMO_MODE === "true" || isTrustedNetwork() || hasLocalDevelopmentAccess(request))
+    return true;
 
   const teamDomain = getTeamDomain();
   const audience = process.env.CLOUDFLARE_ACCESS_AUD?.trim();

@@ -56,6 +56,19 @@ describe("hasValidCloudflareAccess", () => {
     await expect(hasValidCloudflareAccess(request("access-token"))).resolves.toBe(false);
   });
 
+  it("allows every request when the network boundary is trusted", async () => {
+    vi.stubEnv("AUTH_MODE", "trusted-network");
+
+    await expect(hasValidCloudflareAccess(request())).resolves.toBe(true);
+    expect(mocks.jwtVerify).not.toHaveBeenCalled();
+  });
+
+  it("keeps failing closed for an unrelated AUTH_MODE value", async () => {
+    vi.stubEnv("AUTH_MODE", "trusted");
+
+    await expect(hasValidCloudflareAccess(request())).resolves.toBe(false);
+  });
+
   it("allows the explicit demo-data mode without Access", async () => {
     vi.stubEnv("DEMO_MODE", "true");
 
