@@ -19,3 +19,4 @@ services:
       # data/ はホストへ bind mount 済みなので、ホスト側から書けば crawler が読む
       OTP_CODE_FILE: /app/data/otp-code.txt
       OTP_WAIT_TIMEOUT_SECONDS: ${OTP_WAIT_TIMEOUT_SECONDS:-}
+      OTP_EVENT_LOG: ${OTP_EVENT_LOG:-}

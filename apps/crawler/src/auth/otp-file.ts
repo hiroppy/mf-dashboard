@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { debug, info, warn } from "../logger.js";
 
@@ -16,14 +16,43 @@ import { debug, info, warn } from "../logger.js";
 
 const OTP_CODE_PATTERN = /^\d{4,8}$/;
 
+export type OtpWaitEvent = "wait_started" | "code_received" | "timed_out";
+
 export interface WaitForOtpFileOptions {
   path: string;
   timeoutMs: number;
   pollIntervalMs?: number;
   noticeIntervalMs?: number;
+  /** 手渡しを求められた頻度を後から数えるための追記先。省略すると記録しない */
+  eventLogPath?: string;
+  /** 待機に入った瞬間の通報。失敗しても待機は続ける */
+  onWaitStart?: () => Promise<void> | void;
   /** 時計とスリープは注入して、テストがプロセス全体の時刻を差し替えずに済むようにする */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  nowIso?: () => string;
+}
+
+/**
+ * 手渡しを求められた事実だけを追記する
+ *
+ * 何回・いつ求められたかが分かれば、セッションの寿命を推し量って対処 (TOTP の
+ * 有効化など) の要否を決められる。コードそのものは書かない。
+ */
+async function recordEvent(
+  eventLogPath: string | undefined,
+  event: OtpWaitEvent,
+  at: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  if (!eventLogPath) return;
+
+  try {
+    await mkdir(dirname(eventLogPath), { recursive: true });
+    await appendFile(eventLogPath, `${JSON.stringify({ at, event, ...extra })}\n`, "utf8");
+  } catch (err) {
+    warn(`OTP 待ちの記録に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 async function consumeCode(path: string): Promise<string | null> {
@@ -65,26 +94,41 @@ export async function waitForOtpFromFile(options: WaitForOtpFileOptions): Promis
   const now = options.now ?? (() => Date.now());
   const sleep =
     options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const nowIso = options.nowIso ?? (() => new Date().toISOString());
   const timeoutSeconds = Math.round(timeoutMs / 1000);
 
   await mkdir(dirname(path), { recursive: true });
   await discardStaleCode(path);
 
-  const deadline = now() + timeoutMs;
-  let lastNoticeAt = now();
+  const startedAt = now();
+  const deadline = startedAt + timeoutMs;
+  let lastNoticeAt = startedAt;
   info(
     `OTP コードを待っています: 届いたコードを ${path} へ書いてください (最大 ${timeoutSeconds} 秒)`,
   );
+  await recordEvent(options.eventLogPath, "wait_started", nowIso(), { path, timeoutSeconds });
+
+  if (options.onWaitStart) {
+    try {
+      await options.onWaitStart();
+    } catch (err) {
+      warn(`OTP 待ちの通報に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   for (;;) {
     const code = await consumeCode(path);
     if (code) {
       info("OTP コードを受け取りました");
+      await recordEvent(options.eventLogPath, "code_received", nowIso(), {
+        waited_seconds: Math.round((now() - startedAt) / 1000),
+      });
       return code;
     }
 
     const current = now();
     if (current >= deadline) {
+      await recordEvent(options.eventLogPath, "timed_out", nowIso(), { timeoutSeconds });
       throw new Error(`OTP コードが ${timeoutSeconds} 秒以内に ${path} へ書き込まれませんでした`);
     }
 
