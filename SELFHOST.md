@@ -39,7 +39,7 @@ CREDENTIALS_SOURCE=env
 MF_USERNAME=<Money Forward ME のログイン ID>
 MF_PASSWORD=<パスワード>
 
-# ログインを課さない (プライベートネットワークに閉じていることが前提)
+# ログインを課さない (到達範囲が閲覧範囲になることを承知のうえで)
 AUTH_MODE=trusted-network
 
 # 内部 API 用の共有トークン。openssl rand -hex 32 で生成する
@@ -92,6 +92,24 @@ grep wait_started data/otp-events.jsonl | tail -20
 待機上限は既定 300 秒だが、定時実行で通報に気付いてから応じる余裕を見るなら `OTP_WAIT_TIMEOUT_SECONDS` を延ばす。
 
 TOTP を有効にすれば手渡しは不要になる。実装するときも依存パッケージは足さず `node:crypto` で書く。
+
+## 到達範囲を変えたいとき
+
+publish 先は `.env` の `WEB_PUBLISH` で決まる。値を変えて `docker compose up -d web` するだけでよく、リポジトリのファイルは触らない。
+
+```dotenv
+WEB_PUBLISH=8765:8765            # LAN へ公開 (省略時の既定)
+WEB_PUBLISH=127.0.0.1:8765:8765  # ホスト内だけ (外からは Tailscale 経由のみ)
+```
+
+## 再ビルドが要る変更・要らない変更
+
+| 変更するもの                                                      | 要るもの                                                               |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `NEXT_PUBLIC_*` (`NEXT_PUBLIC_BASE_PATH`、シミュレーターの初期値) | 再ビルド。Next.js がクライアント側コードへ値を埋め込むため避けられない |
+| `DASHBOARD_URL`                                                   | `docker compose up -d web` のみ (実測で確認)                           |
+| `AUTH_MODE`、`REFRESH_TOKEN`、crawler の各変数                    | コンテナの再作成のみ                                                   |
+| `WEB_PUBLISH`                                                     | コンテナの再作成のみ                                                   |
 
 ## 起動
 

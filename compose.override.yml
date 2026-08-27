@@ -4,12 +4,17 @@
 #   宅内のどの端末からも無認証で閲覧できる。これは意図した設計 (SELFHOST.md 参照)
 # - 外出先からは Tailscale 経由で同じ web へ届く
 # - cloudflared は起動しない (docker compose up -d migrate web crawler)
+#
+# publish 先は .env の WEB_PUBLISH で変えられる (既定は LAN へ公開)。ここを直値で
+# 書くと到達範囲を変えるたびにコミットが要るため、値は .env 側へ出してある。
+#   WEB_PUBLISH=127.0.0.1:8765:8765   ホスト内だけ
+#   WEB_PUBLISH=8765:8765             LAN へ公開 (既定)
 services:
   web:
     environment:
       AUTH_MODE: ${AUTH_MODE:-}
     ports:
-      - "8765:8765"
+      - "${WEB_PUBLISH:-8765:8765}"
 
   crawler:
     environment:
