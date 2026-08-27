@@ -1,14 +1,15 @@
 # フォーク固有の上書き。上流の compose.yml は編集しない。
 #
-# - web はループバックにだけ publish する。ページ側に認証チェックが無いため、
-#   到達できる範囲がそのまま閲覧できる範囲になる。0.0.0.0 に publish しない
+# - web は LAN からも直接届くよう publish する。ページ側に認証チェックが無いので、
+#   宅内のどの端末からも無認証で閲覧できる。これは意図した設計 (SELFHOST.md 参照)
+# - 外出先からは Tailscale 経由で同じ web へ届く
 # - cloudflared は起動しない (docker compose up -d migrate web crawler)
 services:
   web:
     environment:
       AUTH_MODE: ${AUTH_MODE:-}
     ports:
-      - "127.0.0.1:8765:8765"
+      - "8765:8765"
 
   crawler:
     environment:
