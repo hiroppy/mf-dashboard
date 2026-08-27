@@ -1,0 +1,17 @@
+# フォーク固有の上書き。上流の compose.yml は編集しない。
+#
+# - web はループバックにだけ publish する。ページ側に認証チェックが無いため、
+#   到達できる範囲がそのまま閲覧できる範囲になる。0.0.0.0 に publish しない
+# - cloudflared は起動しない (docker compose up -d migrate web crawler)
+services:
+  web:
+    environment:
+      AUTH_MODE: ${AUTH_MODE:-}
+    ports:
+      - "127.0.0.1:8765:8765"
+
+  crawler:
+    environment:
+      CREDENTIALS_SOURCE: ${CREDENTIALS_SOURCE:-}
+      MF_USERNAME: ${MF_USERNAME:-}
+      MF_PASSWORD: ${MF_PASSWORD:-}

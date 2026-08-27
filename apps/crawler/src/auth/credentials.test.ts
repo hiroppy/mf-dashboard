@@ -76,6 +76,49 @@ describe("credentials", () => {
     });
   });
 
+  describe("CREDENTIALS_SOURCE=env", () => {
+    beforeEach(() => {
+      process.env.CREDENTIALS_SOURCE = "env";
+    });
+
+    test("returns credentials from environment variables without calling 1Password", async () => {
+      process.env.MF_USERNAME = "user-a@example.com";
+      process.env.MF_PASSWORD = "test-password";
+
+      const result = await getCredentials();
+
+      expect(result).toEqual({
+        username: "user-a@example.com",
+        password: "test-password",
+      });
+      expect(mockCreateClient).not.toHaveBeenCalled();
+      expect(mockResolve).not.toHaveBeenCalled();
+    });
+
+    test("throws error when MF_PASSWORD is not set", async () => {
+      process.env.MF_USERNAME = "user-a@example.com";
+      delete process.env.MF_PASSWORD;
+
+      await expect(getCredentials()).rejects.toThrow("MF_USERNAME と MF_PASSWORD が必要です");
+    });
+
+    test("does not fall back to 1Password when OP_SERVICE_ACCOUNT_TOKEN is missing", async () => {
+      delete process.env.OP_SERVICE_ACCOUNT_TOKEN;
+      process.env.MF_USERNAME = "user-a@example.com";
+      process.env.MF_PASSWORD = "test-password";
+
+      await expect(getCredentials()).resolves.toEqual({
+        username: "user-a@example.com",
+        password: "test-password",
+      });
+    });
+
+    test("throws a descriptive error when OTP is required", async () => {
+      await expect(getOTP()).rejects.toThrow("CREDENTIALS_SOURCE=env では OTP を取得できません");
+      expect(mockCreateClient).not.toHaveBeenCalled();
+    });
+  });
+
   describe("getOTP", () => {
     test("returns OTP from 1Password", async () => {
       mockResolve.mockResolvedValue("123456");
