@@ -1,5 +1,7 @@
+import { dirname, join } from "node:path";
 import { createClient, type Client } from "@1password/sdk";
 import { debug, error, warn } from "../logger.js";
+import { alertOtpWaiting } from "./otp-alert.js";
 import { waitForOtpFromFile } from "./otp-file.js";
 
 interface Credentials {
@@ -38,8 +40,14 @@ async function getOTPFromFile(): Promise<string> {
   const configured = Number.parseInt(process.env.OTP_WAIT_TIMEOUT_SECONDS ?? "", 10);
   const seconds =
     Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_OTP_WAIT_SECONDS;
+  const eventLogPath = process.env.OTP_EVENT_LOG || join(dirname(path), "otp-events.jsonl");
 
-  return waitForOtpFromFile({ path, timeoutMs: seconds * 1000 });
+  return waitForOtpFromFile({
+    path,
+    timeoutMs: seconds * 1000,
+    eventLogPath,
+    onWaitStart: () => alertOtpWaiting(path, seconds),
+  });
 }
 
 function getCredentialsFromEnv(): Credentials {
