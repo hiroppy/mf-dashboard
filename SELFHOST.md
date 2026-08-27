@@ -59,9 +59,21 @@ OP_TOTP_FIELD=
 
 `compose.yml` は `cloudflared` 用の secret ファイル (`secrets/cloudflared-token`) を宣言しているが、`cloudflared` を起動しない限り存在しなくてよい (`docker compose --dry-run up -d migrate web crawler` で確認済み)。
 
-### 二段階認証
+### ワンタイムコードの手渡し
 
-Money Forward ME 側で二段階認証を使っている場合、`CREDENTIALS_SOURCE=env` では OTP を供給できない (`getOTP()` が理由付きで失敗する)。その場合は TOTP の生成を実装するか、`CREDENTIALS_SOURCE` を既定の `1password` に戻す。TOTP を実装するときも依存パッケージは足さず `node:crypto` で書く。
+Money Forward ME は新しい端末からのログインでメールにワンタイムコードを送る。TOTP と違い手元のシークレットからは生成できないため、走行中の crawler へ外から渡す。
+
+crawler はコードを求められると `OTP_CODE_FILE` (既定の compose 設定では `/app/data/otp-code.txt`、ホスト側の `data/otp-code.txt`) を監視し、既定 300 秒 (`OTP_WAIT_TIMEOUT_SECONDS` で変更可) 待つ。ログに待機中である旨が出たら、届いたコードをホスト側から書き込む。
+
+```sh
+echo 123456 > data/otp-code.txt
+```
+
+- コードは一度きりなので、読み取ったら成否に関わらずファイルを消す
+- 待機開始時点で残っているファイルは前回の走行の残骸とみなして捨てる (コードはこの待機が始まった後にしか届かない)
+- 一度ログインに成功するとブラウザーのセッションが `crawler_auth_state` ボリュームに保存され、失効するまでは手渡しが要らない
+
+TOTP を有効にすれば手渡しは不要になる。実装するときも依存パッケージは足さず `node:crypto` で書く。
 
 ## 起動
 

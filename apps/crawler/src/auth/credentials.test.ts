@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 type AnyMock = (...args: any[]) => any;
@@ -113,9 +116,31 @@ describe("credentials", () => {
       });
     });
 
-    test("throws a descriptive error when OTP is required", async () => {
-      await expect(getOTP()).rejects.toThrow("CREDENTIALS_SOURCE=env では OTP を取得できません");
+    test("throws a descriptive error when the OTP handoff path is not configured", async () => {
+      delete process.env.OTP_CODE_FILE;
+
+      await expect(getOTP()).rejects.toThrow("OTP_CODE_FILE を設定してください");
       expect(mockCreateClient).not.toHaveBeenCalled();
+    });
+
+    test("takes the OTP handed over through the configured file", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "credentials-otp-"));
+      const path = join(dir, "otp-code.txt");
+      process.env.OTP_CODE_FILE = path;
+      process.env.OTP_WAIT_TIMEOUT_SECONDS = "30";
+
+      try {
+        const pending = getOTP();
+        // 待機が始まる前に置いたコードは前回の残骸として捨てられるため、
+        // 残骸の掃除が終わったあとに書き込む
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        await writeFile(path, "246810", "utf8");
+
+        await expect(pending).resolves.toBe("246810");
+        expect(mockCreateClient).not.toHaveBeenCalled();
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
     });
   });
 
