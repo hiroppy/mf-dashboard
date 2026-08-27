@@ -15,3 +15,7 @@ services:
       CREDENTIALS_SOURCE: ${CREDENTIALS_SOURCE:-}
       MF_USERNAME: ${MF_USERNAME:-}
       MF_PASSWORD: ${MF_PASSWORD:-}
+      # MF が新しい端末へメールで送るワンタイムコードを、走行中に外から手渡す口。
+      # data/ はホストへ bind mount 済みなので、ホスト側から書けば crawler が読む
+      OTP_CODE_FILE: /app/data/otp-code.txt
+      OTP_WAIT_TIMEOUT_SECONDS: ${OTP_WAIT_TIMEOUT_SECONDS:-}

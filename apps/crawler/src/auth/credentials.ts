@@ -1,5 +1,6 @@
 import { createClient, type Client } from "@1password/sdk";
-import { debug, error } from "../logger.js";
+import { debug, error, warn } from "../logger.js";
+import { waitForOtpFromFile } from "./otp-file.js";
 
 interface Credentials {
   username: string;
@@ -16,6 +17,29 @@ type CredentialsSource = "1password" | "env";
  */
 function getCredentialsSource(): CredentialsSource {
   return process.env.CREDENTIALS_SOURCE === "env" ? "env" : "1password";
+}
+
+const DEFAULT_OTP_WAIT_SECONDS = 300;
+
+/**
+ * 手渡しの OTP を待つ
+ *
+ * MF は新しい端末からのログインでメールにコードを送る。TOTP と違いシークレット
+ * からは生成できないため、走行中に外から受け取る。
+ */
+async function getOTPFromFile(): Promise<string> {
+  const path = process.env.OTP_CODE_FILE || "";
+  if (!path) {
+    throw new Error(
+      "CREDENTIALS_SOURCE=env で OTP が要求されました。OTP_CODE_FILE を設定してください",
+    );
+  }
+
+  const configured = Number.parseInt(process.env.OTP_WAIT_TIMEOUT_SECONDS ?? "", 10);
+  const seconds =
+    Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_OTP_WAIT_SECONDS;
+
+  return waitForOtpFromFile({ path, timeoutMs: seconds * 1000 });
 }
 
 function getCredentialsFromEnv(): Credentials {
@@ -82,12 +106,15 @@ export async function getCredentials(): Promise<Credentials> {
 
 export async function getOTP(): Promise<string> {
   if (getCredentialsSource() === "env") {
-    // 二段階認証を使っていなければ login.ts の maybeHandleOtp が OTP 入力欄を
-    // 見つけられず、この関数は呼ばれない。呼ばれたということは MF 側で二段階
-    // 認証が有効になったということなので、黙って失敗させず理由を出す。
-    throw new Error(
-      "CREDENTIALS_SOURCE=env では OTP を取得できません (MF 側で二段階認証を有効にした場合は TOTP の生成を実装してください)",
-    );
+    try {
+      return await getOTPFromFile();
+    } catch (err) {
+      // 呼び出し元の maybeHandleOtp は OTP 処理全体を try/catch で包んで例外を
+      // 握り潰し、debug ログに「OTP not required」と残すだけなので、ここで理由を
+      // 出さないと「MF ME へ到達しなかった」という原因を隠した失敗になる。
+      warn(`OTP を取得できませんでした: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
   }
 
   const vault = process.env.OP_VAULT || "";
