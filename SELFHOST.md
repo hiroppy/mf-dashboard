@@ -2,20 +2,22 @@
 
 このフォークは、上流の運用前提 (1Password Service Account / Cloudflare Tunnel + Access / Google OAuth) を、自分ひとりが手元で見る用途に合わせて置き換えたものである。
 
-| 上流                          | このフォーク                                       |
-| ----------------------------- | -------------------------------------------------- |
-| 1Password Service Account     | `.env` に資格情報を直接置く                        |
-| Cloudflare Tunnel + Terraform | プライベートネットワーク (Tailscale 等) にのみ公開 |
-| Google OAuth によるログイン   | ログイン無し。到達できる範囲が閲覧できる範囲になる |
+| 上流                          | このフォーク                                               |
+| ----------------------------- | ---------------------------------------------------------- |
+| 1Password Service Account     | `.env` に資格情報を直接置く                                |
+| Cloudflare Tunnel + Terraform | 宅内 LAN へ直接公開し、外出先からは Tailscale 経由で届ける |
+| Google OAuth によるログイン   | ログイン無し。到達できる範囲が閲覧できる範囲になる         |
 
 ## 前提となる性質
 
 上流のダッシュボードのページには認証チェックが無く、アプリ内で検証しているのは `hasValidCloudflareAccess` の呼び元 2 箇所 (`api/chat` と `api/crawler/refresh`) だけである。エッジの認証を外すということは、**ポートに到達できる者が全資産を無認証で閲覧できる**ということを意味する。
 
-したがって次の 2 点を必ず守る。
+この構成はそれを承知のうえで、到達できる範囲を次の 2 つに定めている。
 
-- web のポートは `127.0.0.1` にのみ publish する (`compose.override.yml` がそう設定している)。`0.0.0.0` に出すと同一 LAN の全端末から見える
-- 公開はプライベートネットワークに閉じる。Tailscale の場合は `tailscale serve` を使い、`tailscale funnel` は使わない (公開インターネットへ露出する)
+- 宅内 LAN: `0.0.0.0:8765` で publish する。宅内のどの端末からも無認証で見えるが、それが望ましい使い方だという判断による
+- 宅外: Tailscale 経由。`tailscale serve` を使い、`tailscale funnel` は使わない (funnel は公開インターネットへ露出する)
+
+つまり境界は「宅内 LAN に居るか、tailnet に居るか」である。宅内 LAN に信頼できない端末を入れる運用に変わったときは、この前提が崩れるので publish 先を見直すこと。
 
 ## 上流からの差分
 
@@ -23,7 +25,7 @@
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `apps/crawler/src/auth/credentials.ts`  | `CREDENTIALS_SOURCE` に `env` を指定すると 1Password SDK を呼ばず環境変数から読む。既定は `1password` で上流互換 |
 | `apps/web/src/lib/cloudflare-access.ts` | `AUTH_MODE=trusted-network` のとき Access JWT の検証を省く                                                       |
-| `compose.override.yml`                  | web をループバックへ publish し、追加した環境変数をコンテナへ渡す                                                |
+| `compose.override.yml`                  | web を LAN へ publish し、追加した環境変数をコンテナへ渡す                                                       |
 
 `compose.yml`・`terraform/`・`pnpm-lock.yaml` は変更しない。上流を継続的に取り込めるようにするためで、依存パッケージも追加しない。
 
@@ -37,7 +39,7 @@ CREDENTIALS_SOURCE=env
 MF_USERNAME=<Money Forward ME のログイン ID>
 MF_PASSWORD=<パスワード>
 
-# ログインを課さない (プライベートネットワークに閉じていることが前提)
+# ログインを課さない (到達範囲が閲覧範囲になることを承知のうえで)
 AUTH_MODE=trusted-network
 
 # 内部 API 用の共有トークン。openssl rand -hex 32 で生成する
@@ -91,6 +93,24 @@ grep wait_started data/otp-events.jsonl | tail -20
 
 TOTP を有効にすれば手渡しは不要になる。実装するときも依存パッケージは足さず `node:crypto` で書く。
 
+## 到達範囲を変えたいとき
+
+publish 先は `.env` の `WEB_PUBLISH` で決まる。値を変えて `docker compose up -d web` するだけでよく、リポジトリのファイルは触らない。
+
+```dotenv
+WEB_PUBLISH=8765:8765            # LAN へ公開 (省略時の既定)
+WEB_PUBLISH=127.0.0.1:8765:8765  # ホスト内だけ (外からは Tailscale 経由のみ)
+```
+
+## 再ビルドが要る変更・要らない変更
+
+| 変更するもの                                                      | 要るもの                                                               |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `NEXT_PUBLIC_*` (`NEXT_PUBLIC_BASE_PATH`、シミュレーターの初期値) | 再ビルド。Next.js がクライアント側コードへ値を埋め込むため避けられない |
+| `DASHBOARD_URL`                                                   | `docker compose up -d web` のみ (実測で確認)                           |
+| `AUTH_MODE`、`REFRESH_TOKEN`、crawler の各変数                    | コンテナの再作成のみ                                                   |
+| `WEB_PUBLISH`                                                     | コンテナの再作成のみ                                                   |
+
 ## 起動
 
 `cloudflared` を除く 3 サービスだけを起動する。
@@ -113,8 +133,8 @@ tailscale serve status
 ## 確認
 
 - ホスト上で `curl -sI http://127.0.0.1:8765/` が 200 を返す
-- 同一 LAN の別端末から `http://<ホストの LAN アドレス>:8765/` に到達しない
-- プライベートネットワーク上の別端末から公開 URL が開く
+- 同一 LAN の別端末から `http://<ホストの LAN アドレス>:8765/` が開く
+- tailnet 上の別端末から公開 URL が開く
 
 ## 上流の取り込み
 
