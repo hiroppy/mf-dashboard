@@ -28,7 +28,7 @@
     "@mf-dashboard/meta": "workspace:*",
     "@nivo/sankey": "0.99.0",
     "@streamdown/cjk": "1.0.3",
-    "ai": "7.0.83",
+    "ai": "7.0.84",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
