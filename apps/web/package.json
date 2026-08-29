@@ -20,7 +20,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/react": "4.0.86",
+    "@ai-sdk/react": "4.0.87",
     "@base-ui/react": "1.7.0",
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/date-utils": "workspace:*",
