@@ -144,7 +144,7 @@ importers:
     dependencies:
       '@ai-sdk/react':
         specifier: 4.0.87
-        version: 4.0.87(react@19.2.8)(zod@4.5.1)
+        version: 4.0.87(react@19.2.8)(zod@4.5.2)
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -168,7 +168,7 @@ importers:
         version: 1.0.3(@types/mdast@4.0.4)(micromark-util-types@2.0.2)(micromark@4.0.2(supports-color@10.2.2))(react@19.2.8)(supports-color@10.2.2)(unified@11.0.5)
       ai:
         specifier: 7.0.84
-        version: 7.0.84(zod@4.5.1)
+        version: 7.0.84(zod@4.5.2)
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -271,13 +271,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: 4.0.45
-        version: 4.0.45(zod@4.5.1)
+        version: 4.0.45(zod@4.5.2)
       '@ai-sdk/google':
         specifier: 4.0.57
-        version: 4.0.57(zod@4.5.1)
+        version: 4.0.57(zod@4.5.2)
       '@ai-sdk/openai':
         specifier: 4.0.51
-        version: 4.0.51(zod@4.5.1)
+        version: 4.0.51(zod@4.5.2)
       '@mf-dashboard/date-utils':
         specifier: workspace:*
         version: link:../date-utils
@@ -286,10 +286,10 @@ importers:
         version: link:../db
       ai:
         specifier: 7.0.84
-        version: 7.0.84(zod@4.5.1)
+        version: 7.0.84(zod@4.5.2)
       zod:
-        specifier: 4.5.1
-        version: 4.5.1
+        specifier: 4.5.2
+        version: 4.5.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -5652,8 +5652,8 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
-  zod@4.5.1:
-    resolution: {integrity: sha512-P3GqeAEOEDqKvafVGLezbg+39YW/ze4xrD4qdS0adOY8eoI3zfjv1PQM4UwQzgT8mZKXEbqtVt8K+ZKGqkMFKg==}
+  zod@4.5.2:
+    resolution: {integrity: sha512-XkYXCol10+ba/6F/cueWV+TezUeOqXW0hdeJt5CdXjTYeAgAQg5N03RQdJ80mhfFE72+pblvYMW4wy2Qp4Qbrg==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
@@ -5668,58 +5668,58 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@ai-sdk/anthropic@4.0.45(zod@4.5.1)':
+  '@ai-sdk/anthropic@4.0.45(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
-      zod: 4.5.1
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
+      zod: 4.5.2
 
-  '@ai-sdk/gateway@4.0.68(zod@4.5.1)':
+  '@ai-sdk/gateway@4.0.68(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
       '@vercel/oidc': 3.2.0
-      zod: 4.5.1
+      zod: 4.5.2
 
-  '@ai-sdk/google@4.0.57(zod@4.5.1)':
+  '@ai-sdk/google@4.0.57(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
-      zod: 4.5.1
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
+      zod: 4.5.2
 
-  '@ai-sdk/mcp@2.0.40(zod@4.5.1)':
+  '@ai-sdk/mcp@2.0.40(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
       cross-spawn: 7.0.6
       pkce-challenge: 5.0.1
-      zod: 4.5.1
+      zod: 4.5.2
 
-  '@ai-sdk/openai@4.0.51(zod@4.5.1)':
+  '@ai-sdk/openai@4.0.51(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
-      zod: 4.5.1
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
+      zod: 4.5.2
 
-  '@ai-sdk/provider-utils@5.0.33(zod@4.5.1)':
+  '@ai-sdk/provider-utils@5.0.33(zod@4.5.2)':
     dependencies:
       '@ai-sdk/provider': 4.0.8
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.0.8
       undici: 7.29.0
-      zod: 4.5.1
+      zod: 4.5.2
 
   '@ai-sdk/provider@4.0.8':
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@4.0.87(react@19.2.8)(zod@4.5.1)':
+  '@ai-sdk/react@4.0.87(react@19.2.8)(zod@4.5.2)':
     dependencies:
-      '@ai-sdk/mcp': 2.0.40(zod@4.5.1)
+      '@ai-sdk/mcp': 2.0.40(zod@4.5.2)
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
-      ai: 7.0.84(zod@4.5.1)
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
+      ai: 7.0.84(zod@4.5.2)
       react: 19.2.8
       swr: 2.4.2(react@19.2.8)
       throttleit: 2.1.0
@@ -7991,12 +7991,12 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai@7.0.84(zod@4.5.1):
+  ai@7.0.84(zod@4.5.2):
     dependencies:
-      '@ai-sdk/gateway': 4.0.68(zod@4.5.1)
+      '@ai-sdk/gateway': 4.0.68(zod@4.5.2)
       '@ai-sdk/provider': 4.0.8
-      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.1)
-      zod: 4.5.1
+      '@ai-sdk/provider-utils': 5.0.33(zod@4.5.2)
+      zod: 4.5.2
 
   ansi-regex@5.0.1: {}
 
@@ -8690,7 +8690,7 @@ snapshots:
       tinyglobby: 0.2.17
       unbash: 4.0.10
       yaml: 2.9.0
-      zod: 4.5.1
+      zod: 4.5.2
 
   lefthook-darwin-arm64@2.1.12:
     optional: true
@@ -10522,6 +10522,6 @@ snapshots:
       cookie: 1.1.1
       youch-core: 0.3.3
 
-  zod@4.5.1: {}
+  zod@4.5.2: {}
 
   zwitch@2.0.4: {}
