@@ -26,7 +26,7 @@
     "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
     "ai": "7.0.84",
-    "zod": "4.5.1"
+    "zod": "4.5.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",
