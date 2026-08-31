@@ -24,6 +24,14 @@ export const PNS_CORE_COLUMN_COUNT = 6;
 const CELL_TIMEOUT = 1000;
 
 const DEPOSIT_COLUMNS = { NAME: 0, BALANCE: 1, INSTITUTION: 2 } as const;
+type DepositColumns = { NAME: number; BALANCE: number; INSTITUTION: number };
+// `.table-depo` は預金以外の区分でも使われ、列順が同じとは限らない。
+// 例: 「株式(信用)」は [保有金融機関, 名称, 残高]、預金は [種類・名称, 残高, 保有金融機関]。
+const DEPOSIT_HEADER_LABELS = {
+  NAME: ["種類・名称", "名称"],
+  BALANCE: ["残高"],
+  INSTITUTION: ["保有金融機関"],
+} as const;
 const STOCK_COLUMNS = {
   CODE: 0,
   NAME: 1,
@@ -107,6 +115,24 @@ async function getPrecedingSectionTitle(table: Locator): Promise<string> {
   });
 }
 
+/**
+ * ヘッダー行の文言から列位置を決める。列順が既定と異なるテーブル(株式(信用)など)を
+ * 預金の列順で読むと、金融機関名と金額が入れ替わったまま保存されてしまうため。
+ * 判別できない場合は既定の列順にフォールバックする。
+ */
+export function resolveDepositColumns(headers: readonly string[]): DepositColumns {
+  const normalized = headers.map((header) => header.trim());
+  const indexOf = (labels: readonly string[]) =>
+    normalized.findIndex((header) => labels.includes(header));
+
+  const NAME = indexOf(DEPOSIT_HEADER_LABELS.NAME);
+  const BALANCE = indexOf(DEPOSIT_HEADER_LABELS.BALANCE);
+  const INSTITUTION = indexOf(DEPOSIT_HEADER_LABELS.INSTITUTION);
+
+  if (NAME < 0 || BALANCE < 0 || INSTITUTION < 0) return DEPOSIT_COLUMNS;
+  return { NAME, BALANCE, INSTITUTION };
+}
+
 export function resolveDepositTableCategory(titleText: string): string {
   const category = titleText.trim();
   return DEPOSIT_TABLE_CATEGORIES.has(category) ? category : "預金・現金";
@@ -143,6 +169,14 @@ async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
     const category = resolveDepositTableCategory(sectionTitle);
     debug(`  .table-depo[${t}] title: "${sectionTitle}" -> ${category}`);
 
+    const headers = await table.locator("thead th").allTextContents();
+    const columns = resolveDepositColumns(headers);
+    if (columns === DEPOSIT_COLUMNS && headers.length > 0) {
+      warn(
+        `  .table-depo[${t}] unrecognized headers, using default columns: ${headers.join(", ")}`,
+      );
+    }
+
     const rows = table.locator("tbody tr");
     const count = await rows.count();
 
@@ -150,10 +184,10 @@ async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
       const cells = rows.nth(i).locator("td");
       // 並列取得
       const [name, institution, balanceText, accountMfId] = await Promise.all([
-        getCellText(cells, DEPOSIT_COLUMNS.NAME),
-        getInstitutionFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
-        getCellText(cells, DEPOSIT_COLUMNS.BALANCE, "0"),
-        getAccountMfIdFromCell(cells, DEPOSIT_COLUMNS.INSTITUTION),
+        getCellText(cells, columns.NAME),
+        getInstitutionFromCell(cells, columns.INSTITUTION),
+        getCellText(cells, columns.BALANCE, "0"),
+        getAccountMfIdFromCell(cells, columns.INSTITUTION),
       ]);
       const item = parseDepositPortfolioItem(category, name, institution, balanceText, accountMfId);
       if (item) items.push(item);
