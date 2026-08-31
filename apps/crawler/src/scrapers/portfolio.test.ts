@@ -15,6 +15,7 @@ import {
   parseOptionalJapaneseNumber,
   parsePnsPortfolioItem,
   parseStockPortfolioItem,
+  resolveDepositColumns,
   resolveDepositTableCategory,
   selectLinkedPnsAccounts,
   selectLinkedPnsPortfolioItems,
@@ -312,6 +313,42 @@ describe("identifyTableTypeFromTitle", () => {
   test("不明なタイトルは「不明」を返す", () => {
     expect(identifyTableTypeFromTitle("")).toBe("不明");
     expect(identifyTableTypeFromTitle("不明なカテゴリ")).toBe("不明");
+  });
+});
+
+describe("resolveDepositColumns", () => {
+  test("resolves the standard deposit layout", () => {
+    expect(resolveDepositColumns(["種類・名称", "残高", "保有金融機関", "変更", "削除"])).toEqual({
+      NAME: 0,
+      BALANCE: 1,
+      INSTITUTION: 2,
+    });
+  });
+
+  // 「株式(信用)」は .table-depo だが列順が異なる。既定の列順で読むと
+  // 金融機関名と金額が入れ替わる。
+  test("resolves the margin-stock layout that reorders the columns", () => {
+    expect(resolveDepositColumns(["保有金融機関", "名称", "残高", "変更", "削除"])).toEqual({
+      NAME: 1,
+      BALANCE: 2,
+      INSTITUTION: 0,
+    });
+  });
+
+  test("tolerates surrounding whitespace", () => {
+    expect(resolveDepositColumns([" 保有金融機関 ", " 名称 ", " 残高 "])).toEqual({
+      NAME: 1,
+      BALANCE: 2,
+      INSTITUTION: 0,
+    });
+  });
+
+  test.each([
+    ["missing headers", []],
+    ["an unknown layout", ["列A", "列B", "列C"]],
+    ["a partial match", ["名称", "残高"]],
+  ])("falls back to the default layout for %s", (_case, headers) => {
+    expect(resolveDepositColumns(headers)).toEqual({ NAME: 0, BALANCE: 1, INSTITUTION: 2 });
   });
 });
 
