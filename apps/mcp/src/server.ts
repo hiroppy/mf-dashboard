@@ -1,4 +1,5 @@
-import { createAnalysisTools, createFinancialTools } from "@mf-dashboard/analytics";
+import { createAnalysisTools } from "@mf-dashboard/analytics/insights/analysis-tools";
+import { createFinancialTools } from "@mf-dashboard/analytics/insights/tools";
 import { getCurrentGroup, type Db } from "@mf-dashboard/db";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ZodObject, ZodRawShape } from "zod";

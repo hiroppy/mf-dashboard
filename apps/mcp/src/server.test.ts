@@ -13,7 +13,7 @@ const executeAnalysisTool = vi.fn<() => Promise<{ trend: string }>>(async () => 
   trend: "stable",
 }));
 
-vi.mock("@mf-dashboard/analytics", () => ({
+vi.mock("@mf-dashboard/analytics/insights/tools", () => ({
   createFinancialTools: () => ({
     getMonthlySummaryByMonth: {
       description: "指定月の収支サマリーを取得",
@@ -26,6 +26,9 @@ vi.mock("@mf-dashboard/analytics", () => ({
       execute: executeEmptyTool,
     },
   }),
+}));
+
+vi.mock("@mf-dashboard/analytics/insights/analysis-tools", () => ({
   createAnalysisTools: () => ({
     analyzeMoMTrend: {
       description: "月次収支の前月比トレンドを分析",
