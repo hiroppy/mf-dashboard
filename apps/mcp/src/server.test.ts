@@ -12,20 +12,25 @@ const executeEmptyTool = vi.fn<() => Promise<undefined>>(async () => undefined);
 const executeAnalysisTool = vi.fn<() => Promise<{ trend: string }>>(async () => ({
   trend: "stable",
 }));
+const financialToolGroupIds: string[] = [];
 
 vi.mock("@mf-dashboard/analytics/insights/tools", () => ({
-  createFinancialTools: () => ({
-    getMonthlySummaryByMonth: {
-      description: "指定月の収支サマリーを取得",
-      inputSchema: z.object({ month: z.string() }),
-      execute: executeFinancialTool,
-    },
-    getLatestMonthlySummary: {
-      description: "最新月の収支サマリーを取得",
-      inputSchema: z.object({}),
-      execute: executeEmptyTool,
-    },
-  }),
+  createFinancialTools: (_db: Db, groupId: string) => {
+    financialToolGroupIds.push(groupId);
+
+    return {
+      getMonthlySummaryByMonth: {
+        description: "指定月の収支サマリーを取得",
+        inputSchema: z.object({ month: z.string() }),
+        execute: executeFinancialTool,
+      },
+      getLatestMonthlySummary: {
+        description: "最新月の収支サマリーを取得",
+        inputSchema: z.object({}),
+        execute: executeEmptyTool,
+      },
+    };
+  },
 }));
 
 vi.mock("@mf-dashboard/analytics/insights/analysis-tools", () => ({
@@ -39,15 +44,23 @@ vi.mock("@mf-dashboard/analytics/insights/analysis-tools", () => ({
 }));
 
 function createDbWithCurrentGroup(groupId?: string) {
-  return {
+  let currentGroupId = groupId;
+  const db = {
     select: () => ({
       from: () => ({
         where: () => ({
-          get: async () => (groupId ? { id: groupId } : undefined),
+          get: async () => (currentGroupId ? { id: currentGroupId } : undefined),
         }),
       }),
     }),
   } as unknown as Db;
+
+  return {
+    db,
+    setCurrentGroup: (nextGroupId?: string) => {
+      currentGroupId = nextGroupId;
+    },
+  };
 }
 
 async function connectClient(server: ReturnType<typeof createMcpServer>) {
@@ -61,6 +74,7 @@ async function connectClient(server: ReturnType<typeof createMcpServer>) {
 
 afterEach(() => {
   vi.clearAllMocks();
+  financialToolGroupIds.length = 0;
 });
 
 describe("createMcpServer", () => {
@@ -78,7 +92,8 @@ describe("createMcpServer", () => {
   });
 
   it("toolの実行結果をJSON text contentとして返す", async () => {
-    const client = await connectClient(createMcpServer({} as Db, "group-a"));
+    const { db } = createDbWithCurrentGroup("group-a");
+    const client = await connectClient(createMcpServer(db, "group-a"));
 
     const result = await client.callTool({
       name: "getMonthlySummaryByMonth",
@@ -96,7 +111,8 @@ describe("createMcpServer", () => {
   });
 
   it("データがないtoolの実行結果をnullとして返す", async () => {
-    const client = await connectClient(createMcpServer({} as Db, "group-a"));
+    const { db } = createDbWithCurrentGroup("group-a");
+    const client = await connectClient(createMcpServer(db, "group-a"));
 
     const result = await client.callTool({
       name: "getLatestMonthlySummary",
@@ -104,6 +120,35 @@ describe("createMcpServer", () => {
     });
 
     expect(result.content).toEqual([{ type: "text", text: "null" }]);
+    await client.close();
+  });
+
+  it("tool callごとに現在グループを再解決する", async () => {
+    const { db, setCurrentGroup } = createDbWithCurrentGroup("group-a");
+    const client = await connectClient(createMcpServer(db, "group-a"));
+    setCurrentGroup("group-b");
+
+    await client.callTool({
+      name: "getLatestMonthlySummary",
+      arguments: {},
+    });
+
+    expect(financialToolGroupIds).toEqual(["group-a", "group-b"]);
+    await client.close();
+  });
+
+  it("tool call時に現在グループがない場合はエラーを返す", async () => {
+    const { db, setCurrentGroup } = createDbWithCurrentGroup("group-a");
+    const client = await connectClient(createMcpServer(db, "group-a"));
+    setCurrentGroup();
+
+    const result = await client.callTool({
+      name: "getLatestMonthlySummary",
+      arguments: {},
+    });
+
+    expect(result.isError).toBe(true);
+    expect(executeEmptyTool).not.toHaveBeenCalled();
     await client.close();
   });
 
@@ -124,8 +169,9 @@ describe("createMcpServer", () => {
 describe("startMcpServer", () => {
   it("現在グループがない場合は接続せずに失敗する", async () => {
     const [, serverTransport] = InMemoryTransport.createLinkedPair();
+    const { db } = createDbWithCurrentGroup();
 
-    await expect(startMcpServer(createDbWithCurrentGroup(), serverTransport)).rejects.toThrow(
+    await expect(startMcpServer(db, serverTransport)).rejects.toThrow(
       "No current group found in database",
     );
   });

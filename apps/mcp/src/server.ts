@@ -10,21 +10,46 @@ type AnalyticsTool = {
   execute: (input: Record<string, unknown>) => Promise<unknown>;
 };
 
-export function createMcpServer(db: Db, groupId: string) {
+function createAnalyticsTools(db: Db, groupId: string) {
+  return {
+    ...createFinancialTools(db, groupId),
+    ...createAnalysisTools(db, groupId),
+  };
+}
+
+async function getRequiredCurrentGroup(db: Db) {
+  const group = await getCurrentGroup(db);
+
+  if (!group) {
+    throw new Error("No current group found in database");
+  }
+
+  return group;
+}
+
+export function createMcpServer(db: Db, initialGroupId: string) {
   const server = new McpServer({
     name: "moneyforward-dashboard",
     version: "1.0.0",
   });
-  const tools = {
-    ...createFinancialTools(db, groupId),
-    ...createAnalysisTools(db, groupId),
-  };
+  const tools = createAnalyticsTools(db, initialGroupId);
 
   for (const [name, tool] of Object.entries(tools)) {
-    const { description, inputSchema, execute } = tool as unknown as AnalyticsTool;
+    const { description, inputSchema } = tool as unknown as AnalyticsTool;
 
     server.registerTool(name, { description, inputSchema }, async (input) => {
-      const result = await execute(input);
+      const group = await getRequiredCurrentGroup(db);
+      const currentTools = createAnalyticsTools(db, group.id) as unknown as Record<
+        string,
+        AnalyticsTool
+      >;
+      const currentTool = currentTools[name];
+
+      if (!currentTool) {
+        throw new Error(`Tool no longer available: ${name}`);
+      }
+
+      const result = await currentTool.execute(input);
       const text = JSON.stringify(result, null, 2) ?? "null";
 
       return {
@@ -37,12 +62,7 @@ export function createMcpServer(db: Db, groupId: string) {
 }
 
 export async function startMcpServer(db: Db, transport: Parameters<McpServer["connect"]>[0]) {
-  const group = await getCurrentGroup(db);
-
-  if (!group) {
-    throw new Error("No current group found in database");
-  }
-
+  const group = await getRequiredCurrentGroup(db);
   const server = createMcpServer(db, group.id);
   await server.connect(transport);
 

@@ -44,7 +44,7 @@ codex mcp add moneyforward \
 }
 ```
 
-`DB_PATH` を省略すると `data/moneyforward.db` を使用する。個人データを含まない動作確認には `data/demo.db` を指定する。
+`DB_PATH` は必須で、絶対パスを指定する。MCP クライアントの起動ディレクトリに依存しないため、相対パスは受け付けない。個人データを含まない動作確認には `data/demo.db` の絶対パスを指定する。
 
 ## 利用可能なツール
 
@@ -53,12 +53,12 @@ codex mcp add moneyforward \
 - Financial tools: 口座・残高、取引履歴、保有資産、月次収支、カテゴリ別集計、資産推移、財務メトリクス
 - Analysis tools: 月次収支、支出比較、ポートフォリオリスク、貯蓄推移、収入安定性の分析
 
-すべての tool は選択中のグループだけを照会する。MCP サーバーはデータを書き込む tool を公開しない。
+すべての tool は呼び出し時点で選択中のグループを解決し、そのグループだけを照会する。MCP サーバーを再起動せずに選択グループを変更できる。MCP サーバーはデータを書き込む tool を公開しない。
 
 ## 開発
 
 ```bash
-DB_PATH=../../data/demo.db pnpm --filter @mf-dashboard/mcp dev
+DB_PATH=/absolute/path/to/mf-dashboard/data/demo.db pnpm --filter @mf-dashboard/mcp dev
 pnpm --filter @mf-dashboard/mcp test
 pnpm --filter @mf-dashboard/mcp typecheck
 ```
