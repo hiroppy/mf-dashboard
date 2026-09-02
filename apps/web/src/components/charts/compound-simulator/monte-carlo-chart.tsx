@@ -14,8 +14,6 @@ import {
 } from "recharts";
 import { CHART_INITIAL_DIMENSION } from "../../../lib/chart";
 import { formatCurrency } from "../../../lib/format";
-import { MetricLabel } from "../../ui/metric-label";
-import { Slider } from "../../ui/slider";
 import { chartTooltipStyle } from "../chart-tooltip";
 import { formatYAxisAmount, type FanChartDataPoint } from "./compound-simulator-utils";
 
@@ -27,10 +25,6 @@ export interface MonteCarloChartProps {
   contributionYears: number;
   withdrawalStartYear: number;
   totalYears: number;
-  inflationRate: number;
-  onInflationRateChange: (value: number) => void;
-  volatility: number;
-  onVolatilityChange: (value: number) => void;
   copyData: unknown;
 }
 
@@ -61,10 +55,6 @@ export function MonteCarloChart({
   contributionYears,
   withdrawalStartYear,
   totalYears,
-  inflationRate,
-  onInflationRateChange,
-  volatility,
-  onVolatilityChange,
   copyData,
 }: MonteCarloChartProps) {
   let taxDescription = "";
@@ -73,102 +63,23 @@ export function MonteCarloChart({
 
   return (
     <div className="space-y-4 border-t pt-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold">モンテカルロ・シミュレーション</h3>
-          <p className="text-xs text-muted-foreground">
-            5,000通りのランダムなシナリオに基づく将来予測。インフレを差し引いた実質値（今の貨幣価値に換算
-            {taxDescription}
-            ）で表示しています。
-          </p>
-          <div
-            className="flex flex-wrap gap-x-4 text-xs text-muted-foreground"
-            aria-label="グラフの凡例"
-          >
-            {LEGEND_ITEMS.map((item) => (
-              <span key={item.label} className="inline-flex items-center gap-1.5">
-                <span className={item.markerClassName} aria-hidden="true" />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 md:flex md:items-center md:gap-4">
-          <div className="space-y-1 md:w-32">
-            <div className="flex items-center justify-between">
-              <MetricLabel
-                title="インフレ率"
-                description="今の100万円が将来いくらの価値になるかに影響します。日本の直近インフレ率は約2〜3%です。名目リターンから差し引いて実質リターンを算出し、グラフは購買力ベース（実質値）で表示されます"
-              />
-              <span className="text-xs font-semibold text-primary">{inflationRate}%</span>
-            </div>
-            <Slider
-              value={inflationRate}
-              onValueChange={onInflationRateChange}
-              min={0}
-              max={10}
-              step={0.5}
-              aria-label="インフレ率"
-              ticks={[
-                { value: 0, label: "0%" },
-                { value: 5, label: "5%" },
-                { value: 10, label: "10%" },
-              ]}
-            />
-          </div>
-          <div className="space-y-1 md:w-40">
-            <div className="flex items-center justify-between">
-              <MetricLabel
-                title="ボラティリティ"
-                description={
-                  <div className="space-y-1.5">
-                    <p>年率の価格変動幅。値が大きいほどリターンのばらつきが大きくなります。</p>
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="pb-1 text-left font-medium">資産クラス</th>
-                          <th className="pb-1 text-right font-medium">目安</th>
-                        </tr>
-                      </thead>
-                      <tbody className="tabular-nums">
-                        <tr>
-                          <td>全世界株式 (MSCI ACWI)</td>
-                          <td className="text-right">14〜17%</td>
-                        </tr>
-                        <tr>
-                          <td>先進国株式 (S&amp;P500等)</td>
-                          <td className="text-right">15〜19%</td>
-                        </tr>
-                        <tr>
-                          <td>バランス型 (株60/債40)</td>
-                          <td className="text-right">8〜11%</td>
-                        </tr>
-                        <tr>
-                          <td>債券中心</td>
-                          <td className="text-right">3〜8%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                }
-              />
-              <span className="text-xs font-semibold text-primary">{volatility}%</span>
-            </div>
-            <Slider
-              value={volatility}
-              onValueChange={onVolatilityChange}
-              min={5}
-              max={30}
-              step={1}
-              aria-label="ボラティリティ"
-              ticks={[
-                { value: 5, label: "5%" },
-                { value: 10, label: "10%" },
-                { value: 20, label: "20%" },
-                { value: 30, label: "30%" },
-              ]}
-            />
-          </div>
+      <div>
+        <h3 className="text-sm font-semibold">モンテカルロ・シミュレーション</h3>
+        <p className="text-xs text-muted-foreground">
+          5,000通りのランダムなシナリオに基づく将来予測。インフレを差し引いた実質値（今の貨幣価値に換算
+          {taxDescription}
+          ）で表示しています。
+        </p>
+        <div
+          className="flex flex-wrap gap-x-4 text-xs text-muted-foreground"
+          aria-label="グラフの凡例"
+        >
+          {LEGEND_ITEMS.map((item) => (
+            <span key={item.label} className="inline-flex items-center gap-1.5">
+              <span className={item.markerClassName} aria-hidden="true" />
+              {item.label}
+            </span>
+          ))}
         </div>
       </div>
 

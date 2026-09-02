@@ -30,6 +30,10 @@ export interface SettingsPanelProps {
   onAnnualReturnRateChange: (value: number) => void;
   expenseRatio: number;
   onExpenseRatioChange: (value: number) => void;
+  inflationRate: number;
+  onInflationRateChange: (value: number) => void;
+  volatility: number;
+  onVolatilityChange: (value: number) => void;
   withdrawalMode: WithdrawalMode;
   onWithdrawalModeChange: (value: WithdrawalMode) => void;
   withdrawalRate: number;
@@ -50,7 +54,6 @@ export interface SettingsPanelProps {
   onTaxFreeChange: (value: boolean) => void;
   inflationAdjustedWithdrawal: boolean;
   onInflationAdjustedWithdrawalChange: (value: boolean) => void;
-  inflationRate: number;
   portfolioContext?: PortfolioContext;
 }
 
@@ -73,6 +76,10 @@ export function SettingsPanel({
   onAnnualReturnRateChange,
   expenseRatio,
   onExpenseRatioChange,
+  inflationRate,
+  onInflationRateChange,
+  volatility,
+  onVolatilityChange,
   withdrawalMode,
   onWithdrawalModeChange,
   withdrawalRate,
@@ -93,7 +100,6 @@ export function SettingsPanel({
   onTaxFreeChange,
   inflationAdjustedWithdrawal,
   onInflationAdjustedWithdrawalChange,
-  inflationRate,
   portfolioContext,
 }: SettingsPanelProps) {
   return (
@@ -138,7 +144,7 @@ export function SettingsPanel({
           />
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
         <FormField
           label="初期投資額"
           htmlFor="simulator-initial-amount"
@@ -297,6 +303,83 @@ export function SettingsPanel({
               { value: 1, label: "1%" },
               { value: 2, label: "2%" },
               { value: 3, label: "3%" },
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <MetricLabel
+              title="インフレ率"
+              description="今の100万円が将来いくらの価値になるかに影響します。日本の直近インフレ率は約2〜3%です。名目リターンから差し引いて実質リターンを算出し、モンテカルロ・シミュレーションは購買力ベース（実質値）で表示されます"
+            />
+            <span className="text-sm font-semibold text-primary">{inflationRate}%</span>
+          </div>
+          <Slider
+            value={inflationRate}
+            onValueChange={onInflationRateChange}
+            min={0}
+            max={10}
+            step={0.5}
+            aria-label="インフレ率"
+            ticks={[
+              { value: 0, label: "0%" },
+              { value: 5, label: "5%" },
+              { value: 10, label: "10%" },
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <MetricLabel
+              title="ボラティリティ"
+              description={
+                <div className="space-y-1.5">
+                  <p>年率の価格変動幅。値が大きいほどリターンのばらつきが大きくなります。</p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="pb-1 text-left font-medium">資産クラス</th>
+                        <th className="pb-1 text-right font-medium">目安</th>
+                      </tr>
+                    </thead>
+                    <tbody className="tabular-nums">
+                      <tr>
+                        <td>全世界株式 (MSCI ACWI)</td>
+                        <td className="text-right">14〜17%</td>
+                      </tr>
+                      <tr>
+                        <td>先進国株式 (S&amp;P500等)</td>
+                        <td className="text-right">15〜19%</td>
+                      </tr>
+                      <tr>
+                        <td>バランス型 (株60/債40)</td>
+                        <td className="text-right">8〜11%</td>
+                      </tr>
+                      <tr>
+                        <td>債券中心</td>
+                        <td className="text-right">3〜8%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              }
+            />
+            <span className="text-sm font-semibold text-primary">{volatility}%</span>
+          </div>
+          <Slider
+            value={volatility}
+            onValueChange={onVolatilityChange}
+            min={5}
+            max={30}
+            step={1}
+            aria-label="ボラティリティ"
+            ticks={[
+              { value: 5, label: "5%" },
+              { value: 10, label: "10%" },
+              { value: 20, label: "20%" },
+              { value: 30, label: "30%" },
             ]}
           />
         </div>
