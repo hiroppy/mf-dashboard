@@ -14,11 +14,9 @@ Money Forward MEの家計・資産・投資データを定期的に取得し、W
 
 crawlerコンテナ内のsupercronicが、登録金融機関の「一括更新」を定期的に実行して完了を監視する。既定の実行時刻は毎日6:30と15:30。
 
-### 更新結果をSlackやDiscordへ通知
+### 更新結果をDiscordへ通知
 
-通知先を設定すると、更新結果や前日との差分をSlackまたはDiscordへ投稿できる。
-
-<img src="./.github/assets/slack.png" alt="Slackに投稿された更新結果" width="420" />
+通知先を設定すると、更新結果や前日との差分をDiscordへ投稿できる。Slackへは更新エラーとOTP入力待ちのアラートだけを通知する。
 
 ### 家計・資産情報を可視化
 

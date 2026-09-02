@@ -3,7 +3,7 @@ import { formatUpdatedAt } from "./data-builder.js";
 import { sendDiscordNotification, sendDiscordErrorNotification } from "./discord.js";
 import { error, warn } from "./logger.js";
 import type { GroupData } from "./scraper.js";
-import { sendSlackNotification, sendErrorNotification } from "./slack.js";
+import { sendErrorNotification } from "./slack.js";
 import type { ScrapedData } from "./types.js";
 
 export function selectNotificationGroup(
@@ -44,17 +44,7 @@ export async function sendSuccessNotifications(
     return;
   }
 
-  const notifyPayload = buildNotificationPayload(notifyGroupData);
-  const results = await Promise.allSettled([
-    sendSlackNotification(notifyPayload),
-    sendDiscordNotification(notifyPayload),
-  ]);
-
-  logNotificationFailures(results, "Failed to send notification:");
-  const failure = results.find(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  );
-  if (failure) throw failure.reason;
+  await sendDiscordNotification(buildNotificationPayload(notifyGroupData));
 }
 
 export async function sendFailureNotifications(err: Error) {

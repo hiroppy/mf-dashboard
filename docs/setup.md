@@ -121,7 +121,7 @@ DASHBOARD_URL=https://dashboard.example.com
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                              |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                           |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
-| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slackのエラー通知とOTP入力待ちアラート                                           |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
 | `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000`   |
 | `AUTH_STATE_PATH`                            | 任意 | ローカル実行時       | ローカル実行時のブラウザーセッション保存先。Docker Composeでは設定しない         |
@@ -255,7 +255,9 @@ terraform -chdir=terraform output -raw tunnel_id
 
 ここからの設定は、基本セットアップの完了後に必要なものだけ追加する。
 
-### Slack通知
+### Slackのエラー通知
+
+更新エラーとOTP入力待ちのアラートをSlackへ通知する。更新結果のレポートはDiscordだけが対象で、Slackへは投稿しない。
 
 1. [Slack API](https://api.slack.com/apps)でBotを作成し、`xoxb-`から始まるトークンを発行する
 2. Botへ`chat:write`権限を付与し、投稿先チャンネルへ招待する

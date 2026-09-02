@@ -6,20 +6,18 @@ import {
   sendSuccessNotifications,
 } from "./notification.js";
 import type { GroupData } from "./scraper.js";
-import { sendSlackNotification } from "./slack.js";
+import { sendErrorNotification } from "./slack.js";
 
 vi.mock("./discord.js", () => ({
   sendDiscordNotification: vi.fn<() => Promise<void>>(),
   sendDiscordErrorNotification: vi.fn<() => Promise<void>>(),
 }));
 vi.mock("./slack.js", () => ({
-  sendSlackNotification: vi.fn<() => Promise<void>>(),
   sendErrorNotification: vi.fn<() => Promise<void>>(),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(sendSlackNotification).mockResolvedValue(undefined);
   vi.mocked(sendDiscordNotification).mockResolvedValue(undefined);
 });
 
@@ -119,9 +117,16 @@ describe("buildNotificationPayload", () => {
 });
 
 describe("sendSuccessNotifications", () => {
+  test("更新レポートを Slack へ送らない", async () => {
+    await sendSuccessNotifications([makeGroupData("group-a", "Group A")], null);
+
+    expect(sendDiscordNotification).toHaveBeenCalledTimes(1);
+    expect(sendErrorNotification).not.toHaveBeenCalled();
+  });
+
   test("通知 channel の失敗を caller に返す", async () => {
     const failure = new Error("notification unavailable");
-    vi.mocked(sendSlackNotification).mockRejectedValue(failure);
+    vi.mocked(sendDiscordNotification).mockRejectedValue(failure);
 
     await expect(
       sendSuccessNotifications([makeGroupData("group-a", "Group A")], null),
