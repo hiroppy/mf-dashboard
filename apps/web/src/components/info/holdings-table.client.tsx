@@ -20,7 +20,7 @@ import {
 
 const PAGE_SIZE = 10;
 
-export interface HoldingItem {
+interface HoldingItem {
   id: number;
   name: string;
   accountName: string | null;
