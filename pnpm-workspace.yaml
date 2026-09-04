@@ -23,9 +23,9 @@ minimumReleaseAgeExclude:
 catalog:
   "@libsql/client": 0.18.0
   "@types/node": 25.9.5
-  "@vitest/browser-playwright": 4.1.11
+  "@vitest/browser-playwright": 5.0.0
   drizzle-orm: 0.45.2
   playwright: 1.62.1
   playwright-core: 1.62.1
   typescript: 7.0.2
-  vitest: 4.1.11
+  vitest: 5.0.0
