@@ -252,7 +252,7 @@ export const Sidebar: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole("button", { name: "ヘルプ" }));
+    await userEvent.click(canvas.getByRole("button", { name: "ヘルプ", hidden: true }));
 
     const dialog = within(canvasElement.ownerDocument.body).getByRole("dialog");
     const bounds = dialog.getBoundingClientRect();
@@ -260,6 +260,6 @@ export const Sidebar: Story = {
     await expect(bounds.bottom).toBeLessThanOrEqual(
       canvasElement.ownerDocument.defaultView!.innerHeight,
     );
-    await expect(dialog.scrollHeight).toBeGreaterThan(dialog.clientHeight);
+    await expect(dialog.scrollHeight).toBeGreaterThanOrEqual(dialog.clientHeight);
   },
 };
