@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 import type { WithdrawalMode } from "./compound-simulator-types";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
@@ -38,6 +39,10 @@ const settingsArgs: SettingsPanelProps = {
   onAnnualReturnRateChange: () => {},
   expenseRatio: 0.1,
   onExpenseRatioChange: () => {},
+  inflationRate: 2,
+  onInflationRateChange: () => {},
+  volatility: 15,
+  onVolatilityChange: () => {},
   withdrawalMode: "amount",
   onWithdrawalModeChange: () => {},
   withdrawalRate: 4,
@@ -58,7 +63,6 @@ const settingsArgs: SettingsPanelProps = {
   onTaxFreeChange: () => {},
   inflationAdjustedWithdrawal: false,
   onInflationAdjustedWithdrawalChange: () => {},
-  inflationRate: 2,
   portfolioContext: {
     monthlyContributionSource: "月の余剰額から推定",
     annualReturnRateSource: "テスト用の推定値",
@@ -72,11 +76,13 @@ export const Default: Story = {
     const [contributionYears, setContributionYears] = useState(25);
     const [withdrawalStartYear, setWithdrawalStartYear] = useState(30);
     const [withdrawalYears, setWithdrawalYears] = useState(30);
-    const [selectedPreset, setSelectedPreset] = useState("custom");
+    const [selectedPreset, setSelectedPreset] = useState("all-country");
     const [initialAmount, setInitialAmount] = useState(1_000_000);
     const [monthlyContribution, setMonthlyContribution] = useState(50_000);
     const [annualReturnRate, setAnnualReturnRate] = useState(5);
     const [expenseRatio, setExpenseRatio] = useState(0.1);
+    const [inflationRate, setInflationRate] = useState(2);
+    const [volatility, setVolatility] = useState(15);
     const [withdrawalMode, setWithdrawalMode] = useState<WithdrawalMode>("amount");
     const [withdrawalRate, setWithdrawalRate] = useState(4);
     const [fixedMonthlyWithdrawal, setFixedMonthlyWithdrawal] = useState(200_000);
@@ -90,6 +96,10 @@ export const Default: Story = {
     const initialAnnualWithdrawal = Math.round((rateBasis * withdrawalRate) / 100);
     const initialMonthlyWithdrawal = Math.round(initialAnnualWithdrawal / 12);
     const adjustedMonthlyPension = Math.round(basePension * 0.85);
+    const handleVolatilityChange = (value: number) => {
+      setVolatility(value);
+      setSelectedPreset("custom");
+    };
 
     return (
       <SettingsPanel
@@ -111,6 +121,10 @@ export const Default: Story = {
         onAnnualReturnRateChange={setAnnualReturnRate}
         expenseRatio={expenseRatio}
         onExpenseRatioChange={setExpenseRatio}
+        inflationRate={inflationRate}
+        onInflationRateChange={setInflationRate}
+        volatility={volatility}
+        onVolatilityChange={handleVolatilityChange}
         withdrawalMode={withdrawalMode}
         onWithdrawalModeChange={setWithdrawalMode}
         withdrawalRate={withdrawalRate}
@@ -131,12 +145,27 @@ export const Default: Story = {
         onTaxFreeChange={setTaxFree}
         inflationAdjustedWithdrawal={inflationAdjustedWithdrawal}
         onInflationAdjustedWithdrawalChange={setInflationAdjustedWithdrawal}
-        inflationRate={2}
         portfolioContext={{
           monthlyContributionSource: "月の余剰額から推定",
           annualReturnRateSource: "テスト用の推定値",
         }}
       />
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("slider", { name: "インフレ率" })).toHaveAttribute(
+      "aria-valuenow",
+      "2",
+    );
+
+    const volatilitySlider = canvas.getByRole("slider", { name: "ボラティリティ" });
+    await userEvent.click(volatilitySlider);
+    await userEvent.keyboard("{ArrowRight}");
+
+    await expect(volatilitySlider).toHaveAttribute("aria-valuenow", "16");
+    await expect(canvas.getByRole("combobox", { name: "商品プリセット" })).toHaveTextContent(
+      "カスタム",
     );
   },
 };

@@ -63,10 +63,6 @@ export const Default: Story = {
     contributionYears: 25,
     withdrawalStartYear: 30,
     totalYears: 55,
-    inflationRate: 2,
-    onInflationRateChange: () => {},
-    volatility: 15,
-    onVolatilityChange: () => {},
     copyData: {
       settings: {
         initialAmount: 1_000_000,
