@@ -203,6 +203,7 @@ describe("loadCrawlerConfig", () => {
       DB_PATH: "/tmp/test.db",
       DEBUG: "true",
       HEADED: "true",
+      HISTORY_START_MONTH: "2020-04",
       SCRAPE_MODE: "history",
       SKIP_REFRESH: "true",
     };
@@ -219,8 +220,15 @@ describe("loadCrawlerConfig", () => {
     expect(config.dbExists).toBe(true);
     expect(config.scrapeMode).toBe("history");
     expect(config.isHistoryMode).toBe(true);
+    expect(config.historyStartMonth).toBe("2020-04");
     expect(config.isDebug).toBe(true);
     expect(config.isHeaded).toBe(true);
+  });
+
+  test("HISTORY_START_MONTHがYYYY-MM形式でない場合は拒否する", () => {
+    expect(() => loadCrawlerConfig({ HISTORY_START_MONTH: "2020-4" })).toThrow(
+      "Invalid year-month key: 2020-4",
+    );
   });
 });
 
@@ -357,6 +365,32 @@ describe("runCashFlowHistoryPhase", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("history modeではHISTORY_START_MONTHまで未取得期間を探す", async () => {
+    vi.mocked(hasCashFlowPeriod).mockResolvedValue(false);
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, {
+      isHistoryMode: true,
+      historyStartMonth: "2020-04",
+      activeAccountingMonth: "2026-09",
+    });
+
+    expect(hasCashFlowPeriod).toHaveBeenCalledWith({}, "2020-04");
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 78, expect.any(Object));
+  });
+
+  test("month modeではHISTORY_START_MONTHを無視する", async () => {
+    vi.mocked(scrapeCashFlowHistory).mockResolvedValue([]);
+
+    await runCashFlowHistoryPhase({} as never, {} as never, {
+      isHistoryMode: false,
+      historyStartMonth: "2030-01",
+      activeAccountingMonth: "2026-09",
+    });
+
+    expect(scrapeCashFlowHistory).toHaveBeenCalledWith({}, 2, expect.any(Object));
   });
 
   test("初期 navigation 失敗を対象月 step に記録する", async () => {

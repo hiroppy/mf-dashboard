@@ -39,4 +39,25 @@ describe("getHistoryMonth", () => {
     expect(getHistoryMaxMonthsFromAnchor("2026-09")).toBe(21);
     expect(getHistoryMonthFromAnchor("2026-09", 20)).toBe("2025-01");
   });
+
+  test("指定した開始月を含む履歴月数を計算する", () => {
+    expect(getHistoryMaxMonthsFromAnchor("2026-09", "2020-04")).toBe(78);
+    expect(getHistoryMonthFromAnchor("2026-09", 77)).toBe("2020-04");
+  });
+
+  test("開始月と現在月が同じ場合は1か月を取得する", () => {
+    expect(getHistoryMaxMonthsFromAnchor("2026-09", "2026-09")).toBe(1);
+  });
+
+  test("開始月が現在月より後の場合は拒否する", () => {
+    expect(() => getHistoryMaxMonthsFromAnchor("2026-09", "2026-10")).toThrow(
+      "HISTORY_START_MONTH (2026-10) must not be after the active accounting month (2026-09)",
+    );
+  });
+
+  test("開始月がYYYY-MM形式でない場合は拒否する", () => {
+    expect(() => getHistoryMaxMonthsFromAnchor("2026-09", "2020-4")).toThrow(
+      "Invalid year-month key: 2020-4",
+    );
+  });
 });

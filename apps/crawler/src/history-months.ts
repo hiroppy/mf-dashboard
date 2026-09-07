@@ -10,15 +10,28 @@ export function getHistoryMonth(now: Date, monthsAgo: number): string {
   return getHistoryMonthFromAnchor(getJstYearMonthKey(now), monthsAgo);
 }
 
-export function getHistoryMaxMonths(now: Date): number {
-  return getHistoryMaxMonthsFromAnchor(getJstYearMonthKey(now));
+export function getHistoryMaxMonths(now: Date, historyStartMonth?: string): number {
+  return getHistoryMaxMonthsFromAnchor(getJstYearMonthKey(now), historyStartMonth);
 }
 
 export function getHistoryMonthFromAnchor(anchorMonth: string, monthsAgo: number): string {
   return shiftYearMonthKey(anchorMonth, -monthsAgo);
 }
 
-export function getHistoryMaxMonthsFromAnchor(anchorMonth: string): number {
-  const { month } = parseYearMonthKey(anchorMonth);
-  return month + 12;
+export function getHistoryMaxMonthsFromAnchor(
+  anchorMonth: string,
+  historyStartMonth?: string,
+): number {
+  const anchor = parseYearMonthKey(anchorMonth);
+  if (!historyStartMonth) return anchor.month + 12;
+
+  const start = parseYearMonthKey(historyStartMonth);
+  const monthDistance = (anchor.year - start.year) * 12 + anchor.month - start.month;
+  if (monthDistance < 0) {
+    throw new Error(
+      `HISTORY_START_MONTH (${historyStartMonth}) must not be after the active accounting month (${anchorMonth})`,
+    );
+  }
+
+  return monthDistance + 1;
 }
