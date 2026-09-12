@@ -186,11 +186,11 @@ export async function switchGroup(page: Page, groupId: string): Promise<Group | 
   }
 
   try {
-    // グループを切り替え
-    await groupSelect.selectOption({ value: groupId });
-
-    // ページ遷移またはリロードを待つ
-    await page.waitForLoadState("domcontentloaded");
+    // 選択直後に始まる遷移を取り逃さないよう、操作前から待機する。
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+      groupSelect.selectOption({ value: groupId }),
+    ]);
     // グループセレクタが更新されるまで待機
     await page.locator(GROUP_SELECTOR).waitFor({ state: "visible", timeout: 5000 });
 
