@@ -28,8 +28,10 @@ export async function switchGroupAnonymously(page: Page, groupId: string): Promi
     const selector = await getVisibleGroupSelector(page);
     if ((await selector.inputValue()) === groupId) return;
 
-    await selector.selectOption({ value: groupId });
-    await page.waitForLoadState("domcontentloaded");
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+      selector.selectOption({ value: groupId }),
+    ]);
 
     const updatedSelector = page.locator(GROUP_SELECTOR).first();
     await updatedSelector.waitFor({ state: "visible", timeout: 5000 });
