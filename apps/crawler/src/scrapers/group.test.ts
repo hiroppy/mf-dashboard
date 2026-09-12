@@ -13,6 +13,7 @@ import { createGroupScope, NO_GROUP_ID, switchGroup } from "./group.js";
 
 function createFailingGroupPage(switchError: Error = new Error("private-group-id")) {
   const state = { currentGroupId: "private-group-id" };
+  const waitForNavigation = vi.fn<() => Promise<null>>(async () => null);
   const option = {
     count: vi.fn<() => Promise<number>>(async () => 1),
     textContent: vi.fn<() => Promise<string>>(async () => "Private Group Name"),
@@ -31,11 +32,11 @@ function createFailingGroupPage(switchError: Error = new Error("private-group-id
     goto: vi.fn<() => Promise<null>>(async () => null),
     isClosed: vi.fn<() => boolean>(() => false),
     locator: vi.fn<() => typeof select>(() => select),
-    waitForLoadState: vi.fn<() => Promise<void>>(async () => undefined),
+    waitForNavigation,
     waitForTimeout: vi.fn<() => Promise<void>>(async () => undefined),
   } as unknown as Page;
 
-  return { page, select, state };
+  return { page, select, state, waitForNavigation };
 }
 
 describe("createGroupScope", () => {
@@ -98,5 +99,23 @@ describe("switchGroup", () => {
 
     expect(error).toMatchObject({ message: "Group switch failed" });
     expect((error as Error).message).not.toContain("private-group-id");
+  });
+
+  test("選択操作より前からページ遷移を待機する", async () => {
+    const { page, select, state, waitForNavigation } = createFailingGroupPage();
+    const calls: string[] = [];
+    state.currentGroupId = NO_GROUP_ID;
+    waitForNavigation.mockImplementation(async () => {
+      calls.push("wait");
+      state.currentGroupId = "private-group-id";
+      return null;
+    });
+    select.selectOption = vi.fn<() => Promise<void>>(async () => {
+      calls.push("select");
+    });
+
+    await switchGroup(page, "private-group-id");
+
+    expect(calls).toEqual(["wait", "select"]);
   });
 });
