@@ -39,7 +39,7 @@
     "react-dom": "19.3.0",
     "recharts": "3.10.1",
     "streamdown": "2.6.0",
-    "tailwind-merge": "3.6.0"
+    "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
