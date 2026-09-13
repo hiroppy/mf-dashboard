@@ -5,7 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_FILE="$PROJECT_DIR/data/e2e-crawler.log"
 MISE_SHIMS="$HOME/.local/share/mise/shims"
 
-export PATH="$MISE_SHIMS:$PATH"
+export PATH="$HOME/.local/bin:$MISE_SHIMS:$PATH"
 
 cd "$PROJECT_DIR"
 
