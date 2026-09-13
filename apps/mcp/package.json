@@ -1,0 +1,26 @@
+{
+  "name": "@mf-dashboard/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "start": "node dist/index.cjs",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@libsql/client": "catalog:",
+    "@mf-dashboard/analytics": "workspace:*",
+    "@mf-dashboard/db": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "0.22.14",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
