@@ -25,12 +25,12 @@
   },
   "devDependencies": {
     "knip": "6.35.1",
-    "lefthook": "2.1.12",
-    "oxfmt": "0.67.0",
-    "oxlint": "1.82.0",
+    "lefthook": "2.1.14",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
     "oxlint-tsgolint": "7.0.2001",
     "tsx": "4.23.13",
-    "turbo": "2.10.12"
+    "turbo": "2.10.13"
   },
   "packageManager": "pnpm@12.4.1"
 }
