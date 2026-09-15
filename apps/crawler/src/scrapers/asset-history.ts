@@ -2,14 +2,13 @@ import type { AssetHistory, AssetHistoryPoint } from "@mf-dashboard/db/types";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { debug } from "../logger.js";
+import { navigateToPage } from "../navigation.js";
 import { parseJapaneseNumber } from "../parsers.js";
 
 export async function getAssetHistory(page: Page): Promise<AssetHistory> {
   debug("Getting asset history from /bs/history page...");
 
-  await page.goto(mfUrls.assetHistory, {
-    waitUntil: "domcontentloaded",
-  });
+  await navigateToPage(page, mfUrls.assetHistory);
   // テーブルが表示されるまで待機
   await page.locator("table.table-bordered").waitFor({ state: "visible", timeout: 10000 });
 

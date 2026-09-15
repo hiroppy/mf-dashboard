@@ -3,6 +3,7 @@ import { ASSET_CATEGORIES } from "@mf-dashboard/meta/categories";
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Locator, Page } from "playwright";
 import { debug, warn } from "../logger.js";
+import { navigateToPage } from "../navigation.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 import { extractAccountMfIdFromDetailUrl, isExpectedAccountDetailPage } from "./account-detail.js";
 import { createManualHoldingKey, type ManualHoldingAccountMap } from "./manual-holding-accounts.js";
@@ -674,7 +675,7 @@ export async function getPortfolio(
   debug("Getting portfolio from /bs/portfolio page...");
 
   // Get official totalAssets from bs/history (more accurate than summing items)
-  await page.goto(mfUrls.assetHistory, { waitUntil: "domcontentloaded" });
+  await navigateToPage(page, mfUrls.assetHistory);
   // テーブルが表示されるまで待機
   await page.locator("table.table-bordered").waitFor({ state: "visible", timeout: 10000 });
 
