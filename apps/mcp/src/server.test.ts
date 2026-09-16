@@ -88,6 +88,11 @@ describe("createMcpServer", () => {
       "getLatestMonthlySummary",
       "analyzeMoMTrend",
     ]);
+    expect(result.tools.map(({ annotations }) => annotations)).toEqual([
+      { readOnlyHint: true, destructiveHint: false },
+      { readOnlyHint: true, destructiveHint: false },
+      { readOnlyHint: true, destructiveHint: false },
+    ]);
     await client.close();
   });
 

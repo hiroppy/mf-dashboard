@@ -38,25 +38,33 @@ export function createMcpServer(db: Db, initialGroupId: string) {
   for (const [name, tool] of Object.entries(tools)) {
     const { description, inputSchema } = tool as unknown as AnalyticsTool;
 
-    server.registerTool(name, { description, inputSchema }, async (input) => {
-      const group = await getRequiredCurrentGroup(db);
-      const currentTools = createAnalyticsTools(db, group.id) as unknown as Record<
-        string,
-        AnalyticsTool
-      >;
-      const currentTool = currentTools[name];
+    server.registerTool(
+      name,
+      {
+        description,
+        inputSchema,
+        annotations: { readOnlyHint: true, destructiveHint: false },
+      },
+      async (input) => {
+        const group = await getRequiredCurrentGroup(db);
+        const currentTools = createAnalyticsTools(db, group.id) as unknown as Record<
+          string,
+          AnalyticsTool
+        >;
+        const currentTool = currentTools[name];
 
-      if (!currentTool) {
-        throw new Error(`Tool no longer available: ${name}`);
-      }
+        if (!currentTool) {
+          throw new Error(`Tool no longer available: ${name}`);
+        }
 
-      const result = await currentTool.execute(input);
-      const text = JSON.stringify(result, null, 2) ?? "null";
+        const result = await currentTool.execute(input);
+        const text = JSON.stringify(result, null, 2) ?? "null";
 
-      return {
-        content: [{ type: "text", text }],
-      };
-    });
+        return {
+          content: [{ type: "text", text }],
+        };
+      },
+    );
   }
 
   return server;
