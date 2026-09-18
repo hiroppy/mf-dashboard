@@ -15,22 +15,26 @@
   },
   "scripts": {
     "dev:scrape": "DEBUG=true SKIP_REFRESH=true tsx src/index.ts",
+    "dev:prod": "tsx src/server.ts",
+    "serve": "tsx src/server.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run --project unit",
     "test:e2e": "vitest run --project e2e",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@1password/sdk": "0.4.0",
+    "@1password/sdk": "0.5.0",
     "@mf-dashboard/analytics": "workspace:*",
+    "@mf-dashboard/date-utils": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
     "@mf-dashboard/meta": "workspace:*",
-    "@slack/web-api": "7.15.2",
-    "drizzle-orm": "catalog:"
+    "@slack/web-api": "8.1.1",
+    "drizzle-orm": "catalog:",
+    "playwright": "catalog:",
+    "tsx": "4.23.13"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "playwright": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

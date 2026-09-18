@@ -17,7 +17,7 @@ export async function getAssetHistory(page: Page): Promise<AssetHistory> {
 
   // ヘッダーからカテゴリ名を動的取得
   const headers = await page.locator("table.table-bordered thead th").allTextContents();
-  // headers: ["日付", "合計", "預金・現金・暗号資産", "株式(現物)", ..., "詳細"]
+  // headers: ["日付", "合計", "預金・現金", "暗号資産", "株式(現物)", ..., "詳細"]
   const categoryNames = headers.slice(2, -1).map((h) => h.trim()); // 日付と合計と詳細を除外
 
   const rows = page.locator("table.table-bordered tbody tr");

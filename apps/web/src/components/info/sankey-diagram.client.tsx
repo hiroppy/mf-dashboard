@@ -8,6 +8,7 @@ import { ChartTooltipContent } from "../charts/chart-tooltip";
 import { AmountDisplay } from "../ui/amount-display";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
+import { calculateFlowPercentage } from "./sankey-diagram-utils";
 
 interface SankeyDiagramClientProps {
   income: Array<{ category: string; amount: number }>;
@@ -124,22 +125,6 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
     return sankeyData.labelMap.get(id) || id;
   };
 
-  // Calculate percentage for each node
-  const getPercentage = (id: string, value: number): string => {
-    if (id.startsWith("n-in-")) {
-      return totalIncome > 0 ? ((value / totalIncome) * 100).toFixed(0) : "0";
-    } else if (id.startsWith("n-out-")) {
-      return totalExpense > 0 ? ((value / totalExpense) * 100).toFixed(0) : "0";
-    } else if (id === "n-central") {
-      return "100";
-    } else if (id === "n-balance") {
-      return totalFlow > 0 ? ((balance / totalFlow) * 100).toFixed(0) : "0";
-    } else if (id === "n-deficit") {
-      return totalFlow > 0 ? ((Math.abs(balance) / totalFlow) * 100).toFixed(0) : "0";
-    }
-    return "100";
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -202,7 +187,9 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
         </div>
 
         {/* Sankey diagram */}
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="キャッシュフロー図">
+        {/* Scrollable Sankey content must be focusable for Safari keyboard access. */}
+        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+        <section className="overflow-x-auto" aria-label="キャッシュフロー図" tabIndex={0}>
           <div className="min-w-150" style={{ height }}>
             <ResponsiveSankey
               data={data}
@@ -228,7 +215,7 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
                 const id = node.id as string;
                 const label = getLabel(id);
                 const value = node.value || 0;
-                const pct = getPercentage(id, value);
+                const pct = calculateFlowPercentage(value, totalFlow);
 
                 return `${label} ${pct}%`;
               }}
@@ -250,7 +237,7 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
               )}
             />
           </div>
-        </div>
+        </section>
 
         {/* Legend */}
         <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">

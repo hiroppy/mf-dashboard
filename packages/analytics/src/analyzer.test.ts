@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mockSaveAnalyticsReport = vi.fn();
-const mockGenerateInsights = vi.fn();
-const mockIsLLMEnabled = vi.fn();
+type AnyMock = (...args: any[]) => any;
+
+const mockSaveAnalyticsReport = vi.fn<AnyMock>();
+const mockGenerateInsights = vi.fn<AnyMock>();
+const mockIsLLMEnabled = vi.fn<AnyMock>();
 
 vi.mock("@mf-dashboard/db/repository/analytics", () => ({
   saveAnalyticsReport: (...args: any[]) => mockSaveAnalyticsReport(...args),
@@ -79,6 +81,29 @@ describe("analyzeFinancialData", () => {
       insights,
       model: null,
     });
+  });
+
+  it("should save report with JST date across UTC day boundary", async () => {
+    vi.useFakeTimers({ now: new Date("2025-03-31T15:00:00.000Z") });
+    mockIsLLMEnabled.mockReturnValue(true);
+    const insights = {
+      summary: "summary",
+      savingsInsight: "savings",
+      investmentInsight: null,
+      spendingInsight: null,
+      balanceInsight: null,
+      liabilityInsight: null,
+    };
+    mockGenerateInsights.mockResolvedValue(insights);
+
+    await analyzeFinancialData(mockDb, groupId);
+
+    expect(mockSaveAnalyticsReport).toHaveBeenCalledWith(
+      mockDb,
+      expect.objectContaining({
+        date: "2025-04-01",
+      }),
+    );
   });
 
   it("should return false when all insight values are null", async () => {

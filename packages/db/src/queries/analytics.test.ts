@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AnalyticsMetrics } from "./analytics";
-import { calculateHealthScore } from "./analytics";
+import { calculateHealthScore, isInvestmentCategory, isLiquidAssetCategory } from "./analytics";
 
 type FullMetrics = Omit<AnalyticsMetrics, "healthScore">;
 
@@ -57,6 +57,14 @@ function createMockMetrics(
       ...overrides.liability,
     },
   };
+}
+
+function createSpendingAnomalies(count: number): FullMetrics["spending"]["anomalies"] {
+  return Array.from({ length: count }, (_, index) => ({
+    category: `category-${index + 1}`,
+    amount: 100000 - index * 1000,
+    deviation: 3 - index * 0.1,
+  }));
 }
 
 describe("calculateHealthScore", () => {
@@ -147,17 +155,22 @@ describe("calculateHealthScore", () => {
     const anomaly0 = calculateHealthScore(createMockMetrics({ spending: { anomalies: [] } }));
     const anomaly1 = calculateHealthScore(
       createMockMetrics({
-        spending: { anomalies: [{ category: "a", amount: 100000, deviation: 3 }] },
+        spending: { anomalies: createSpendingAnomalies(1) },
       }),
     );
     const anomaly2 = calculateHealthScore(
       createMockMetrics({
-        spending: {
-          anomalies: [
-            { category: "a", amount: 100000, deviation: 3 },
-            { category: "b", amount: 80000, deviation: 2.5 },
-          ],
-        },
+        spending: { anomalies: createSpendingAnomalies(2) },
+      }),
+    );
+    const anomaly3 = calculateHealthScore(
+      createMockMetrics({
+        spending: { anomalies: createSpendingAnomalies(3) },
+      }),
+    );
+    const anomaly4 = calculateHealthScore(
+      createMockMetrics({
+        spending: { anomalies: createSpendingAnomalies(4) },
       }),
     );
 
@@ -167,6 +180,8 @@ describe("calculateHealthScore", () => {
     expect(get(anomaly0)).toBe(15);
     expect(get(anomaly1)).toBe(10);
     expect(get(anomaly2)).toBe(5);
+    expect(get(anomaly3)).toBe(0);
+    expect(get(anomaly4)).toBe(0);
   });
 
   it("should have 5 categories that sum to totalScore", () => {
@@ -197,5 +212,42 @@ describe("calculateHealthScore", () => {
 
     expect(getGrowth(negGrowth)).toBeLessThan(getGrowth(zeroGrowth));
     expect(getGrowth(zeroGrowth)).toBe(Math.round(15 / 2));
+  });
+});
+
+describe("isLiquidAssetCategory", () => {
+  it("matches current Money Forward split liquid asset categories", () => {
+    expect(isLiquidAssetCategory("預金・現金")).toBe(true);
+    expect(isLiquidAssetCategory("暗号資産")).toBe(true);
+    expect(isLiquidAssetCategory("電子マネー・プリペイド")).toBe(true);
+  });
+
+  it("normalizes surrounding whitespace before matching", () => {
+    expect(isLiquidAssetCategory(" 預金・現金 ")).toBe(true);
+  });
+
+  it("does not classify non-liquid asset categories as liquid", () => {
+    expect(isLiquidAssetCategory("投資信託")).toBe(false);
+    expect(isLiquidAssetCategory("株式(現物)")).toBe(false);
+    expect(isLiquidAssetCategory("暗号資産・FX・貴金属")).toBe(false);
+  });
+});
+
+describe("isInvestmentCategory", () => {
+  it("matches investment categories", () => {
+    expect(isInvestmentCategory("投資信託")).toBe(true);
+    expect(isInvestmentCategory("株式(現物)")).toBe(true);
+    expect(isInvestmentCategory("暗号資産・FX・貴金属")).toBe(true);
+  });
+
+  it("does not classify split liquid asset categories as investment", () => {
+    expect(isInvestmentCategory("暗号資産")).toBe(false);
+    expect(isInvestmentCategory("預金・現金")).toBe(false);
+    expect(isInvestmentCategory("電子マネー・プリペイド")).toBe(false);
+  });
+
+  it("does not classify empty or whitespace-only strings as investment", () => {
+    expect(isInvestmentCategory("")).toBe(false);
+    expect(isInvestmentCategory("   ")).toBe(false);
   });
 });

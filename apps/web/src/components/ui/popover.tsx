@@ -30,6 +30,7 @@ function PopoverTrigger({ children }: PopoverTriggerProps) {
 interface PopoverContentProps {
   children: ReactNode;
   className?: string;
+  ariaLabel?: string;
   align?: "start" | "center" | "end";
   sideOffset?: number;
   initialFocus?: false | React.RefObject<HTMLElement | null>;
@@ -38,6 +39,7 @@ interface PopoverContentProps {
 function PopoverContent({
   children,
   className,
+  ariaLabel,
   align = "center",
   sideOffset = 4,
   initialFocus,
@@ -46,6 +48,7 @@ function PopoverContent({
     <BasePopover.Portal>
       <BasePopover.Positioner sideOffset={sideOffset} align={align} className="z-[100]">
         <BasePopover.Popup
+          aria-label={ariaLabel}
           initialFocus={initialFocus}
           className={cn(
             "z-[100] w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none",

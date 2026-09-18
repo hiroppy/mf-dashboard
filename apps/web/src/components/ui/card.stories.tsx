@@ -1,6 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Wallet } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "./card";
+import {
+  Card,
+  CardButton,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+  CardFooter,
+} from "./card";
 
 const meta = {
   title: "UI/Card",
@@ -38,5 +46,13 @@ export const WithAction: Story = {
         <p>ヘッダーにアクションボタンがあるカードです。</p>
       </CardContent>
     </Card>
+  ),
+};
+
+export const Button: Story = {
+  render: () => (
+    <CardButton className="border-primary/30 p-4 hover:border-primary">
+      クリックできるカード
+    </CardButton>
   ),
 };

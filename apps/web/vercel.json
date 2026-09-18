@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && pnpm turbo build:demo --filter=@mf-dashboard/web...",
+  "outputDirectory": ".next"
+}

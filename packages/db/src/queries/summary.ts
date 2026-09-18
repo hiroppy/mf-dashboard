@@ -1,6 +1,12 @@
+import { getJstDateParts, getJstYearMonthKey } from "@mf-dashboard/date-utils";
 import { eq, and, like, sql, inArray, or, notInArray } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
+import {
+  createNormalTransactionMirrorKeys,
+  createTransferMovementKey,
+  hasNormalTransactionMirror,
+} from "../shared/transfer";
 import { generateMonthRange } from "../shared/utils";
 
 /**
@@ -197,7 +203,8 @@ export async function getDeduplicatedTransferIncome(
     );
     if (classification !== "income") continue;
 
-    const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
+    const key = createTransferMovementKey(t);
+    if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -261,6 +268,24 @@ export async function getDeduplicatedTransferExpense(
     );
 
   const transfers = await query.all();
+  const normalTransactions = await db
+    .select({
+      accountId: schema.transactions.accountId,
+      date: schema.transactions.date,
+      amount: schema.transactions.amount,
+      type: schema.transactions.type,
+      isTransfer: schema.transactions.isTransfer,
+    })
+    .from(schema.transactions)
+    .where(
+      and(
+        inArray(schema.transactions.accountId, accountIds),
+        sql`${schema.transactions.type} IN ('income', 'expense')`,
+        dateCondition ? like(schema.transactions.date, `${dateCondition}%`) : sql`1=1`,
+      ),
+    )
+    .all();
+  const normalTransactionKeys = createNormalTransactionMirrorKeys(normalTransactions);
 
   // 重複除外: (date, amount, accountId, transferTargetAccountId) でユニーク化
   const seen = new Set<string>();
@@ -269,24 +294,10 @@ export async function getDeduplicatedTransferExpense(
   for (const t of transfers) {
     if (!t.date || !t.transferTargetAccountId || t.accountId === null) continue;
 
-    // 振替先アカウントで同一日・同一金額の通常トランザクションがある場合は除外
-    // （既に通常支出としてカウントされているため）
-    const existingNormalTx = await db
-      .select({ id: schema.transactions.id })
-      .from(schema.transactions)
-      .where(
-        and(
-          eq(schema.transactions.accountId, t.transferTargetAccountId),
-          eq(schema.transactions.date, t.date),
-          eq(schema.transactions.amount, t.amount),
-          sql`${schema.transactions.type} IN ('income', 'expense')`,
-        ),
-      )
-      .get();
+    if (hasNormalTransactionMirror(t, normalTransactionKeys)) continue;
 
-    if (existingNormalTx) continue;
-
-    const key = `${t.date}-${t.amount}-${t.accountId}-${t.transferTargetAccountId}`;
+    const key = createTransferMovementKey(t);
+    if (!key) continue;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -332,8 +343,7 @@ export async function getMonthlySummaries(
   if (!oldestResult?.month) return [];
 
   // 最古の月から現在月までの全ての月を生成
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = getJstYearMonthKey();
   const allMonths = generateMonthRange(oldestResult.month, currentMonth);
 
   // 通常の収入/支出を集計
@@ -405,8 +415,7 @@ export async function getAvailableMonths(groupIdParam?: string, db: Db = getDb()
   if (!oldestResult?.month) return [];
 
   // Generate all months from oldest to current
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = getJstYearMonthKey();
 
   const months = generateMonthRange(oldestResult.month, currentMonth);
 
@@ -562,7 +571,7 @@ export async function getYearToDateSummary(
   db: Db = getDb(),
 ) {
   const groupId = await resolveGroupId(db, options?.groupId);
-  const targetYear = options?.year || new Date().getFullYear();
+  const targetYear = options?.year || getJstDateParts().year;
 
   if (!groupId) {
     return {

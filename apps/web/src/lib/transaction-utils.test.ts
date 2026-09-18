@@ -3,6 +3,7 @@ import type { Transaction } from "../components/info/transaction-table/types";
 import {
   countBy,
   filterTransactions,
+  filterTransactionsByYear,
   sortTransactions,
   type TransactionFilters,
 } from "./transaction-utils";
@@ -140,6 +141,25 @@ describe("filterTransactions", () => {
     const result = filterTransactions(transactions, filters);
     expect(result).toHaveLength(1);
     expect(result[0].category).toBe("食費");
+  });
+});
+
+describe("filterTransactionsByYear", () => {
+  const transactions = [
+    createTransaction({ id: 1, date: "2024-12-31" }),
+    createTransaction({ id: 2, date: "2025-01-01" }),
+    createTransaction({ id: 3, date: "2025-12-31" }),
+    createTransaction({ id: 4, date: "2026-01-01" }),
+  ];
+
+  it("includes the selected year's boundary dates", () => {
+    const result = filterTransactionsByYear(transactions, "2025");
+
+    expect(result.map(({ id }) => id)).toEqual([2, 3]);
+  });
+
+  it("returns all transactions when no year is selected", () => {
+    expect(filterTransactionsByYear(transactions, null)).toBe(transactions);
   });
 });
 

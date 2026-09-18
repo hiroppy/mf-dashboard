@@ -3,6 +3,22 @@ import { getDb, type Db, schema } from "../index";
 import { resolveGroupId, getAccountIdsForGroup } from "../shared/group-filter";
 
 const INVESTMENT_CATEGORIES = ["株式(現物)", "投資信託"];
+const GLOBAL_GROUP_ID = "0";
+const FALLBACK_ACCOUNT_MF_ID = "unknown";
+
+async function getHoldingAccountIdsForGroup(db: Db, groupId: string): Promise<number[]> {
+  const accountIds = await getAccountIdsForGroup(db, groupId);
+  if (groupId !== GLOBAL_GROUP_ID) return accountIds;
+
+  const fallbackAccount = await db
+    .select({ id: schema.accounts.id })
+    .from(schema.accounts)
+    .where(eq(schema.accounts.mfId, FALLBACK_ACCOUNT_MF_ID))
+    .get();
+
+  if (!fallbackAccount || accountIds.includes(fallbackAccount.id)) return accountIds;
+  return [...accountIds, fallbackAccount.id];
+}
 
 /**
  * 最新のスナップショットを取得
@@ -25,21 +41,11 @@ export function buildHoldingWhereCondition(
   accountIds: number[],
   additionalCondition?: ReturnType<typeof eq>,
 ) {
-  const baseCondition = eq(schema.holdingValues.snapshotId, snapshotId);
-
-  if (accountIds.length > 0) {
-    const conditions = [baseCondition, inArray(schema.holdings.accountId, accountIds)];
-    if (additionalCondition) {
-      conditions.push(additionalCondition);
-    }
-    return and(...conditions);
-  }
-
-  if (additionalCondition) {
-    return and(baseCondition, additionalCondition);
-  }
-
-  return baseCondition;
+  return and(
+    eq(schema.holdingValues.snapshotId, snapshotId),
+    inArray(schema.holdings.accountId, accountIds),
+    additionalCondition,
+  );
 }
 
 /**
@@ -54,7 +60,7 @@ export async function getHoldingsWithLatestValues(groupIdParam?: string, db: Db 
   }
 
   const groupId = await resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
+  const accountIds = groupId ? await getHoldingAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(latestSnapshot.id, accountIds);
 
@@ -160,7 +166,7 @@ export async function getHoldingsWithDailyChange(
   }
 
   const groupId = await resolveGroupId(db, groupIdParam);
-  const accountIds = groupId ? await getAccountIdsForGroup(db, groupId) : [];
+  const accountIds = groupId ? await getHoldingAccountIdsForGroup(db, groupId) : [];
 
   const whereCondition = buildHoldingWhereCondition(
     latestSnapshot.id,

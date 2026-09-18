@@ -4,6 +4,7 @@ import { ListOrdered } from "lucide-react";
 import { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 import { Pagination } from "../../ui/pagination";
+import { Select } from "../../ui/select";
 import { useDateFilter } from "../date-filter-context";
 import { TransactionDesktopView } from "./transaction-desktop-view";
 import { TransactionFilters } from "./transaction-filters";
@@ -39,12 +40,14 @@ interface TransactionTableClientProps {
   transactions: Transaction[];
   pageSize?: number;
   isMonthView?: boolean;
+  showYearSelector?: boolean;
 }
 
 export function TransactionTableClient({
   transactions,
   pageSize = 50,
   isMonthView = false,
+  showYearSelector = false,
 }: TransactionTableClientProps) {
   const scrollTargetRef = useRef<HTMLDivElement>(null);
   const dateFilter = useDateFilter();
@@ -58,6 +61,7 @@ export function TransactionTableClient({
     selectedCategories,
     selectedTypes,
     selectedAccounts,
+    selectedYear,
     sortColumn,
     sortDirection,
     categories,
@@ -65,6 +69,7 @@ export function TransactionTableClient({
     accounts,
     accountCount,
     typeOptions,
+    availableYears,
     paginatedTransactions,
     filteredAndSortedTransactions,
     kpi,
@@ -72,6 +77,7 @@ export function TransactionTableClient({
     currentPage,
     handleSort,
     handleSearchChange,
+    handleYearChange,
     handleCategoriesChange,
     handleTypesChange,
     handleAccountsChange,
@@ -84,16 +90,30 @@ export function TransactionTableClient({
     transactions,
     selectedDate,
     pageSize,
+    yearFilterEnabled: showYearSelector,
   });
+
+  const yearSelector =
+    showYearSelector && selectedYear ? (
+      <Select
+        options={availableYears.map((year) => ({ value: year, label: `${year}年` }))}
+        value={selectedYear}
+        onChange={handleYearChange}
+        className="w-28"
+        aria-label="年を選択"
+        textCenter
+      />
+    ) : null;
 
   return (
     <Card ref={scrollTargetRef} className="scroll-mt-20">
       <CardHeader
         className="pb-4"
         action={
-          !isMonthView && !selectedDate && dateRange ? (
+          yearSelector ??
+          (!isMonthView && !selectedDate && dateRange ? (
             <span className="text-sm text-muted-foreground">{formatDateRange(dateRange)}</span>
-          ) : undefined
+          ) : undefined)
         }
       >
         <CardTitle icon={ListOrdered}>詳細一覧</CardTitle>

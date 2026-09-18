@@ -3,7 +3,11 @@
 import { PieChart as PieChartIcon } from "lucide-react";
 import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { COMPARISON_PERIOD_OPTIONS, type ComparisonPeriod } from "../../lib/chart";
+import {
+  CHART_INITIAL_DIMENSION,
+  COMPARISON_PERIOD_OPTIONS,
+  type ComparisonPeriod,
+} from "../../lib/chart";
 import { getAssetCategoryColor } from "../../lib/colors";
 import { formatCurrency } from "../../lib/format";
 import { chartTooltipStyle } from "../charts/chart-tooltip";
@@ -64,8 +68,12 @@ export function AssetBreakdownChartClient({
 
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
-  const periodData =
-    period === "daily" ? dailyChanges : period === "weekly" ? weeklyChanges : monthlyChanges;
+  const changesByPeriod: Record<ComparisonPeriod, PeriodChanges | null> = {
+    daily: dailyChanges,
+    weekly: weeklyChanges,
+    monthly: monthlyChanges,
+  };
+  const periodData = changesByPeriod[period];
 
   // Build a map of category changes for quick lookup
   const changeMap = new Map(periodData?.categories.map((c) => [c.name, c]) ?? []);
@@ -85,7 +93,11 @@ export function AssetBreakdownChartClient({
       <CardContent>
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
           <div className="w-32 h-32 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              initialDimension={CHART_INITIAL_DIMENSION}
+            >
               <PieChart>
                 <Pie
                   data={chartData}

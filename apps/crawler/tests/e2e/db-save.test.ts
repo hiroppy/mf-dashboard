@@ -1,9 +1,14 @@
 import path from "node:path";
 import { getDb, schema } from "@mf-dashboard/db";
-import { saveScrapedData } from "@mf-dashboard/db/repository/save-scraped-data";
+import {
+  normalizePortfolioCategories,
+  saveScrapedData,
+} from "@mf-dashboard/db/repository/save-scraped-data";
+import type { ScrapedData } from "@mf-dashboard/db/types";
 import { eq } from "drizzle-orm";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { runInstitutionCategoryPhase } from "../../src/crawler-phases.js";
 import { scrape } from "../../src/scraper.js";
 import {
   gotoHome,
@@ -20,6 +25,8 @@ const TEST_DB_PATH = path.join(TEST_DB_DIR, "test-moneyforward.db");
 
 let browser: Browser;
 let context: BrowserContext;
+let scrapedData: ScrapedData;
+let normalizedPortfolio: ScrapedData["portfolio"];
 
 beforeAll(async () => {
   // テスト用 DB パスを環境変数で設定
@@ -31,10 +38,16 @@ beforeAll(async () => {
     await gotoHome(page);
     await saveScreenshot(page, "db-save-test-before-scrape.png");
 
-    const data = await withErrorScreenshot(page, "db-save-test-error.png", () =>
+    scrapedData = await withErrorScreenshot(page, "db-save-test-error.png", () =>
       scrape(page, { skipRefresh: true }),
     );
-    await saveScrapedData(getDb(), data);
+    const institutionCategories = await runInstitutionCategoryPhase(page);
+    normalizedPortfolio = normalizePortfolioCategories(
+      scrapedData.portfolio,
+      scrapedData.registeredAccounts,
+      institutionCategories,
+    );
+    await saveScrapedData(getDb(), scrapedData, institutionCategories);
   });
 });
 
@@ -71,34 +84,13 @@ describe("DB保存", () => {
     expect(snapshots.length).toBeGreaterThan(0);
     const latestSnapshot = snapshots[snapshots.length - 1];
     const today = new Date().toISOString().split("T")[0];
-    expect(latestSnapshot.date).toBe(today);
+    expect(latestSnapshot.date === today).toBe(true);
   });
 
-  test("保有銘柄が保存される", async () => {
-    const db = getDb();
-    const holdings = await db.select().from(schema.holdings).all();
-    expect(holdings.length).toBeGreaterThan(0);
-    const assetHoldings = holdings.filter((h) => h.type === "asset");
-    expect(assetHoldings.length).toBeGreaterThan(0);
-  });
-
-  test("評価額が保存される", async () => {
+  test("取得したポートフォリオが値を欠落させず保存される", async () => {
     const db = getDb();
     const snapshots = await db.select().from(schema.dailySnapshots).all();
     const latestSnapshot = snapshots[snapshots.length - 1];
-    const holdingValues = await db
-      .select()
-      .from(schema.holdingValues)
-      .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id))
-      .all();
-    expect(holdingValues.length).toBeGreaterThan(0);
-  });
-
-  test("投資銘柄の詳細値が保存される", async () => {
-    const db = getDb();
-    const snapshots = await db.select().from(schema.dailySnapshots).all();
-    const latestSnapshot = snapshots[snapshots.length - 1];
-    // 投資信託か株式のholding valuesを取得
     const holdingValues = await db
       .select()
       .from(schema.holdingValues)
@@ -107,22 +99,38 @@ describe("DB保存", () => {
       .where(eq(schema.holdingValues.snapshotId, latestSnapshot.id))
       .all();
 
-    // 投資信託か株式のレコードを探す
-    const investmentHoldings = holdingValues.filter(
-      (hv) => hv.asset_categories.name === "投資信託" || hv.asset_categories.name === "株式(現物)",
-    );
+    const expected = normalizedPortfolio.items
+      .map((item) => ({
+        name: item.name,
+        category: item.type,
+        amount: Number.isFinite(item.balance) ? item.balance : 0,
+        quantity: item.quantity ?? null,
+        unitPrice: item.unitPrice ?? null,
+        avgCostPrice: item.avgCostPrice ?? null,
+        dailyChange: item.dailyChange ?? null,
+        unrealizedGain: item.unrealizedGain ?? null,
+        unrealizedGainPct: item.unrealizedGainPct ?? null,
+      }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    const actual = holdingValues
+      .filter(({ holdings }) => holdings.type === "asset")
+      .map(({ holdings, holding_values: value, asset_categories: category }) => ({
+        name: holdings.name,
+        category: category.name,
+        amount: value.amount,
+        quantity: value.quantity,
+        unitPrice: value.unitPrice,
+        avgCostPrice: value.avgCostPrice,
+        dailyChange: value.dailyChange,
+        unrealizedGain: value.unrealizedGain,
+        unrealizedGainPct: value.unrealizedGainPct,
+      }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-    if (investmentHoldings.length > 0) {
-      const sample = investmentHoldings[0].holding_values;
-      // 数量が保存されている
-      expect(sample.quantity).not.toBeNull();
-      // 単価が保存されている
-      expect(sample.unitPrice).not.toBeNull();
-      // 前日比は0も有効な値なのでnullでないことのみ確認
-      expect(sample.dailyChange).not.toBeNull();
-      // 評価損益が保存されている
-      expect(sample.unrealizedGain).not.toBeNull();
-    }
+    expect(actual.length).toBe(expected.length);
+    expect(
+      actual.every((value, index) => JSON.stringify(value) === JSON.stringify(expected[index])),
+    ).toBe(true);
   });
 
   test("口座ステータスが保存される", async () => {
@@ -133,12 +141,12 @@ describe("DB保存", () => {
 
   // Note: monthly_summary, yearly_summary, and monthly_category_totals are now calculated dynamically from transactions
 
-  test("トランザクションが保存される", async () => {
+  test("保存されたトランザクションIDが有効で重複しない", async () => {
     const db = getDb();
     const transactions = await db.select().from(schema.transactions).all();
-    expect(transactions.length).toBeGreaterThan(0);
-    // mfId がユニーク
-    const mfIds = transactions.map((t) => t.mfId);
-    expect(new Set(mfIds).size).toBe(transactions.length);
+    const mfIds = transactions.map((transaction) => transaction.mfId);
+
+    expect(mfIds.every((mfId) => Boolean(mfId) && !mfId.startsWith("unknown"))).toBe(true);
+    expect(new Set(mfIds).size).toBe(mfIds.length);
   });
 });

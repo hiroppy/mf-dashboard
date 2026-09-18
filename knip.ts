@@ -2,17 +2,14 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   workspaces: {
-    "apps/web": {
-      ignoreDependencies: ["postcss"],
-    },
     "apps/crawler": {
       ignore: ["src/hooks/helpers.ts"],
     },
-    "apps/simulator": {
-      ignoreDependencies: ["postcss"],
+    "apps/web": {
+      entry: ["e2e/mock-crawler-server.ts"],
     },
-    "apps/mcp": {
-      ignoreDependencies: ["@libsql/client"],
+    "packages/db": {
+      entry: ["src/migrate.ts"],
     },
   },
 };

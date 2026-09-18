@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, test, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import * as schema from "./schema/schema";
 import { createTestDb, resetTestDb, closeTestDb } from "./test-helpers";
 import { now, parseAmount, convertToIsoDate, upsertById, upsertOne, getOrCreate } from "./utils";
@@ -65,6 +65,17 @@ describe("convertToIsoDate", () => {
 
   test("04/22(火) 形式を変換する", async () => {
     expect(convertToIsoDate("04/22(火)", 2025)).toBe("2025-04-22");
+  });
+
+  test("年指定なしの場合はJST基準の現在年を使う", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-12-31T15:00:00.000Z"));
+
+    try {
+      expect(convertToIsoDate("01/01(木)")).toBe("2026-01-01");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("04/25 08:51 形式を変換する", async () => {

@@ -1,0 +1,44 @@
+node_modules
+**/node_modules
+.next
+**/.next
+out
+**/out
+storybook-static
+**/storybook-static
+.turbo
+**/.turbo
+dist
+**/dist
+.git
+.github
+.worktrees
+.playwright-mcp
+playwright-report
+test-results
+debug
+**/debug
+
+# 機密
+.env
+.env.*
+!.env.example
+data/*
+secrets/*
+apps/crawler/tests/e2e/*.db
+apps/crawler/tests/e2e/*.db-shm
+apps/crawler/tests/e2e/*.db-wal
+apps/crawler/tests/e2e/screenshots
+
+# Terraform local state
+terraform/.terraform
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/*.tfvars.bak.*
+terraform/.env
+
+# その他
+docs
+*.md
+!README.md

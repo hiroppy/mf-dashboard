@@ -2,7 +2,7 @@ import { getAccountByMfId } from "@mf-dashboard/db";
 import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
 import { TrendingUp } from "lucide-react";
 import { EmptyState } from "../ui/empty-state";
-import { UnrealizedGainCardClient } from "./unrealized-gain-card.client";
+import { HoldingsFilterReset, UnrealizedGainCardClient } from "./unrealized-gain-card.client";
 
 interface UnrealizedGainCardProps {
   className?: string;
@@ -19,7 +19,12 @@ export async function UnrealizedGainCard({ className, mfId, groupId }: Unrealize
 
   if (withGain.length === 0) {
     if (mfId) return null;
-    return <EmptyState icon={TrendingUp} title="含み損益" />;
+    return (
+      <>
+        <HoldingsFilterReset />
+        <EmptyState icon={TrendingUp} title="含み損益" />
+      </>
+    );
   }
 
   const holdingsData = withGain.map((h) => ({

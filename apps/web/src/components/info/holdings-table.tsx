@@ -1,17 +1,25 @@
-import { getAccountByMfId } from "@mf-dashboard/db";
-import { getLatestTotalAssets } from "@mf-dashboard/db";
-import { getHoldingsByAccountId, getHoldingsWithLatestValues } from "@mf-dashboard/db";
+import {
+  getAccountByMfId,
+  getHoldingsByAccountId,
+  getHoldingsWithLatestValues,
+  getLatestTotalAssets,
+} from "@mf-dashboard/db";
 import { LucideIcon, PiggyBankIcon, LandmarkIcon } from "lucide-react";
-import { AmountDisplay } from "../ui/amount-display";
+import { sortByAmountDescending } from "../../lib/amount-order";
 import { Card, CardHeader, CardTitle } from "../ui/card";
 import { EmptyState } from "../ui/empty-state";
-import { HoldingsTableClient } from "./holdings-table.client";
+import {
+  type CategoryGroup,
+  HoldingsTableClient,
+  HoldingsTableTotal,
+} from "./holdings-table.client";
 
 interface HoldingsTableProps {
   type: "asset" | "liability";
   icon?: LucideIcon;
   mfId?: string;
   groupId?: string;
+  enableSharedFilter?: boolean;
 }
 
 const CONFIG = {
@@ -25,7 +33,13 @@ const CONFIG = {
   },
 } as const;
 
-export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTableProps) {
+export async function HoldingsTable({
+  type,
+  icon,
+  mfId,
+  groupId,
+  enableSharedFilter = false,
+}: HoldingsTableProps) {
   const account = mfId ? await getAccountByMfId(mfId, groupId) : null;
   const allHoldings = account
     ? await getHoldingsByAccountId(account.id, groupId)
@@ -40,49 +54,25 @@ export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTable
     return <EmptyState icon={Icon} title={config.title} />;
   }
 
-  // Calculate total based on type
-  let total: number;
-  if (mfId) {
-    total = holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  } else if (type === "asset") {
-    // Use asset_history for total assets
-    total =
-      (await getLatestTotalAssets(groupId)) ??
-      holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  } else {
-    // For liabilities, sum from holdings
-    total = holdings.reduce((sum, h) => sum + (h.amount || 0), 0);
-  }
+  const holdingsTotal = holdings.reduce((sum, holding) => sum + (holding.amount ?? 0), 0);
+  const total =
+    !mfId && type === "asset"
+      ? ((await getLatestTotalAssets(groupId)) ?? holdingsTotal)
+      : holdingsTotal;
 
   // Group holdings by category
-  const grouped = holdings.reduce<
-    Record<
-      string,
-      Array<{
-        id: number;
-        name: string;
-        accountName: string | null;
-        amount: number | null;
-        unrealizedGain: number | null;
-        unrealizedGainPct: number | null;
-        dailyChange: number | null;
-        avgCostPrice: number | null;
-        quantity: number | null;
-        unitPrice: number | null;
-      }>
-    >
-  >((acc, holding) => {
+  const grouped = holdings.reduce<Record<string, CategoryGroup["items"]>>((acc, holding) => {
     const category =
       holding.type === "liability"
         ? holding.liabilityCategory || "その他"
         : holding.categoryName || "その他";
-    if (!acc[category]) {
-      acc[category] = [];
-    }
+    acc[category] ??= [];
     acc[category].push({
       id: holding.id,
       name: holding.name,
       accountName: holding.accountName,
+      institution: holding.institution,
+      categoryName: holding.categoryName,
       amount: holding.amount,
       unrealizedGain: holding.unrealizedGain,
       unrealizedGainPct: holding.unrealizedGainPct,
@@ -94,23 +84,37 @@ export async function HoldingsTable({ type, icon, mfId, groupId }: HoldingsTable
     return acc;
   }, {});
 
-  const categories = Object.entries(grouped)
-    .map(([category, items]) => ({
+  const orderedCategories = sortByAmountDescending(
+    Object.entries(grouped).map(([category, items]) => ({
       category,
-      items: items.sort((a, b) => (b.amount || 0) - (a.amount || 0)),
-      total: items.reduce((sum, h) => sum + (h.amount || 0), 0),
-    }))
-    .sort((a, b) => b.total - a.total);
+      items: sortByAmountDescending(
+        items,
+        (item) => item.amount,
+        (item) => `${item.name}\u0000${item.id}`,
+      ),
+      total: items.reduce((sum, h) => sum + (h.amount ?? 0), 0),
+    })),
+    (category) => category.total,
+    (category) => category.category,
+  );
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle icon={Icon}>{config.title}</CardTitle>
-          <AmountDisplay amount={total} size="lg" weight="bold" />
+          <HoldingsTableTotal
+            categories={orderedCategories}
+            total={total}
+            enableSharedFilter={enableSharedFilter}
+          />
         </div>
       </CardHeader>
-      <HoldingsTableClient categories={categories} hideAccountName={!!mfId} />
+      <HoldingsTableClient
+        categories={orderedCategories}
+        hideAccountName={!!mfId}
+        enableSharedFilter={enableSharedFilter}
+      />
     </Card>
   );
 }

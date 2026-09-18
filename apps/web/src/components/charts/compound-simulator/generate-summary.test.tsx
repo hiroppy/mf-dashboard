@@ -175,6 +175,21 @@ describe("generateSummary", () => {
       expect(text).toContain("以降インフレ率に応じて増額します");
     });
 
+    test("uses the grossed-up tax rate in the effective withdrawal rate", () => {
+      const text = renderText({
+        ...baseInput,
+        withdrawalYears: 25,
+        withdrawalMode: "rate",
+        withdrawalRate: 4,
+        monthlyWithdrawal: 50_000,
+        finalTotal: 796_850,
+        finalPrincipal: 0,
+        finalInterest: 796_850,
+      });
+
+      expect(text).toContain("実質引出率は約5.0%");
+    });
+
     test("generates rate mode summary text without effective rate when taxFree", () => {
       const text = renderText({
         ...baseInput,

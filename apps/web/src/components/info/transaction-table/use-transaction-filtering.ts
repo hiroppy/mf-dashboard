@@ -1,14 +1,26 @@
 import { useMemo, useState } from "react";
-import { countBy, filterTransactions, sortTransactions } from "../../../lib/transaction-utils";
+import {
+  countBy,
+  filterTransactions,
+  filterTransactionsByYear,
+  sortTransactions,
+} from "../../../lib/transaction-utils";
 import type { SortColumn, Transaction, TransactionKpi } from "./types";
 
 interface UseTransactionFilteringOptions {
   transactions: Transaction[];
   selectedDate: string | null;
   pageSize: number;
+  yearFilterEnabled?: boolean;
 }
 
 const TYPE_OPTIONS = ["income", "expense", "transfer"];
+
+function getAvailableYears(transactions: Transaction[]): string[] {
+  return Array.from(
+    new Set(transactions.map((transaction) => transaction.date.substring(0, 4))),
+  ).sort((a, b) => b.localeCompare(a));
+}
 
 function getSortedCountMap<T>(
   items: T[],
@@ -63,7 +75,19 @@ export function useTransactionFiltering({
   transactions,
   selectedDate,
   pageSize,
+  yearFilterEnabled = false,
 }: UseTransactionFilteringOptions) {
+  const availableYears = useMemo(() => getAvailableYears(transactions), [transactions]);
+  const [preferredYear, setPreferredYear] = useState<string | null>(
+    yearFilterEnabled ? (availableYears[0] ?? null) : null,
+  );
+  let selectedYear: string | null = null;
+  if (yearFilterEnabled) {
+    selectedYear =
+      preferredYear && availableYears.includes(preferredYear)
+        ? preferredYear
+        : (availableYears[0] ?? null);
+  }
   const [searchText, setSearchText] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -72,21 +96,26 @@ export function useTransactionFiltering({
   const [sortColumn, setSortColumn] = useState<SortColumn>("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
+  const transactionsInSelectedYear = useMemo(
+    () => filterTransactionsByYear(transactions, selectedYear),
+    [transactions, selectedYear],
+  );
+
   // Get unique categories with count, sorted by count descending
   const { keys: categories, countMap: categoryCount } = useMemo(
-    () => getSortedCountMap(transactions, (t) => t.category ?? "振替"),
-    [transactions],
+    () => getSortedCountMap(transactionsInSelectedYear, (t) => t.category ?? "振替"),
+    [transactionsInSelectedYear],
   );
 
   // Get unique accounts with count, sorted by count descending
   const { keys: accounts, countMap: accountCount } = useMemo(
-    () => getSortedCountMap(transactions, (t) => t.accountName ?? "不明"),
-    [transactions],
+    () => getSortedCountMap(transactionsInSelectedYear, (t) => t.accountName ?? "不明"),
+    [transactionsInSelectedYear],
   );
 
   // Filter and sort transactions using pure functions
   const filteredAndSortedTransactions = useMemo(() => {
-    const filtered = filterTransactions(transactions, {
+    const filtered = filterTransactions(transactionsInSelectedYear, {
       searchText,
       categories: selectedCategories,
       types: selectedTypes,
@@ -95,7 +124,7 @@ export function useTransactionFiltering({
     });
     return sortTransactions(filtered, sortColumn, sortDirection);
   }, [
-    transactions,
+    transactionsInSelectedYear,
     searchText,
     selectedCategories,
     selectedTypes,
@@ -113,9 +142,10 @@ export function useTransactionFiltering({
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedTransactions.length / pageSize);
+  const displayedPage = Math.min(currentPage, Math.max(totalPages - 1, 0));
   const paginatedTransactions = filteredAndSortedTransactions.slice(
-    currentPage * pageSize,
-    (currentPage + 1) * pageSize,
+    displayedPage * pageSize,
+    (displayedPage + 1) * pageSize,
   );
 
   const resetPage = () => {
@@ -134,6 +164,11 @@ export function useTransactionFiltering({
 
   const handleSearchChange = (value: string) => {
     setSearchText(value);
+    resetPage();
+  };
+
+  const handleYearChange = (year: string) => {
+    setPreferredYear(year);
     resetPage();
   };
 
@@ -181,7 +216,8 @@ export function useTransactionFiltering({
     selectedCategories,
     selectedTypes,
     selectedAccounts,
-    currentPage,
+    selectedYear,
+    currentPage: displayedPage,
     sortColumn,
     sortDirection,
     // Computed
@@ -190,6 +226,7 @@ export function useTransactionFiltering({
     accounts,
     accountCount,
     typeOptions: TYPE_OPTIONS,
+    availableYears,
     filteredAndSortedTransactions,
     paginatedTransactions,
     kpi,
@@ -197,6 +234,7 @@ export function useTransactionFiltering({
     // Handlers
     handleSort,
     handleSearchChange,
+    handleYearChange,
     handleCategoriesChange,
     handleTypesChange,
     handleAccountsChange,

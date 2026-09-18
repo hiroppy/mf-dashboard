@@ -5,6 +5,7 @@ import { AssetHistoryChart } from "../../components/info/asset-history-chart";
 import { BalanceSheetChart } from "../../components/info/balance-sheet-chart";
 import { HoldingsTable } from "../../components/info/holdings-table";
 import { UnrealizedGainCard } from "../../components/info/unrealized-gain-card";
+import { HoldingsFilterProvider } from "../../components/info/unrealized-gain-card.client";
 import { PageLayout } from "../../components/layout/page-layout";
 
 export const metadata: Metadata = {
@@ -18,8 +19,10 @@ export async function BSContent({ groupId }: { groupId?: string }) {
     <PageLayout title="資産" href={mfUrls.portfolio}>
       <BalanceSheetChart groupId={groupId} />
       <AssetHistoryChart groupId={groupId} />
-      {showUnrealizedGain && <UnrealizedGainCard groupId={groupId} />}
-      <HoldingsTable type="asset" groupId={groupId} />
+      <HoldingsFilterProvider filterAvailable={showUnrealizedGain}>
+        {showUnrealizedGain && <UnrealizedGainCard groupId={groupId} />}
+        <HoldingsTable type="asset" groupId={groupId} enableSharedFilter />
+      </HoldingsFilterProvider>
       <HoldingsTable type="liability" groupId={groupId} />
     </PageLayout>
   );

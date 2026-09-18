@@ -1,11 +1,18 @@
+import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import { eq } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
-import type { ScrapedData } from "../types";
+import type { Portfolio, PortfolioItem, RegisteredAccounts, ScrapedData } from "../types";
 import { now } from "../utils";
-import { upsertAccounts, saveAccountStatuses, buildAccountIdMap } from "./accounts";
+import {
+  upsertAccounts,
+  saveAccountStatuses,
+  buildAccountIdMap,
+  updateAccountCategory,
+} from "./accounts";
 import { getOrCreateCategory } from "./categories";
 import {
+  deleteGroupsNotIn,
   upsertGroup,
   updateGroupLastScrapedAt,
   clearGroupAccountLinks,
@@ -15,11 +22,106 @@ import { createHolding, saveHoldingValue } from "./holdings";
 import { createSnapshot } from "./snapshots";
 import { saveSpendingTargets } from "./spending-targets";
 import { saveAssetHistory } from "./summaries";
-import { saveTransaction } from "./transactions";
+import {
+  assertNonOverlappingTransactionRanges,
+  replaceTransactionsForMonth,
+  type TransactionPeriodReplacement,
+} from "./transactions";
 
 const isCI = process.env.CI === "true";
+const DEPOSIT_ASSET_CATEGORY = "預金・現金";
+const CRYPTO_ASSET_CATEGORY = "暗号資産";
+const CRYPTO_INSTITUTION_CATEGORY = "暗号資産・FX・貴金属";
+
 function log(...args: unknown[]) {
   if (!isCI) console.log(...args);
+}
+
+function buildCurrentAccountMfIdByName(
+  registeredAccounts: RegisteredAccounts,
+): ReadonlyMap<string, string | null> {
+  const accountMfIdByName = new Map<string, string | null>();
+
+  for (const account of registeredAccounts.accounts) {
+    const existingMfId = accountMfIdByName.get(account.name);
+    if (existingMfId === undefined) {
+      accountMfIdByName.set(account.name, account.mfId);
+    } else if (existingMfId !== account.mfId) {
+      accountMfIdByName.set(account.name, null);
+    }
+  }
+
+  return accountMfIdByName;
+}
+
+function resolvePortfolioAccountMfId(
+  item: PortfolioItem,
+  currentAccountMfIds: ReadonlySet<string>,
+  accountMfIdByName: ReadonlyMap<string, string | null>,
+): string | null {
+  if (item.accountMfId) {
+    return currentAccountMfIds.has(item.accountMfId) ? item.accountMfId : null;
+  }
+
+  return accountMfIdByName.get(item.institution) ?? null;
+}
+
+export function normalizePortfolioCategories(
+  portfolio: Portfolio,
+  registeredAccounts: RegisteredAccounts,
+  institutionCategories: ReadonlyMap<string, string> = new Map(),
+): Portfolio {
+  const currentAccountMfIds = new Set(registeredAccounts.accounts.map((account) => account.mfId));
+  const accountMfIdByName = buildCurrentAccountMfIdByName(registeredAccounts);
+
+  return {
+    ...portfolio,
+    items: portfolio.items.map((item) => {
+      if (item.type !== DEPOSIT_ASSET_CATEGORY) return item;
+
+      const accountMfId = resolvePortfolioAccountMfId(item, currentAccountMfIds, accountMfIdByName);
+      let institutionCategory = accountMfId ? institutionCategories.get(accountMfId) : undefined;
+      if (!accountMfId && !item.accountMfId) {
+        // Duplicate account names need not prevent classification when every
+        // candidate has the same known category. Account ownership stays unresolved.
+        const candidates = registeredAccounts.accounts
+          .filter((account) => account.name === item.institution)
+          .map((account) => institutionCategories.get(account.mfId));
+        if (
+          candidates.length > 0 &&
+          candidates.every((category) => category && category === candidates[0])
+        ) {
+          institutionCategory = candidates[0];
+        }
+      }
+      if (!institutionCategory) {
+        throw new Error("Cannot classify a deposit without a unique current account category");
+      }
+
+      return {
+        ...item,
+        type:
+          institutionCategory === CRYPTO_INSTITUTION_CATEGORY
+            ? CRYPTO_ASSET_CATEGORY
+            : DEPOSIT_ASSET_CATEGORY,
+      };
+    }),
+  };
+}
+
+function resolveHoldingAccountId(
+  accountIdByMfId: ReadonlyMap<string, number>,
+  accountIdByName: Map<string, number | null>,
+  item: { accountMfId?: string; institution: string },
+  fallbackAccountId: number,
+): number {
+  if (item.accountMfId) {
+    return accountIdByMfId.get(item.accountMfId) ?? fallbackAccountId;
+  }
+
+  const institutionAccountId = accountIdByName.get(item.institution);
+  if (institutionAccountId != null) return institutionAccountId;
+  return fallbackAccountId;
 }
 
 /**
@@ -29,8 +131,72 @@ function log(...args: unknown[]) {
  * - assetHistory, spendingTargets
  * - group_accountsへのリンク
  */
-export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> {
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
+export async function saveScrapedData(
+  db: Db,
+  data: ScrapedData,
+  institutionCategories: ReadonlyMap<string, string> = new Map(),
+): Promise<void> {
+  await saveScrapedDataBatch(db, {
+    fullData: data,
+    groupOnlyData: [],
+    institutionCategories,
+  });
+}
+
+export async function saveScrapedDataBatch(
+  db: Db,
+  data: {
+    cleanupGroupIds?: string[];
+    fullData?: ScrapedData;
+    groupOnlyData: ScrapedData[];
+    historyMonths?: TransactionPeriodReplacement[];
+    institutionCategories?: ReadonlyMap<string, string>;
+  },
+): Promise<number[]> {
+  const fullData = data.fullData
+    ? {
+        ...data.fullData,
+        portfolio: normalizePortfolioCategories(
+          data.fullData.portfolio,
+          data.fullData.registeredAccounts,
+          data.institutionCategories,
+        ),
+      }
+    : undefined;
+
+  return db.transaction(async (transaction) => {
+    if (fullData) await saveScrapedDataAtomically(transaction, fullData);
+    for (const groupData of data.groupOnlyData) {
+      await saveGroupOnlyDataAtomically(transaction, groupData);
+    }
+    for (const [mfId, category] of data.institutionCategories ?? []) {
+      await updateAccountCategory(transaction, mfId, category);
+    }
+
+    const savedCounts: number[] = [];
+    if (data.historyMonths?.length) {
+      assertNonOverlappingTransactionRanges(data.historyMonths);
+      const accountIdMap = await buildAccountIdMap(transaction);
+      for (const { dateRange, isComplete, items, month } of data.historyMonths) {
+        savedCounts.push(
+          await replaceTransactionsForMonth(
+            transaction,
+            month,
+            items,
+            accountIdMap,
+            dateRange,
+            isComplete,
+          ),
+        );
+      }
+    }
+    if (data.cleanupGroupIds) await deleteGroupsNotIn(transaction, data.cleanupGroupIds);
+    return savedCounts;
+  });
+}
+
+async function saveScrapedDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
+  const today = getJstTodayIsoDate();
 
   log("Saving scraped data to database...");
 
@@ -53,26 +219,19 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
   const accountIdMap = await buildAccountIdMap(db);
   log(`  - accountIdMap: ${accountIdMap.size} entries`);
 
-  // Portfolio/liability保存時は mfId 優先で解決し、同名複数口座の曖昧解決を避ける
-  const accountRows = await db
-    .select({ id: schema.accounts.id, mfId: schema.accounts.mfId, name: schema.accounts.name })
-    .from(schema.accounts)
-    .all();
-  const statusRows = await db
-    .select({ accountId: schema.accountStatuses.accountId, totalAssets: schema.accountStatuses.totalAssets })
-    .from(schema.accountStatuses)
-    .all();
-  const accountIdByMfId = new Map(accountRows.map((account) => [account.mfId, account.id]));
-  const totalAssetsByAccountId = new Map(
-    statusRows.map((status) => [status.accountId, status.totalAssets ?? 0]),
-  );
-  const accountIdsByName = new Map<string, number[]>();
-  const normalizeAccountName = (value: string): string => value.trim().replace(/\s+/g, " ");
-  for (const account of accountRows) {
-    const key = normalizeAccountName(account.name);
-    const ids = accountIdsByName.get(key) ?? [];
-    ids.push(account.id);
-    accountIdsByName.set(key, ids);
+  const currentAccountIdByName = new Map<string, number | null>();
+  const currentAccountIdByMfId = new Map<string, number>();
+  for (const account of data.registeredAccounts.accounts) {
+    const accountId = accountIdMap.get(account.mfId);
+    if (accountId === undefined) continue;
+
+    currentAccountIdByMfId.set(account.mfId, accountId);
+    const existingAccountId = currentAccountIdByName.get(account.name);
+    if (existingAccountId === undefined) {
+      currentAccountIdByName.set(account.name, accountId);
+    } else if (existingAccountId !== accountId) {
+      currentAccountIdByName.set(account.name, null);
+    }
   }
 
   // 4. Group-account links (バルク処理)
@@ -123,59 +282,15 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
       .get();
   }
   const unknownAccountId = unknownAccount.id;
-  const pickBestFromCandidates = (candidateIds: number[], amount?: number): number => {
-    if (candidateIds.length === 1) return candidateIds[0];
-
-    if (amount !== undefined) {
-      const roundedAmount = Math.round(Math.abs(amount));
-      const exactMatch = candidateIds.find(
-        (accountId) => (totalAssetsByAccountId.get(accountId) ?? 0) === roundedAmount,
-      );
-      if (exactMatch) return exactMatch;
-    }
-
-    return candidateIds
-      .slice()
-      .sort((a, b) => (totalAssetsByAccountId.get(b) ?? 0) - (totalAssetsByAccountId.get(a) ?? 0))[0];
-  };
-
-  const resolveAccountId = (item: {
-    mfId?: string;
-    institution?: string;
-    name?: string;
-    type?: string;
-    balance?: number;
-  }): number => {
-    if (item.mfId) {
-      const accountId = accountIdByMfId.get(item.mfId);
-      if (accountId) return accountId;
-    }
-
-    const institution = item.institution?.trim();
-    if (institution) {
-      const ids = accountIdsByName.get(normalizeAccountName(institution));
-      if (ids && ids.length > 0) {
-        return pickBestFromCandidates(ids, item.balance);
-      }
-    }
-
-    // 年金テーブルの自動取得行はmfId・金融機関名を持たないため、DC口座と見なす
-    // 名称に依存しない判定で「待機資金」のような汎用名称にも対応
-    if (item.type === "年金" && !item.mfId && !item.institution) {
-      const dcIds = accountRows
-        .filter((account) => /(DC|確定拠出年金)/.test(account.name))
-        .map((account) => account.id);
-      if (dcIds.length > 0) {
-        return pickBestFromCandidates(dcIds, item.balance);
-      }
-    }
-
-    return unknownAccountId;
-  };
 
   // 8. Save portfolio
   for (const item of data.portfolio.items) {
-    const accountId = resolveAccountId(item);
+    const accountId = resolveHoldingAccountId(
+      currentAccountIdByMfId,
+      currentAccountIdByName,
+      item,
+      unknownAccountId,
+    );
     const categoryId = await getOrCreateCategory(db, item.type);
     const holdingId = await createHolding(db, accountId, item.name, "asset", {
       categoryId,
@@ -196,7 +311,12 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
 
   // 9. Save liabilities
   for (const liability of data.liabilities.items) {
-    const accountId = resolveAccountId(liability);
+    const accountId = resolveHoldingAccountId(
+      currentAccountIdByMfId,
+      currentAccountIdByName,
+      liability,
+      unknownAccountId,
+    );
     const holdingId = await createHolding(db, accountId, liability.name, "liability", {
       liabilityCategory: liability.category,
     });
@@ -205,19 +325,17 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
   log(`  - Liabilities: ${data.liabilities.items.length}`);
 
   // 10. Save transactions
-  let insertedCount = 0;
-  let updatedCount = 0;
-  let skippedCount = 0;
-  for (const item of data.cashFlow.items) {
-    const result = await saveTransaction(db, item, accountIdMap);
-    if (result === "inserted") insertedCount++;
-    if (result === "updated") updatedCount++;
-    if (result === "skipped") skippedCount++;
-  }
-  const savedCount = insertedCount + updatedCount;
-  log(
-    `  - Transactions: ${savedCount}/${data.cashFlow.items.length} (inserted: ${insertedCount}, updated: ${updatedCount}, skipped: ${skippedCount})`,
+  const savedCount = await replaceTransactionsForMonth(
+    db,
+    data.cashFlow.month,
+    data.cashFlow.items,
+    accountIdMap,
+    data.cashFlow.periodStart && data.cashFlow.periodEnd
+      ? { from: data.cashFlow.periodStart, to: data.cashFlow.periodEnd }
+      : undefined,
+    data.cashFlow.isComplete,
   );
+  log(`  - Transactions: ${savedCount}/${data.cashFlow.items.length}`);
 
   // 11. Save asset history
   if (data.assetHistory?.points?.length > 0) {
@@ -244,6 +362,10 @@ export async function saveScrapedData(db: Db, data: ScrapedData): Promise<void> 
  * - spendingTargets
  */
 export async function saveGroupOnlyData(db: Db, data: ScrapedData): Promise<void> {
+  await saveScrapedDataBatch(db, { groupOnlyData: [data] });
+}
+
+async function saveGroupOnlyDataAtomically(db: DbExecutor, data: ScrapedData): Promise<void> {
   log("Saving group-only data to database...");
 
   // 1. Save group

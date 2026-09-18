@@ -498,6 +498,51 @@ describe("simulateMonteCarlo", () => {
       }
     });
 
+    it("should base first rate withdrawal on withdrawal-start median before monthly growth", () => {
+      const annualWithdrawalRate = 4;
+      const withdrawalStartYear = 5;
+      const result = simulateMonteCarlo({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 12,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear,
+        annualWithdrawalRate,
+        withdrawalYears: 1,
+        taxFree: true,
+      });
+
+      const withdrawalStart = result.yearlyData.find((d) => d.year === withdrawalStartYear)!;
+      const firstWithdrawalYear = result.yearlyData.find(
+        (d) => d.year === withdrawalStartYear + 1,
+      )!;
+
+      expect(firstWithdrawalYear.medianYearlyWithdrawal).toBe(
+        Math.round((withdrawalStart.p50 * annualWithdrawalRate) / 100),
+      );
+    });
+
+    it("should not reseed rate withdrawal when withdrawal-start median is zero", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 0,
+        monthlyContribution: 100_000,
+        annualReturnRate: 0,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 2,
+        withdrawalStartYear: 0,
+        annualWithdrawalRate: 4,
+        withdrawalYears: 2,
+        taxFree: true,
+      });
+
+      const withdrawals = result.yearlyData.filter((d) => d.isWithdrawing);
+      expect(withdrawals.map((d) => d.medianYearlyWithdrawal)).toEqual([0, 0]);
+      expect(result.yearlyData[2].p50).toBe(2_400_000);
+    });
+
     it("should keep withdrawal constant in real terms with positive inflation (trinity study)", () => {
       // Trinity Study: withdrawal is inflation-adjusted (nominal increases with inflation).
       // In the MC simulation (which works in real terms), this means the withdrawal
@@ -520,6 +565,28 @@ describe("simulateMonteCarlo", () => {
       for (const yd of withdrawYears) {
         expect(yd.medianYearlyWithdrawal).toBe(firstWithdrawal);
       }
+    });
+
+    it("should match a standalone run for a withdrawal-rate sensitivity row", () => {
+      const base = {
+        initialAmount: 10_000_000,
+        monthlyContribution: 50_000,
+        annualReturnRate: 5,
+        volatility: 15,
+        inflationRate: 2,
+        contributionYears: 10,
+        withdrawalStartYear: 10,
+        annualWithdrawalRate: 4,
+        withdrawalYears: 25,
+      };
+      const sensitivity = simulateMonteCarlo({ ...base, rateDeltas: [-1] });
+      const standalone = simulateMonteCarlo({ ...base, annualWithdrawalRate: 3, rateDeltas: [0] });
+      const sensitivityRow = sensitivity.sensitivityRows!.find((row) => row.delta === -1)!;
+      const standaloneRow = standalone.sensitivityRows!.find((row) => row.delta === 0)!;
+
+      expect(sensitivityRow.depletionProbability).toBe(standaloneRow.depletionProbability);
+      expect(sensitivityRow.medianFinalBalance).toBe(standaloneRow.medianFinalBalance);
+      expect(sensitivityRow.securityScore).toBe(standaloneRow.securityScore);
     });
   });
 
@@ -699,6 +766,52 @@ describe("simulateMonteCarlo", () => {
   });
 
   describe("inflation-adjusted withdrawal", () => {
+    it("should reset the real withdrawal at each annual boundary", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 3,
+        volatility: 0,
+        inflationRate: 3,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 2,
+        inflationAdjustedWithdrawal: true,
+        taxFree: true,
+      });
+
+      const firstYearWithdrawal = result.yearlyData[0].p50 - result.yearlyData[1].p50;
+      const secondYearWithdrawal = result.yearlyData[1].p50 - result.yearlyData[2].p50;
+
+      expect(firstYearWithdrawal).toBeLessThan(1_200_000);
+      expect(secondYearWithdrawal).toBeCloseTo(firstYearWithdrawal, -1);
+    });
+
+    it("should deflate income with the withdrawal within each year", () => {
+      const base = {
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 3,
+        volatility: 0,
+        inflationRate: 3,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 2,
+        inflationAdjustedWithdrawal: true,
+        taxFree: true,
+      };
+      const withoutIncome = simulateMonteCarlo(base);
+      const withIncome = simulateMonteCarlo({ ...base, monthlyOtherIncome: 90_000 });
+      const firstYearIncome = withIncome.yearlyData[1].p50 - withoutIncome.yearlyData[1].p50;
+      const secondYearIncome =
+        withIncome.yearlyData[2].p50 - withoutIncome.yearlyData[2].p50 - firstYearIncome;
+
+      expect(firstYearIncome).toBeLessThan(90_000 * 12);
+      expect(secondYearIncome).toBeCloseTo(firstYearIncome / 1.03, -1);
+    });
+
     it("should deplete faster with inflation-adjusted withdrawal", () => {
       const base = {
         initialAmount: 5_000_000,
@@ -1095,6 +1208,7 @@ describe("simulateMonteCarlo", () => {
       // Same z values, same computation → same results
       expect(row60kFromBase60k!.depletionProbability).toBe(row60kFromBase50k!.depletionProbability);
       expect(row60kFromBase60k!.medianFinalBalance).toBe(row60kFromBase50k!.medianFinalBalance);
+      expect(row60kFromBase60k!.securityScore).toBe(row60kFromBase50k!.securityScore);
     });
 
     it("returns undefined sensitivityRows when no deltas provided", () => {
@@ -1107,6 +1221,23 @@ describe("simulateMonteCarlo", () => {
   });
 
   describe("probability invariant", () => {
+    it("counts only withdrawals that the portfolio can actually fund", () => {
+      const result = simulateMonteCarlo({
+        initialAmount: 1_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: -50,
+        volatility: 0,
+        inflationRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear: 0,
+        monthlyWithdrawal: 10_000_000,
+        withdrawalYears: 1,
+      });
+
+      expect(result.depletionProbability).toBe(1);
+      expect(result.failureProbability).toBe(1);
+    });
+
     it("failureProbability accounts for cumulative withdrawals (total return metric)", () => {
       const result = simulateMonteCarlo({
         initialAmount: 5_000_000,

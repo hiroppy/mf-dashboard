@@ -2,10 +2,12 @@ import { describe, expect, test } from "vitest";
 import type { YearlyProjection } from "./calculate-compound";
 import {
   getLabelMap,
+  formatYAxisAmount,
   selectMilestones,
   getTimelinePattern,
   computeSummaryYear,
   computeMonthlyWithdrawalForSummary,
+  computeRateWithdrawalBasis,
   computeMcDrawdownEndValue,
   computeTotalWithdrawalAmount,
   buildFanChartData,
@@ -28,6 +30,22 @@ describe("getLabelMap", () => {
   test("returns taxed labels when taxFree is false", () => {
     const map = getLabelMap(false);
     expect(map.interest).toBe("運用益（税引後）");
+  });
+});
+
+describe("formatYAxisAmount", () => {
+  test.each([
+    [0, "0万"],
+    [-1_000, "0万"],
+    [-5_000, "-1万"],
+    [99_999_999, "10000万"],
+    [-99_999_999, "-10000万"],
+    [100_000_000, "1億"],
+    [-100_000_000, "-1億"],
+    [125_000_000, "1.3億"],
+    [1_000_000_000, "10億"],
+  ])("formats %d as %s", (value, expected) => {
+    expect(formatYAxisAmount(value)).toBe(expected);
   });
 });
 
@@ -153,6 +171,38 @@ describe("computeMonthlyWithdrawalForSummary", () => {
   test("rate mode: returns 0 when projection not found", () => {
     const result = computeMonthlyWithdrawalForSummary("rate", projections, 99, 0);
     expect(result).toBe(0);
+  });
+});
+
+describe("computeRateWithdrawalBasis", () => {
+  test("uses gross portfolio value so taxable rate-mode display matches calculation basis", () => {
+    const projection: YearlyProjection = {
+      year: 5,
+      principal: 10_000_000,
+      interest: 6_074_720,
+      tax: 1_548_697,
+      total: 16_074_720,
+      yearlyWithdrawal: 0,
+      isContributing: false,
+      isWithdrawing: false,
+    };
+
+    expect(computeRateWithdrawalBasis(projection)).toBe(17_623_417);
+  });
+
+  test("matches total for tax-free projections", () => {
+    const projection: YearlyProjection = {
+      year: 5,
+      principal: 10_000_000,
+      interest: 7_623_417,
+      tax: 0,
+      total: 17_623_417,
+      yearlyWithdrawal: 0,
+      isContributing: false,
+      isWithdrawing: false,
+    };
+
+    expect(computeRateWithdrawalBasis(projection)).toBe(projection.total);
   });
 });
 

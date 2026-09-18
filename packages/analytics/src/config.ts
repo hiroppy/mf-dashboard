@@ -17,7 +17,7 @@ const providers: Record<Provider, () => ReturnType<typeof createOpenAI>> = {
 };
 
 export function isLLMEnabled(): boolean {
-  return !!(process.env.AI_PROVIDER && process.env.AI_MODEL);
+  return !!(process.env.AI_PROVIDER && process.env.AI_MODEL && process.env.AI_API_KEY);
 }
 
 export function getModel() {

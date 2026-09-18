@@ -67,7 +67,7 @@ const assetHoldings = [
     name: "預り金",
     type: "asset",
     liabilityCategory: null,
-    categoryName: "預金・現金・暗号資産",
+    categoryName: "預金・現金",
     accountName: "サンプル証券",
     institution: "サンプル証券",
     amount: 500000,

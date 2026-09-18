@@ -1,15 +1,27 @@
-/**
- * /cf/monthly ページから月次収支サマリーを取得
- * 6ヶ月分のデータを1回のアクセスで取得できる
- */
+import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { Page } from "playwright";
 import { log, debug } from "../logger.js";
 import { parseJapaneseNumber } from "../parsers.js";
 
+/**
+ * /cf/monthly ページから月次収支サマリーを取得
+ * 6ヶ月分のデータを1回のアクセスで取得できる
+ */
 export interface MonthlySummaryItem {
   month: string; // YYYY-MM
   totalIncome: number;
   totalExpense: number;
+}
+
+export function parseMonthlySummaryMonths(headers: string[]): string[] {
+  const months: string[] = [];
+  for (let i = 1; i < headers.length; i++) {
+    const match = headers[i].trim().match(/^(\d{4})\/(\d{1,2})\/\d{1,2}〜$/);
+    if (match) {
+      months.push(`${match[1]}-${match[2].padStart(2, "0")}`);
+    }
+  }
+  return months;
 }
 
 /**
@@ -18,7 +30,7 @@ export interface MonthlySummaryItem {
 export async function scrapeMonthlySummary(page: Page): Promise<MonthlySummaryItem[]> {
   log("Scraping monthly summary from /cf/monthly...");
 
-  await page.goto("https://moneyforward.com/cf/monthly", {
+  await page.goto(mfUrls.monthlyCashFlow, {
     waitUntil: "domcontentloaded",
   });
   // テーブルが表示されるまで待機
@@ -29,13 +41,7 @@ export async function scrapeMonthlySummary(page: Page): Promise<MonthlySummaryIt
   const headers = await headerRow.locator("th, td").allTextContents();
 
   // 月を解析（最初のセルは空なのでスキップ）
-  const months: string[] = [];
-  for (let i = 1; i < headers.length; i++) {
-    const match = headers[i].trim().match(/^(\d{4})\/(\d{2})\/\d{2}〜$/);
-    if (match) {
-      months.push(`${match[1]}-${match[2]}`);
-    }
-  }
+  const months = parseMonthlySummaryMonths(headers);
 
   debug(`Found months: ${months.join(", ")}`);
 

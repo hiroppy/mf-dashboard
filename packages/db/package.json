@@ -17,6 +17,13 @@
     "./repository/holdings": "./src/repositories/holdings.ts",
     "./repository/spending-targets": "./src/repositories/spending-targets.ts",
     "./repository/analytics": "./src/repositories/analytics.ts",
+    "./queries/bank-forecast-dismissal": "./src/queries/bank-forecast-dismissal.ts",
+    "./queries/bank-forecast-manual-event": "./src/queries/bank-forecast-manual-event.ts",
+    "./queries/account": "./src/queries/account.ts",
+    "./queries/holding": "./src/queries/holding.ts",
+    "./queries/read-only-query": "./src/queries/read-only-query.ts",
+    "./queries/transaction": "./src/queries/transaction.ts",
+    "./shared/transfer": "./src/shared/transfer.ts",
     "./types": "./src/types.ts",
     "./utils": "./src/utils.ts",
     "./test-helpers": "./src/test-helpers.ts"
@@ -24,11 +31,13 @@
   "scripts": {
     "build:demo": "DB_PATH=../../data/demo.db tsx src/seed.ts",
     "test": "vitest run",
+    "test:demo": "REQUIRE_DEMO_DB=true vitest run src/demo-data.test.ts",
     "typecheck": "tsc --noEmit",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@libsql/client": "catalog:",
+    "@mf-dashboard/date-utils": "workspace:*",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {

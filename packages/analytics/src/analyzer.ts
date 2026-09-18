@@ -1,3 +1,4 @@
+import { getJstTodayIsoDate } from "@mf-dashboard/date-utils";
 import type { Db } from "@mf-dashboard/db";
 import { saveAnalyticsReport } from "@mf-dashboard/db/repository/analytics";
 import { isLLMEnabled } from "./config.js";
@@ -18,7 +19,7 @@ export async function analyzeFinancialData(db: Db, groupId: string): Promise<boo
     return false;
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getJstTodayIsoDate();
 
   await saveAnalyticsReport(db, {
     groupId,

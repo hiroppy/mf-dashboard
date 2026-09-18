@@ -1,8 +1,10 @@
 "use client";
 
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { Button } from "./button";
 
 interface DialogProps {
   open?: boolean;
@@ -32,17 +34,40 @@ function DialogTrigger({ children, className }: DialogTriggerProps) {
   );
 }
 
+interface DialogCloseButtonProps {
+  ariaLabel?: string;
+  className?: string;
+}
+
+function DialogCloseButton({
+  ariaLabel = "ダイアログを閉じる",
+  className,
+}: DialogCloseButtonProps) {
+  return (
+    <BaseDialog.Close
+      className={className}
+      render={
+        <Button type="button" variant="ghost" size="icon" aria-label={ariaLabel}>
+          <X aria-hidden="true" />
+        </Button>
+      }
+    />
+  );
+}
+
 interface DialogContentProps {
+  backdropBlur?: boolean;
   children: ReactNode;
   className?: string;
 }
 
-function DialogContent({ children, className }: DialogContentProps) {
+function DialogContent({ backdropBlur = true, children, className }: DialogContentProps) {
   return (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop
         className={cn(
-          "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm",
+          "fixed inset-0 z-50 bg-black/40",
+          backdropBlur && "backdrop-blur-sm",
           "transition-opacity duration-200",
           "data-[ending-style]:opacity-0",
           "data-[starting-style]:opacity-0",
@@ -96,4 +121,4 @@ function DialogDescription({ children, className, asChild }: DialogDescriptionPr
   );
 }
 
-export { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription };
+export { Dialog, DialogTrigger, DialogCloseButton, DialogContent, DialogTitle, DialogDescription };

@@ -1,18 +1,31 @@
 packages:
   - apps/*
   - packages/*
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  lefthook: true
+  sharp: true
+  workerd: true
+
+minimumReleaseAgeExclude:
+  - "@storybook/addon-a11y@10.5.5"
+  - "@storybook/addon-vitest@10.5.5"
+  - "@storybook/builder-vite@10.5.5"
+  - "@storybook/csf-plugin@10.5.5"
+  - "@storybook/nextjs-vite@10.5.5"
+  - "@storybook/react@10.5.5"
+  - "@storybook/react-dom-shim@10.5.5"
+  - "@storybook/react-vite@10.5.5"
+  - storybook@10.5.5
+
 catalog:
-  "@libsql/client": 0.17.2
-  "@types/node": 25.6.0
-  "@vitest/browser-playwright": 4.1.4
+  "@libsql/client": 0.18.0
+  "@types/node": 25.9.7
+  "@vitest/browser-playwright": 5.0.1
   drizzle-orm: 0.45.2
-  playwright: 1.58.2
-  typescript: 5.9.3
-  vitest: 4.1.4
-ignoredBuiltDependencies: []
-onlyBuiltDependencies:
-  - better-sqlite3
-  - esbuild
-  - lefthook
-  - sharp
-  - workerd
+  playwright: 1.62.1
+  playwright-core: 1.62.1
+  typescript: 7.0.2
+  vitest: 5.0.1

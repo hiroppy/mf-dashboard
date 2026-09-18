@@ -1,3 +1,11 @@
+import {
+  formatIsoDateKey,
+  getDayOfWeekIsoDateKey,
+  getDaysInMonth,
+  parseIsoDateKey,
+  parseYearMonthKey,
+} from "@mf-dashboard/date-utils";
+
 interface CalendarCell {
   day: number;
   date: string;
@@ -15,9 +23,9 @@ export function buildCalendarGrid(
 ): CalendarWeek[] {
   const amountMap = new Map(dailyData.map((d) => [d.date, d.amount]));
 
-  const firstDay = new Date(year, monthIndex, 1);
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const startDow = firstDay.getDay();
+  const firstDate = toDateString(year, monthIndex + 1, 1);
+  const daysInMonth = getDaysInMonth(year, monthIndex + 1);
+  const startDow = getDayOfWeekIsoDateKey(firstDate);
 
   const weeks: CalendarWeek[] = [];
   let currentWeek: Array<CalendarCell | null> = [];
@@ -51,17 +59,15 @@ export function buildCalendarGrid(
 }
 
 export function toDateString(year: number, month: number, day: number): string {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return formatIsoDateKey({ year, month, day });
 }
 
 export function parseDateString(dateStr: string): { year: number; month: number; day: number } {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return { year, month, day };
+  return parseIsoDateKey(dateStr);
 }
 
 export function parseMonthString(monthStr: string): { year: number; month: number } {
-  const [year, month] = monthStr.split("-").map(Number);
-  return { year, month };
+  return parseYearMonthKey(monthStr);
 }
 
 export function getIntensityLevel(amount: number, max: number): 0 | 1 | 2 | 3 | 4 {

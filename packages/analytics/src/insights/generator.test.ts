@@ -1,26 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const mockGenerateText = vi.fn();
+type AnyMock = (...args: any[]) => any;
+
+const mockGenerateText = vi.fn<AnyMock>();
 
 vi.mock("ai", () => ({
   generateText: (...args: any[]) => mockGenerateText(...args),
   Output: {
-    object: vi.fn(({ schema }: any) => ({ type: "object", schema })),
+    object: vi.fn<AnyMock>(({ schema }: any) => ({ type: "object", schema })),
   },
-  stepCountIs: vi.fn((n: number) => ({ type: "stepCount", count: n })),
-  tool: vi.fn((def: any) => def),
+  stepCountIs: vi.fn<AnyMock>((n: number) => ({ type: "stepCount", count: n })),
+  tool: vi.fn<AnyMock>((def: any) => def),
 }));
 
 vi.mock("../config.js", () => ({
-  getModel: vi.fn(() => "mock-model"),
+  getModel: vi.fn<AnyMock>(() => "mock-model"),
 }));
 
 vi.mock("./tools.js", () => ({
-  createFinancialTools: vi.fn(() => ({ dbTool1: {}, dbTool2: {} })),
+  createFinancialTools: vi.fn<AnyMock>(() => ({ dbTool1: {}, dbTool2: {} })),
 }));
 
 vi.mock("./analysis-tools.js", () => ({
-  createAnalysisTools: vi.fn(() => ({ analysisTool1: {}, analysisTool2: {} })),
+  createAnalysisTools: vi.fn<AnyMock>(() => ({ analysisTool1: {}, analysisTool2: {} })),
 }));
 
 const { generateInsights } = await import("./generator");
@@ -57,6 +59,10 @@ function mockStage2Result(output: any) {
 describe("generateInsights", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("should call createFinancialTools and createAnalysisTools with db and groupId", async () => {
@@ -131,6 +137,41 @@ describe("generateInsights", () => {
     expect(stage2Args).toHaveProperty("system");
   });
 
+  it("should request concise insights without template labels", async () => {
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(validOutput));
+
+    await generateInsights(mockDb, groupId);
+
+    const stage2Args = mockGenerateText.mock.calls[1][0];
+    expect(stage2Args.system).toContain("最初の1文で、その分野で最も重要な結論");
+    expect(stage2Args.system).toContain("見出しやラベルを一切付けず");
+    expect(stage2Args.system).toContain("短い語句＋コロン");
+    expect(stage2Args.system).toContain("網羅性より重要度を優先する");
+    expect(stage2Args.system).toContain("行動を変えるべき場合だけ");
+    expect(stage2Args.system).toContain("重要性の高い事実だけを伝える");
+    expect(stage2Args.system).toContain("推測、一般論、定型的な助言は書かない");
+    expect(stage2Args.system).toContain("大きな変化はない");
+    expect(stage2Args.system).toContain("改善効果の数値を作ること");
+  });
+
+  it("should use JST date context across UTC year boundary", async () => {
+    vi.useFakeTimers({ now: new Date("2025-12-31T15:00:00.000Z") });
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(validOutput));
+
+    await generateInsights(mockDb, groupId);
+
+    const stage1Args = mockGenerateText.mock.calls[0][0];
+    expect(stage1Args.prompt).toContain("今日は2026-01-01です");
+    expect(stage1Args.system).toContain("今日は2026-01-01です");
+    expect(stage1Args.system).toContain("当月2026-01");
+    expect(stage1Args.system).toContain("最新の確定月は**2025-12**");
+    expect(stage1Args.system).toContain("2025-12は2025-11比");
+  });
+
   it("should return structured insights from Stage 2 output", async () => {
     mockGenerateText
       .mockResolvedValueOnce(mockStage1Result("memo"))
@@ -138,6 +179,61 @@ describe("generateInsights", () => {
 
     const result = await generateInsights(mockDb, groupId);
     expect(result).toEqual(validOutput);
+  });
+
+  it("should remove leading labels from every generated insight", async () => {
+    const labeledOutput = {
+      summary: "結論：家計は安定しています。要点：支出も横ばいです。補足（例：臨時収入）です。",
+      savingsInsight: "最重要結論：予備資金は十分です。",
+      investmentInsight: "評価: 分散されています。",
+      spendingInsight: "比較事実：支出は前月比で減少しました。",
+      balanceInsight: "収支：黒字を維持しています。",
+      liabilityInsight: "アクション：追加対応は不要です。",
+    };
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(labeledOutput));
+
+    const result = await generateInsights(mockDb, groupId);
+
+    expect(result).toEqual({
+      summary: "家計は安定しています。支出も横ばいです。補足（例、臨時収入）です。",
+      savingsInsight: "予備資金は十分です。",
+      investmentInsight: "分散されています。",
+      spendingInsight: "支出は前月比で減少しました。",
+      balanceInsight: "黒字を維持しています。",
+      liabilityInsight: "追加対応は不要です。",
+    });
+  });
+
+  it("should preserve substantive text surrounding colons", async () => {
+    const output = {
+      ...validOutput,
+      summary: "1月の収支は収入：50万円、支出：30万円です。",
+      savingsInsight: "総資産に対する現金と投資の比率は2:3です。",
+    };
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(output));
+
+    const result = await generateInsights(mockDb, groupId);
+
+    expect(result.summary).toBe("1月の収支は収入、50万円、支出、30万円です。");
+    expect(result.savingsInsight).toBe("総資産に対する現金と投資の比率は2、3です。");
+  });
+
+  it("should remove labels after line breaks and indentation", async () => {
+    const output = {
+      ...validOutput,
+      summary: "結論：家計は安定しています。\n  要点：支出も横ばいです。",
+    };
+    mockGenerateText
+      .mockResolvedValueOnce(mockStage1Result("memo"))
+      .mockResolvedValueOnce(mockStage2Result(output));
+
+    const result = await generateInsights(mockDb, groupId);
+
+    expect(result.summary).toBe("家計は安定しています。\n  支出も横ばいです。");
   });
 
   it("should throw when Stage 2 output is null", async () => {

@@ -68,10 +68,7 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   // Acceleration: are the month-over-month changes themselves increasing or decreasing?
   let acceleration: "accelerating" | "decelerating" | "steady" = "steady";
   if (sorted.length >= 3) {
-    const netIncomeDiffs = monthlyComparisons
-      .slice(1)
-      .map((m) => m.netIncomeDiff!)
-      .filter((d) => d != null);
+    const netIncomeDiffs = monthlyComparisons.slice(1).map((month) => month.netIncomeDiff!);
     if (netIncomeDiffs.length >= 2) {
       const recentDiffs = netIncomeDiffs.slice(-3);
       const diffSlope = calcLinearSlope(recentDiffs);
@@ -83,14 +80,12 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   }
 
   // Best/worst months
-  const bestMonth =
-    sorted.length > 0
-      ? sorted.reduce((best, m) => (m.netIncome > best.netIncome ? m : best))
-      : null;
-  const worstMonth =
-    sorted.length > 0
-      ? sorted.reduce((worst, m) => (m.netIncome < worst.netIncome ? m : worst))
-      : null;
+  const bestMonth = sorted.reduce((best, month) =>
+    month.netIncome > best.netIncome ? month : best,
+  );
+  const worstMonth = sorted.reduce((worst, month) =>
+    month.netIncome < worst.netIncome ? month : worst,
+  );
 
   const last3 = sorted.slice(-3);
   const last6 = sorted.slice(-6);
@@ -105,22 +100,27 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
   const threeMonthAvg = last3.length >= 3 ? buildAvg(last3) : null;
   const sixMonthAvg = last6.length >= 6 ? buildAvg(last6) : null;
 
-  // Latest month vs 3-month average
+  // Latest month vs previous 3-month average
   let latestVsThreeMonthAvg: MoMTrendResult["latestVsThreeMonthAvg"] = null;
-  if (threeMonthAvg && sorted.length > 0) {
-    const latest = sorted[sorted.length - 1];
+  const previous3 = sorted.slice(-4, -1);
+  const previousThreeMonthAvg = previous3.length >= 3 ? buildAvg(previous3) : null;
+  if (previousThreeMonthAvg) {
+    const latest = sorted.at(-1)!;
     latestVsThreeMonthAvg = {
-      incomeDiff: latest.totalIncome - threeMonthAvg.income,
+      incomeDiff: latest.totalIncome - previousThreeMonthAvg.income,
       incomeDiffPct:
-        threeMonthAvg.income > 0
-          ? ((latest.totalIncome - threeMonthAvg.income) / threeMonthAvg.income) * 100
+        previousThreeMonthAvg.income > 0
+          ? ((latest.totalIncome - previousThreeMonthAvg.income) / previousThreeMonthAvg.income) *
+            100
           : 0,
-      expenseDiff: latest.totalExpense - threeMonthAvg.expense,
+      expenseDiff: latest.totalExpense - previousThreeMonthAvg.expense,
       expenseDiffPct:
-        threeMonthAvg.expense > 0
-          ? ((latest.totalExpense - threeMonthAvg.expense) / threeMonthAvg.expense) * 100
+        previousThreeMonthAvg.expense > 0
+          ? ((latest.totalExpense - previousThreeMonthAvg.expense) /
+              previousThreeMonthAvg.expense) *
+            100
           : 0,
-      netIncomeDiff: latest.netIncome - threeMonthAvg.netIncome,
+      netIncomeDiff: latest.netIncome - previousThreeMonthAvg.netIncome,
     };
   }
 
@@ -140,8 +140,8 @@ export function analyzeMoMTrend(monthlySummaries: MonthlySummary[]): MoMTrendRes
     streaks,
     overallTrend,
     acceleration,
-    bestMonth: bestMonth ? { month: bestMonth.month, netIncome: bestMonth.netIncome } : null,
-    worstMonth: worstMonth ? { month: worstMonth.month, netIncome: worstMonth.netIncome } : null,
+    bestMonth: { month: bestMonth.month, netIncome: bestMonth.netIncome },
+    worstMonth: { month: worstMonth.month, netIncome: worstMonth.netIncome },
     threeMonthAvg,
     sixMonthAvg,
     latestVsThreeMonthAvg,

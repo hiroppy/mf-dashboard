@@ -1,6 +1,7 @@
 "use client";
 
 import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../lib/chart";
 import { formatCurrency } from "../../lib/format";
 import { chartTooltipStyle } from "./chart-tooltip";
 
@@ -92,7 +93,7 @@ export function TreemapChart({ data, height = 200 }: TreemapChartProps) {
   if (data.length === 0) return null;
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ResponsiveContainer width="100%" height={height} initialDimension={CHART_INITIAL_DIMENSION}>
       <Treemap
         data={data}
         dataKey="value"

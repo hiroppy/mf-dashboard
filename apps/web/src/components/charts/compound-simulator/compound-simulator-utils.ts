@@ -9,6 +9,16 @@ export function getLabelMap(taxFree: boolean): Record<string, string> {
   };
 }
 
+export function formatYAxisAmount(value: number): string {
+  if (Math.abs(value) >= 100_000_000) {
+    const oku = Number((value / 100_000_000).toFixed(1));
+    return `${oku.toLocaleString("ja-JP")}億`;
+  }
+
+  const man = Number((value / 10_000).toFixed(0));
+  return `${man}万`;
+}
+
 export const MILESTONE_CANDIDATES = [10_000_000, 20_000_000, 50_000_000, 100_000_000, 200_000_000];
 
 export function selectMilestones(maxValue: number): number[] {
@@ -60,14 +70,18 @@ export function computeMonthlyWithdrawalForSummary(
   return fixedAmount;
 }
 
+export function computeRateWithdrawalBasis(projection: YearlyProjection | undefined): number {
+  if (!projection) return 0;
+  return projection.principal + projection.interest + projection.tax;
+}
+
 export function computeMcDrawdownEndValue(
   withdrawalYears: number,
   yearlyData: MonteCarloYearData[],
   percentile: "p10" | "p25" | "p50" | "p75" | "p90",
 ): number | undefined {
-  return withdrawalYears > 0
-    ? yearlyData.filter((d) => d.isWithdrawing).at(-1)?.[percentile]
-    : undefined;
+  if (withdrawalYears <= 0) return undefined;
+  return yearlyData.findLast((data) => data.isWithdrawing)?.[percentile];
 }
 
 export function computeTotalWithdrawalAmount(
@@ -78,7 +92,7 @@ export function computeTotalWithdrawalAmount(
   return projections.filter((p) => p.isWithdrawing).reduce((sum, p) => sum + p.yearlyWithdrawal, 0);
 }
 
-interface FanChartDataPoint {
+export interface FanChartDataPoint {
   year: number;
   p10: number;
   p25: number;

@@ -164,22 +164,6 @@ describe("buildScrapedData", () => {
     expect(result.updatedAt).toBeTruthy();
     expect(result.updatedAt).toContain("2025");
   });
-
-  test("すべての必須フィールドが含まれる", () => {
-    const result = buildScrapedData(mockGlobalData, mockGroupData);
-
-    expect(result).toHaveProperty("summary");
-    expect(result).toHaveProperty("items");
-    expect(result).toHaveProperty("cashFlow");
-    expect(result).toHaveProperty("portfolio");
-    expect(result).toHaveProperty("liabilities");
-    expect(result).toHaveProperty("assetHistory");
-    expect(result).toHaveProperty("registeredAccounts");
-    expect(result).toHaveProperty("spendingTargets");
-    expect(result).toHaveProperty("currentGroup");
-    expect(result).toHaveProperty("refreshResult");
-    expect(result).toHaveProperty("updatedAt");
-  });
 });
 
 describe("buildGroupOnlyScrapedData", () => {

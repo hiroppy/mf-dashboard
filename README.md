@@ -1,103 +1,79 @@
 <div align="center">
-  <img src="apps/web/public/logo.png" alt="Logo" width="120">
+  <img src="apps/web/public/logo.png" alt="MoneyForward Me Dashboardのロゴ" width="120">
   <h1>MoneyForward Me Dashboard</h1>
-  <p>MoneyForward Meを自動化、可視化</p>
+  <p>Money Forward MEのデータ取得・更新・可視化を自動化するダッシュボード</p>
 </div>
 
-## 機能
+Money Forward MEの家計・資産・投資データを定期的に取得し、Webダッシュボードで確認できる。更新結果の通知、取引カテゴリの自動決定、AIアシスタントからのデータ照会にも対応する。
 
-### 指定した時間に金融機関の一括更新
+[デモを見る](https://mf-dashboard-demo.vercel.app/) · [本番環境をセットアップする](docs/setup.md)
 
-GitHubのworkflowでcrontabを使い定期的に実行し、登録金融機関の「一括更新」ボタンを押し監視を行う。デフォルトの設定は、毎日6:50(JST)と15:20(JST)。GitHubのcrontabは指定時間ちょうどに実行されないので、-10分に設定。
+## 主な機能
 
-### Slackへ結果を投稿
+### 金融機関の情報を自動更新
 
-Slack botの設定をすることにより、前日との差分を投稿可能。
+crawlerコンテナ内のsupercronicが、登録金融機関の「一括更新」を定期的に実行して完了を監視する。既定の実行時刻は毎日6:30と15:30。
 
-<img src="./.github/assets/slack.png" alt="slack" width="30%" />
+### 更新結果をSlackやDiscordへ通知
 
-### 自分の行いたい処理を実行
+通知先を設定すると、更新結果や前日との差分をSlackまたはDiscordへ投稿できる。
 
-hookが提供されているので、スクレイピング時に用意したスクリプトを実行可能。例えば、特定の金融機関の取引の場合に大項目、中項目を常に食品に設定する等。Playwrightの`Page`を持っているので基本何でもできる。
+<img src="./.github/assets/slack.png" alt="Slackに投稿された更新結果" width="420" />
 
-### MCP経由でAIアシスタントと連携
+### 家計・資産情報を可視化
 
-MCP (Model Context Protocol) サーバーを内蔵。ChatGPTやClaude Desktopから、家計・資産・投資データを自然言語で照会できる。詳細は [apps/mcp/README.md](apps/mcp/README.md) を参照。
+予算機能を除くダッシュボードの表示を、[公開デモ](https://mf-dashboard-demo.vercel.app/)で確認できる。
 
-### すべての情報を可視化
+| 月次画面                                                                     | ダッシュボード                                                                             |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| <img src="./.github/assets/demo-month.png" alt="月次収支画面" width="600" /> | <img src="./.github/assets/demo-dashboard.png" alt="資産ダッシュボード画面" width="600" /> |
 
-[demoページ](https://hiroppy.github.io/mf-dashboard)を参考。予算機能以外はすべて対応済み。
+### スクレイピング処理をフックで拡張
 
-<img src="./.github/assets/demo-month.png" alt="month page" width="50%" /><img src="./.github/assets/demo-dashboard.png" alt="dashboard page" width="50%" />
+スクレイピング中に独自のスクリプトを実行できる。MoneyForward Meでなにか処理を挟み込みたいときに利用する。
 
-### 複利シミュレーター
+### 未分類取引のカテゴリを自動決定
 
-いくら積み立てて、いくら切り崩しをすればいいのかモンテカルロ法を用いて計算。年金なども設定でき、精度高く検証する。
+`data/category-rules.json`を用意すると、新規の未分類取引へ固定ルールを適用できる。ルールに一致しない取引には、任意でLLMによる推論も利用できる。決定したカテゴリはMoneyForward MEへ反映し、対象月を再取得してデータベースへ保存する。
 
-[個別サイト](https://asset-melt.party/)
+[カテゴリ決定機能を設定する](docs/setup.md#未分類取引のカテゴリ決定)
 
-## 導入方法
+### AIによる財務インサイトと家計データ照会
 
-[使い方ページ](/docs/setup.md)を参照
+インサイトページでは、取得した家計データをもとに、貯蓄の健全性、収支バランス、支出パターン、投資パフォーマンス、負債状況を分析する。財務健全性スコアや主要な指標に加えて、AIが生成した要約と各項目へのコメントをまとめて確認できる。
 
-## アーキテクチャ
+Webアプリ右下の家計AIチャットでは、「先月の食費はいくら？」「資産が前月からどのくらい増えた？」といった質問を自然言語で入力できる。選択中のグループに保存された家計・資産・投資データを参照し、回答に必要な集計や比較を行うため、画面を行き来せずに知りたい情報を調べられる。
 
-このプロダクトは、GitHub Actionsで定期的にMoneyForward Meのデータを取得してSQLiteに保存し、Cloudflare Pagesで静的サイトをビルド・公開する。Publicで公開する前提のものではないので、以下の構成とする。
+| 財務インサイト                                                                     | 家計AIチャット                                                                  |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| <img src="./.github/assets/ai-insight.png" alt="財務インサイト画面" width="600" /> | <img src="./.github/assets/ai-chat.png" alt="家計AIチャット画面" width="600" /> |
+
+### 複利シミュレーション
+
+積立額や取崩額、年金などの条件を設定し、モンテカルロ法で資産推移をシミュレーションできる。[公開サイト](https://asset-melt.party/)でも利用可能。
+
+<img src="./.github/assets/simulator.png" alt="複利シミュレーション画面" />
+
+## システム構成
+
+Docker Composeで次の3サービスを動かす。
+
+- **web**: SQLiteのデータを表示するNext.jsアプリ
+- **crawler**: Money Forward MEからデータを取得し、SQLiteへ保存するPlaywrightアプリ
+- **cloudflare**: Cloudflare Tunnelへ接続し、認証済みユーザーへWebアプリを公開
 
 ```mermaid
-graph LR
-    A[GitHub Actions<br/>Cron] -->|1. 実行| B[Crawler<br/>Playwright]
-    B -->|2. OTP取得| E[1Password<br/>Service Account]
-    E -->|3. 認証情報| B
-    B -->|4. アクセス| F[MoneyForward Me]
-    F -->|5. データ| B
-    B -->|6. 保存| C[SQLite<br/>Database]
-    C -->|7. 更新完了| A
-    A -->|8. Git Commit| D[Cloudflare Worker<br/>Next.js Static Export]
+flowchart TD
+    U[利用者] -->|Cloudflare Accessで認証| T[Cloudflare]
+    T --> W[web]
+    W -->|手動更新| C[crawler]
+    S[supercronic<br/>6:30 / 15:30 JST] --> C
+    O[1Password<br/>認証情報とOTP] --> C
+    C --> M[Money Forward ME]
+    M --> C
+    C -->|保存| D[(SQLite)]
+    D -->|読み取り| W
+    C -->|表示を更新| W
 ```
 
-**処理の流れ:**
-
-- **定期実行**: GitHub Actionsのcronスケジュールで自動実行
-- **認証**: 1Password Service AccountからOTPを取得
-- **データ取得**: Playwrightを使用してMoneyForward Meからデータをスクレイピング
-- **データ保存**: SQLiteデータベースに構造化して保存
-- **コミット**: SQLiteファイルをリポジトリにコミットすることにより、cloudflareをキック
-- **ビルド・デプロイ**: Cloudflare PagesでNext.jsの静的サイトをビルドして公開(Cloudflare Oneの利用を強く推奨)
-
-## 推奨セキュリティ
-
-- GitHub
-  - Passkey
-- MoneyForward Me
-  - ワンタイムパスワード
-  - Passkeyだけだとクローリングするときにログインできない点に注意
-- Cloudflare
-  - Cloudflare oneでサイトへのアクセス制限 (e.g. googleログイン)
-
-このプロダクトはスケールさせる必要がないことから、当初GitHubだけで完結するように設計されていた。しかし、Private repoの場合はGitHub Pagesが有料限定ということでページの公開と認証はCloudflareを利用するようにした経緯がある。
-
-SQLiteを今後、pushしなくても良いオプションを作る可能性はあるが、毎回1年分のデータ取得と取得毎のdiffが取れなくなるデメリットがあるため現段階では実装していない。またインフラは今後変える可能性あり。
-
-## 開発
-
-[UIコンポーネント集](https://hiroppy.github.io/mf-dashboard/storybook/)
-
-```sh
-$ git clone xxx
-$ cd mf-dashboard
-# demoで確認したいだけであれば不要
-$ cp .env.example .env
-$ pnpm i
-# demoデータで確認
-$ pnpm dev:demo
-# 実際のアカウントのデータを取得する場合
-$ pnpm db:dev
-$ pnpm dev
-```
-
-## 更新
-
-```sh
-$ sh update.sh
-```
+SQLiteはwebとcrawlerで共有する。外部アクセスはCloudflare TunnelとAccessで保護し、Googleログインとメールアドレスの許可リストを通過したユーザーだけに限定する。詳しい構築手順は[セットアップガイド](docs/setup.md)を参照。

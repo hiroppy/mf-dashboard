@@ -1,4 +1,4 @@
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import { getOrCreate } from "../utils";
 
@@ -7,7 +7,7 @@ import { getOrCreate } from "../utils";
  * Returns the category ID
  */
 export async function getOrCreateInstitutionCategory(
-  db: Db,
+  db: DbExecutor,
   categoryName: string,
 ): Promise<number> {
   return await getOrCreate(

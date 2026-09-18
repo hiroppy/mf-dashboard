@@ -53,6 +53,17 @@ describe("parseJapaneseNumber", () => {
     expect(parseJapaneseNumber("1億2345万6789")).toBe(123456789);
   });
 
+  test("億万表記の負数をパースする", () => {
+    expect(parseJapaneseNumber("-1万")).toBe(-10000);
+    expect(parseJapaneseNumber("−1万")).toBe(-10000);
+    expect(parseJapaneseNumber("▲2億")).toBe(-200000000);
+  });
+
+  test("小数の億万表記をパースする", () => {
+    expect(parseJapaneseNumber("1.5万")).toBe(15000);
+    expect(parseJapaneseNumber("1.2億")).toBe(120000000);
+  });
+
   test("全角マイナスをパースする", () => {
     expect(parseJapaneseNumber("−1,234")).toBe(-1234);
   });
@@ -119,6 +130,11 @@ describe("parsePercentage", () => {
 
   test("全角パーセントをパースする", () => {
     expect(parsePercentage("1.5％")).toBe(1.5);
+  });
+
+  test("全角マイナスと▲表記のパーセントをパースする", () => {
+    expect(parsePercentage("−2.2％")).toBe(-2.2);
+    expect(parsePercentage("▲2.2%")).toBe(-2.2);
   });
 
   test("空文字列は undefined を返す", () => {

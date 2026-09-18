@@ -16,7 +16,7 @@ import {
   type HoldingComparison,
 } from "../src/compare/holdings";
 
-describe.skip("Holdings比較: スクレイピング vs DB", () => {
+describe.skipIf(!hasAuthState())("Holdings比較: スクレイピング vs DB", () => {
   let browser: Browser;
   let context: BrowserContext;
   let page: Page;

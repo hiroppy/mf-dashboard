@@ -5,7 +5,7 @@ import { Minus, Plus } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface NumberFieldProps {
-  value?: number;
+  value?: number | null;
   defaultValue?: number;
   onValueChange?: (value: number | null) => void;
   min?: number;
@@ -16,6 +16,7 @@ interface NumberFieldProps {
   className?: string;
   "aria-label"?: string;
   suffix?: string;
+  id?: string;
 }
 
 function NumberField({
@@ -30,6 +31,7 @@ function NumberField({
   className,
   "aria-label": ariaLabel,
   suffix,
+  id,
 }: NumberFieldProps) {
   return (
     <BaseNumberField.Root
@@ -41,6 +43,7 @@ function NumberField({
       step={step}
       largeStep={largeStep}
       disabled={disabled}
+      id={id}
       locale="ja-JP"
       className={cn("flex flex-col", className)}
     >

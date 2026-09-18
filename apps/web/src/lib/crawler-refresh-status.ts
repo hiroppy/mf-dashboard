@@ -1,0 +1,307 @@
+import type {
+  CrawlerRunCurrent,
+  CrawlerRunProgress,
+  CrawlerRunReason,
+  CrawlerRunStateSnapshot,
+  CrawlerRunStepDetails,
+  CrawlerRunTimelineItem,
+} from "../../../crawler/src/crawler-run-state";
+
+export interface CrawlerRefreshStatus {
+  available: boolean;
+  running: boolean;
+  source: string | null;
+  startedAt: string | null;
+  latestRun: CrawlerRunStateSnapshot | null;
+}
+
+export const unavailableCrawlerRefreshStatus: CrawlerRefreshStatus = {
+  available: false,
+  running: false,
+  source: null,
+  startedAt: null,
+  latestRun: null,
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function readReason(value: unknown): CrawlerRunReason | null {
+  if (!isRecord(value) || typeof value.message !== "string") {
+    return null;
+  }
+
+  switch (value.code) {
+    case "auth_failed":
+    case "unknown_error":
+      return { code: value.code, message: value.message };
+    case "refresh_timeout":
+      return isNonNegativeFiniteNumber(value.maxWaitMinutes) &&
+        isStringArray(value.incompleteAccounts)
+        ? {
+            code: value.code,
+            message: value.message,
+            maxWaitMinutes: value.maxWaitMinutes,
+            incompleteAccounts: value.incompleteAccounts,
+          }
+        : null;
+    case "moneyforward_timeout":
+      return typeof value.operation === "string" && isNonNegativeFiniteNumber(value.timeoutMs)
+        ? {
+            code: value.code,
+            message: value.message,
+            operation: value.operation,
+            timeoutMs: value.timeoutMs,
+          }
+        : null;
+    case "navigation_failed":
+      return typeof value.url === "string"
+        ? { code: value.code, message: value.message, url: value.url }
+        : null;
+    case "selector_not_found":
+      return typeof value.selector === "string"
+        ? { code: value.code, message: value.message, selector: value.selector }
+        : null;
+    default:
+      return null;
+  }
+}
+
+function readStepDetails(value: Record<string, unknown>): CrawlerRunStepDetails | null {
+  switch (value.step) {
+    case "authentication":
+    case "group_list":
+    case "registered_accounts":
+    case "portfolio":
+    case "liabilities":
+    case "global_data":
+    case "database_save":
+    case "institution_categories":
+    case "analytics":
+    case "notification":
+    case "web_cache_refresh":
+      return value.metadata === null ? { step: value.step, metadata: null } : null;
+    case "group_data":
+      return isRecord(value.metadata) &&
+        value.metadata.kind === "group" &&
+        typeof value.metadata.groupName === "string"
+        ? {
+            step: value.step,
+            metadata: { kind: "group", groupName: value.metadata.groupName },
+          }
+        : null;
+    case "cash_flow_history":
+      return isRecord(value.metadata) &&
+        value.metadata.kind === "month" &&
+        typeof value.metadata.month === "string"
+        ? { step: value.step, metadata: { kind: "month", month: value.metadata.month } }
+        : null;
+    case "moneyforward_refresh":
+      return isRecord(value.metadata) &&
+        value.metadata.kind === "refresh" &&
+        isNonNegativeFiniteNumber(value.metadata.maxWaitMinutes) &&
+        isNonNegativeInteger(value.metadata.remainingAccounts) &&
+        isStringArray(value.metadata.incompleteAccounts)
+        ? {
+            step: value.step,
+            metadata: {
+              kind: "refresh",
+              maxWaitMinutes: value.metadata.maxWaitMinutes,
+              remainingAccounts: value.metadata.remainingAccounts,
+              incompleteAccounts: value.metadata.incompleteAccounts,
+            },
+          }
+        : null;
+    default:
+      return null;
+  }
+}
+
+function readTimelineItem(value: unknown): CrawlerRunTimelineItem | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.label !== "string") {
+    return null;
+  }
+  const details = readStepDetails(value);
+  if (!details) {
+    return null;
+  }
+
+  const startedAt = isTimestamp(value.startedAt) ? value.startedAt : null;
+  const finishedAt = isTimestamp(value.finishedAt) ? value.finishedAt : null;
+  const reason = readReason(value.reason);
+  switch (value.status) {
+    case "pending":
+      if (value.startedAt !== null || value.finishedAt !== null || value.reason !== null)
+        return null;
+      break;
+    case "running":
+      if (!startedAt || value.finishedAt !== null || value.reason !== null) return null;
+      break;
+    case "done":
+      if (!startedAt || !finishedAt || value.reason !== null) return null;
+      break;
+    case "warning":
+    case "failed":
+      if (!startedAt || !finishedAt || !reason) return null;
+      break;
+    case "skipped":
+      if (value.startedAt !== null || !finishedAt || value.reason !== null) return null;
+      break;
+    default:
+      return null;
+  }
+
+  return {
+    id: value.id,
+    label: value.label,
+    status: value.status,
+    startedAt,
+    finishedAt,
+    reason,
+    ...details,
+  } as CrawlerRunTimelineItem;
+}
+
+function readCurrent(value: unknown): CrawlerRunCurrent | null {
+  if (
+    !isRecord(value) ||
+    typeof value.timelineItemId !== "string" ||
+    typeof value.label !== "string"
+  ) {
+    return null;
+  }
+  const details = readStepDetails(value);
+  return details ? { timelineItemId: value.timelineItemId, label: value.label, ...details } : null;
+}
+
+function readProgress(value: unknown): CrawlerRunProgress | null {
+  return isRecord(value) &&
+    isNonNegativeInteger(value.completed) &&
+    isNonNegativeInteger(value.total) &&
+    value.completed <= value.total
+    ? { completed: value.completed, total: value.total }
+    : null;
+}
+
+function readLatestRun(value: unknown): CrawlerRunStateSnapshot | null {
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    typeof value.runId !== "string" ||
+    typeof value.source !== "string" ||
+    !isTimestamp(value.startedAt) ||
+    !Array.isArray(value.timeline)
+  ) {
+    return null;
+  }
+
+  const timeline = value.timeline.map(readTimelineItem);
+  if (timeline.some((item) => item === null)) {
+    return null;
+  }
+  const base = {
+    version: 1 as const,
+    runId: value.runId,
+    source: value.source,
+    startedAt: value.startedAt,
+    timeline: timeline as CrawlerRunTimelineItem[],
+  };
+  const current = value.current === null ? null : readCurrent(value.current);
+  const progress = value.progress === null ? null : readProgress(value.progress);
+
+  switch (value.runStatus) {
+    case "running":
+      if (
+        value.finishedAt !== null ||
+        (value.current !== null && !current) ||
+        (value.progress !== null && !progress) ||
+        value.reason !== null
+      ) {
+        return null;
+      }
+      return {
+        ...base,
+        runStatus: value.runStatus,
+        finishedAt: null,
+        current,
+        progress,
+        reason: null,
+      };
+    case "success":
+      if (
+        !isTimestamp(value.finishedAt) ||
+        value.current !== null ||
+        !progress ||
+        value.reason !== null
+      ) {
+        return null;
+      }
+      return {
+        ...base,
+        runStatus: value.runStatus,
+        finishedAt: value.finishedAt,
+        current: null,
+        progress,
+        reason: null,
+      };
+    case "failed": {
+      const reason = readReason(value.reason);
+      if (
+        !isTimestamp(value.finishedAt) ||
+        (value.current !== null && !current) ||
+        (value.progress !== null && !progress) ||
+        !reason
+      ) {
+        return null;
+      }
+      return {
+        ...base,
+        runStatus: value.runStatus,
+        finishedAt: value.finishedAt,
+        current,
+        progress,
+        reason,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+export function parseCrawlerRefreshStatus(value: unknown, responseOk = true): CrawlerRefreshStatus {
+  if (!isRecord(value)) {
+    return unavailableCrawlerRefreshStatus;
+  }
+
+  const latestRun = readLatestRun(value.latestRun ?? value);
+  const hasLockStatus = typeof value.running === "boolean";
+  if (!hasLockStatus && !latestRun) {
+    return unavailableCrawlerRefreshStatus;
+  }
+
+  const running = hasLockStatus ? value.running === true : latestRun?.runStatus === "running";
+  return {
+    available: responseOk && value.available !== false,
+    running,
+    source: typeof value.source === "string" ? value.source : (latestRun?.source ?? null),
+    startedAt: isTimestamp(value.startedAt) ? value.startedAt : (latestRun?.startedAt ?? null),
+    latestRun,
+  };
+}

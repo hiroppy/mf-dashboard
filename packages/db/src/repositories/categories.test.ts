@@ -20,18 +20,18 @@ beforeEach(async () => {
 
 describe("getOrCreateCategory", () => {
   test("新規カテゴリを作成して ID を返す", async () => {
-    const id = await getOrCreateCategory(db, "預金・現金・暗号資産");
+    const id = await getOrCreateCategory(db, "預金・現金");
     expect(id).toBeGreaterThan(0);
   });
 
   test("既存カテゴリの ID を返す", async () => {
-    const id1 = await getOrCreateCategory(db, "預金・現金・暗号資産");
-    const id2 = await getOrCreateCategory(db, "預金・現金・暗号資産");
+    const id1 = await getOrCreateCategory(db, "預金・現金");
+    const id2 = await getOrCreateCategory(db, "預金・現金");
     expect(id1).toBe(id2);
   });
 
   test("異なるカテゴリには異なる ID を返す", async () => {
-    const id1 = await getOrCreateCategory(db, "預金・現金・暗号資産");
+    const id1 = await getOrCreateCategory(db, "預金・現金");
     const id2 = await getOrCreateCategory(db, "株式（現物）");
     expect(id1).not.toBe(id2);
   });

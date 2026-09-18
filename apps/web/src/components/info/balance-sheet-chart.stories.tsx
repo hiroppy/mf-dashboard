@@ -1,5 +1,8 @@
-import { getAssetBreakdownByCategory, getLiabilityBreakdownByCategory } from "@mf-dashboard/db";
-import { getLatestMonthlySummary } from "@mf-dashboard/db";
+import {
+  getAssetBreakdownByCategory,
+  getLatestTotalAssets,
+  getLiabilityBreakdownByCategory,
+} from "@mf-dashboard/db";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { mocked } from "storybook/test";
 import { BalanceSheetChart } from "./balance-sheet-chart";
@@ -16,7 +19,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 5000000 },
+      { category: "預金・現金", amount: 5000000 },
       { category: "株式(現物)", amount: 3000000 },
       { category: "投資信託", amount: 2000000 },
       { category: "年金", amount: 1500000 },
@@ -25,12 +28,7 @@ export const Default: Story = {
       { category: "住宅ローン", amount: 3000000 },
       { category: "カードローン", amount: 500000 },
     ]);
-    mocked(getLatestMonthlySummary).mockResolvedValue({
-      month: "2025-01",
-      totalIncome: 500000,
-      totalExpense: 300000,
-      netIncome: 200000,
-    });
+    mocked(getLatestTotalAssets).mockResolvedValue(12000000);
   },
 };
 
@@ -38,22 +36,17 @@ export const Empty: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([]);
     mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
-    mocked(getLatestMonthlySummary).mockResolvedValue(undefined);
+    mocked(getLatestTotalAssets).mockResolvedValue(null);
   },
 };
 
 export const NoLiabilities: Story = {
   beforeEach() {
     mocked(getAssetBreakdownByCategory).mockResolvedValue([
-      { category: "預金・現金・暗号資産", amount: 8000000 },
+      { category: "預金・現金", amount: 8000000 },
       { category: "株式(現物)", amount: 2000000 },
     ]);
     mocked(getLiabilityBreakdownByCategory).mockResolvedValue([]);
-    mocked(getLatestMonthlySummary).mockResolvedValue({
-      month: "2025-01",
-      totalIncome: 500000,
-      totalExpense: 300000,
-      netIncome: 200000,
-    });
+    mocked(getLatestTotalAssets).mockResolvedValue(10000000);
   },
 };

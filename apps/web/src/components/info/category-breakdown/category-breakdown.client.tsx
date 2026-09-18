@@ -2,6 +2,7 @@
 
 import { ChevronDown, List, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { CHART_INITIAL_DIMENSION } from "../../../lib/chart";
 import { getChartColorArray } from "../../../lib/colors";
 import { formatCurrency, formatDateShort } from "../../../lib/format";
 import { cn } from "../../../lib/utils";
@@ -59,7 +60,11 @@ export function CategoryBreakdownClient({
         {type === "income" && incomeChartData.length > 0 ? (
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
             <div className="w-32 h-32 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                initialDimension={CHART_INITIAL_DIMENSION}
+              >
                 <PieChart>
                   <Pie
                     data={incomeChartData}

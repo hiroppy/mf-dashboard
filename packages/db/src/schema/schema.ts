@@ -82,6 +82,10 @@ export const accountStatuses = sqliteTable("account_statuses", {
   status: text("status").notNull(), // "ok" / "error" / "updating" / "suspended" / "unknown"
   lastUpdated: text("last_updated"), // ISO 8601形式
   totalAssets: integer("total_assets").default(0), // /accountsページから取得した資産額
+  scheduledWithdrawalAmount: integer("scheduled_withdrawal_amount"),
+  scheduledWithdrawalConfirmed: integer("scheduled_withdrawal_confirmed", { mode: "boolean" })
+    .notNull()
+    .default(false),
   errorMessage: text("error_message"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -198,6 +202,69 @@ export const transactions = sqliteTable(
   ],
 );
 
+export const cashFlowPeriods = sqliteTable(
+  "cash_flow_periods",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    month: text("month").notNull(),
+    periodStart: text("period_start").notNull(),
+    periodEnd: text("period_end").notNull(),
+    transactionCount: integer("transaction_count").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("cash_flow_periods_month_idx").on(table.month)],
+);
+
+export const bankForecastDismissals = sqliteTable(
+  "bank_forecast_dismissals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    direction: text("direction", { enum: ["income", "expense"] }).notNull(),
+    recurringIdentity: text("recurring_identity").notNull(),
+    dismissedThroughDate: text("dismissed_through_date").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("bank_forecast_dismissals_candidate_idx").on(
+      table.accountId,
+      table.direction,
+      table.recurringIdentity,
+    ),
+    index("bank_forecast_dismissals_account_id_idx").on(table.accountId),
+  ],
+);
+
+export const bankForecastManualEvents = sqliteTable(
+  "bank_forecast_manual_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    amount: integer("amount").notNull(),
+    direction: text("direction", { enum: ["income", "expense"] }).notNull(),
+    description: text("description").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("bank_forecast_manual_events_group_account_date_idx").on(
+      table.groupId,
+      table.accountId,
+      table.date,
+    ),
+  ],
+);
+
 // ============================================================================
 // 資産履歴系
 // ============================================================================
@@ -294,6 +361,8 @@ export const accountsRelations = relations(accounts, ({ many, one }) => ({
   }),
   transactions: many(transactions),
   groupAccounts: many(groupAccounts),
+  bankForecastDismissals: many(bankForecastDismissals),
+  bankForecastManualEvents: many(bankForecastManualEvents),
 }));
 
 export const accountStatusesRelations = relations(accountStatuses, ({ one }) => ({
@@ -337,6 +406,24 @@ export const holdingValuesRelations = relations(holdingValues, ({ one }) => ({
 export const transactionsRelations = relations(transactions, ({ one }) => ({
   account: one(accounts, {
     fields: [transactions.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const bankForecastDismissalsRelations = relations(bankForecastDismissals, ({ one }) => ({
+  account: one(accounts, {
+    fields: [bankForecastDismissals.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+export const bankForecastManualEventsRelations = relations(bankForecastManualEvents, ({ one }) => ({
+  group: one(groups, {
+    fields: [bankForecastManualEvents.groupId],
+    references: [groups.id],
+  }),
+  account: one(accounts, {
+    fields: [bankForecastManualEvents.accountId],
     references: [accounts.id],
   }),
 }));

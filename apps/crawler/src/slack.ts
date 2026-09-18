@@ -1,5 +1,7 @@
+import { formatJstDateTimeForDisplay } from "@mf-dashboard/date-utils";
 import type { KnownBlock } from "@slack/web-api";
 import { WebClient } from "@slack/web-api";
+import { getDashboardUrl } from "./dashboard-url.js";
 import { log, info, error } from "./logger.js";
 import type { ScrapedData } from "./types.js";
 
@@ -57,8 +59,7 @@ export async function sendErrorNotification(err: Error): Promise<void> {
     return;
   }
 
-  const now = new Date();
-  const timestamp = now.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
+  const timestamp = formatJstDateTimeForDisplay();
 
   await slack.chat.postMessage({
     channel: channelId,
@@ -67,7 +68,7 @@ export async function sendErrorNotification(err: Error): Promise<void> {
   });
 }
 
-function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
+export function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
   const { summary, items, updatedAt, groupName } = data;
 
   // Extract "合計" from items to get daily change
@@ -150,7 +151,7 @@ function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
 
     const lines = data.accountIssues.map((issue) => {
       const statusLabel = issue.status === "updating" ? "更新中" : "エラー";
-      if (issue.errorMessage) {
+      if (issue.status === "error" && issue.errorMessage) {
         return `• ${issue.name} (${statusLabel}: ${issue.errorMessage})`;
       }
       return `• ${issue.name} (${statusLabel})`;
@@ -164,7 +165,7 @@ function buildSummaryBlocks(data: ScrapedData): KnownBlock[] {
     });
   }
 
-  const dashboardUrl = process.env.DASHBOARD_URL;
+  const dashboardUrl = getDashboardUrl();
   const contextText = dashboardUrl
     ? `更新日時: ${updatedAt}  |  <${dashboardUrl}|📈 ダッシュボードを開く>`
     : `更新日時: ${updatedAt}`;

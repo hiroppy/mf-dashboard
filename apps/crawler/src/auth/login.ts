@@ -1,6 +1,7 @@
 import { mfUrls } from "@mf-dashboard/meta/urls";
 import type { BrowserContext, Page } from "playwright";
 import { log, debug } from "../logger.js";
+import { navigateToAccountsPage } from "../scrapers/refresh.js";
 import { getCredentials, getOTP } from "./credentials.js";
 import { hasAuthState, saveAuthState } from "./state.js";
 
@@ -12,6 +13,9 @@ const TIMEOUTS = {
   login: 30000,
 };
 
+const MONEY_FORWARD_ME_ORIGIN = new URL(mfUrls.home).origin;
+const AUTHENTICATED_PATHNAME = new URL(mfUrls.accounts).pathname;
+
 const SELECTORS = {
   mfidEmail: 'input[name="mfid_user[email]"]',
   mfidPassword: 'input[name="mfid_user[password]"]',
@@ -22,17 +26,13 @@ const SELECTORS = {
   meSignIn: 'button:has-text("Sign in")',
 };
 
-const AUTHENTICATED_PATH_PREFIXES = ["/accounts", "/cf", "/bs", "/spending_targets"];
-
 function isLoggedInUrl(url: string): boolean {
   try {
-    const { hostname, pathname } = new URL(url);
-    if (hostname !== "moneyforward.com") {
-      return false;
-    }
-
-    return AUTHENTICATED_PATH_PREFIXES.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    const currentUrl = new URL(url);
+    return (
+      currentUrl.origin === MONEY_FORWARD_ME_ORIGIN &&
+      (currentUrl.pathname === AUTHENTICATED_PATHNAME ||
+        currentUrl.pathname.startsWith(`${AUTHENTICATED_PATHNAME}/`))
     );
   } catch {
     return false;
@@ -50,16 +50,6 @@ async function waitForUrlChange(page: Page, timeout: number = TIMEOUTS.redirect)
   } catch {
     // Ignore timeout: no redirect happened
   }
-}
-
-async function navigateToAuthenticatedPage(page: Page): Promise<string> {
-  await page.goto(mfUrls.accounts, {
-    waitUntil: "domcontentloaded",
-    timeout: TIMEOUTS.long,
-  });
-
-  await waitForUrlChange(page);
-  return page.url();
 }
 
 async function maybeHandleOtp(
@@ -99,9 +89,17 @@ async function isSessionValid(page: Page): Promise<boolean> {
   debug("Checking if session is valid...");
 
   try {
-    const currentUrl = await navigateToAuthenticatedPage(page);
+    // Navigate to a page that requires an authenticated Money Forward ME session.
+    // The public home page cannot prove that the session is valid.
+    await navigateToAccountsPage(page);
+
+    // Wait a bit for potential redirects
+    await waitForUrlChange(page);
+
+    const currentUrl = page.url();
     debug("Current URL after navigation:", currentUrl);
 
+    // If we're on the main site (not login/id page), session is valid
     if (isLoggedInUrl(currentUrl)) {
       log("Session is valid!");
       return true;
@@ -252,9 +250,13 @@ export async function login(page: Page): Promise<void> {
     debug("Already redirected to ME (session exists)");
   }
 
-  const verifiedUrl = await navigateToAuthenticatedPage(page);
-  if (!isLoggedInUrl(verifiedUrl)) {
-    throw new Error(`Login completed but did not reach an authenticated page: ${verifiedUrl}`);
+  // Recheck against an authenticated-only page. moneyforward.com/ itself is
+  // publicly accessible and therefore cannot be used as proof of login.
+  await navigateToAccountsPage(page);
+  await waitForUrlChange(page);
+
+  if (!isLoggedInUrl(page.url())) {
+    throw new Error("Login failed: browser did not reach Money Forward ME");
   }
 
   log("Login successful!");

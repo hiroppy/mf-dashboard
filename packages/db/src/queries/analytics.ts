@@ -1,3 +1,9 @@
+import {
+  addMonthsToIsoDateKey,
+  getJstTodayIsoDate,
+  getJstYearMonthKey,
+  parseIsoDateKey,
+} from "@mf-dashboard/date-utils";
 import { desc, eq } from "drizzle-orm";
 import { getDb, type Db, schema } from "../index";
 import {
@@ -80,7 +86,11 @@ export interface AnalyticsReport {
 // 定数
 // ============================================================================
 
-const LIQUID_ASSET_CATEGORIES = ["預金・現金・暗号資産", "電子マネー・プリペイド"];
+const LIQUID_ASSET_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
+
+export function isLiquidAssetCategory(category: string): boolean {
+  return LIQUID_ASSET_CATEGORIES.has(category.trim());
+}
 const INVESTMENT_CATEGORIES = [
   "株式(現物)",
   "投資信託",
@@ -90,15 +100,15 @@ const INVESTMENT_CATEGORIES = [
   "暗号資産・FX・貴金属",
 ];
 const ANALYSIS_MONTHS = 12;
+const SPENDING_STABILITY_MAX_SCORE = 15;
+const SPENDING_STABILITY_ANOMALY_PENALTY = 5;
 
 // ============================================================================
 // データ収集
 // ============================================================================
 
 function getDateThreshold(): string {
-  const date = new Date();
-  date.setMonth(date.getMonth() - ANALYSIS_MONTHS);
-  return date.toISOString().split("T")[0];
+  return addMonthsToIsoDateKey(getJstTodayIsoDate(), -ANALYSIS_MONTHS);
 }
 
 interface CollectedData {
@@ -139,7 +149,7 @@ async function collectData(groupId: string, db: Db): Promise<CollectedData> {
   const categoryBreakdown = await getAssetBreakdownByCategory(groupId, db);
 
   const liquidAssets = categoryBreakdown
-    .filter((c) => LIQUID_ASSET_CATEGORIES.some((lc) => c.category.includes(lc)))
+    .filter((c) => isLiquidAssetCategory(c.category))
     .reduce((sum, c) => sum + c.amount, 0);
 
   const holdings = holdingsRaw
@@ -160,7 +170,7 @@ async function collectData(groupId: string, db: Db): Promise<CollectedData> {
       amount: h.amount ?? 0,
     }));
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = getJstYearMonthKey();
   const transactions = transactionsRaw
     .filter((t) => !t.isExcludedFromCalculation && t.date >= dateThreshold)
     .filter((t) => t.date.slice(0, 7) !== currentMonth)
@@ -202,8 +212,14 @@ function calculateSavings(data: CollectedData): AnalyticsMetrics["savings"] {
   return { totalAssets, liquidAssets, monthlyExpenseAvg, emergencyFundMonths };
 }
 
-function isInvestmentCategory(categoryName: string): boolean {
-  return INVESTMENT_CATEGORIES.some((c) => categoryName.includes(c) || c.includes(categoryName));
+export function isInvestmentCategory(categoryName: string): boolean {
+  const normalizedCategoryName = categoryName.trim();
+  if (!normalizedCategoryName) return false;
+  if (isLiquidAssetCategory(normalizedCategoryName)) return false;
+  return INVESTMENT_CATEGORIES.some(
+    (category) =>
+      normalizedCategoryName.includes(category) || category.includes(normalizedCategoryName),
+  );
 }
 
 function calculateInvestment(data: CollectedData): AnalyticsMetrics["investment"] {
@@ -379,11 +395,9 @@ function calculateGrowth(data: CollectedData): AnalyticsMetrics["growth"] {
     };
   }
 
-  const startDate = new Date(first.date);
-  const endDate = new Date(last.date);
-  const monthsDiff =
-    (endDate.getFullYear() - startDate.getFullYear()) * 12 +
-    (endDate.getMonth() - startDate.getMonth());
+  const startDate = parseIsoDateKey(first.date);
+  const endDate = parseIsoDateKey(last.date);
+  const monthsDiff = (endDate.year - startDate.year) * 12 + (endDate.month - startDate.month);
 
   if (monthsDiff <= 0) {
     return {
@@ -491,10 +505,10 @@ function scoreGrowth(monthlyGrowthRate: number): number {
 }
 
 function scoreSpendingStability(anomalyCount: number): number {
-  if (anomalyCount === 0) return 15;
-  if (anomalyCount === 1) return 10;
-  if (anomalyCount === 2) return 5;
-  return 0;
+  return Math.max(
+    0,
+    SPENDING_STABILITY_MAX_SCORE - anomalyCount * SPENDING_STABILITY_ANOMALY_PENALTY,
+  );
 }
 
 export function calculateHealthScore(
@@ -524,7 +538,7 @@ export function calculateHealthScore(
     {
       name: "支出安定性",
       score: scoreSpendingStability(metrics.spending.anomalies.length),
-      maxScore: 15,
+      maxScore: SPENDING_STABILITY_MAX_SCORE,
     },
   ];
   const totalScore = categories.reduce((sum, c) => sum + c.score, 0);

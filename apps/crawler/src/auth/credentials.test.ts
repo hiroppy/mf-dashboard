@@ -1,9 +1,11 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
+type AnyMock = (...args: any[]) => any;
+
 // Use vi.hoisted to create mock before hoisting
 const { mockResolve, mockCreateClient } = vi.hoisted(() => {
-  const mockResolve = vi.fn();
-  const mockCreateClient = vi.fn().mockResolvedValue({
+  const mockResolve = vi.fn<AnyMock>();
+  const mockCreateClient = vi.fn<AnyMock>().mockResolvedValue({
     secrets: {
       resolve: mockResolve,
     },

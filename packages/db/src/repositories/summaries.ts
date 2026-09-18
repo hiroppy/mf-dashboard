@@ -1,5 +1,5 @@
 import { eq, and, notInArray, sql } from "drizzle-orm";
-import type { Db } from "../index";
+import type { DbExecutor } from "../index";
 import { schema } from "../index";
 import type { AssetHistoryPoint } from "../types";
 import { now, convertToIsoDate, upsertById } from "../utils";
@@ -9,7 +9,7 @@ import { now, convertToIsoDate, upsertById } from "../utils";
 // ============================================================================
 
 async function saveAssetHistoryPoint(
-  db: Db,
+  db: DbExecutor,
   groupId: string,
   point: AssetHistoryPoint,
 ): Promise<number> {
@@ -32,7 +32,7 @@ async function saveAssetHistoryPoint(
 }
 
 async function saveAssetHistoryCategories(
-  db: Db,
+  db: DbExecutor,
   historyId: number,
   categories: Record<string, number>,
 ): Promise<void> {
@@ -91,7 +91,7 @@ async function saveAssetHistoryCategories(
 // ============================================================================
 
 export async function saveAssetHistory(
-  db: Db,
+  db: DbExecutor,
   groupId: string,
   points: AssetHistoryPoint[],
 ): Promise<void> {

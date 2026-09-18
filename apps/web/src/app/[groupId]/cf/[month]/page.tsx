@@ -1,7 +1,7 @@
 import { getAllGroups, getAvailableMonths, isDatabaseAvailable } from "@mf-dashboard/db";
 import type { Metadata } from "next";
-import { formatMonth } from "../../../../lib/format";
 import { CFMonthContent } from "../../../cf/[month]/page";
+import { formatCashFlowPageTitle } from "../../../cf/[month]/page-title";
 
 export async function generateStaticParams() {
   if (!isDatabaseAvailable()) return [{ groupId: "_", month: "_" }];
@@ -25,7 +25,7 @@ export async function generateMetadata({
 }: PageProps<"/[groupId]/cf/[month]">): Promise<Metadata> {
   const { month } = await params;
   return {
-    title: `収支 - ${formatMonth(month)}`,
+    title: formatCashFlowPageTitle(month),
   };
 }
 

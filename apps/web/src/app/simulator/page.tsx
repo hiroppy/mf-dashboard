@@ -19,7 +19,7 @@ export async function SimulatorContent({ groupId }: { groupId?: string }) {
   return (
     <PageLayout title="シミュレーター">
       <CompoundSimulator
-        defaultInitialAmount={isDemo ? 0 : totalInvestment}
+        defaultInitialAmount={totalInvestment}
         portfolioContext={
           isDemo
             ? undefined

@@ -677,10 +677,26 @@ describe("calculateCompound", () => {
       });
 
       const withdrawals = result.filter((p) => p.isWithdrawing);
-      // First year withdrawal should be slightly above 1.2M (inflated from month 1)
-      expect(withdrawals[0].yearlyWithdrawal).toBeGreaterThan(1_200_000);
-      // Later years should have even higher withdrawal
-      expect(withdrawals[4].yearlyWithdrawal).toBeGreaterThan(withdrawals[0].yearlyWithdrawal);
+      expect(withdrawals[0].yearlyWithdrawal).toBe(1_200_000);
+      expect(withdrawals[1].yearlyWithdrawal).toBe(1_236_000);
+      expect(withdrawals[4].yearlyWithdrawal).toBe(1_350_611);
+    });
+
+    it("should increase the withdrawal only at yearly boundaries", () => {
+      const result = calculateCompound({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 0,
+        contributionYears: 0,
+        withdrawalStartYear: 2,
+        monthlyWithdrawal: 100_000,
+        withdrawalYears: 2,
+        inflationRate: 10,
+        inflationAdjustedWithdrawal: true,
+      });
+
+      expect(result[3].yearlyWithdrawal).toBe(1_200_000);
+      expect(result[4].yearlyWithdrawal).toBe(1_320_000);
     });
 
     it("should deplete faster than non-adjusted withdrawal", () => {
@@ -911,6 +927,45 @@ describe("calculateCompound", () => {
       for (const w of withdrawals) {
         expect(w.yearlyWithdrawal).toBe(firstYrWithdrawal);
       }
+    });
+
+    it("should base first rate withdrawal on withdrawal-start assets before monthly growth", () => {
+      const annualWithdrawalRate = 4;
+      const withdrawalStartYear = 5;
+      const result = calculateCompound({
+        initialAmount: 10_000_000,
+        monthlyContribution: 0,
+        annualReturnRate: 12,
+        contributionYears: 0,
+        withdrawalStartYear,
+        annualWithdrawalRate,
+        withdrawalYears: 1,
+        taxFree: true,
+      });
+
+      const withdrawalStart = result.find((p) => p.year === withdrawalStartYear)!;
+      const firstWithdrawalYear = result.find((p) => p.year === withdrawalStartYear + 1)!;
+
+      expect(firstWithdrawalYear.yearlyWithdrawal).toBe(
+        Math.round((withdrawalStart.total * annualWithdrawalRate) / 100),
+      );
+    });
+
+    it("should not reseed rate withdrawal when withdrawal-start assets are zero", () => {
+      const result = calculateCompound({
+        initialAmount: 0,
+        monthlyContribution: 100_000,
+        annualReturnRate: 0,
+        contributionYears: 2,
+        withdrawalStartYear: 0,
+        annualWithdrawalRate: 4,
+        withdrawalYears: 2,
+        taxFree: true,
+      });
+
+      const withdrawals = result.filter((p) => p.isWithdrawing);
+      expect(withdrawals.map((p) => p.yearlyWithdrawal)).toEqual([0, 0]);
+      expect(result[2].total).toBe(2_400_000);
     });
   });
 

@@ -1,11 +1,11 @@
 import { eq, and } from "drizzle-orm";
-import type { Db } from "../index";
+import type { Db, DbExecutor } from "../index";
 import { schema } from "../index";
 import type { SpendingTargetsData } from "../types";
 import { upsertById } from "../utils";
 
 export async function saveSpendingTargets(
-  db: Db,
+  db: DbExecutor,
   groupId: string,
   data: SpendingTargetsData,
 ): Promise<void> {

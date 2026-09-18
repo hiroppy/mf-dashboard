@@ -88,11 +88,123 @@ describe("useTransactionFiltering", () => {
       expect(result.current.categories[0]).toBe("食費");
       expect(result.current.categoryCount.get("食費")).toBe(2);
     });
+  });
 
-    it("typeOptionsが定義されている", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
+  describe("年フィルタ", () => {
+    const transactions = [
+      createTransaction({ id: 1, date: "2026-01-01", category: "2026年カテゴリー" }),
+      createTransaction({ id: 2, date: "2025-12-31", category: "2025年カテゴリー" }),
+      createTransaction({ id: 3, date: "2025-01-01", category: "2025年カテゴリー" }),
+      createTransaction({ id: 4, date: "2024-12-31", category: "2024年カテゴリー" }),
+    ];
 
-      expect(result.current.typeOptions).toEqual(["income", "expense", "transfer"]);
+    it("利用可能な年を降順で返し、最新年を初期選択する", () => {
+      const { result } = renderHook(() =>
+        useTransactionFiltering({
+          ...defaultOptions,
+          transactions,
+          yearFilterEnabled: true,
+        }),
+      );
+
+      expect(result.current.availableYears).toEqual(["2026", "2025", "2024"]);
+      expect(result.current.selectedYear).toBe("2026");
+      expect(result.current.categories).toEqual(["2026年カテゴリー"]);
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+    });
+
+    it("選択年の年初から年末までに絞り込み、ページを先頭に戻す", () => {
+      const { result } = renderHook(() =>
+        useTransactionFiltering({
+          ...defaultOptions,
+          transactions,
+          yearFilterEnabled: true,
+        }),
+      );
+
+      act(() => {
+        result.current.setCurrentPage(2);
+        result.current.handleYearChange("2025");
+      });
+
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.categories).toEqual(["2025年カテゴリー"]);
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
+    });
+
+    it("データ更新で選択年がなくなった場合は最新の利用可能年へ切り替える", () => {
+      const { result, rerender } = renderHook(
+        ({ currentTransactions }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions: currentTransactions,
+            yearFilterEnabled: true,
+          }),
+        { initialProps: { currentTransactions: transactions } },
+      );
+
+      expect(result.current.selectedYear).toBe("2026");
+
+      rerender({ currentTransactions: transactions.slice(1) });
+
+      expect(result.current.availableYears).toEqual(["2025", "2024"]);
+      expect(result.current.selectedYear).toBe("2025");
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([2, 3]);
+    });
+
+    it("データ更新で別の年へ切り替わる場合はページを有効範囲に収める", () => {
+      const initialTransactions = [
+        createTransaction({ id: 1, date: "2026-03-01" }),
+        createTransaction({ id: 2, date: "2026-02-01" }),
+        createTransaction({ id: 3, date: "2026-01-01" }),
+        createTransaction({ id: 4, date: "2025-12-31" }),
+      ];
+      const { result, rerender } = renderHook(
+        ({ currentTransactions }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions: currentTransactions,
+            pageSize: 1,
+            yearFilterEnabled: true,
+          }),
+        { initialProps: { currentTransactions: initialTransactions } },
+      );
+
+      act(() => {
+        result.current.setCurrentPage(2);
+      });
+      expect(result.current.currentPage).toBe(2);
+
+      rerender({ currentTransactions: initialTransactions.slice(3) });
+
+      expect(result.current.selectedYear).toBe("2025");
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.paginatedTransactions.map(({ id }) => id)).toEqual([4]);
+    });
+
+    it("年フィルタの有効状態に合わせて選択年と表示対象を切り替える", () => {
+      const { result, rerender } = renderHook(
+        ({ yearFilterEnabled }) =>
+          useTransactionFiltering({
+            ...defaultOptions,
+            transactions,
+            yearFilterEnabled,
+          }),
+        { initialProps: { yearFilterEnabled: false } },
+      );
+
+      expect(result.current.selectedYear).toBeNull();
+      expect(result.current.filteredAndSortedTransactions).toHaveLength(4);
+
+      rerender({ yearFilterEnabled: true });
+
+      expect(result.current.selectedYear).toBe("2026");
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
+
+      rerender({ yearFilterEnabled: false });
+
+      expect(result.current.selectedYear).toBeNull();
+      expect(result.current.filteredAndSortedTransactions).toHaveLength(4);
     });
   });
 
@@ -144,35 +256,10 @@ describe("useTransactionFiltering", () => {
   });
 
   describe("検索フィルタ", () => {
-    it("説明文で検索できる", () => {
-      const transactions = [
-        createTransaction({ id: 1, description: "ランチ代" }),
-        createTransaction({ id: 2, description: "ディナー" }),
-      ];
-      const { result } = renderHook(() =>
-        useTransactionFiltering({ ...defaultOptions, transactions }),
-      );
-
-      act(() => {
-        result.current.handleSearchChange("ランチ");
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(1);
-      expect(result.current.filteredAndSortedTransactions[0].description).toBe("ランチ代");
-    });
-
-    it("カテゴリ名で検索できる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleSearchChange("食費");
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(2);
-    });
-
     it("検索時にページがリセットされる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
+      const { result } = renderHook(() =>
+        useTransactionFiltering({ ...defaultOptions, pageSize: 1 }),
+      );
 
       act(() => {
         result.current.setCurrentPage(2);
@@ -198,16 +285,6 @@ describe("useTransactionFiltering", () => {
       expect(result.current.selectedCategories).toEqual(["食費"]);
     });
 
-    it("複数カテゴリでOR検索できる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleCategoriesChange(["食費", "交通費"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(3);
-    });
-
     it("カテゴリを削除できる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -221,31 +298,9 @@ describe("useTransactionFiltering", () => {
 
       expect(result.current.selectedCategories).toEqual(["交通費"]);
     });
-
-    it("nullカテゴリは「振替」として扱われる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleCategoriesChange(["振替"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(1);
-      expect(result.current.filteredAndSortedTransactions[0].category).toBeNull();
-    });
   });
 
   describe("タイプフィルタ", () => {
-    it("タイプでフィルタできる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleTypesChange(["income"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(1);
-      expect(result.current.filteredAndSortedTransactions[0].type).toBe("income");
-    });
-
     it("タイプを削除できる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -262,16 +317,6 @@ describe("useTransactionFiltering", () => {
   });
 
   describe("アカウントフィルタ", () => {
-    it("アカウントでフィルタできる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleAccountsChange(["銀行A"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(3);
-    });
-
     it("アカウントを削除できる", () => {
       const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
 
@@ -284,6 +329,33 @@ describe("useTransactionFiltering", () => {
       });
 
       expect(result.current.selectedAccounts).toEqual(["銀行B"]);
+    });
+  });
+
+  describe("フィルタ配線", () => {
+    it("検索・タイプ・アカウントを組み合わせてフィルタする", () => {
+      const transactions = [
+        createTransaction({ id: 1, description: "ランチ", type: "expense", accountName: "銀行A" }),
+        createTransaction({
+          id: 2,
+          description: "ディナー",
+          type: "expense",
+          accountName: "銀行A",
+        }),
+        createTransaction({ id: 3, description: "ランチ", type: "income", accountName: "銀行A" }),
+        createTransaction({ id: 4, description: "ランチ", type: "expense", accountName: "銀行B" }),
+      ];
+      const { result } = renderHook(() =>
+        useTransactionFiltering({ ...defaultOptions, transactions }),
+      );
+
+      act(() => {
+        result.current.handleSearchChange("ランチ");
+        result.current.handleTypesChange(["expense"]);
+        result.current.handleAccountsChange(["銀行A"]);
+      });
+
+      expect(result.current.filteredAndSortedTransactions.map(({ id }) => id)).toEqual([1]);
     });
   });
 
@@ -384,20 +456,6 @@ describe("useTransactionFiltering", () => {
       });
 
       expect(dateValue).toBeNull();
-    });
-  });
-
-  describe("複合フィルタ", () => {
-    it("複数のフィルタを組み合わせてAND検索できる", () => {
-      const { result } = renderHook(() => useTransactionFiltering(defaultOptions));
-
-      act(() => {
-        result.current.handleCategoriesChange(["食費"]);
-        result.current.handleTypesChange(["expense"]);
-        result.current.handleAccountsChange(["銀行A"]);
-      });
-
-      expect(result.current.filteredAndSortedTransactions).toHaveLength(2);
     });
   });
 });

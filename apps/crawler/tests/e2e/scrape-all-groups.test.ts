@@ -1,8 +1,14 @@
+import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { Browser, BrowserContext } from "playwright";
 import { describe, test, expect, beforeAll, afterAll } from "vitest";
+import { createCrawlerProgressReporter } from "../../src/crawler-progress.js";
 import type { ScrapeResult } from "../../src/scraper.js";
 import { scrapeAllGroups } from "../../src/scraper.js";
-import { isNoGroup, createGroupScope } from "../../src/scrapers/group.js";
+import { isNoGroup } from "../../src/scrapers/group.js";
+import { createAnonymousGroupScope } from "./group-state.js";
 import {
   gotoHome,
   launchLoggedInContext,
@@ -14,6 +20,7 @@ import {
 let browser: Browser;
 let context: BrowserContext;
 let result: ScrapeResult;
+const progressStatePath = path.join(os.tmpdir(), `scrape-all-groups-${randomUUID()}.json`);
 
 beforeAll(async () => {
   ({ browser, context } = await launchLoggedInContext());
@@ -22,8 +29,13 @@ beforeAll(async () => {
     await saveScreenshot(page, "scrape-all-groups-test-before-scrape.png");
 
     return withErrorScreenshot(page, "scrape-all-groups-test-error.png", async () => {
-      await using _scope = await createGroupScope(page);
-      return scrapeAllGroups(page, { skipRefresh: true });
+      await using _scope = await createAnonymousGroupScope(page);
+      const progress = await createCrawlerProgressReporter(progressStatePath, {
+        id: randomUUID(),
+        source: "e2e",
+        startedAt: new Date().toISOString(),
+      });
+      return scrapeAllGroups(page, progress, { skipRefresh: true });
     });
   });
 }, 300000);
@@ -31,6 +43,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await context?.close();
   await browser?.close();
+  await rm(progressStatePath, { force: true });
 });
 
 describe("scrapeAllGroups", () => {
@@ -42,11 +55,13 @@ describe("scrapeAllGroups", () => {
     });
 
     test("defaultGroupがnullまたは有効なGroupオブジェクト", () => {
-      if (result.defaultGroup) {
-        expect(result.defaultGroup.id).toBeTruthy();
-        expect(result.defaultGroup.name).toBeTruthy();
-        expect(typeof result.defaultGroup.isCurrent).toBe("boolean");
-      }
+      const isValidDefaultGroup =
+        result.defaultGroup === null ||
+        (Boolean(result.defaultGroup.id) &&
+          Boolean(result.defaultGroup.name) &&
+          typeof result.defaultGroup.isCurrent === "boolean");
+
+      expect(isValidDefaultGroup).toBe(true);
     });
   });
 
@@ -90,9 +105,7 @@ describe("scrapeAllGroups", () => {
 
     test("各グループにgroup情報がある", () => {
       for (const groupData of result.groupDataList) {
-        expect(groupData.group).toBeDefined();
-        expect(groupData.group.id).toBeDefined();
-        expect(groupData.group.name).toBeTruthy();
+        expect(Boolean(groupData.group.id) && Boolean(groupData.group.name)).toBe(true);
         expect(typeof groupData.group.isCurrent).toBe("boolean");
       }
     });
@@ -114,7 +127,7 @@ describe("scrapeAllGroups", () => {
     test("各グループにsummaryがある", () => {
       for (const groupData of result.groupDataList) {
         expect(groupData.summary).toBeDefined();
-        expect(groupData.summary.totalAssets).toBeDefined();
+        expect(groupData.summary.totalAssets !== undefined).toBe(true);
       }
     });
 
@@ -133,10 +146,11 @@ describe("scrapeAllGroups", () => {
     });
 
     test("isCurrent=trueのグループはdefaultGroupと一致する", () => {
-      if (result.defaultGroup) {
-        const currentGroup = result.groupDataList.find((gd) => gd.group.isCurrent);
-        expect(currentGroup?.group.id).toBe(result.defaultGroup.id);
-      }
+      const currentGroup = result.groupDataList.find((gd) => gd.group.isCurrent);
+      const matchesDefaultGroup =
+        result.defaultGroup === null || currentGroup?.group.id === result.defaultGroup.id;
+
+      expect(matchesDefaultGroup).toBe(true);
     });
   });
 

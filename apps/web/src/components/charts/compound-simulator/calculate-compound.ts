@@ -57,9 +57,9 @@ export function calculateCompound({
 
   let currentTotal = initialAmount;
   let totalPrincipal = initialAmount;
-  let currentMonthlyWithdrawal = monthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
   let rateFirstWithdrawalYear = -1;
+  let rateBasedWithdrawalSeeded = false;
 
   for (let year = 0; year <= totalYears; year++) {
     const isContributing = year > 0 && year <= contributionYears;
@@ -82,6 +82,16 @@ export function calculateCompound({
 
     let yearlyWithdrawalTotal = 0;
 
+    if (isWithdrawing && isRateMode) {
+      if (!rateBasedWithdrawalSeeded) {
+        rateBasedMonthlyWithdrawal = (currentTotal * (annualWithdrawalRate ?? 0)) / 100 / 12;
+        rateFirstWithdrawalYear = year;
+        rateBasedWithdrawalSeeded = true;
+      } else if (year > rateFirstWithdrawalYear) {
+        rateBasedMonthlyWithdrawal *= 1 + ri;
+      }
+    }
+
     for (let month = 0; month < 12; month++) {
       currentTotal *= 1 + monthlyRate;
 
@@ -93,29 +103,28 @@ export function calculateCompound({
       if (isWithdrawing && currentTotal > 0) {
         let baseWithdrawal: number;
         if (isRateMode) {
-          if (rateBasedMonthlyWithdrawal === 0) {
-            rateBasedMonthlyWithdrawal = (currentTotal * annualWithdrawalRate) / 100 / 12;
-            rateFirstWithdrawalYear = year;
-          } else if (month === 0 && year > rateFirstWithdrawalYear) {
-            rateBasedMonthlyWithdrawal *= 1 + ri;
-          }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
-          baseWithdrawal = currentMonthlyWithdrawal;
-          if (inflationAdjustedWithdrawal) {
-            currentMonthlyWithdrawal *= monthlyInflationFactor;
-          }
+          const withdrawalYearIndex = year - withdrawalStartYear - 1;
+          baseWithdrawal = inflationAdjustedWithdrawal
+            ? monthlyWithdrawal * Math.pow(monthlyInflationFactor, withdrawalYearIndex * 12)
+            : monthlyWithdrawal;
         }
         const pensionActive = pensionStartYear != null && year >= pensionStartYear;
         const income = (pensionActive ? monthlyPensionIncome : 0) + monthlyOtherIncome;
-        const netWithdrawal = Math.max(baseWithdrawal - income, 0);
-        yearlyWithdrawalTotal += netWithdrawal;
+        const requestedNetWithdrawal = Math.max(baseWithdrawal - income, 0);
         const gainRatio =
           currentTotal > totalPrincipal ? (currentTotal - totalPrincipal) / currentTotal : 0;
-        const taxOnWithdrawal = netWithdrawal * gainRatio * taxRate;
-        const withdrawalRatio = Math.min(netWithdrawal / currentTotal, 1);
+        const effectiveTaxRate = gainRatio * taxRate;
+        const requiredGrossWithdrawal =
+          requestedNetWithdrawal / Math.max(1 - effectiveTaxRate, Number.EPSILON);
+        const grossWithdrawal = Math.min(requiredGrossWithdrawal, currentTotal);
+        const taxOnWithdrawal = grossWithdrawal * effectiveTaxRate;
+        const actualNetWithdrawal = grossWithdrawal - taxOnWithdrawal;
+        yearlyWithdrawalTotal += actualNetWithdrawal;
+        const withdrawalRatio = grossWithdrawal / currentTotal;
         totalPrincipal *= 1 - withdrawalRatio;
-        currentTotal -= netWithdrawal + taxOnWithdrawal;
+        currentTotal -= grossWithdrawal;
         if (currentTotal < 0) currentTotal = 0;
       }
     }
