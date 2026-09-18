@@ -76,7 +76,7 @@ beforeEach(async () => {
     fingerprints: [],
     items: [],
     scheduledWithdrawals: new Map(),
-      holdingAccounts: { complete: true, references: [] },
+    holdingAccounts: { complete: true, references: [] },
   });
   vi.mocked(getPortfolio).mockResolvedValue({ items: [], totalAssets: 0 });
   vi.mocked(getLiabilities).mockResolvedValue({ items: [], totalLiabilities: 0 });
