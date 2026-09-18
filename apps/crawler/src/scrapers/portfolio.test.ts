@@ -243,6 +243,7 @@ describe("linked insurance and pension candidates", () => {
       fingerprints: [],
       items: [],
       scheduledWithdrawals: new Map(),
+      holdingAccounts: { complete: false, references: [] },
     });
     expect(goto).toHaveBeenCalledOnce();
   });
@@ -544,6 +545,28 @@ describe("parseFundPortfolioItem", () => {
     });
   });
 });
+
+test.each([parseStockPortfolioItem, parseFundPortfolioItem])(
+  "investment parsing preserves an authoritative account ID without changing financial values",
+  (parse) => {
+    const texts = {
+      name: "Asset A",
+      institution: "Duplicate Institution",
+      code: "1234",
+      balance: "1,000",
+      quantity: "10",
+      avgCost: "90",
+      unitPrice: "100",
+      dailyChange: "0",
+      unrealizedGain: "100",
+      unrealizedGainPct: "11.11%",
+    };
+    expect(parse({ ...texts, accountMfId: "account-a" })).toEqual({
+      ...parse(texts),
+      accountMfId: "account-a",
+    });
+  },
+);
 
 describe("parseFxQuantity", () => {
   test("買建は正数で数量を返す", () => {
