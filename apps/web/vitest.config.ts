@@ -35,7 +35,7 @@ export default defineConfig({
               launchOptions: {
                 args: ["--window-size=1280,800"],
               },
-            }),
+            }) as never,
             headless: true,
             instances: [
               {
