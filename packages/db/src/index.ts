@@ -4,7 +4,7 @@ import { createClient, type Client } from "@libsql/client";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
-import { getDbPath } from "./db-path";
+import { getDbPath, getDbUrl } from "./db-path";
 import * as schema from "./schema/schema";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
@@ -16,7 +16,7 @@ export function isDatabaseAvailable(): boolean {
 
 export function getDb() {
   if (!_db) {
-    _client = createClient({ url: `file:${getDbPath()}` });
+    _client = createClient({ url: getDbUrl() });
     _db = drizzle(_client, { schema });
   }
   return _db;
