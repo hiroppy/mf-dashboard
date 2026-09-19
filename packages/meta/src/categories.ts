@@ -42,6 +42,7 @@ export const ASSET_CATEGORIES = [
   "保険",
   "年金",
   "ポイント・マイル",
+  "FX",
   "ポイント",
 ] as const;
 

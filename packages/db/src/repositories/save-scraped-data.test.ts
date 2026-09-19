@@ -199,6 +199,35 @@ describe("normalizePortfolioCategories", () => {
     },
   );
 
+  test.each(["証券", "暗号資産・FX・貴金属"])(
+    "同名口座のカテゴリがすべて%sなら口座を推測せず分類できる",
+    (category) => {
+      const duplicateAccounts = {
+        accounts: [
+          registeredAccounts.accounts[0]!,
+          { ...registeredAccounts.accounts[1]!, name: "Bank A" },
+        ],
+      };
+      const portfolio = {
+        totalAssets: 100000,
+        items: [{ name: "Asset A", type: "預金・現金", institution: "Bank A", balance: 100000 }],
+      };
+      const result = normalizePortfolioCategories(
+        portfolio,
+        duplicateAccounts,
+        new Map([
+          ["bank-a", category],
+          ["crypto-a", category],
+        ]),
+      );
+      expect(result.items[0]?.type).toBe(category === "証券" ? "預金・現金" : "暗号資産");
+      expect(result.items[0]?.accountMfId).toBeUndefined();
+      expect(() =>
+        normalizePortfolioCategories(portfolio, duplicateAccounts, new Map([["bank-a", category]])),
+      ).toThrow("Cannot classify a deposit");
+    },
+  );
+
   test("同名口座が複数ある場合は名称で推測しない", () => {
     const duplicateAccounts = {
       accounts: [

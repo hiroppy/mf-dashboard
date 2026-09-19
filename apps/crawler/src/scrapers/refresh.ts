@@ -96,6 +96,134 @@ export function summarizeRefreshRows(rows: readonly RefreshStatusRow[]): {
   return { incompleteAccounts, remainingCount };
 }
 
+async function dismissBlockingModal(page: Page): Promise<boolean> {
+  const iframeSelector = 'iframe[title="Modal Message"]';
+  const iframe = page.locator(iframeSelector).first();
+  if (!(await iframe.count())) {
+    return false;
+  }
+
+  const modalFrame = page.frameLocator(iframeSelector);
+  const closeCandidates = [
+    'button[aria-label="閉じる"]',
+    'button[aria-label="Close"]',
+    'button:has-text("閉じる")',
+    'button:has-text("×")',
+    'button:has-text("✕")',
+    'button:has-text("X")',
+    'a:has-text("閉じる")',
+    '[role="button"][aria-label="閉じる"]',
+  ];
+
+  for (const selector of closeCandidates) {
+    const button = modalFrame.locator(selector).first();
+    if (await button.count()) {
+      try {
+        await button.click({ timeout: 2000 });
+        await page.waitForTimeout(500);
+        info(`Dismissed blocking modal via selector: ${selector}`);
+        return true;
+      } catch {
+        // Try next candidate
+      }
+    }
+  }
+
+  const programmaticClose = modalFrame.locator(".ab-programmatic-close-button").first();
+  if (await programmaticClose.count()) {
+    try {
+      await programmaticClose.click({ timeout: 2000 });
+      await page.waitForTimeout(500);
+      info("Dismissed blocking modal via .ab-programmatic-close-button");
+      return true;
+    } catch {
+      // continue fallback
+    }
+  }
+
+  const frameCloseButton = modalFrame.locator(".ab-close-button").first();
+  if (await frameCloseButton.count()) {
+    try {
+      await frameCloseButton.click({ timeout: 2000 });
+      await page.waitForTimeout(500);
+      info("Dismissed blocking modal via .ab-close-button in iframe");
+      return true;
+    } catch {
+      // continue fallback
+    }
+  }
+
+  try {
+    const clicked = await page.evaluate((selector) => {
+      const iframe = document.querySelector(selector) as HTMLIFrameElement | null;
+      const doc = iframe?.contentDocument;
+      if (!doc) return false;
+
+      const button = doc.querySelector(
+        ".ab-programmatic-close-button, .ab-close-button",
+      ) as HTMLElement | null;
+      if (button) {
+        button.click();
+        return true;
+      }
+
+      const body = doc.body as HTMLElement | null;
+      if (body) {
+        body.click();
+        return true;
+      }
+
+      return false;
+    }, iframeSelector);
+
+    if (clicked) {
+      await page.waitForTimeout(500);
+      info("Dismissed blocking modal via iframe DOM click fallback");
+      return true;
+    }
+  } catch {
+    // ignore and continue fallback
+  }
+
+  try {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    if (!(await iframe.count())) {
+      info("Dismissed blocking modal via Escape");
+      return true;
+    }
+  } catch {
+    // ignore and continue fallback
+  }
+
+  try {
+    const removed = await page.evaluate((selector) => {
+      const iframe = document.querySelector(selector);
+      if (!iframe) return false;
+
+      const root = iframe.closest('.ab-iam-root, [role="complementary"]');
+      if (root instanceof HTMLElement) {
+        root.remove();
+        return true;
+      }
+
+      iframe.remove();
+      return true;
+    }, iframeSelector);
+
+    if (removed) {
+      await page.waitForTimeout(500);
+      info("Dismissed blocking modal by removing overlay from DOM");
+      return true;
+    }
+  } catch {
+    // ignore and fall through
+  }
+
+  warn("Detected blocking modal iframe, but could not dismiss it automatically");
+  return false;
+}
+
 interface RefreshWaitProgress {
   elapsedSeconds: number;
   incompleteAccounts: string[];
@@ -130,8 +258,18 @@ export async function clickRefreshButton(
   await page.goto(mfUrls.home);
   await page.waitForLoadState("networkidle");
 
+  await dismissBlockingModal(page);
+
   const refreshButton = page.locator('a:has-text("一括更新")').first();
-  await refreshButton.click();
+  try {
+    await refreshButton.click({ timeout: 5000 });
+  } catch (error) {
+    const dismissed = await dismissBlockingModal(page);
+    if (!dismissed) {
+      throw error;
+    }
+    await refreshButton.click({ timeout: 5000 });
+  }
 
   info("Refreshing accounts...");
 

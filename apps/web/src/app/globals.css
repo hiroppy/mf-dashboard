@@ -65,6 +65,7 @@
   --color-asset-insurance: #be185d; /* 本家: #ff689a */
   --color-asset-pension: #008381; /* 本家: #008986 */
   --color-asset-point: #9c39b6;
+  --color-asset-fx: #4f46e5;
 
   /* === Expense category colors === */
   --color-cat-cash-card: #a6662e; /* 本家: #d3955f */
