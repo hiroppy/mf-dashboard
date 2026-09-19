@@ -15,11 +15,11 @@
     "@mf-dashboard/analytics": "workspace:*",
     "@mf-dashboard/db": "workspace:*",
     "@modelcontextprotocol/sdk": "1.30.0",
-    "zod": "4.5.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsdown": "0.22.14",
+    "tsdown": "0.23.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
