@@ -5,6 +5,13 @@ import type { Locator, Page } from "playwright";
 import { debug, warn } from "../logger.js";
 import { parseDecimalNumber, parseJapaneseNumber, parsePercentage } from "../parsers.js";
 import { extractAccountMfIdFromDetailUrl, isExpectedAccountDetailPage } from "./account-detail.js";
+import {
+  buildHoldingAccountMap,
+  getHoldingAccountMfId,
+  readHoldingAccountFingerprints,
+  type HoldingAccountSource,
+  type HoldingAccountReference,
+} from "./holding-account-references.js";
 import { createManualHoldingKey, type ManualHoldingAccountMap } from "./manual-holding-accounts.js";
 import {
   getScheduledWithdrawalStatus,
@@ -14,6 +21,7 @@ import {
 const DEPOSIT_TABLE_CATEGORIES = new Set(["預金・現金", "暗号資産", "電子マネー・プリペイド"]);
 const POINT_CATEGORIES = new Set(["ポイント・マイル", "ポイント"]);
 const UNKNOWN_CATEGORY = "不明";
+const FX_CATEGORY = "FX";
 const INSURANCE_CATEGORY = "保険";
 const PENSION_CATEGORY = "年金";
 const LINKED_PNS_CATEGORIES = new Set([INSURANCE_CATEGORY, PENSION_CATEGORY]);
@@ -63,7 +71,16 @@ const INSURANCE_PENSION_COLUMNS = {
   UNREALIZED_GAIN: 3,
   UNREALIZED_GAIN_PCT: 4,
 } as const;
-const POINT_COLUMNS = { NAME: 0, BALANCE: 4, INSTITUTION: 6 } as const;
+const POINT_COLUMNS = { NAME: 0, QUANTITY: 2, UNIT_PRICE: 3, BALANCE: 4, INSTITUTION: 6 } as const;
+const FX_BALANCE_COLUMNS = { INSTITUTION: 0, NAME: 1, BALANCE: 2 } as const;
+const FX_POSITION_COLUMNS = {
+  PAIR: 0,
+  QUANTITY: 1,
+  CONTRACT_RATE: 2,
+  CURRENT_RATE: 3,
+  UNREALIZED_GAIN: 4,
+  INSTITUTION: 5,
+} as const;
 
 // Helper functions
 async function getCellText(cells: Locator, index: number, defaultValue = ""): Promise<string> {
@@ -91,14 +108,20 @@ async function getInstitutionFromCell(cells: Locator, index: number): Promise<st
   }
 }
 
-async function getAccountMfIdFromCell(cells: Locator, index: number): Promise<string | null> {
+async function getAccountMfIdFromCell(
+  cells: Locator,
+  index: number,
+  row: Locator,
+  accountMap: ReadonlyMap<string, string>,
+): Promise<string | null> {
+  const linkedAccountMfId = await getHoldingAccountMfId(row, accountMap);
   const href = await cells
     .nth(index)
     .locator("a")
     .first()
     .getAttribute("href", { timeout: CELL_TIMEOUT })
     .catch(() => null);
-  return href ? extractAccountMfIdFromDetailUrl(href, "show") : null;
+  return (href ? extractAccountMfIdFromDetailUrl(href, "show") : null) ?? linkedAccountMfId;
 }
 
 async function getPrecedingSectionTitle(table: Locator): Promise<string> {
@@ -158,13 +181,17 @@ export function parseDepositPortfolioItem(
 }
 
 // Parse deposits from .table-depo
-async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
+async function parseDeposits(
+  page: Page,
+  accountMap: ReadonlyMap<string, string>,
+): Promise<PortfolioItem[]> {
   const tables = page.locator("table.table-depo");
   const tableCount = await tables.count();
   const items: PortfolioItem[] = [];
 
   for (let t = 0; t < tableCount; t++) {
     const table = tables.nth(t);
+    if (await table.evaluate((el) => Boolean(el.closest("#portfolio_det_fx")))) continue;
     const sectionTitle = await getPrecedingSectionTitle(table);
     const category = resolveDepositTableCategory(sectionTitle);
     debug(`  .table-depo[${t}] title: "${sectionTitle}" -> ${category}`);
@@ -181,19 +208,124 @@ async function parseDeposits(page: Page): Promise<PortfolioItem[]> {
     const count = await rows.count();
 
     for (let i = 0; i < count; i++) {
-      const cells = rows.nth(i).locator("td");
+      const row = rows.nth(i);
+      const cells = row.locator("td");
       // 並列取得
       const [name, institution, balanceText, accountMfId] = await Promise.all([
         getCellText(cells, columns.NAME),
         getInstitutionFromCell(cells, columns.INSTITUTION),
         getCellText(cells, columns.BALANCE, "0"),
-        getAccountMfIdFromCell(cells, columns.INSTITUTION),
+        getAccountMfIdFromCell(cells, columns.INSTITUTION, row, accountMap),
       ]);
       const item = parseDepositPortfolioItem(category, name, institution, balanceText, accountMfId);
       if (item) items.push(item);
     }
   }
   return items;
+}
+
+// Parse FX balances from #portfolio_det_fx
+async function parseFx(
+  page: Page,
+  accountMap: ReadonlyMap<string, string>,
+): Promise<PortfolioItem[]> {
+  const items: PortfolioItem[] = [];
+
+  // FX balance table uses table-depo class but has different column order from deposits.
+  const balanceRows = page.locator("#portfolio_det_fx table.table-depo tbody tr");
+  const balanceCount = await balanceRows.count();
+  for (let i = 0; i < balanceCount; i++) {
+    const row = balanceRows.nth(i);
+    const cells = row.locator("td");
+    const [name, institutionCell, balanceText, accountMfId] = await Promise.all([
+      getCellText(cells, FX_BALANCE_COLUMNS.NAME),
+      getCellText(cells, FX_BALANCE_COLUMNS.INSTITUTION),
+      getCellText(cells, FX_BALANCE_COLUMNS.BALANCE, "0"),
+      getAccountMfIdFromCell(cells, FX_BALANCE_COLUMNS.INSTITUTION, row, accountMap),
+    ]);
+    if (!name) continue;
+    const institution = institutionCell;
+
+    items.push({
+      ...(accountMfId ? { accountMfId } : {}),
+      name,
+      type: FX_CATEGORY,
+      institution,
+      balance: parseJapaneseNumber(balanceText),
+    });
+  }
+
+  const positionRows = page.locator("#portfolio_det_fx table.table-fx tbody tr");
+  const positionCount = await positionRows.count();
+  for (let i = 0; i < positionCount; i++) {
+    const row = positionRows.nth(i);
+    const cells = row.locator("td");
+    const [
+      name,
+      institutionCell,
+      quantityText,
+      contractRateText,
+      currentRateText,
+      unrealizedGainText,
+      accountMfId,
+    ] = await Promise.all([
+      getCellText(cells, FX_POSITION_COLUMNS.PAIR),
+      getCellText(cells, FX_POSITION_COLUMNS.INSTITUTION),
+      getCellText(cells, FX_POSITION_COLUMNS.QUANTITY),
+      getCellText(cells, FX_POSITION_COLUMNS.CONTRACT_RATE),
+      getCellText(cells, FX_POSITION_COLUMNS.CURRENT_RATE),
+      getCellText(cells, FX_POSITION_COLUMNS.UNREALIZED_GAIN),
+      getAccountMfIdFromCell(cells, FX_POSITION_COLUMNS.INSTITUTION, row, accountMap),
+    ]);
+    if (!name) continue;
+    const unrealizedGain = parseJapaneseNumber(unrealizedGainText);
+    const institution = institutionCell;
+
+    items.push({
+      ...(accountMfId ? { accountMfId } : {}),
+      name,
+      type: FX_CATEGORY,
+      institution,
+      // MF上のFX合計は、残高テーブルに加えて通貨ペアの評価損益も反映されるため、
+      // 通貨ペア行は評価損益を資産寄与額(amount)として保持する。
+      balance: unrealizedGain,
+      quantity: parseFxQuantity(quantityText),
+      avgCostPrice: parseFxRate(contractRateText),
+      unitPrice: parseFxRate(currentRateText),
+      unrealizedGain: unrealizedGain || undefined,
+    });
+  }
+
+  return items;
+}
+
+export function parseFxQuantity(quantityText: string): number | undefined {
+  if (!quantityText) return undefined;
+  const match = quantityText.match(/\d[\d,]*/);
+  if (!match) return undefined;
+  const quantity = parseDecimalNumber(match[0]);
+  if (!quantity) return undefined;
+  return quantityText.includes("売") ? -quantity : quantity;
+}
+
+export function parseFxRate(rateText: string): number | undefined {
+  if (!rateText) return undefined;
+  const match = rateText.match(/-?\d[\d,]*(?:\.\d+)?/);
+  if (!match) return undefined;
+  const rate = parseDecimalNumber(match[0]);
+  return rate || undefined;
+}
+
+export function parsePointQuantity(quantityText: string): number | undefined {
+  if (!quantityText) return undefined;
+  const quantity = parseDecimalNumber(quantityText);
+  return quantity || undefined;
+}
+
+export function parsePointRate(rateText: string): number | undefined {
+  if (!rateText) return undefined;
+  const rate = parseDecimalNumber(rateText);
+  return rate || undefined;
 }
 
 // Helper to convert 0 to undefined only for optional numeric fields
@@ -210,6 +342,7 @@ export function parseOptionalJapaneseNumber(text: string): number | undefined {
 }
 
 type InvestmentPortfolioTexts = {
+  accountMfId?: string | null;
   name: string;
   institution: string;
   balance: string;
@@ -234,6 +367,7 @@ function parseInvestmentPortfolioItem(
     ...(code?.trim() ? { code: code.trim() } : {}),
     type,
     institution: texts.institution.trim(),
+    ...(texts.accountMfId ? { accountMfId: texts.accountMfId } : {}),
     balance: parseJapaneseNumber(texts.balance),
     quantity: orUndefined(parseDecimalNumber(texts.quantity)),
     avgCostPrice: orUndefined(parseDecimalNumber(texts.avgCost)),
@@ -271,6 +405,8 @@ export function parsePnsPortfolioItem(
       type: category,
       institution: cellTexts[POINT_COLUMNS.INSTITUTION]?.trim() ?? "",
       balance: parseJapaneseNumber(cellTexts[POINT_COLUMNS.BALANCE] ?? "0"),
+      quantity: parsePointQuantity(cellTexts[POINT_COLUMNS.QUANTITY] ?? ""),
+      unitPrice: parsePointRate(cellTexts[POINT_COLUMNS.UNIT_PRICE] ?? ""),
     };
   }
 
@@ -292,6 +428,7 @@ export function parsePnsPortfolioItem(
 }
 
 export interface LinkedAccountDetailSource {
+  holdingAccounts: HoldingAccountSource;
   complete: boolean;
   fingerprints: readonly string[];
   items: readonly PortfolioItem[];
@@ -428,6 +565,7 @@ export async function getLinkedAccountDetailSource(
   const fingerprints: string[] = [];
   const scheduledWithdrawals = new Map<string, ScheduledWithdrawalStatus>();
   let failedPageCount = 0;
+  const holdingReferences: HoldingAccountReference[] = [];
 
   for (const account of linkedAccounts) {
     const expectedPath = `/accounts/show/${encodeURIComponent(account.mfId)}`;
@@ -440,6 +578,13 @@ export async function getLinkedAccountDetailSource(
         continue;
       }
 
+      const holdingFingerprints = await readHoldingAccountFingerprints(page);
+      holdingReferences.push(
+        ...holdingFingerprints.map((fingerprint) => ({
+          fingerprint,
+          accountMfId: account.mfId,
+        })),
+      );
       const scheduledWithdrawal = await getScheduledWithdrawalStatus(page);
       if (scheduledWithdrawal) scheduledWithdrawals.set(account.mfId, scheduledWithdrawal);
 
@@ -479,17 +624,27 @@ export async function getLinkedAccountDetailSource(
     warn(`Linked account insurance/pension source incomplete: ${failedPageCount} failures`);
   }
 
-  return { complete: failedPageCount === 0, fingerprints, items, scheduledWithdrawals };
+  return {
+    complete: failedPageCount === 0,
+    fingerprints,
+    items,
+    scheduledWithdrawals,
+    holdingAccounts: { complete: failedPageCount === 0, references: holdingReferences },
+  };
 }
 
 // Parse stocks from .table-eq
-async function parseStocks(page: Page): Promise<PortfolioItem[]> {
+async function parseStocks(
+  page: Page,
+  accountMap: ReadonlyMap<string, string>,
+): Promise<PortfolioItem[]> {
   const rows = page.locator("table.table-eq tbody tr");
   const count = await rows.count();
   const items: PortfolioItem[] = [];
 
   for (let i = 0; i < count; i++) {
-    const cells = rows.nth(i).locator("td");
+    const row = rows.nth(i);
+    const cells = row.locator("td");
     // 並列取得
     const [
       name,
@@ -502,6 +657,7 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
       dailyChangeText,
       unrealizedGainText,
       unrealizedGainPctText,
+      accountMfId,
     ] = await Promise.all([
       getCellText(cells, STOCK_COLUMNS.NAME),
       getCellText(cells, STOCK_COLUMNS.CODE),
@@ -513,11 +669,13 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
       getCellText(cells, STOCK_COLUMNS.DAILY_CHANGE),
       getCellText(cells, STOCK_COLUMNS.UNREALIZED_GAIN),
       getCellText(cells, STOCK_COLUMNS.UNREALIZED_GAIN_PCT),
+      getAccountMfIdFromCell(cells, STOCK_COLUMNS.INSTITUTION, row, accountMap),
     ]);
     const item = parseStockPortfolioItem({
       name,
       code,
       institution,
+      accountMfId,
       balance: balanceText,
       quantity: quantityText,
       avgCost: avgCostText,
@@ -532,13 +690,17 @@ async function parseStocks(page: Page): Promise<PortfolioItem[]> {
 }
 
 // Parse mutual funds from .table-mf
-async function parseFunds(page: Page): Promise<PortfolioItem[]> {
+async function parseFunds(
+  page: Page,
+  accountMap: ReadonlyMap<string, string>,
+): Promise<PortfolioItem[]> {
   const rows = page.locator("table.table-mf tbody tr");
   const count = await rows.count();
   const items: PortfolioItem[] = [];
 
   for (let i = 0; i < count; i++) {
-    const cells = rows.nth(i).locator("td");
+    const row = rows.nth(i);
+    const cells = row.locator("td");
     // 並列取得
     const [
       name,
@@ -550,6 +712,7 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
       dailyChangeText,
       unrealizedGainText,
       unrealizedGainPctText,
+      accountMfId,
     ] = await Promise.all([
       getCellText(cells, FUND_COLUMNS.NAME),
       getInstitutionFromCell(cells, FUND_COLUMNS.INSTITUTION),
@@ -560,10 +723,12 @@ async function parseFunds(page: Page): Promise<PortfolioItem[]> {
       getCellText(cells, FUND_COLUMNS.DAILY_CHANGE),
       getCellText(cells, FUND_COLUMNS.UNREALIZED_GAIN),
       getCellText(cells, FUND_COLUMNS.UNREALIZED_GAIN_PCT),
+      getAccountMfIdFromCell(cells, FUND_COLUMNS.INSTITUTION, row, accountMap),
     ]);
     const item = parseFundPortfolioItem({
       name,
       institution,
+      accountMfId,
       balance: balanceText,
       quantity: quantityText,
       avgCost: avgCostText,
@@ -669,7 +834,8 @@ export async function parseInsuranceAndPoints(
 export async function getPortfolio(
   page: Page,
   manualHoldingAccountMap: ManualHoldingAccountMap = new Map(),
-  linkedAccountPnsSource?: Pick<LinkedAccountDetailSource, "complete" | "fingerprints" | "items">,
+  linkedAccountPnsSource?: Pick<LinkedAccountDetailSource, "complete" | "fingerprints" | "items"> &
+    Partial<Pick<LinkedAccountDetailSource, "holdingAccounts">>,
 ): Promise<Portfolio> {
   debug("Getting portfolio from /bs/portfolio page...");
 
@@ -693,20 +859,27 @@ export async function getPortfolio(
   // ポートフォリオコンテンツが表示されるまで待機
   await page.locator("h1.heading-normal").first().waitFor({ state: "visible", timeout: 10000 });
 
-  // 4つのパース関数を並列実行
-  const [deposits, stocks, funds, insuranceAndPoints] = await Promise.all([
-    parseDeposits(page),
-    parseStocks(page),
-    parseFunds(page),
+  const accountMap = buildHoldingAccountMap(
+    await readHoldingAccountFingerprints(page),
+    linkedAccountPnsSource?.holdingAccounts,
+  );
+
+  // Parse each asset section without changing its values or row count.
+  const [deposits, stocks, funds, insuranceAndPoints, fx] = await Promise.all([
+    parseDeposits(page, accountMap),
+    parseStocks(page, accountMap),
+    parseFunds(page, accountMap),
     parseInsuranceAndPoints(page, manualHoldingAccountMap, linkedAccountPnsSource),
+    parseFx(page, accountMap),
   ]);
 
   debug(`  .table-depo rows: ${deposits.length}`);
   debug(`  .table-eq rows: ${stocks.length}`);
   debug(`  .table-mf rows: ${funds.length}`);
   debug(`  .table-pns items: ${insuranceAndPoints.length}`);
+  debug(`  FX items: ${fx.length}`);
 
-  const items: PortfolioItem[] = [...deposits, ...stocks, ...funds, ...insuranceAndPoints];
+  const items: PortfolioItem[] = [...deposits, ...stocks, ...funds, ...insuranceAndPoints, ...fx];
 
   if (totalAssets === 0) {
     totalAssets = items.reduce((sum, item) => sum + (item.balance || 0), 0);

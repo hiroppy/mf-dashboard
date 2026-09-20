@@ -9,6 +9,7 @@ const CATEGORY_VAR_MAP: Record<CategoryName, string> = {
   保険: "--color-asset-insurance",
   年金: "--color-asset-pension",
   "ポイント・マイル": "--color-asset-point",
+  FX: "--color-asset-fx",
   ポイント: "--color-asset-point",
   "現金・カード": "--color-cat-cash-card",
   住宅: "--color-cat-housing",

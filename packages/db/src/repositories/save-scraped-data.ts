@@ -80,7 +80,20 @@ export function normalizePortfolioCategories(
       if (item.type !== DEPOSIT_ASSET_CATEGORY) return item;
 
       const accountMfId = resolvePortfolioAccountMfId(item, currentAccountMfIds, accountMfIdByName);
-      const institutionCategory = accountMfId ? institutionCategories.get(accountMfId) : undefined;
+      let institutionCategory = accountMfId ? institutionCategories.get(accountMfId) : undefined;
+      if (!accountMfId && !item.accountMfId) {
+        // Duplicate account names need not prevent classification when every
+        // candidate has the same known category. Account ownership stays unresolved.
+        const candidates = registeredAccounts.accounts
+          .filter((account) => account.name === item.institution)
+          .map((account) => institutionCategories.get(account.mfId));
+        if (
+          candidates.length > 0 &&
+          candidates.every((category) => category && category === candidates[0])
+        ) {
+          institutionCategory = candidates[0];
+        }
+      }
       if (!institutionCategory) {
         throw new Error("Cannot classify a deposit without a unique current account category");
       }

@@ -22,6 +22,7 @@ describe("getCategoryColor", () => {
 
 describe("getAssetCategoryColor", () => {
   it("資産カテゴリの var() 参照を返す", () => {
+    expect(getAssetCategoryColor("FX")).toBe("var(--color-asset-fx)");
     expect(getAssetCategoryColor("預金・現金")).toBe("var(--color-asset-deposit)");
     expect(getAssetCategoryColor("暗号資産")).toBe("var(--color-asset-crypto)");
     expect(getAssetCategoryColor("電子マネー・プリペイド")).toBe("var(--color-asset-prepaid)");
