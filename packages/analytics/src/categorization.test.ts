@@ -1,9 +1,11 @@
-import { generateText } from "ai";
+import { generateText, NoObjectGeneratedError } from "ai";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import type { z } from "zod";
 import { generateCategoryDecisionWithLLM } from "./categorization.js";
 import { isLLMEnabled } from "./config.js";
 
-vi.mock("ai", () => ({
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
   generateText: vi.fn<() => Promise<unknown>>(),
   Output: {
     object: vi.fn<(value: unknown) => unknown>((value) => value),
@@ -48,10 +50,85 @@ describe("generateCategoryDecisionWithLLM", () => {
   test("LLMが無効の場合はgenerateTextを呼ばずnullを返す", async () => {
     vi.mocked(isLLMEnabled).mockReturnValue(false);
 
-    const result = await generateCategoryDecisionWithLLM({ transaction, candidates });
+    const result = await generateCategoryDecisionWithLLM({
+      transaction,
+      candidates,
+      warn: () => {},
+    });
 
     expect(result).toBeNull();
     expect(generateText).not.toHaveBeenCalled();
+  });
+
+  test("候補が空の場合はgenerateTextを呼ばずnullを返す", async () => {
+    const result = await generateCategoryDecisionWithLLM({
+      transaction,
+      candidates: [],
+      warn: () => {},
+    });
+
+    expect(result).toBeNull();
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  test("候補に無いcategoryIdはスキーマが拒否する", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      output: { categoryId: "13:77", confidence: 0.78, reason: "subscription service" },
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    await generateCategoryDecisionWithLLM({ transaction, candidates, warn: () => {} });
+
+    const schema = (
+      vi.mocked(generateText).mock.calls[0]?.[0].output as { schema?: z.ZodType } | undefined
+    )?.schema;
+    if (!schema) {
+      throw new Error("Expected generateText to receive an output schema");
+    }
+    const base = { confidence: 0.5, reason: "reason" };
+    expect(schema.safeParse({ ...base, categoryId: "11:41" }).success).toBe(true);
+    expect(schema.safeParse({ ...base, categoryId: "13:77" }).success).toBe(true);
+    // 大項目と中項目を別々の string で受けていたときに生成されうる形。
+    expect(schema.safeParse({ ...base, categoryId: "D11:42" }).success).toBe(false);
+    expect(schema.safeParse({ ...base, categoryId: ":" }).success).toBe(false);
+    // 候補に存在する大項目と中項目でも、対応していない組み合わせは通さない。
+    expect(schema.safeParse({ ...base, categoryId: "11:77" }).success).toBe(false);
+  });
+
+  test("スキーマに合わない出力はwarnを呼んでnullを返す", async () => {
+    const warn = vi.fn<(...args: unknown[]) => void>();
+    vi.mocked(generateText).mockRejectedValue(
+      new NoObjectGeneratedError({
+        message: "no object generated",
+        text: '{"categoryId":"D11:42","reason":"private merchant name"}',
+        response: { id: "r", timestamp: new Date(0), modelId: "mock-model" },
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          inputTokenDetails: {
+            noCacheTokens: undefined,
+            cacheReadTokens: undefined,
+            cacheWriteTokens: undefined,
+          },
+          outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
+        },
+        finishReason: "stop",
+      }),
+    );
+
+    const result = await generateCategoryDecisionWithLLM({ transaction, candidates, warn });
+
+    expect(result).toBeNull();
+    expect(warn).toHaveBeenCalledWith("LLM category decision ignored (code: LLM_SCHEMA_MISMATCH).");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("private merchant name");
+  });
+
+  test("スキーマ違反以外のエラーはそのまま投げる", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("provider unreachable"));
+
+    await expect(
+      generateCategoryDecisionWithLLM({ transaction, candidates, warn: () => {} }),
+    ).rejects.toThrow("provider unreachable");
   });
 
   test("信頼できない取引データをJSON境界内に隔離してLLM決定を返す", async () => {
@@ -63,8 +140,7 @@ describe("generateCategoryDecisionWithLLM", () => {
     };
     vi.mocked(generateText).mockResolvedValue({
       output: {
-        largeCategoryId: "13",
-        middleCategoryId: "77",
+        categoryId: "13:77",
         confidence: 0.78,
         reason: "subscription service",
       },
@@ -73,6 +149,7 @@ describe("generateCategoryDecisionWithLLM", () => {
     const result = await generateCategoryDecisionWithLLM({
       transaction: adversarialTransaction,
       candidates,
+      warn: () => {},
     });
 
     expect(generateText).toHaveBeenCalledTimes(1);
@@ -95,14 +172,10 @@ describe("generateCategoryDecisionWithLLM", () => {
         type: adversarialTransaction.type,
         description: adversarialTransaction.description,
       },
-      candidates: candidates.map(
-        ({ largeCategoryId, largeCategoryName, middleCategoryId, middleCategoryName }) => ({
-          largeCategoryId,
-          largeCategoryName,
-          middleCategoryId,
-          middleCategoryName,
-        }),
-      ),
+      candidates: [
+        { categoryId: "11:41", largeCategoryName: "食費", middleCategoryName: "食料品" },
+        { categoryId: "13:77", largeCategoryName: "趣味・娯楽", middleCategoryName: "動画・音楽" },
+      ],
     });
     expect(serializedData).not.toContain("Account A");
     expect(serializedData).not.toContain("transaction-a");
