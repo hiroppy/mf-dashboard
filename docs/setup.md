@@ -357,3 +357,12 @@ cp data/category-rules.example.json data/category-rules.json
 - 更新に失敗してもcrawlerは停止せず、対象取引を未分類のまま保存する
 
 採用したカテゴリはMoney Forward MEの`/cf/update`へ反映する。その後、対象月を再取得してデータベースへ保存する。外部プロバイダーへ取引情報を送信してよい場合だけ、LLMによる推論を有効にする。
+
+##### TypeSafe (Jev) を使う
+
+`generateText`ベースの推論の代わりに、`.env`で`CATEGORIZATION_PROVIDER=typesafe`と`TYPESAFE_API_KEY`を設定すると、TypeSafe AIの[Jev](https://typesafe.ai/)を分類専用に使う。フロンティアLLMと比べ1回の呼び出しは1/7〜1/80の単価で、5〜9倍速い。`llm.enabled`の判定や`maxPerRun`・`minConfidence`の閾値は共通で、切り替えても挙動は変わらない。`AI_PROVIDER`はチャットとinsightsで引き続き使われるため、両方を並行して設定してよい。
+
+- Jevは候補の集合からしか選べない構造のため、候補に存在しないIDが返ることはない
+- `confidence`はJevが返す確率分布の広がりから計算される統計量で、汎用LLMの自己申告値とは意味が異なる。`llm.minConfidence`の閾値は同じ値をそのまま流用できるが、較正の性質が違う点に注意する
+- Jevはテキストを生成しないため、`reason`は返ってきた確率分布の上位3件から機械的に組み立てる
+- Jevのdocsは日本語を含むCJK入力で精度が下がると明記している。取引内容と候補カテゴリ名は日本語のまま送信する

@@ -34,3 +34,7 @@ export function getModel() {
 
   return providers[provider]()(model);
 }
+
+export function isTypeSafeCategorizationEnabled(): boolean {
+  return process.env.CATEGORIZATION_PROVIDER === "typesafe" && !!process.env.TYPESAFE_API_KEY;
+}

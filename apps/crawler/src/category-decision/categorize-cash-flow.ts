@@ -112,6 +112,7 @@ export async function categorizeCashFlowMonth(options: {
         generateCategoryDecisionWithLLM({
           transaction,
           candidates: candidateList,
+          warn,
         }),
     });
     const decisions = await engine.decideMany(targets);
