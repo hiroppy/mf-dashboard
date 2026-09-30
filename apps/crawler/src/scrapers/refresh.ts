@@ -17,19 +17,20 @@ export async function navigateToAccountsPage(
   options: NavigationOptions = {},
 ): Promise<void> {
   const retryDelayMs = options.retryDelayMs ?? NAVIGATION_RETRY_DELAY_MS;
-  await navigateToPage(page, mfUrls.accounts, { retryDelayMs });
+  await navigateToPage(page, mfUrls.accounts, { force: true, retryDelayMs });
 }
 
 export async function getRefreshStatus(
   page: Page,
 ): Promise<{ incompleteAccounts: string[]; remainingCount: number }> {
   const rows = page.locator("#account-table tr:has(td.account-status)");
+  await rows.first().waitFor({ state: "visible", timeout: 10000 });
   const count = await rows.count();
   const refreshRows: RefreshStatusRow[] = [];
 
   for (let i = 0; i < count; i++) {
     const row = rows.nth(i);
-    const statuses = await row.locator("td.account-status").allTextContents();
+    const statuses = await row.locator("td.account-status").allInnerTexts();
     const nameLink = row.locator("td.service a").first();
     refreshRows.push({
       name: statuses.some((status) => status.trim() === "更新中")
@@ -117,6 +118,7 @@ export async function clickRefreshButton(
   info("Waiting for all updates to complete on /accounts page...");
 
   const startTime = Date.now();
+  let consecutiveCompletedChecks = 0;
 
   while (Date.now() - startTime < maxWaitTimeMs) {
     const { incompleteAccounts, remainingCount } = await getRefreshStatus(page);
@@ -132,6 +134,11 @@ export async function clickRefreshButton(
     });
 
     if (remainingCount === 0) {
+      consecutiveCompletedChecks++;
+    } else {
+      consecutiveCompletedChecks = 0;
+    }
+    if (consecutiveCompletedChecks >= 2) {
       info("All updates completed!");
       return { completed: true, incompleteAccounts: [] };
     }

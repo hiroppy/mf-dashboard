@@ -4,6 +4,7 @@ const DEFAULT_NAVIGATION_TIMEOUT_MS = 60000;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 
 interface NavigationOptions {
+  force?: boolean;
   retryDelayMs?: number;
   timeoutMs?: number;
 }
@@ -26,7 +27,7 @@ export async function navigateToPage(
   url: string,
   options: NavigationOptions = {},
 ): Promise<Response | null> {
-  if (isCurrentUrl(page, url)) {
+  if (!options.force && isCurrentUrl(page, url)) {
     return null;
   }
 
