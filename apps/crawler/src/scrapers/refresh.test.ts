@@ -9,6 +9,10 @@ import {
   type RefreshStatusRow,
 } from "./refresh.js";
 
+function diagnosticEventMethods() {
+  return { on: vi.fn<() => void>(), off: vi.fn<() => void>() };
+}
+
 describe("getMaxWaitMinutes", () => {
   test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(
     "invalid MAX_WAIT_MINUTES=%s は default 値を返す",
@@ -104,6 +108,7 @@ describe("getRefreshStatus", () => {
       nth: vi.fn<() => typeof row>().mockReturnValue(row),
     };
     const page = {
+      ...diagnosticEventMethods(),
       locator: vi.fn<() => typeof rows>().mockReturnValue(rows),
     } as unknown as Page;
 
@@ -125,7 +130,7 @@ describe("navigateToAccountsPage", () => {
       .mockRejectedValueOnce(new Error(message))
       .mockResolvedValueOnce(null);
     const isClosed = vi.fn<(...args: any[]) => any>().mockReturnValue(false);
-    const retryPage = { goto, isClosed } as unknown as Page;
+    const retryPage = { ...diagnosticEventMethods(), goto, isClosed } as unknown as Page;
 
     await navigateToAccountsPage(retryPage, { retryDelayMs: 0 });
 
@@ -140,6 +145,7 @@ describe("navigateToAccountsPage", () => {
     const error = new Error("page.goto: Page crashed");
     const goto = vi.fn<(...args: any[]) => any>().mockRejectedValue(error);
     const page = {
+      ...diagnosticEventMethods(),
       goto,
       isClosed: vi.fn<(...args: any[]) => any>().mockReturnValue(false),
     } as unknown as Page;
@@ -167,6 +173,7 @@ describe("clickRefreshButton", () => {
       count: vi.fn<() => Promise<number>>(async () => 1),
     };
     const page = {
+      ...diagnosticEventMethods(),
       goto: vi.fn<() => Promise<void>>(async () => undefined),
       waitForLoadState: vi.fn<() => Promise<void>>(async () => undefined),
       waitForTimeout: vi.fn<() => Promise<void>>(async () => undefined),

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { safeErrorDetails, writeCrawlerDiagnostic } from "./auth/diagnostics.js";
 import {
   getCrawlerRunStatePath,
   writeCrawlerRunState,
@@ -142,6 +143,31 @@ export async function createCrawlerProgressReporter(
     mutator(draft);
     await writeCrawlerRunState(draft, options);
     await reporterOptions.onUpdate?.();
+    for (const item of draft.timeline) {
+      const previous = state.timeline.find((candidate) => candidate.id === item.id);
+      const remaining = item.metadata?.kind === "refresh" ? item.metadata.remainingAccounts : null;
+      const previousRemaining =
+        previous?.metadata?.kind === "refresh" ? previous.metadata.remainingAccounts : null;
+      if (previous?.status === item.status && remaining === previousRemaining) continue;
+      writeCrawlerDiagnostic({
+        event:
+          item.status === "running"
+            ? previous
+              ? "step_progress"
+              : "step_started"
+            : `step_${item.status}`,
+        step: item.step,
+        step_id: item.id,
+        elapsed_ms: item.startedAt ? Math.max(0, Date.now() - Date.parse(item.startedAt)) : null,
+        reason_code: item.reason?.code ?? null,
+        ...(item.metadata?.kind === "refresh"
+          ? {
+              remaining_count: remaining,
+              max_wait_minutes: item.metadata.maxWaitMinutes,
+            }
+          : {}),
+      });
+    }
     state = draft;
   }
 
@@ -322,6 +348,12 @@ export async function runCrawlerStep<T>(
     await reporter.completeStep(stepId);
     return result;
   } catch (error) {
+    writeCrawlerDiagnostic({
+      event: "step_error",
+      step: step.code,
+      step_id: stepId,
+      ...safeErrorDetails(error),
+    });
     await reporter.failStep(stepId, normalizeCrawlerError(error, options.failureCode ?? step.code));
     throw error;
   }

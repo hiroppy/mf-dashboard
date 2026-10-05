@@ -3,6 +3,7 @@ import type { BrowserContext, Page } from "playwright";
 import { log, debug } from "../logger.js";
 import { navigateToAccountsPage } from "../scrapers/refresh.js";
 import { getCredentials, getOTP } from "./credentials.js";
+import { withAuthDiagnostics, type AuthCheckpoint } from "./diagnostics.js";
 import { hasAuthState, saveAuthState } from "./state.js";
 
 const TIMEOUTS = {
@@ -59,26 +60,34 @@ async function maybeHandleOtp(
     submitSelector,
     label,
     timeout = TIMEOUTS.short,
+    checkpoint,
   }: {
     inputSelector: string;
     submitSelector: string;
     label: string;
     timeout?: number;
+    checkpoint: AuthCheckpoint;
   },
 ): Promise<void> {
+  const otpInput = page.locator(inputSelector).first();
+  checkpoint("otp_probe");
   try {
     debug(`Checking for ${label} OTP...`);
-    const otpInput = page.locator(inputSelector).first();
     await otpInput.waitFor({ state: "visible", timeout });
-
-    debug(`${label} OTP required, getting from 1Password...`);
-    const otp = await getOTP();
-    await otpInput.fill(otp);
-    debug("Clicking verify button...");
-    await page.locator(submitSelector).first().click();
-  } catch {
-    debug(`${label} OTP not required`);
+  } catch (failure) {
+    if (failure instanceof Error && failure.name === "TimeoutError") {
+      debug(`${label} OTP not required`);
+      return;
+    }
+    throw failure;
   }
+  checkpoint("otp_fetch");
+  debug(`${label} OTP required, getting from 1Password...`);
+  const otp = await getOTP();
+  checkpoint("otp_submit");
+  await otpInput.fill(otp);
+  debug("Clicking verify button...");
+  await page.locator(submitSelector).first().click();
 }
 
 /**
@@ -117,47 +126,60 @@ async function isSessionValid(page: Page): Promise<boolean> {
  * Login with auth state if available, otherwise perform full login
  */
 export async function loginWithAuthState(page: Page, context: BrowserContext): Promise<void> {
-  // If auth state exists, check if session is valid
-  if (hasAuthState()) {
-    debug("Auth state found, checking session validity...");
+  return withAuthDiagnostics(page, async (checkpoint) => {
+    // If auth state exists, check if session is valid
+    if (hasAuthState()) {
+      checkpoint("session_check");
+      debug("Auth state found, checking session validity...");
 
-    const valid = await isSessionValid(page);
-    if (valid) {
-      debug("Using existing session from auth state");
-      return;
+      const valid = await isSessionValid(page);
+      if (valid) {
+        debug("Using existing session from auth state");
+        return;
+      }
+
+      debug("Session expired, performing full login...");
+    } else {
+      debug("No auth state found, performing full login...");
     }
 
-    debug("Session expired, performing full login...");
-  } else {
-    debug("No auth state found, performing full login...");
-  }
+    // Perform full login
+    await performLogin(page, checkpoint);
 
-  // Perform full login
-  await login(page);
-
-  // Save auth state after successful login
-  await saveAuthState(context);
+    // Save auth state after successful login
+    checkpoint("auth_state_save");
+    await saveAuthState(context);
+  });
 }
 
 export async function login(page: Page): Promise<void> {
+  return withAuthDiagnostics(page, (checkpoint) => performLogin(page, checkpoint));
+}
+
+async function performLogin(page: Page, checkpoint: AuthCheckpoint): Promise<void> {
+  checkpoint("credentials_fetch");
   const { username, password } = await getCredentials();
 
+  checkpoint("mfid_open");
   debug("Navigating to login page...");
   await page.goto(mfUrls.auth.signIn, {
     waitUntil: "domcontentloaded",
   });
 
   // Enter email
+  checkpoint("email_input");
   debug("Entering email...");
   const emailInput = page.locator(SELECTORS.mfidEmail);
   await emailInput.waitFor({ state: "visible", timeout: TIMEOUTS.medium });
   await emailInput.fill(username);
 
   // Click sign in button
+  checkpoint("email_submit");
   debug("Clicking Sign in button...");
   await page.locator(SELECTORS.mfidSubmit).click();
 
   // Wait for password field
+  checkpoint("password_input");
   debug("Waiting for password page...");
   const passwordInput = page.locator(SELECTORS.mfidPassword);
   await passwordInput.waitFor({ state: "visible", timeout: TIMEOUTS.medium });
@@ -165,6 +187,7 @@ export async function login(page: Page): Promise<void> {
   // Enter password
   debug("Entering password...");
   await passwordInput.fill(password);
+  checkpoint("password_submit");
   debug("Clicking Sign in button...");
   await page.locator(SELECTORS.mfidSubmit).click();
 
@@ -173,15 +196,18 @@ export async function login(page: Page): Promise<void> {
     inputSelector: SELECTORS.mfidOtpInput,
     submitSelector: SELECTORS.mfidOtpSubmit,
     label: "MFID",
+    checkpoint,
   });
 
   // Wait for redirect after login
+  checkpoint("mfid_redirect");
   debug("Waiting for login to complete...");
   await page.waitForURL(/https:\/\/(id\.)?moneyforward\.com\/.*/, {
     timeout: TIMEOUTS.login,
   });
 
   // Navigate to Money Forward ME - will redirect to MFID for auth
+  checkpoint("me_open");
   debug("Navigating to Money Forward ME...");
   // Don't wait for full load, just start navigation
   await page.goto(mfUrls.signIn);
@@ -193,6 +219,7 @@ export async function login(page: Page): Promise<void> {
   let currentUrl = page.url();
   debug("URL after initial wait:", currentUrl);
   if (currentUrl.startsWith(mfUrls.signIn)) {
+    checkpoint("me_redirect");
     // Wait for redirect to MFID
     debug("Waiting for MFID redirect...");
     await page.waitForURL(/id\.moneyforward\.com/, {
@@ -211,6 +238,7 @@ export async function login(page: Page): Promise<void> {
 
   // Check if we're on account selector or password page
   if (currentUrl.includes("account_selector")) {
+    checkpoint("account_select");
     // Click account button (contains email address)
     debug("Account selector found, clicking account...");
     // Try multiple selectors: email address, or Japanese/English text
@@ -221,6 +249,7 @@ export async function login(page: Page): Promise<void> {
     debug("Clicking account and waiting for navigation...");
     await accountButton.click();
 
+    checkpoint("account_redirect");
     // Wait for either password page or direct redirect to ME
     await page.waitForURL(/id\.moneyforward\.com\/sign_in\/password|moneyforward\.com\//, {
       timeout: TIMEOUTS.long,
@@ -230,6 +259,7 @@ export async function login(page: Page): Promise<void> {
 
   // Check if we need to enter password or already redirected to ME
   if (currentUrl.includes(mfUrls.auth.password)) {
+    checkpoint("me_password_input");
     // Wait for password page
     debug("Waiting for ME password page...");
     const mePasswordInput = page.locator(SELECTORS.mePassword).first();
@@ -239,11 +269,13 @@ export async function login(page: Page): Promise<void> {
     debug("Entering ME password...");
     await mePasswordInput.fill(password);
 
+    checkpoint("me_password_submit");
     // Click Sign in button
     debug("Clicking Sign in button...");
     await page.locator(SELECTORS.meSignIn).click();
 
     // Wait for redirect to ME
+    checkpoint("me_login_redirect");
     debug("Waiting for ME redirect...");
     await page.waitForURL(`${mfUrls.home}**`, { timeout: TIMEOUTS.login });
   } else {
@@ -252,6 +284,7 @@ export async function login(page: Page): Promise<void> {
 
   // Recheck against an authenticated-only page. moneyforward.com/ itself is
   // publicly accessible and therefore cannot be used as proof of login.
+  checkpoint("session_verify");
   await navigateToAccountsPage(page);
   await waitForUrlChange(page);
 
