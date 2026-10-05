@@ -4,11 +4,58 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { safeErrorDetails, safePageLocation, withAuthDiagnostics } from "./diagnostics.js";
+import { info, warn } from "../logger.js";
+import {
+  safeErrorDetails,
+  safePageLocation,
+  withAuthDiagnostics,
+  writeCrawlerDiagnostic,
+} from "./diagnostics.js";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.mocked(info).mockReset();
+  vi.mocked(warn).mockReset();
+});
 
 describe("safe authentication diagnostics", () => {
+  test("serialization and warning failures never escape", () => {
+    const warning = vi.mocked(warn).mockImplementation(() => {
+      throw new Error("synthetic-warning-failure");
+    });
+    expect(() => writeCrawlerDiagnostic({ event: "test", value: 1n })).not.toThrow();
+    expect(warning).toHaveBeenCalledWith("Could not persist crawler diagnostic");
+  });
+
+  test("stdout failure still allows the diagnostic file to be persisted", () => {
+    const directory = mkdtempSync(join(tmpdir(), "mf-diagnostics-stdout-"));
+    const destination = join(directory, "run.ndjson");
+    vi.stubEnv("CRAWLER_DIAGNOSTIC_PATH", destination);
+    vi.mocked(info).mockImplementation(() => {
+      throw new Error("synthetic-stdout-failure");
+    });
+    try {
+      expect(() => writeCrawlerDiagnostic({ event: "test" })).not.toThrow();
+      expect(JSON.parse(readFileSync(destination, "utf8"))).toMatchObject({ event: "test" });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("file persistence and warning failures never escape", () => {
+    const directory = mkdtempSync(join(tmpdir(), "mf-diagnostics-write-failure-"));
+    vi.stubEnv("CRAWLER_DIAGNOSTIC_PATH", directory);
+    const warning = vi.mocked(warn).mockImplementation(() => {
+      throw new Error("synthetic-warning-failure");
+    });
+    try {
+      expect(() => writeCrawlerDiagnostic({ event: "test" })).not.toThrow();
+      expect(warning).toHaveBeenCalledWith("Could not persist crawler diagnostic");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test("keeps only error category, known network code and numeric timeout", () => {
     const failure = new Error(
       "Timeout 10000ms exceeded; user-a@example.com password=secret net::ERR_CONNECTION_RESET https://id.moneyforward.com/?otp=123456",

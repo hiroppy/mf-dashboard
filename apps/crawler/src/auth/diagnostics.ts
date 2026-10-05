@@ -94,14 +94,22 @@ export function safePageLocation(value: string): string {
 }
 
 export function writeCrawlerDiagnostic(event: Record<string, unknown>): void {
-  const record = JSON.stringify({ version: 1, at: new Date().toISOString(), ...event });
-  info(`MF_CRAWLER_DIAGNOSTIC ${record}`);
-  const destination = process.env.CRAWLER_DIAGNOSTIC_PATH;
-  if (destination) {
+  try {
+    const record = JSON.stringify({ version: 1, at: new Date().toISOString(), ...event });
     try {
-      appendFileSync(destination, `${record}\n`, { encoding: "utf8", mode: 0o600 });
+      info(`MF_CRAWLER_DIAGNOSTIC ${record}`);
     } catch {
+      // Still persist the event when stdout is unavailable.
+    }
+    const destination = process.env.CRAWLER_DIAGNOSTIC_PATH;
+    if (destination) {
+      appendFileSync(destination, `${record}\n`, { encoding: "utf8", mode: 0o600 });
+    }
+  } catch {
+    try {
       warn("Could not persist crawler diagnostic");
+    } catch {
+      // Diagnostic failures must never replace the crawler's result or error.
     }
   }
 }

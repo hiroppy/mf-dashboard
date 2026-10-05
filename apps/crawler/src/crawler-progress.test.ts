@@ -9,8 +9,48 @@ import {
   runCrawlerStep,
 } from "./crawler-progress.js";
 import { getCrawlerRunState, runWithCrawlerRunLock } from "./crawler-run-lock.js";
+import { info, warn } from "./logger.js";
 
 describe("crawler progress", () => {
+  test("diagnostic sink failures preserve the original error and persist the failed step", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "crawler-diagnostic-sink-failure-"));
+    const statePath = path.join(directory, "state.json");
+    // An existing directory makes file persistence fail deterministically.
+    vi.stubEnv("CRAWLER_DIAGNOSTIC_PATH", directory);
+    const output = vi.mocked(info).mockImplementation(() => {
+      throw new Error("synthetic-stdout-failure");
+    });
+    const warning = vi.mocked(warn).mockImplementation(() => {
+      throw new Error("synthetic-warning-failure");
+    });
+    const failure = Object.assign(new Error("Timeout 10000ms exceeded"), { name: "TimeoutError" });
+    try {
+      const progress = await createCrawlerProgressReporter(statePath, {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      await expect(
+        runCrawlerStep(progress, CRAWLER_STEPS.registeredAccounts, async () => {
+          throw failure;
+        }),
+      ).rejects.toBe(failure);
+      const state = JSON.parse(await readFile(statePath, "utf8"));
+      expect(state.timeline).toEqual([
+        expect.objectContaining({
+          step: "registered_accounts",
+          status: "failed",
+          reason: expect.objectContaining({ code: "moneyforward_timeout" }),
+        }),
+      ]);
+    } finally {
+      output.mockReset();
+      warning.mockReset();
+      vi.unstubAllEnvs();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("persists direct refresh progress and warnings without account names or messages", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "crawler-refresh-diagnostics-"));
     const destination = path.join(directory, "run.ndjson");
