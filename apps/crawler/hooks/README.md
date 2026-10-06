@@ -56,13 +56,13 @@ export default hook;
 ### 使用例
 
 ```ts
-import type { Hook } from "../src/hooks/types.js";
 import {
   getCsrfToken,
   getTransactionId,
   getTransactionRows,
   updateTransactionCategory,
 } from "../src/hooks/helpers.js";
+import type { Hook } from "../src/hooks/types.js";
 
 const hook: Hook = async (page) => {
   await page.goto("https://moneyforward.com/cf", {

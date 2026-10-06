@@ -31,8 +31,8 @@ description: Use when adding new scraping targets to the crawler
 ```typescript
 // apps/crawler/src/scrapers/my-feature.ts
 import type { MyData } from "@mf-dashboard/db/types";
-import type { Page } from "playwright";
 import { mfUrls } from "@mf-dashboard/meta";
+import type { Page } from "playwright";
 import { debug } from "../logger.js";
 import { parseJapaneseNumber } from "../parsers.js";
 
