@@ -55,6 +55,20 @@ const NETWORK_CODES = [
   "EHOSTUNREACH",
 ] as const;
 
+const FAILURE_KINDS = [
+  ["navigation_interrupted", /interrupted by another navigation/i],
+  [
+    "execution_context_destroyed",
+    /execution context was destroyed|cannot find context with specified id/i,
+  ],
+  ["frame_detached", /(?:^|:\s*)(?:navigating )?frame (?:was|has been|is) detached\b/i],
+  ["page_crashed", /page crashed/i],
+  [
+    "page_closed",
+    /target page, context or browser has been closed|target closed|page (?:has been|was|is) closed/i,
+  ],
+] as const;
+
 export function safeErrorDetails(failure: unknown) {
   const message = failure instanceof Error ? failure.message : "";
   const networkCode =
@@ -69,6 +83,15 @@ export function safeErrorDetails(failure: unknown) {
           : "operation_failed",
     network_code: networkCode,
     timeout_ms: timeoutMatch ? Number(timeoutMatch[1]) : null,
+    failure_kind:
+      FAILURE_KINDS.find(([, pattern]) => pattern.test(message))?.[0] ??
+      (networkCode === "ERR_ABORTED"
+        ? "navigation_aborted"
+        : networkCode
+          ? "network"
+          : failure instanceof Error && (failure.name === "TimeoutError" || timeoutMatch)
+            ? "timeout"
+            : "unknown"),
   };
 }
 

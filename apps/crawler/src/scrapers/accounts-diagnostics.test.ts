@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { afterEach, expect, test, vi } from "vitest";
+import { info } from "../logger.js";
 import { inspectAccountsPage, withAccountsPageDiagnostics } from "./accounts-diagnostics.js";
 
 const missingTable = {
@@ -28,7 +29,30 @@ function createPage(structure = missingTable) {
   });
 }
 
+function diagnosticRecords() {
+  return vi
+    .mocked(info)
+    .mock.calls.map(([message]) => message)
+    .filter(
+      (message): message is string =>
+        typeof message === "string" && message.startsWith("MF_CRAWLER_DIAGNOSTIC "),
+    )
+    .map((message) => JSON.parse(message.slice("MF_CRAWLER_DIAGNOSTIC ".length)));
+}
+
+const observedEvents = [
+  "request",
+  "response",
+  "requestfailed",
+  "framenavigated",
+  "domcontentloaded",
+  "load",
+  "close",
+  "crash",
+];
+
 afterEach(() => {
+  vi.mocked(info).mockClear();
   vi.unstubAllEnvs();
   vi.useRealTimers();
 });
@@ -174,3 +198,132 @@ test("diagnostics preserve successful task results", async () => {
     }),
   ).resolves.toBe(result);
 });
+
+test("correlates document events before and during goto and removes all listeners", async () => {
+  const page = createPage();
+  const request = () => ({
+    isNavigationRequest: () => true,
+    frame: () => page.mainFrame(),
+    url: () => page.url(),
+  });
+  const beforeGoto = request();
+  const duringGoto = request();
+  await withAccountsPageDiagnostics(
+    page as unknown as Page,
+    "refresh_navigation",
+    async (checkpoint, navigation) => {
+      await checkpoint("navigation");
+      page.emit("request", { isNavigationRequest: () => false });
+      page.emit("request", { ...request(), frame: () => ({}) });
+      page.emit("framenavigated", {});
+      page.emit("request", beforeGoto);
+      page.emit("response", {
+        request: () => beforeGoto,
+        status: () => 200,
+        url: () => page.url(),
+      });
+      navigation("started");
+      page.emit("request", duringGoto);
+      page.emit("response", {
+        request: () => duringGoto,
+        status: () => 200,
+        url: () => page.url(),
+      });
+      page.emit("framenavigated", page.mainFrame());
+      page.emit("domcontentloaded");
+      page.emit("load");
+      navigation("completed");
+    },
+    { operationId: "test-operation", attempt: 1, maxAttempts: 2 },
+  );
+  const records = diagnosticRecords();
+  expect(records.map((record) => record.event)).toEqual([
+    "accounts_stage_started",
+    "accounts_document_requested",
+    "accounts_http_response",
+    "accounts_goto_started",
+    "accounts_document_requested",
+    "accounts_http_response",
+    "accounts_frame_navigated",
+    "accounts_domcontentloaded",
+    "accounts_load",
+    "accounts_goto_completed",
+    "accounts_page_done",
+  ]);
+  const requests = records.filter((record) => record.event === "accounts_document_requested");
+  const responses = records.filter((record) => record.event === "accounts_http_response");
+  expect(requests[0]).toMatchObject({ document_id: 1, navigation_state: "not_started" });
+  expect(requests[1]).toMatchObject({ document_id: 2, navigation_state: "in_progress" });
+  expect(responses.map((record) => record.document_id)).toEqual([1, 2]);
+  expect(records.at(-1)).toMatchObject({ navigation_state: "completed" });
+  for (const record of records)
+    expect(record).toMatchObject({ operation_id: "test-operation", attempt: 1, max_attempts: 2 });
+  expect(JSON.stringify(records)).not.toContain("secret-token");
+  expect(JSON.stringify(records)).not.toContain("https://");
+  for (const event of observedEvents) expect(page.listenerCount(event)).toBe(0);
+});
+
+test("keeps goto interruption separate from snapshot context destruction", async () => {
+  const page = createPage();
+  page.evaluate.mockRejectedValue(
+    new Error("Execution context was destroyed, most likely because of a navigation"),
+  );
+  const failure = new Error(
+    "Navigation to https://moneyforward.com/accounts?token=secret-token is interrupted by another navigation",
+  );
+  await expect(
+    withAccountsPageDiagnostics(
+      page as unknown as Page,
+      "refresh_navigation",
+      async (_, navigation) => {
+        navigation("started");
+        throw failure;
+      },
+    ),
+  ).rejects.toBe(failure);
+  const records = diagnosticRecords();
+  expect(records.find((record) => record.event === "accounts_goto_failed")).toMatchObject({
+    navigation_state: "failed",
+    failure_kind: "navigation_interrupted",
+  });
+  expect(records.at(-1)).toMatchObject({
+    event: "accounts_page_failed",
+    failure_kind: "navigation_interrupted",
+    snapshot_failure_kind: "execution_context_destroyed",
+  });
+  expect(JSON.stringify(records)).not.toContain("secret-token");
+  for (const event of observedEvents) expect(page.listenerCount(event)).toBe(0);
+});
+
+test.each(["close", "crash"])(
+  "records page %s without replacing the original failure",
+  async (event) => {
+    const page = createPage();
+    const failure = new Error(
+      event === "close" ? "Target page, context or browser has been closed" : "Page crashed",
+    );
+    await expect(
+      withAccountsPageDiagnostics(
+        page as unknown as Page,
+        "refresh_navigation",
+        async (_, navigation) => {
+          navigation("started");
+          if (event === "close") page.isClosed = () => true;
+          page.emit(event);
+          throw failure;
+        },
+      ),
+    ).rejects.toBe(failure);
+    const records = diagnosticRecords();
+    expect(
+      records.find(
+        (record) =>
+          record.event === (event === "close" ? "accounts_page_closed" : "accounts_page_crashed"),
+      ),
+    ).toMatchObject(event === "close" ? { page_closed: true } : { page_crashed: true });
+    expect(records.at(-1)).toMatchObject({
+      failure_kind: event === "close" ? "page_closed" : "page_crashed",
+    });
+    for (const name of observedEvents) expect(page.listenerCount(name)).toBe(0);
+  },
+);

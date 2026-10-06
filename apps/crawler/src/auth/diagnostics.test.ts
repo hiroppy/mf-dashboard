@@ -65,12 +65,38 @@ describe("safe authentication diagnostics", () => {
       error_type: "timeout",
       network_code: "ERR_CONNECTION_RESET",
       timeout_ms: 10000,
+      failure_kind: "network",
     });
     expect(safeErrorDetails(new Error("net::ERR_PRIVATE_SECRET"))).toEqual({
       error_type: "operation_failed",
       network_code: null,
       timeout_ms: null,
+      failure_kind: "unknown",
     });
+  });
+
+  test.each([
+    [
+      'page.goto: Navigation to "https://moneyforward.com/accounts?token=secret-token" is interrupted by another navigation to "https://moneyforward.com/accounts"',
+      "navigation_interrupted",
+    ],
+    [
+      "page.evaluate: Execution context was destroyed, most likely because of a navigation.",
+      "execution_context_destroyed",
+    ],
+    ["page.evaluate: Cannot find context with specified id", "execution_context_destroyed"],
+    ["page.goto: Navigating frame was detached!", "frame_detached"],
+    ["page.goto: Frame has been detached", "frame_detached"],
+    ["page.goto: Page crashed", "page_crashed"],
+    ["page.goto: Target page, context or browser has been closed", "page_closed"],
+    ["page.goto: net::ERR_ABORTED", "navigation_aborted"],
+    ["page.goto: net::ERR_ABORTED; maybe frame was detached?", "navigation_aborted"],
+    ["page.goto: Timeout 1000ms exceeded.", "timeout"],
+  ])("classifies a fixed failure kind without saving error text: %s", (message, expected) => {
+    const details = safeErrorDetails(new Error(`${message}; user-a@example.com secret-password`));
+    expect(details.failure_kind).toBe(expected);
+    for (const secret of ["https://", "secret-token", "secret-password", "user-a@example.com"])
+      expect(JSON.stringify(details)).not.toContain(secret);
   });
 
   test.each([

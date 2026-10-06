@@ -6,13 +6,15 @@ import { parseJapaneseNumber } from "../parsers.js";
 import { withAccountsPageDiagnostics } from "./accounts-diagnostics.js";
 
 export async function getRegisteredAccounts(page: Page): Promise<RegisteredAccounts> {
-  return withAccountsPageDiagnostics(page, "registered_accounts", async (checkpoint) => {
+  return withAccountsPageDiagnostics(page, "registered_accounts", async (checkpoint, nav) => {
     debug("Getting registered accounts from /accounts page...");
 
     await checkpoint("navigation");
+    nav("started");
     await page.goto(mfUrls.accounts, {
       waitUntil: "domcontentloaded",
     });
+    nav("completed");
     // テーブルが表示されるまで待機
     await checkpoint("table_wait");
     await page.locator("#account-table").first().waitFor({ state: "visible", timeout: 10000 });

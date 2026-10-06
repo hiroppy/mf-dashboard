@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { info } from "../logger.js";
 import {
   clickRefreshButton,
   getMaxWaitMinutes,
@@ -12,6 +13,20 @@ import {
 function diagnosticEventMethods() {
   return { on: vi.fn<() => void>(), off: vi.fn<() => void>() };
 }
+
+function navigationDecisions() {
+  return vi
+    .mocked(info)
+    .mock.calls.map(([message]) => message)
+    .filter(
+      (message): message is string =>
+        typeof message === "string" && message.startsWith("MF_CRAWLER_DIAGNOSTIC "),
+    )
+    .map((message) => JSON.parse(message.slice("MF_CRAWLER_DIAGNOSTIC ".length)))
+    .filter((record) => record.event === "accounts_navigation_decision");
+}
+
+afterEach(() => vi.mocked(info).mockClear());
 
 describe("getMaxWaitMinutes", () => {
   test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(
@@ -139,6 +154,15 @@ describe("navigateToAccountsPage", () => {
       "https://moneyforward.com/accounts",
       expect.objectContaining({ timeout: 60000, waitUntil: "domcontentloaded" }),
     );
+    expect(navigationDecisions()).toEqual([
+      expect.objectContaining({
+        decision: "retry",
+        decision_reason: "retryable_error",
+        attempt: 1,
+        max_attempts: 2,
+        retry_delay_ms: 0,
+      }),
+    ]);
   });
 
   test("Page crashedは再試行せず元のエラーを返す", async () => {
@@ -152,6 +176,73 @@ describe("navigateToAccountsPage", () => {
 
     await expect(navigateToAccountsPage(page, { retryDelayMs: 0 })).rejects.toBe(error);
     expect(goto).toHaveBeenCalledOnce();
+    expect(navigationDecisions()).toEqual([
+      expect.objectContaining({
+        decision: "stop",
+        decision_reason: "error_not_retryable",
+        failure_kind: "page_crashed",
+      }),
+    ]);
+  });
+
+  test.each([
+    ["Navigation is interrupted by another navigation", "navigation_interrupted"],
+    ["Execution context was destroyed", "execution_context_destroyed"],
+    ["Frame was detached", "frame_detached"],
+    ["timeout 1000ms exceeded", "timeout"],
+  ])("細分類を追加しても再試行対象は増やさない: %s", async (message, kind) => {
+    const failure = new Error(message);
+    const goto = vi.fn<Page["goto"]>().mockRejectedValue(failure);
+    const page = { ...diagnosticEventMethods(), goto, isClosed: () => false } as unknown as Page;
+    await expect(navigateToAccountsPage(page, { retryDelayMs: 0 })).rejects.toBe(failure);
+    expect(goto).toHaveBeenCalledOnce();
+    expect(navigationDecisions()).toEqual([
+      expect.objectContaining({
+        decision: "stop",
+        decision_reason: "error_not_retryable",
+        failure_kind: kind,
+        retry_delay_ms: null,
+      }),
+    ]);
+  });
+
+  test.each(["net::ERR_ABORTED", "Timeout 60000ms exceeded"])(
+    "再試行の上限と操作IDを記録する: %s",
+    async (message) => {
+      const failure = new Error(message);
+      const goto = vi.fn<Page["goto"]>().mockRejectedValue(failure);
+      const page = { ...diagnosticEventMethods(), goto, isClosed: () => false } as unknown as Page;
+      await expect(navigateToAccountsPage(page, { retryDelayMs: 0 })).rejects.toBe(failure);
+      expect(goto).toHaveBeenCalledTimes(2);
+      const records = navigationDecisions();
+      expect(records).toEqual([
+        expect.objectContaining({
+          attempt: 1,
+          max_attempts: 2,
+          decision: "retry",
+          decision_reason: "retryable_error",
+        }),
+        expect.objectContaining({
+          attempt: 2,
+          max_attempts: 2,
+          decision: "stop",
+          decision_reason: "attempts_exhausted",
+        }),
+      ]);
+      expect(records[0].operation_id).toBe(records[1].operation_id);
+      expect(records[0].operation_id).toMatch(/^[a-f0-9-]{36}$/);
+    },
+  );
+
+  test("閉じたページは再試行対象のエラーでも停止理由を記録する", async () => {
+    const failure = new Error("net::ERR_ABORTED");
+    const goto = vi.fn<Page["goto"]>().mockRejectedValue(failure);
+    const page = { ...diagnosticEventMethods(), goto, isClosed: () => true } as unknown as Page;
+    await expect(navigateToAccountsPage(page, { retryDelayMs: 0 })).rejects.toBe(failure);
+    expect(goto).toHaveBeenCalledOnce();
+    expect(navigationDecisions()).toEqual([
+      expect.objectContaining({ decision: "stop", decision_reason: "page_closed" }),
+    ]);
   });
 });
 
