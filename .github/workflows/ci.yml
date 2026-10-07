@@ -62,7 +62,7 @@ jobs:
           cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
           cp -R apps/web/public apps/web/.next/standalone/apps/web/public
           tar -czf e2e-web-build.tar.gz -C apps/web/.next/standalone .
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: e2e-web-build
           path: e2e-web-build.tar.gz
@@ -93,7 +93,7 @@ jobs:
           tar -xzf .artifacts/e2e-web-build.tar.gz -C apps/web/.next/standalone
       - run: pnpm test:e2e:web -- --shard=${{ matrix.shard }}
       - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: playwright-blob-report-${{ strategy.job-index }}
           path: apps/web/blob-report/
@@ -114,7 +114,7 @@ jobs:
           pattern: playwright-blob-report-*
           merge-multiple: true
       - run: pnpm --filter @mf-dashboard/web exec playwright merge-reports --reporter html ../../all-blob-reports
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: playwright-report
           path: apps/web/playwright-report/
