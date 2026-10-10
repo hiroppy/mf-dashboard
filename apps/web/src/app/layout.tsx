@@ -12,6 +12,7 @@ import { SidebarProvider } from "../components/layout/sidebar-context";
 import { parseChatSuggestedPrompts } from "../lib/chat-config";
 import { createRootMetadata } from "../lib/metadata";
 import { waitForRuntimeData } from "../lib/runtime-rendering";
+import { themeInitScript } from "../lib/theme";
 
 export const metadata = createRootMetadata();
 
@@ -73,7 +74,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   }
 
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className={bodyClassName}>{content}</body>
     </html>
   );

@@ -37,10 +37,10 @@ export function buildTimelineSegments(
 }
 
 const phaseChipStyles: Record<PhaseType, string> = {
-  contribution: "bg-blue-50 text-blue-800",
-  idle: "bg-gray-100 text-gray-600",
-  withdrawal: "bg-orange-50 text-orange-800",
-  overlap: "bg-purple-50 text-purple-800",
+  contribution: "bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
+  idle: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+  withdrawal: "bg-orange-50 text-orange-800 dark:bg-orange-950 dark:text-orange-200",
+  overlap: "bg-purple-50 text-purple-800 dark:bg-purple-950 dark:text-purple-200",
 };
 
 const phaseLabels: Record<PhaseType, string> = {
@@ -140,16 +140,16 @@ export function InteractiveTimelineBar({
   const segments = buildTimelineSegments(contributionYears, withdrawalStartYear, withdrawalYears);
 
   const barColorMap: Record<PhaseType, string> = {
-    contribution: "bg-blue-700",
-    withdrawal: "bg-orange-700",
-    overlap: "bg-purple-700",
-    idle: "bg-gray-600",
+    contribution: "bg-blue-700 dark:bg-blue-400",
+    withdrawal: "bg-orange-700 dark:bg-orange-400",
+    overlap: "bg-purple-700 dark:bg-purple-400",
+    idle: "bg-gray-600 dark:bg-gray-400",
   };
 
   const handles: Array<{ id: DragHandle; pos: number; color: string }> = [
-    { id: "contribution", pos: contributionYears, color: "bg-blue-700" },
-    { id: "withdrawalStart", pos: withdrawalStartYear, color: "bg-orange-700" },
-    { id: "withdrawalEnd", pos: withdrawalEnd, color: "bg-orange-700" },
+    { id: "contribution", pos: contributionYears, color: "bg-blue-700 dark:bg-blue-400" },
+    { id: "withdrawalStart", pos: withdrawalStartYear, color: "bg-orange-700 dark:bg-orange-400" },
+    { id: "withdrawalEnd", pos: withdrawalEnd, color: "bg-orange-700 dark:bg-orange-400" },
   ];
 
   function handlePointerDown(e: React.PointerEvent) {
@@ -209,7 +209,7 @@ export function InteractiveTimelineBar({
           return (
             <div
               key={`${seg.type}-${seg.start}`}
-              className={`absolute top-0 h-full flex items-center justify-center text-xs font-medium text-white ${barColorMap[seg.type]}`}
+              className={`absolute top-0 h-full flex items-center justify-center text-xs font-medium text-white dark:text-fill-foreground ${barColorMap[seg.type]}`}
               style={{
                 left: `${yearToPercent(seg.start)}%`,
                 width: `${widthPercent}%`,
@@ -229,7 +229,7 @@ export function InteractiveTimelineBar({
               className={`absolute -translate-x-1/2 top-0 h-full ${activeDrag === h.id ? "w-1" : "w-0.5"} ${h.color} transition-[width]`}
             />
             <div
-              className={`absolute -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${activeDrag === h.id ? "h-4 w-4" : "h-3 w-3"} ${h.color} transition-[width,height]`}
+              className={`absolute -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-full border-2 border-card shadow ${activeDrag === h.id ? "h-4 w-4" : "h-3 w-3"} ${h.color} transition-[width,height]`}
             />
           </div>
         ))}

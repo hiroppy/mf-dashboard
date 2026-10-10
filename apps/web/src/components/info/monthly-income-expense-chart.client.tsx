@@ -155,14 +155,14 @@ export function MonthlyIncomeExpenseChartClient({ data, groupId }: MonthlyIncome
           >
             <XAxis
               dataKey="month"
-              tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 500 }}
+              tick={{ fontSize: 12, fill: "var(--color-chart-axis-text)", fontWeight: 500 }}
               tickLine={false}
-              axisLine={{ stroke: "#E2E8F0" }}
+              axisLine={{ stroke: "var(--color-chart-axis-line)" }}
             />
             <YAxis
-              tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 500 }}
+              tick={{ fontSize: 12, fill: "var(--color-chart-axis-text)", fontWeight: 500 }}
               tickLine={false}
-              axisLine={{ stroke: "#E2E8F0" }}
+              axisLine={{ stroke: "var(--color-chart-axis-line)" }}
               tickFormatter={formatYAxis}
               domain={[yAxisMin, yAxisMax]}
             />
@@ -201,7 +201,7 @@ export function MonthlyIncomeExpenseChartClient({ data, groupId }: MonthlyIncome
                 </div>
               )}
             />
-            <ReferenceLine y={0} stroke="#4B5563" strokeWidth={1} />
+            <ReferenceLine y={0} stroke="var(--color-chart-axis-text)" strokeWidth={1} />
             <Bar
               dataKey="収入"
               fill={semanticColors.income}

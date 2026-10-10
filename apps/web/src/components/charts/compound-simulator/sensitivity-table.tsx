@@ -4,8 +4,8 @@ import type { SensitivityRow } from "./simulate-monte-carlo";
 
 const levelStyles: Record<SecurityLevel, string> = {
   safe: "text-balance-positive",
-  caution: "text-amber-800",
-  warning: "text-amber-800",
+  caution: "text-amber-800 dark:text-amber-300",
+  warning: "text-amber-800 dark:text-amber-300",
   danger: "text-expense",
 };
 
