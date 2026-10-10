@@ -1,4 +1,5 @@
 import { closeDb } from "@mf-dashboard/db";
+import { safeErrorDetails, writeCrawlerDiagnostic } from "./auth/diagnostics.js";
 import { buildCleanupGroupIds } from "./cleanup-groups.js";
 import {
   handleCrawlerFailure,
@@ -131,6 +132,11 @@ export async function runCrawler(progress: CrawlerProgressReporter): Promise<voi
 
     info("Completed!");
   } catch (err) {
+    writeCrawlerDiagnostic({
+      event: "crawler_failed",
+      step: progress.getState().current?.step ?? null,
+      ...safeErrorDetails(err),
+    });
     await handleCrawlerFailure(err, runtime?.page, config);
     throw err;
   } finally {

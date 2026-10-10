@@ -3,6 +3,10 @@ import type { Page } from "playwright";
 import { describe, test, expect, vi } from "vitest";
 import { createManualHoldingKey } from "./manual-holding-accounts.js";
 import {
+  parseFxQuantity,
+  parseFxRate,
+  parsePointQuantity,
+  parsePointRate,
   attachManualHoldingReference,
   createLinkedPnsRowFingerprint,
   getLinkedAccountDetailSource,
@@ -239,6 +243,7 @@ describe("linked insurance and pension candidates", () => {
       fingerprints: [],
       items: [],
       scheduledWithdrawals: new Map(),
+      holdingAccounts: { complete: false, references: [] },
     });
     expect(goto).toHaveBeenCalledOnce();
   });
@@ -403,7 +408,7 @@ describe("parsePnsPortfolioItem", () => {
       "Point Service A",
       "not used",
       "999",
-      "not used",
+      "1.235円",
       "1,234",
       "not used",
       "Institution A",
@@ -414,6 +419,8 @@ describe("parsePnsPortfolioItem", () => {
       type: "ポイント",
       institution: "Institution A",
       balance: 1234,
+      quantity: 999,
+      unitPrice: 1.235,
     });
   });
 
@@ -433,6 +440,8 @@ describe("parsePnsPortfolioItem", () => {
       type: "ポイント・マイル",
       institution: "Institution B",
       balance: 2345,
+      quantity: 999,
+      unitPrice: undefined,
     });
   });
 
@@ -534,5 +543,73 @@ describe("parseFundPortfolioItem", () => {
       unrealizedGain: undefined,
       unrealizedGainPct: undefined,
     });
+  });
+});
+
+test.each([parseStockPortfolioItem, parseFundPortfolioItem])(
+  "investment parsing preserves an authoritative account ID without changing financial values",
+  (parse) => {
+    const texts = {
+      name: "Asset A",
+      institution: "Duplicate Institution",
+      code: "1234",
+      balance: "1,000",
+      quantity: "10",
+      avgCost: "90",
+      unitPrice: "100",
+      dailyChange: "0",
+      unrealizedGain: "100",
+      unrealizedGainPct: "11.11%",
+    };
+    expect(parse({ ...texts, accountMfId: "account-a" })).toEqual({
+      ...parse(texts),
+      accountMfId: "account-a",
+    });
+  },
+);
+
+describe("parseFxQuantity", () => {
+  test("買建は正数で数量を返す", () => {
+    expect(parseFxQuantity("買\n10000")).toBe(10000);
+  });
+
+  test("売建は負数で数量を返す", () => {
+    expect(parseFxQuantity("売\n12,000")).toBe(-12000);
+  });
+
+  test("数量がない場合は undefined", () => {
+    expect(parseFxQuantity("")).toBeUndefined();
+    expect(parseFxQuantity("買")).toBeUndefined();
+  });
+});
+
+describe("parseFxRate", () => {
+  test("レート+日時から先頭のレートを抽出", () => {
+    expect(parseFxRate("0.79\n2025年12月23日 00時00分")).toBe(0.79);
+  });
+
+  test("レートがない場合は undefined", () => {
+    expect(parseFxRate("")).toBeUndefined();
+    expect(parseFxRate("日時のみ")).toBeUndefined();
+  });
+});
+
+describe("parsePointQuantity", () => {
+  test("ポイント数から数値を抽出", () => {
+    expect(parsePointQuantity("98,569ポイント")).toBe(98569);
+  });
+
+  test("値がない場合は undefined", () => {
+    expect(parsePointQuantity("")).toBeUndefined();
+  });
+});
+
+describe("parsePointRate", () => {
+  test("換算レートを数値で返す", () => {
+    expect(parsePointRate("0.30")).toBe(0.3);
+  });
+
+  test("値がない場合は undefined", () => {
+    expect(parsePointRate("")).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   CRAWLER_STEPS,
   createCrawlerProgressReporter,
@@ -9,8 +9,90 @@ import {
   runCrawlerStep,
 } from "./crawler-progress.js";
 import { getCrawlerRunState, runWithCrawlerRunLock } from "./crawler-run-lock.js";
+import { info, warn } from "./logger.js";
 
 describe("crawler progress", () => {
+  test("diagnostic sink failures preserve the original error and persist the failed step", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "crawler-diagnostic-sink-failure-"));
+    const statePath = path.join(directory, "state.json");
+    // An existing directory makes file persistence fail deterministically.
+    vi.stubEnv("CRAWLER_DIAGNOSTIC_PATH", directory);
+    const output = vi.mocked(info).mockImplementation(() => {
+      throw new Error("synthetic-stdout-failure");
+    });
+    const warning = vi.mocked(warn).mockImplementation(() => {
+      throw new Error("synthetic-warning-failure");
+    });
+    const failure = Object.assign(new Error("Timeout 10000ms exceeded"), { name: "TimeoutError" });
+    try {
+      const progress = await createCrawlerProgressReporter(statePath, {
+        id: "run-a",
+        source: "test",
+        startedAt: "2026-07-01T00:00:00.000Z",
+      });
+      await expect(
+        runCrawlerStep(progress, CRAWLER_STEPS.registeredAccounts, async () => {
+          throw failure;
+        }),
+      ).rejects.toBe(failure);
+      const state = JSON.parse(await readFile(statePath, "utf8"));
+      expect(state.timeline).toEqual([
+        expect.objectContaining({
+          step: "registered_accounts",
+          status: "failed",
+          reason: expect.objectContaining({ code: "moneyforward_timeout" }),
+        }),
+      ]);
+    } finally {
+      output.mockReset();
+      warning.mockReset();
+      vi.unstubAllEnvs();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("persists direct refresh progress and warnings without account names or messages", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "crawler-refresh-diagnostics-"));
+    const destination = path.join(directory, "run.ndjson");
+    vi.stubEnv("CRAWLER_DIAGNOSTIC_PATH", destination);
+    try {
+      const reporter = await createCrawlerProgressReporter(path.join(directory, "state.json"), {
+        id: "run-a",
+        source: "test",
+        startedAt: new Date().toISOString(),
+      });
+      const id = await reporter.startStep(CRAWLER_STEPS.refresh, {
+        maxWaitMinutes: 20,
+        remainingCount: 3,
+        incompleteAccounts: ["secret-account"],
+      });
+      await reporter.updateStep(id, { remainingCount: 1 });
+      await reporter.warnStep(id, {
+        code: "refresh_timeout",
+        message: "secret-message",
+        maxWaitMinutes: 20,
+        incompleteAccounts: ["secret-account"],
+      });
+      const content = await readFile(destination, "utf8");
+      const records = content
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(records.map((record) => record.event)).toEqual([
+        "step_started",
+        "step_progress",
+        "step_warning",
+      ]);
+      expect(records[1]).toMatchObject({ step: "moneyforward_refresh", remaining_count: 1 });
+      expect(records[2]).toMatchObject({ reason_code: "refresh_timeout", max_wait_minutes: 20 });
+      expect(content).not.toContain("secret-account");
+      expect(content).not.toContain("secret-message");
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("認証中の Playwright timeout を auth_failed に分類する", () => {
     const timeout = new Error("locator.waitFor: Timeout 30000ms exceeded");
     timeout.name = "TimeoutError";

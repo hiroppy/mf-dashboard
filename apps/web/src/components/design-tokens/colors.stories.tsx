@@ -293,6 +293,11 @@ export const AssetCategory: SwatchStory = {
         variable: "--color-asset-point",
         label: "ポイント",
       },
+      {
+        name: "asset-fx",
+        variable: "--color-asset-fx",
+        label: "FX",
+      },
     ],
   },
 };
@@ -429,6 +434,11 @@ export const TextColorContrast: TextColorStory = {
         name: "asset-point",
         variable: "--color-asset-point",
         label: "ポイント",
+      },
+      {
+        name: "asset-fx",
+        variable: "--color-asset-fx",
+        label: "FX",
       },
       { name: "cat-food", variable: "--color-cat-food", label: "食費" },
       { name: "cat-daily", variable: "--color-cat-daily", label: "日用品" },
