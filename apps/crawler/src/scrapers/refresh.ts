@@ -7,7 +7,7 @@ import { debug, info, warn } from "../logger.js";
 import { withAccountsPageDiagnostics } from "./accounts-diagnostics.js";
 
 const DEFAULT_MAX_WAIT_MINUTES = 20;
-const POLL_INTERVAL_MS = 30000; // 30 seconds
+const POLL_INTERVAL_MS = 60000; // 60 seconds
 const NAVIGATION_RETRY_DELAY_MS = 1000;
 const NAVIGATION_TIMEOUT_MS = 60000;
 
@@ -17,7 +17,11 @@ interface NavigationOptions {
 
 function isRetryableNavigationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes("net::ERR_ABORTED") || message.includes("Timeout");
+  return (
+    message.includes("net::ERR_ABORTED") ||
+    message.includes("Timeout") ||
+    safeErrorDetails(error).failure_kind === "navigation_interrupted"
+  );
 }
 
 export async function navigateToAccountsPage(

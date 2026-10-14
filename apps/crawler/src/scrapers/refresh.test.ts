@@ -139,6 +139,7 @@ describe("navigateToAccountsPage", () => {
   test.each([
     "page.goto: net::ERR_ABORTED at https://moneyforward.com/accounts",
     "page.goto: Timeout 30000ms exceeded.",
+    'page.goto: Navigation to "https://moneyforward.com/accounts" is interrupted by another navigation to "https://moneyforward.com/accounts"',
   ])("一時的な遷移エラーを1回だけ再試行する: %s", async (message) => {
     const goto = vi
       .fn<(...args: any[]) => any>()
@@ -186,11 +187,10 @@ describe("navigateToAccountsPage", () => {
   });
 
   test.each([
-    ["Navigation is interrupted by another navigation", "navigation_interrupted"],
     ["Execution context was destroyed", "execution_context_destroyed"],
     ["Frame was detached", "frame_detached"],
     ["timeout 1000ms exceeded", "timeout"],
-  ])("細分類を追加しても再試行対象は増やさない: %s", async (message, kind) => {
+  ])("復帰対象外のエラーは再試行しない: %s", async (message, kind) => {
     const failure = new Error(message);
     const goto = vi.fn<Page["goto"]>().mockRejectedValue(failure);
     const page = { ...diagnosticEventMethods(), goto, isClosed: () => false } as unknown as Page;
@@ -206,33 +206,34 @@ describe("navigateToAccountsPage", () => {
     ]);
   });
 
-  test.each(["net::ERR_ABORTED", "Timeout 60000ms exceeded"])(
-    "再試行の上限と操作IDを記録する: %s",
-    async (message) => {
-      const failure = new Error(message);
-      const goto = vi.fn<Page["goto"]>().mockRejectedValue(failure);
-      const page = { ...diagnosticEventMethods(), goto, isClosed: () => false } as unknown as Page;
-      await expect(navigateToAccountsPage(page, { retryDelayMs: 0 })).rejects.toBe(failure);
-      expect(goto).toHaveBeenCalledTimes(2);
-      const records = navigationDecisions();
-      expect(records).toEqual([
-        expect.objectContaining({
-          attempt: 1,
-          max_attempts: 2,
-          decision: "retry",
-          decision_reason: "retryable_error",
-        }),
-        expect.objectContaining({
-          attempt: 2,
-          max_attempts: 2,
-          decision: "stop",
-          decision_reason: "attempts_exhausted",
-        }),
-      ]);
-      expect(records[0].operation_id).toBe(records[1].operation_id);
-      expect(records[0].operation_id).toMatch(/^[a-f0-9-]{36}$/);
-    },
-  );
+  test.each([
+    "net::ERR_ABORTED",
+    "Timeout 60000ms exceeded",
+    "Navigation is interrupted by another navigation",
+  ])("再試行の上限と操作IDを記録する: %s", async (message) => {
+    const failure = new Error(message);
+    const goto = vi.fn<Page["goto"]>().mockRejectedValue(failure);
+    const page = { ...diagnosticEventMethods(), goto, isClosed: () => false } as unknown as Page;
+    await expect(navigateToAccountsPage(page, { retryDelayMs: 0 })).rejects.toBe(failure);
+    expect(goto).toHaveBeenCalledTimes(2);
+    const records = navigationDecisions();
+    expect(records).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        max_attempts: 2,
+        decision: "retry",
+        decision_reason: "retryable_error",
+      }),
+      expect.objectContaining({
+        attempt: 2,
+        max_attempts: 2,
+        decision: "stop",
+        decision_reason: "attempts_exhausted",
+      }),
+    ]);
+    expect(records[0].operation_id).toBe(records[1].operation_id);
+    expect(records[0].operation_id).toMatch(/^[a-f0-9-]{36}$/);
+  });
 
   test("閉じたページは再試行対象のエラーでも停止理由を記録する", async () => {
     const failure = new Error("net::ERR_ABORTED");
@@ -247,6 +248,68 @@ describe("navigateToAccountsPage", () => {
 });
 
 describe("clickRefreshButton", () => {
+  test("60秒間隔で監視し、遷移の割り込みから復帰しても一括更新を押し直さない", async () => {
+    const refreshButton = { click: vi.fn<() => Promise<void>>().mockResolvedValue(undefined) };
+    const rows = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValueOnce(1).mockResolvedValueOnce(0),
+      nth: () => ({
+        locator: (selector: string) =>
+          selector === "td.account-status"
+            ? { allTextContents: async () => ["更新中"] }
+            : { first: () => ({ count: async () => 1, textContent: async () => "Institution A" }) },
+      }),
+    };
+    const goto = vi
+      .fn<Page["goto"]>()
+      .mockResolvedValueOnce(null) // Home before the single refresh click.
+      .mockResolvedValueOnce(null) // Initial status check.
+      .mockRejectedValueOnce(new Error("Navigation is interrupted by another navigation"))
+      .mockResolvedValueOnce(null); // Retry the accounts page only.
+    const waitForTimeout = vi.fn<Page["waitForTimeout"]>().mockResolvedValue(undefined);
+    const onWaiting =
+      vi.fn<(progress: { remainingCount: number; nextCheckSeconds: number }) => void>();
+    const page = {
+      ...diagnosticEventMethods(),
+      goto,
+      isClosed: () => false,
+      waitForLoadState: vi.fn<Page["waitForLoadState"]>().mockResolvedValue(undefined),
+      waitForTimeout,
+      locator: (selector: string) => {
+        if (selector === 'a:has-text("一括更新")') return { first: () => refreshButton };
+        if (selector === 'iframe[title="Modal Message"]')
+          return { first: () => ({ count: async () => 0 }) };
+        if (selector === "#account-table tr:has(td.account-status)") return rows;
+        throw new Error(`Unexpected locator: ${selector}`);
+      },
+    } as unknown as Page;
+
+    await expect(clickRefreshButton(page, { onWaiting })).resolves.toEqual({
+      completed: true,
+      incompleteAccounts: [],
+    });
+    expect(waitForTimeout.mock.calls).toEqual([[3000], [60000]]);
+    expect(onWaiting).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ remainingCount: 1, nextCheckSeconds: 60 }),
+    );
+    expect(onWaiting).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ remainingCount: 0, nextCheckSeconds: 60 }),
+    );
+    expect(refreshButton.click).toHaveBeenCalledOnce();
+    expect(goto).toHaveBeenCalledTimes(4);
+    expect(
+      goto.mock.calls.slice(1).every(([url]) => url === "https://moneyforward.com/accounts"),
+    ).toBe(true);
+    expect(navigationDecisions()).toEqual([
+      expect.objectContaining({
+        decision: "retry",
+        failure_kind: "navigation_interrupted",
+        retry_delay_ms: 1000,
+      }),
+    ]);
+  });
+
   test("Modal Message iframe が出ていても閉じてから更新を押せる", async () => {
     const clicks: string[] = [];
     const refreshButton = {
