@@ -190,13 +190,13 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
         {/* Scrollable Sankey content must be focusable for Safari keyboard access. */}
         {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
         <section className="overflow-x-auto" aria-label="キャッシュフロー図" tabIndex={0}>
-          <div className="min-w-150" style={{ height }}>
+          <div className="min-w-150 dark:[&_path]:mix-blend-normal!" style={{ height }}>
             <ResponsiveSankey
               data={data}
               ariaLabel="キャッシュフロー図"
               margin={{ top: 20, right: 160, bottom: 20, left: 160 }}
               align="justify"
-              colors={(node) => nodeColorMap.get(node.id as string) || "#6b7280"}
+              colors={(node) => nodeColorMap.get(node.id as string) || semanticColors.transfer}
               nodeOpacity={1}
               nodeHoverOpacity={1}
               nodeThickness={20}
@@ -210,7 +210,7 @@ export function SankeyDiagramClient({ income, expense, height = 600 }: SankeyDia
               labelPosition="outside"
               labelOrientation="horizontal"
               labelPadding={16}
-              labelTextColor={{ from: "color", modifiers: [["darker", 1.2]] }}
+              labelTextColor="var(--color-foreground)"
               label={(node) => {
                 const id = node.id as string;
                 const label = getLabel(id);

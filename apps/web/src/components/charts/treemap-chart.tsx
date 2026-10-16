@@ -76,7 +76,7 @@ function CustomizedContent({ x, y, width, height, name, color }: CustomContentPr
           y={ry + rh / 2}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill="white"
+          fill="var(--color-fill-foreground)"
           stroke="none"
           fontSize={12}
           fontWeight={500}

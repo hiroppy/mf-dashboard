@@ -164,7 +164,7 @@ export function SummaryPanel({
                     monteCarlo.failureProbability > 0.2
                       ? "text-expense"
                       : monteCarlo.failureProbability > 0.05
-                        ? "text-amber-800"
+                        ? "text-amber-800 dark:text-amber-300"
                         : "text-balance-positive"
                   }`}
                 >
@@ -200,7 +200,7 @@ export function SummaryPanel({
                     monteCarlo.depletionProbability > 0.2
                       ? "text-expense"
                       : monteCarlo.depletionProbability > 0.05
-                        ? "text-amber-800"
+                        ? "text-amber-800 dark:text-amber-300"
                         : "text-balance-positive"
                   }`}
                 >
