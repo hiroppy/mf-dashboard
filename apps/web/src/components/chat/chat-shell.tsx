@@ -41,7 +41,8 @@ const CHAT_ERROR_MESSAGES: Record<string, string> = {
   CURRENT_GROUP_NOT_FOUND: "現在のグループを選択して、もう一度お試しください。",
   DATABASE_NOT_AVAILABLE: "家計データがまだ利用できません。データ更新後にお試しください。",
   CHAT_BUSY: "AIチャットが混み合っています。しばらく待ってからもう一度お試しください。",
-  LLM_NOT_CONFIGURED: "AI_PROVIDER、AI_MODEL、AI_API_KEYの設定を確認してください。",
+  LLM_NOT_CONFIGURED:
+    "AI_PROVIDER、AI_MODEL、AI_API_KEYの設定を確認してください。workers-aiではCLOUDFLARE_ACCOUNT_IDも必要です。",
 };
 const DEFAULT_CHAT_ERROR_MESSAGE =
   "回答を取得できませんでした。AI設定と接続状況を確認してください。";
