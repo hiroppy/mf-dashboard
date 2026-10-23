@@ -1,12 +1,50 @@
 import type { Page } from "playwright";
 import { describe, expect, test, vi } from "vitest";
 import {
+  clickRefreshButton,
   getMaxWaitMinutes,
   getRefreshStatus,
   navigateToAccountsPage,
   summarizeRefreshRows,
   type RefreshStatusRow,
 } from "./refresh.js";
+
+test("更新中が途中で現れたら、消えた状態を連続確認するまで次に進まない", async () => {
+  const statuses = ["正常", "更新中", "正常", "正常"];
+  let check = 0;
+  const row = {
+    locator: vi.fn<(selector: string) => object>((selector) =>
+      selector === "td.account-status"
+        ? { allInnerTexts: async () => [statuses[check++]] }
+        : {
+            first: () => ({ count: async () => 0, textContent: async () => "Institution A" }),
+          },
+    ),
+  };
+  const rows = {
+    first: () => ({ waitFor: async () => undefined }),
+    count: async () => 1,
+    nth: () => row,
+  };
+  const goto = vi.fn<() => Promise<null>>().mockResolvedValue(null);
+  const page = {
+    goto,
+    url: () => "https://moneyforward.com/accounts",
+    waitForLoadState: async () => undefined,
+    waitForTimeout: async () => undefined,
+    locator: (selector: string) =>
+      selector === 'a:has-text("一括更新")'
+        ? { first: () => ({ click: async () => undefined }) }
+        : rows,
+  } as unknown as Page;
+
+  await expect(clickRefreshButton(page, { pollIntervalMs: 1 })).resolves.toEqual({
+    completed: true,
+    incompleteAccounts: [],
+  });
+  expect(check).toBe(4);
+  expect(goto).toHaveBeenCalledTimes(5);
+});
 
 describe("getMaxWaitMinutes", () => {
   test.each([undefined, "", "0", "-1", "Infinity", "NaN"])(
@@ -75,7 +113,7 @@ describe("summarizeRefreshRows", () => {
 describe("getRefreshStatus", () => {
   test("service linkがない更新中行は先頭セルの名称を使う", async () => {
     const statusCells = {
-      allTextContents: vi.fn<() => Promise<string[]>>().mockResolvedValue(["更新中"]),
+      allInnerTexts: vi.fn<() => Promise<string[]>>().mockResolvedValue(["更新中"]),
     };
     const nameLink = {
       count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
@@ -99,6 +137,9 @@ describe("getRefreshStatus", () => {
       }),
     };
     const rows = {
+      first: vi.fn<() => object>().mockReturnValue({
+        waitFor: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      }),
       count: vi.fn<() => Promise<number>>().mockResolvedValue(1),
       nth: vi.fn<() => typeof row>().mockReturnValue(row),
     };
@@ -115,6 +156,21 @@ describe("getRefreshStatus", () => {
 });
 
 describe("navigateToAccountsPage", () => {
+  test("既に口座一覧にいても更新状態を再取得する", async () => {
+    const goto = vi.fn<() => Promise<null>>().mockResolvedValue(null);
+    const page = {
+      goto,
+      url: vi.fn<() => string>().mockReturnValue("https://moneyforward.com/accounts"),
+    } as unknown as Page;
+
+    await navigateToAccountsPage(page);
+
+    expect(goto).toHaveBeenCalledWith(
+      "https://moneyforward.com/accounts",
+      expect.objectContaining({ waitUntil: "domcontentloaded" }),
+    );
+  });
+
   test.each([
     "page.goto: net::ERR_ABORTED at https://moneyforward.com/accounts",
     "page.goto: Timeout 30000ms exceeded.",
