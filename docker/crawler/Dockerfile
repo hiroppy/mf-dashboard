@@ -1,4 +1,4 @@
-FROM node:24.22.1-bookworm-slim
+FROM node:26.12.1-bookworm-slim
 WORKDIR /app
 ENV PNPM_HOME=/pnpm \
     COREPACK_HOME=/pnpm/corepack \
@@ -8,6 +8,7 @@ ENV PNPM_HOME=/pnpm \
     HOME=/home/node
 
 RUN mkdir -p /pnpm \
+    && npm install --global corepack@0.36.0 \
     && corepack enable \
     && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*

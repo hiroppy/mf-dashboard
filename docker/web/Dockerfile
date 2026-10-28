@@ -1,4 +1,4 @@
-FROM node:24.22.1-bookworm-slim AS builder
+FROM node:26.12.1-bookworm-slim AS builder
 WORKDIR /app
 ENV PNPM_HOME=/pnpm \
     COREPACK_HOME=/pnpm/corepack \
@@ -42,6 +42,7 @@ ENV DASHBOARD_URL=${DASHBOARD_URL} \
     NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE=${NEXT_PUBLIC_SIMULATOR_PENSION_START_AGE} \
     NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME=${NEXT_PUBLIC_SIMULATOR_MONTHLY_OTHER_INCOME}
 RUN mkdir -p /pnpm \
+    && npm install --global corepack@0.36.0 \
     && corepack enable \
     && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -63,7 +64,7 @@ COPY . .
 # Runtime dashboard pages wait for an incoming request before reading the mounted DB.
 RUN cd apps/web && ./node_modules/.bin/next build
 
-FROM node:24.22.1-bookworm-slim AS runner
+FROM node:26.12.1-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
