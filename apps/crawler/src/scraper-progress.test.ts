@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createCrawlerProgressReporter } from "./crawler-progress.js";
-import { scrapeAllGroups } from "./scraper.js";
+import { scrape, scrapeAllGroups } from "./scraper.js";
 import { getAssetHistory } from "./scrapers/asset-history.js";
 import { getAssetItems } from "./scrapers/asset-items.js";
 import { getAssetSummary } from "./scrapers/asset-summary.js";
@@ -66,8 +66,8 @@ beforeEach(async () => {
   vi.mocked(getCurrentGroup).mockResolvedValue(null);
   vi.mocked(getAllGroups).mockResolvedValue([{ id: "group-a", name: "Group A", isCurrent: false }]);
   vi.mocked(clickRefreshButton).mockResolvedValue({
-    completed: false,
-    incompleteAccounts: ["Institution A", "Institution B"],
+    completed: true,
+    incompleteAccounts: [],
   });
   vi.mocked(getRegisteredAccounts).mockResolvedValue({ accounts: [] });
   vi.mocked(getManualHoldingAccountMap).mockResolvedValue(new Map());
@@ -297,7 +297,7 @@ describe("scraper progress", () => {
     );
   });
 
-  test("refresh timeout を warning にし、未完了機関と group name を保持する", async () => {
+  test("refresh timeout では取得を中断し、未完了機関を保持する", async () => {
     const progress = await createCrawlerProgressReporter(path.join(tempDir, "state.json"), {
       id: "run-a",
       source: "test",
@@ -319,7 +319,9 @@ describe("scraper progress", () => {
       };
     });
 
-    await scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress);
+    await expect(
+      scrapeAllGroups({} as Parameters<typeof scrapeAllGroups>[0], progress),
+    ).rejects.toThrow("金融機関の一括更新が待機時間を超えたため、データ取得を中断しました");
 
     expect(waitingState).toMatchObject({
       current: {
@@ -345,12 +347,22 @@ describe("scraper progress", () => {
             incompleteAccounts: ["Institution A", "Institution B"],
           }),
         }),
-        expect.objectContaining({
-          step: "group_data",
-          status: "done",
-          metadata: { kind: "group", groupName: "Group A" },
-        }),
       ]),
     );
+    expect(progress.getState().timeline).not.toContainEqual(
+      expect.objectContaining({ step: "group_data" }),
+    );
+  });
+
+  test("旧 scrape API も refresh timeout 後は取得しない", async () => {
+    vi.mocked(clickRefreshButton).mockResolvedValue({
+      completed: false,
+      incompleteAccounts: ["Institution A"],
+    });
+
+    await expect(scrape({} as Parameters<typeof scrape>[0])).rejects.toThrow(
+      "金融機関の一括更新が待機時間を超えたため、データ取得を中断しました",
+    );
+    expect(getCurrentGroup).not.toHaveBeenCalled();
   });
 });
