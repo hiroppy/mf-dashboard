@@ -160,14 +160,14 @@ export function BalanceSheetChartClient({
           >
             <XAxis
               dataKey="name"
-              tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 500 }}
-              axisLine={{ stroke: "#E2E8F0" }}
+              tick={{ fontSize: 12, fill: "var(--color-chart-axis-text)", fontWeight: 500 }}
+              axisLine={{ stroke: "var(--color-chart-axis-line)" }}
               tickLine={false}
             />
             <YAxis
               tickFormatter={(value) => `${(value / 10000).toFixed(0)}万`}
-              tick={{ fontSize: 12, fill: "#4B5563" }}
-              axisLine={{ stroke: "#E2E8F0" }}
+              tick={{ fontSize: 12, fill: "var(--color-chart-axis-text)" }}
+              axisLine={{ stroke: "var(--color-chart-axis-line)" }}
               tickLine={false}
             />
             <Tooltip
