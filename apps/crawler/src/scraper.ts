@@ -28,6 +28,9 @@ import { applyScheduledWithdrawals } from "./scrapers/scheduled-withdrawals.js";
 import { getSpendingTargets } from "./scrapers/spending-targets.js";
 import type { ScrapeOptions } from "./types.js";
 
+const REFRESH_TIMEOUT_MESSAGE =
+  "金融機関の一括更新が待機時間を超えたため、データ取得を中断しました";
+
 async function getPortfolioWithScheduledWithdrawals(
   page: Page,
   registeredAccounts: RegisteredAccounts,
@@ -139,6 +142,9 @@ async function scrapeGlobalData(
     } catch (error) {
       await progress.failStep(refreshStep, normalizeCrawlerError(error, "refresh_failed"));
       throw error;
+    }
+    if (!refreshResult.completed) {
+      throw new Error(REFRESH_TIMEOUT_MESSAGE);
     }
   }
 
@@ -334,6 +340,9 @@ export async function scrape(page: Page, options: ScrapeOptions = {}): Promise<S
   let refreshResult = null;
   if (!skipRefresh) {
     refreshResult = await clickRefreshButton(page);
+    if (!refreshResult.completed) {
+      throw new Error(REFRESH_TIMEOUT_MESSAGE);
+    }
   }
 
   const currentGroup = await getCurrentGroup(page);
