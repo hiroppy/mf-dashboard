@@ -121,6 +121,7 @@ DASHBOARD_URL=https://dashboard.example.com
 | `OP_SERVICE_ACCOUNT_TOKEN`                   | 必須 | Terraform適用前      | 1Password Service Accountのトークン                                              |
 | `OP_VAULT` / `OP_ITEM` / `OP_TOTP_FIELD`     | 必須 | Terraform適用前      | Money Forward MEの保管先。日本語を含む場合はUUIDを指定                           |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY`    | 任意 | 機能を有効にするとき | 財務インサイト、家計AIチャット、LLMカテゴリ推論。利用する機能では3項目すべて必須 |
+| `CLOUDFLARE_ACCOUNT_ID`                      | 任意 | `workers-ai`の利用時 | `workers-ai`のときだけ必須。CloudflareのアカウントID                             |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID`       | 任意 | 通知を有効にするとき | Slack通知                                                                        |
 | `DISCORD_WEBHOOK_URL` / `DISCORD_AVATAR_URL` | 任意 | 通知を有効にするとき | Discord通知                                                                      |
 | `HOST_UID` / `HOST_GID`                      | 任意 | Compose起動前        | Linuxで`./data`とTunnel tokenを所有するユーザーのUIDとGID。既定値は`1000:1000`   |
@@ -276,9 +277,12 @@ AI_MODEL=<provider-model-id>
 AI_API_KEY=<provider-api-key>
 ```
 
-- `AI_PROVIDER`: `openai`、`anthropic`、`google`のいずれか
+- `AI_PROVIDER`: `openai`、`anthropic`、`google`、`workers-ai`のいずれか
 - `AI_MODEL`: 選択したプロバイダーで利用可能なモデルID
 - `AI_API_KEY`: 選択したプロバイダーのAPIキー。ブラウザーへは公開せず、`.env`だけに保存する
+- `CLOUDFLARE_ACCOUNT_ID`: `AI_PROVIDER=workers-ai`のときだけ必須。未設定の場合、AI機能は無効になる
+
+`workers-ai`を使う場合、`AI_API_KEY`にはWorkers AIのAPIトークンテンプレート、またはAccount > Workers AIのReadとEditの権限を付けたCloudflare APIトークンを指定する。`AI_MODEL`には`@cf/...`形式のモデルIDを指定する。
 
 ローカルでデモデータを使って確認する場合は、リポジトリルートで次を実行する。
 

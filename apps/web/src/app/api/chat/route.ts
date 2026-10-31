@@ -250,7 +250,7 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(
       503,
       "LLM_NOT_CONFIGURED",
-      "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。",
+      "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。workers-aiではCLOUDFLARE_ACCOUNT_IDも必要です。",
     );
   }
 

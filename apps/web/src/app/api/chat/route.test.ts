@@ -602,7 +602,8 @@ describe("POST /api/chat", () => {
     await expect(response.json()).resolves.toEqual({
       error: {
         code: "LLM_NOT_CONFIGURED",
-        message: "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。",
+        message:
+          "AI_PROVIDER、AI_MODEL、AI_API_KEYを設定してください。workers-aiではCLOUDFLARE_ACCOUNT_IDも必要です。",
       },
     });
     expect(mocks.getDb).not.toHaveBeenCalled();
