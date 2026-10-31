@@ -23,6 +23,11 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
+      name: "chromium-dark",
+      testMatch: /a11y\.test\.ts/,
+      use: { ...devices["Desktop Chrome"], colorScheme: "dark" },
+    },
+    {
       name: "mobile-chrome",
       use: { ...devices["Pixel 7"] },
     },

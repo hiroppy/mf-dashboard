@@ -27,8 +27,8 @@ const INTENSITY_CLASSES = [
   "bg-muted",
   "bg-expense/20",
   "bg-expense/40",
-  "bg-expense/60 text-white",
-  "bg-expense/80 text-white",
+  "bg-expense/60 text-fill-foreground",
+  "bg-expense/80 text-fill-foreground",
 ] as const;
 
 function getIntensityClass(amount: number, max: number): string {

@@ -20,6 +20,7 @@ import { Button } from "../ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "../ui/dialog";
 import { IconButton } from "../ui/icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { ThemeToggle } from "./theme-toggle";
 
 interface ActionIconsProps {
   variant: "header" | "sidebar";
@@ -38,6 +39,7 @@ export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIco
     return (
       <div className="border-t p-4 flex items-center gap-1 lg:hidden">
         <HelpButton iconSize={iconSize} />
+        <ThemeToggle iconSize={iconSize} />
       </div>
     );
   }
@@ -47,6 +49,7 @@ export function ActionIcons({ variant, notifications, lastScrapedAt }: ActionIco
       <LastUpdatedAt lastScrapedAt={lastScrapedAt ?? null} />
       <RefreshControl iconSize={iconSize} />
       {notifications}
+      <ThemeToggle iconSize={iconSize} className="hidden lg:block" />
       <HomeButton iconSize={iconSize} />
       <HelpButton iconSize={iconSize} className="hidden lg:block" />
     </div>

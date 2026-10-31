@@ -24,6 +24,10 @@
   --color-border: oklch(0.91 0.02 230);
   --color-input: oklch(0.91 0.02 230);
   --color-ring: oklch(0.53 0.15 230);
+  /* Text on top of chart/heatmap fills, which turn light in dark mode */
+  --color-fill-foreground: #ffffff;
+  --color-chart-axis-text: #4b5563;
+  --color-chart-axis-line: #e2e8f0;
 
   /* === Radius === */
   --radius-sm: 0.375rem;
@@ -87,6 +91,100 @@
   /* === Income / uncategorized === */
   --color-cat-income: #2d7893;
   --color-cat-uncategorized: #b45e01; /* 本家: #fe9626 */
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Unlayered so it beats the :root values that @theme emits */
+:root.dark {
+  color-scheme: dark;
+
+  --color-background: oklch(0.16 0.015 230);
+  --color-foreground: oklch(0.96 0.005 230);
+  --color-card: oklch(0.2 0.018 230);
+  --color-card-foreground: oklch(0.96 0.005 230);
+  --color-popover: oklch(0.2 0.018 230);
+  --color-popover-foreground: oklch(0.96 0.005 230);
+  --color-primary: oklch(0.72 0.13 230);
+  --color-primary-foreground: oklch(0.16 0.02 230);
+  --color-secondary: oklch(0.27 0.02 230);
+  --color-secondary-foreground: oklch(0.96 0.005 230);
+  --color-muted: oklch(0.27 0.02 230);
+  --color-muted-foreground: oklch(0.74 0.02 230);
+  --color-accent: oklch(0.3 0.04 230);
+  --color-accent-foreground: oklch(0.96 0.005 230);
+  --color-destructive: oklch(0.78 0.128 25);
+  --color-destructive-foreground: oklch(0.16 0.02 25);
+  --color-border: oklch(0.32 0.02 230);
+  --color-input: oklch(0.32 0.02 230);
+  --color-ring: oklch(0.72 0.13 230);
+  --color-fill-foreground: oklch(0.16 0.02 230);
+  --color-chart-axis-text: oklch(0.78 0.02 230);
+  --color-chart-axis-line: oklch(0.38 0.02 230);
+
+  --color-chart-1: oklch(0.72 0.13 230);
+  --color-chart-2: oklch(0.76 0.16 145);
+  --color-chart-3: oklch(0.78 0.148 55);
+  --color-chart-4: oklch(0.74 0.158 25);
+  --color-chart-5: oklch(0.74 0.158 300);
+
+  --color-income: oklch(0.76 0.1 220);
+  --color-expense: oklch(0.72 0.17 25);
+  --color-balance-positive: oklch(0.78 0.16 150);
+  --color-balance-negative: oklch(0.76 0.15 55);
+
+  --color-success: oklch(0.74 0.16 150);
+  --color-success-foreground: oklch(0.16 0.03 150);
+  --color-warning: oklch(0.32 0.06 85);
+  --color-warning-foreground: oklch(0.88 0.12 90);
+  --color-transfer: oklch(0.74 0.02 260);
+  --color-total-assets: oklch(0.73 0.126 244);
+  --color-liability: oklch(0.71 0.125 46);
+  --color-net-assets: oklch(0.72 0.137 150);
+  --color-expense-fixed: oklch(0.75 0.126 260);
+  --color-expense-variable: oklch(0.8 0.165 70);
+
+  --color-asset-deposit: oklch(0.72 0.094 223);
+  --color-asset-stock: oklch(0.74 0.158 30);
+  --color-asset-fund: oklch(0.74 0.16 47);
+  --color-asset-insurance: oklch(0.72 0.183 4);
+  --color-asset-pension: oklch(0.73 0.094 193);
+  --color-asset-crypto: oklch(0.73 0.155 293);
+  --color-asset-prepaid: oklch(0.72 0.086 186);
+  --color-asset-point: oklch(0.73 0.2 319);
+
+  --color-cat-cash-card: oklch(0.74 0.108 59);
+  --color-cat-housing: oklch(0.71 0.074 293);
+  --color-cat-utility: oklch(0.73 0.1 229);
+  --color-cat-communication: oklch(0.72 0.17 310);
+  --color-cat-automobile: oklch(0.69 0.05 258);
+  --color-cat-tax: oklch(0.71 0.125 46);
+  --color-cat-daily: oklch(0.73 0.106 149);
+  --color-cat-food: oklch(0.74 0.157 24);
+  --color-cat-education: oklch(0.73 0.114 268);
+  --color-cat-entertainment: oklch(0.74 0.162 7);
+  --color-cat-clothing: oklch(0.74 0.126 66);
+  --color-cat-health: oklch(0.72 0.086 186);
+  --color-cat-special: oklch(0.73 0.095 125);
+  --color-cat-other: oklch(0.73 0.05 71);
+  --color-cat-transport: oklch(0.69 0.05 295);
+  --color-cat-social: oklch(0.73 0.111 258);
+  --color-cat-income: oklch(0.73 0.084 226);
+  --color-cat-uncategorized: oklch(0.74 0.139 56);
+}
+
+/* Recharts paints these in fixed greys/white unless a prop overrides them */
+.dark .recharts-cartesian-axis-tick-value {
+  fill: var(--color-chart-axis-text);
+}
+
+.dark .recharts-pie-sector path {
+  stroke: var(--color-card);
+}
+
+.dark .recharts-tooltip-cursor {
+  fill: var(--color-muted);
+  stroke: var(--color-chart-axis-line);
 }
 
 @layer base {

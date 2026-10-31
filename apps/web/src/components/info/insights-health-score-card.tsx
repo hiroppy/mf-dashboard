@@ -9,7 +9,7 @@ interface InsightsHealthScoreCardProps {
 
 function scoreColor(score: number) {
   if (score >= 80) return "text-balance-positive";
-  if (score >= 60) return "text-yellow-700";
+  if (score >= 60) return "text-yellow-700 dark:text-yellow-300";
   return "text-balance-negative";
 }
 
