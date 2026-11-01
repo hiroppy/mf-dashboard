@@ -199,7 +199,51 @@ describe("normalizePortfolioCategories", () => {
     },
   );
 
-  test("同名口座が複数ある場合は名称で推測しない", () => {
+  test("同名口座が複数あってもカテゴリが一致すればそのカテゴリで分類する", () => {
+    const sameBankTwice = {
+      accounts: [
+        registeredAccounts.accounts[0]!,
+        { ...registeredAccounts.accounts[1]!, mfId: "bank-a-2", name: "Bank A" },
+      ],
+    };
+    const portfolio = {
+      totalAssets: 300000,
+      items: [
+        { name: "Deposit A", type: "預金・現金", institution: "Bank A", balance: 100000 },
+        { name: "Deposit B", type: "預金・現金", institution: "Bank A", balance: 200000 },
+      ],
+    };
+
+    const result = normalizePortfolioCategories(
+      portfolio,
+      sameBankTwice,
+      new Map([
+        ["bank-a", "銀行"],
+        ["bank-a-2", "銀行"],
+      ]),
+    );
+
+    expect(result.items.map((item) => item.type)).toEqual(["預金・現金", "預金・現金"]);
+  });
+
+  test("同名口座のカテゴリが一部欠けている場合は分類しない", () => {
+    const sameBankTwice = {
+      accounts: [
+        registeredAccounts.accounts[0]!,
+        { ...registeredAccounts.accounts[1]!, mfId: "bank-a-2", name: "Bank A" },
+      ],
+    };
+    const portfolio = {
+      totalAssets: 100000,
+      items: [{ name: "Deposit A", type: "預金・現金", institution: "Bank A", balance: 100000 }],
+    };
+
+    expect(() =>
+      normalizePortfolioCategories(portfolio, sameBankTwice, new Map([["bank-a", "銀行"]])),
+    ).toThrow("Cannot classify a deposit");
+  });
+
+  test("同名口座のカテゴリが食い違う場合は名称で推測しない", () => {
     const duplicateAccounts = {
       accounts: [
         registeredAccounts.accounts[0]!,

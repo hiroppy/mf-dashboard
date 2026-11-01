@@ -37,33 +37,43 @@ function log(...args: unknown[]) {
   if (!isCI) console.log(...args);
 }
 
-function buildCurrentAccountMfIdByName(
+function buildCurrentAccountMfIdsByName(
   registeredAccounts: RegisteredAccounts,
-): ReadonlyMap<string, string | null> {
-  const accountMfIdByName = new Map<string, string | null>();
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const accountMfIdsByName = new Map<string, Set<string>>();
 
   for (const account of registeredAccounts.accounts) {
-    const existingMfId = accountMfIdByName.get(account.name);
-    if (existingMfId === undefined) {
-      accountMfIdByName.set(account.name, account.mfId);
-    } else if (existingMfId !== account.mfId) {
-      accountMfIdByName.set(account.name, null);
-    }
+    const mfIds = accountMfIdsByName.get(account.name) ?? new Set<string>();
+    mfIds.add(account.mfId);
+    accountMfIdsByName.set(account.name, mfIds);
   }
 
-  return accountMfIdByName;
+  return accountMfIdsByName;
 }
 
-function resolvePortfolioAccountMfId(
+/**
+ * 預金項目の口座カテゴリを解決する。明示キーがあればそれで引き、なければ口座名で引く。
+ * 同名口座が複数あるときは、全口座のカテゴリが一致する場合だけ採用する
+ * （同じ銀行に複数口座を持つのは普通で、分類結果が変わらないなら推測ではない）。
+ */
+function resolveDepositInstitutionCategory(
   item: PortfolioItem,
   currentAccountMfIds: ReadonlySet<string>,
-  accountMfIdByName: ReadonlyMap<string, string | null>,
-): string | null {
+  accountMfIdsByName: ReadonlyMap<string, ReadonlySet<string>>,
+  institutionCategories: ReadonlyMap<string, string>,
+): string | undefined {
   if (item.accountMfId) {
-    return currentAccountMfIds.has(item.accountMfId) ? item.accountMfId : null;
+    return currentAccountMfIds.has(item.accountMfId)
+      ? institutionCategories.get(item.accountMfId)
+      : undefined;
   }
 
-  return accountMfIdByName.get(item.institution) ?? null;
+  const mfIds = accountMfIdsByName.get(item.institution);
+  if (!mfIds || mfIds.size === 0) return undefined;
+
+  const categories = new Set([...mfIds].map((mfId) => institutionCategories.get(mfId)));
+  if (categories.size !== 1) return undefined;
+  return categories.values().next().value;
 }
 
 export function normalizePortfolioCategories(
@@ -72,15 +82,19 @@ export function normalizePortfolioCategories(
   institutionCategories: ReadonlyMap<string, string> = new Map(),
 ): Portfolio {
   const currentAccountMfIds = new Set(registeredAccounts.accounts.map((account) => account.mfId));
-  const accountMfIdByName = buildCurrentAccountMfIdByName(registeredAccounts);
+  const accountMfIdsByName = buildCurrentAccountMfIdsByName(registeredAccounts);
 
   return {
     ...portfolio,
     items: portfolio.items.map((item) => {
       if (item.type !== DEPOSIT_ASSET_CATEGORY) return item;
 
-      const accountMfId = resolvePortfolioAccountMfId(item, currentAccountMfIds, accountMfIdByName);
-      const institutionCategory = accountMfId ? institutionCategories.get(accountMfId) : undefined;
+      const institutionCategory = resolveDepositInstitutionCategory(
+        item,
+        currentAccountMfIds,
+        accountMfIdsByName,
+        institutionCategories,
+      );
       if (!institutionCategory) {
         throw new Error("Cannot classify a deposit without a unique current account category");
       }
