@@ -36,6 +36,9 @@ export function isSupportedCashFlowAmount(value: string): boolean {
   return CASH_FLOW_AMOUNT_PATTERN.test(normalized);
 }
 
+// Money Forward shows this notice in place of the detail rows when a period has no transactions.
+const EMPTY_CASH_FLOW_NOTICE = "収入・支出履歴がありません";
+
 export async function verifyCashFlowRowsComplete(
   page: Page,
   detailCount: number,
@@ -43,8 +46,17 @@ export async function verifyCashFlowRowsComplete(
 ): Promise<void> {
   if (detailCount > 0) return;
 
+  if (totals.some((total) => total !== 0)) {
+    throw new Error("Could not verify an explicit empty cash flow period");
+  }
+
+  // The explicit notice proves the period is empty. Premium accounts always render the CSV
+  // download link, so its presence alone cannot mean that rows failed to load.
+  const hasEmptyNotice = (await page.locator(`text=${EMPTY_CASH_FLOW_NOTICE}`).count()) > 0;
+  if (hasEmptyNotice) return;
+
   const hasCsvLink = (await page.locator("a[href*='/cf/csv']").count()) > 0;
-  if (hasCsvLink || totals.some((total) => total !== 0)) {
+  if (hasCsvLink) {
     throw new Error("Could not verify an explicit empty cash flow period");
   }
 }

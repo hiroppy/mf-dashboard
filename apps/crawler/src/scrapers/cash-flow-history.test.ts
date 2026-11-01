@@ -67,25 +67,43 @@ describe("isSupportedCashFlowAmount", () => {
 });
 
 describe("verifyCashFlowRowsComplete", () => {
+  function pageWith({ csvLinks, emptyNotices }: { csvLinks: number; emptyNotices: number }) {
+    const counting = (count: number) => ({
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(count),
+    });
+    const locator = vi.fn<(selector: string) => { count: () => Promise<number> }>((selector) => {
+      if (selector.includes("/cf/csv")) return counting(csvLinks);
+      if (selector.startsWith("text=収入・支出履歴がありません")) return counting(emptyNotices);
+      return counting(0);
+    });
+    return { page: { locator } as unknown as Page, locator };
+  }
+
   test("0件でもCSVリンクがなく集計値が0なら明示的な空期間として受け入れる", async () => {
-    const page = {
-      locator: vi.fn<() => { count: () => Promise<number> }>().mockReturnValue({
-        count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
-      }),
-    } as unknown as Page;
+    const { page } = pageWith({ csvLinks: 0, emptyNotices: 0 });
 
     await expect(verifyCashFlowRowsComplete(page, 0, [0, 0, 0])).resolves.toBeUndefined();
   });
 
+  test("プレミアムのCSVリンクがあっても「履歴がありません」表示と集計値0なら空期間として受け入れる", async () => {
+    const { page } = pageWith({ csvLinks: 1, emptyNotices: 1 });
+
+    await expect(verifyCashFlowRowsComplete(page, 0, [0, 0, 0])).resolves.toBeUndefined();
+  });
+
+  test("明細があれば検証しない", async () => {
+    const { page, locator } = pageWith({ csvLinks: 1, emptyNotices: 0 });
+
+    await expect(verifyCashFlowRowsComplete(page, 3, [1, 2, -1])).resolves.toBeUndefined();
+    expect(locator).not.toHaveBeenCalled();
+  });
+
   test.each([
-    [1, [0, 0, 0]],
-    [0, [1, 0, 1]],
-  ])("CSVリンク数 %i と集計値 %j の0件表示を完全とは扱わない", async (csvLinks, totals) => {
-    const page = {
-      locator: vi.fn<() => { count: () => Promise<number> }>().mockReturnValue({
-        count: vi.fn<() => Promise<number>>().mockResolvedValue(csvLinks),
-      }),
-    } as unknown as Page;
+    ["CSVリンクのみで空表示なし", { csvLinks: 1, emptyNotices: 0 }, [0, 0, 0]],
+    ["集計値が0でない", { csvLinks: 0, emptyNotices: 1 }, [1, 0, 1]],
+    ["集計値が0でなくCSVリンクもある", { csvLinks: 1, emptyNotices: 0 }, [0, 5, -5]],
+  ])("%s なら0件表示を完全とは扱わない", async (_case, counts, totals) => {
+    const { page } = pageWith(counts);
 
     await expect(verifyCashFlowRowsComplete(page, 0, totals)).rejects.toThrow(
       "explicit empty cash flow period",

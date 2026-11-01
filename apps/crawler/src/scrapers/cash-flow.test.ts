@@ -97,6 +97,9 @@ describe("getCashFlow", () => {
     const detailRows = {
       count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
     } as unknown as Locator;
+    const emptyNotice = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
     const locator = vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
       if (selector === "#cf-detail-table") return detailTable;
       if (selector === ".fc-header-title h2") return monthHeader;
@@ -104,6 +107,7 @@ describe("getCashFlow", () => {
       if (selector === ".fc-button-today") return todayButton;
       if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
       if (selector === "#cf-detail-table tbody > tr") return detailRows;
+      if (selector === "text=収入・支出履歴がありません") return emptyNotice;
       throw new Error(`Unexpected selector: ${selector}`);
     });
     const page = {
@@ -182,6 +186,9 @@ describe("getCashFlow", () => {
       .mockImplementation(async () => {
         events.push(waitForFunction.mock.calls.length === 1 ? "ajax-applied" : "month-updated");
       });
+    const emptyNotice = {
+      count: vi.fn<() => Promise<number>>().mockResolvedValue(0),
+    } as unknown as Locator;
     const locator = vi.fn<(selector: string) => Locator>().mockImplementation((selector) => {
       if (selector === "#cf-detail-table") return detailTable;
       if (selector === ".fc-header-title h2") return monthHeader;
@@ -189,6 +196,7 @@ describe("getCashFlow", () => {
       if (selector === ".fc-button-today") return todayButton;
       if (selector === "#monthly_total_table_kakeibo tbody tr") return summaryRows;
       if (selector === "#cf-detail-table tbody > tr") return detailRows;
+      if (selector === "text=収入・支出履歴がありません") return emptyNotice;
       throw new Error(`Unexpected selector: ${selector}`);
     });
     const page = {
