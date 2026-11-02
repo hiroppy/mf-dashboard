@@ -19,6 +19,8 @@ import {
 } from "./shared";
 import type { GroupMonthlyData } from "./transactions";
 
+const MIN_MONTHLY_ASSETS = 100_000;
+
 interface SeedAssetHistoryInput {
   db: SeedDb;
   range: MonthRange;
@@ -66,7 +68,13 @@ export async function seedAssetHistory({
       const thisMonth = monthKeys[i]!;
       const netIncome = (incomeData[nextMonth] || 0) - (expenseData[nextMonth] || 0);
       const investmentChange = randInt(-20000, 30000);
-      monthlyAssets[thisMonth] = monthlyAssets[nextMonth] - netIncome - investmentChange;
+      // The demo period grows by one month every month, so walking backwards from the
+      // final balance can dip below zero. Keep balances positive so that the category
+      // breakdown (which clamps at zero) still sums to the daily total.
+      monthlyAssets[thisMonth] = Math.max(
+        MIN_MONTHLY_ASSETS,
+        monthlyAssets[nextMonth] - netIncome - investmentChange,
+      );
     }
     groupMonthlyAssets[groupId] = monthlyAssets;
   }
