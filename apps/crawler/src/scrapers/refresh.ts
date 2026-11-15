@@ -127,8 +127,9 @@ export async function clickRefreshButton(
   debug("Looking for refresh button...");
 
   // Navigate to home and click refresh button
-  await page.goto(mfUrls.home);
-  await page.waitForLoadState("networkidle");
+  // Advertising requests can remain pending after the page is ready.
+  // Let the button's actionability checks determine when refreshing can start.
+  await page.goto(mfUrls.home, { waitUntil: "domcontentloaded" });
 
   const refreshButton = page.locator('a:has-text("一括更新")').first();
   await refreshButton.click();
