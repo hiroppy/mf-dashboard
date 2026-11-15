@@ -74,6 +74,50 @@ export function normalizePortfolioCategories(
   const currentAccountMfIds = new Set(registeredAccounts.accounts.map((account) => account.mfId));
   const accountMfIdByName = buildCurrentAccountMfIdByName(registeredAccounts);
 
+  const failures = {
+    explicit_reference_missing: 0,
+    name_no_match: 0,
+    name_ambiguous: 0,
+    category_missing: 0,
+  };
+  let depositsWithReference = 0;
+  let resolvedDeposits = 0;
+  for (const item of portfolio.items) {
+    if (item.type !== DEPOSIT_ASSET_CATEGORY) continue;
+    if (item.accountMfId) depositsWithReference++;
+    const resolved = resolvePortfolioAccountMfId(item, currentAccountMfIds, accountMfIdByName);
+    if (resolved) resolvedDeposits++;
+    if (resolved && institutionCategories.get(resolved)) continue;
+    if (item.accountMfId && !currentAccountMfIds.has(item.accountMfId)) {
+      failures.explicit_reference_missing++;
+    } else if (!item.accountMfId && !accountMfIdByName.has(item.institution)) {
+      failures.name_no_match++;
+    } else if (!item.accountMfId && accountMfIdByName.get(item.institution) === null) {
+      failures.name_ambiguous++;
+    } else {
+      failures.category_missing++;
+    }
+  }
+  if (Object.values(failures).some((count) => count > 0)) {
+    const diagnostic = {
+      failures,
+      depositsWithReference,
+      resolvedDeposits,
+      currentAccounts: currentAccountMfIds.size,
+      categoryEntries: institutionCategories.size,
+      currentAccountsWithCategory: [...currentAccountMfIds].filter((id) =>
+        Boolean(institutionCategories.get(id)),
+      ).length,
+      categoryReferencesOutsideCurrentAccounts: [...institutionCategories.keys()].filter(
+        (id) => !currentAccountMfIds.has(id),
+      ).length,
+    };
+    throw new Error(
+      "Cannot classify a deposit without a unique current account category; classification_diagnostic=" +
+        JSON.stringify(diagnostic),
+    );
+  }
+
   return {
     ...portfolio,
     items: portfolio.items.map((item) => {

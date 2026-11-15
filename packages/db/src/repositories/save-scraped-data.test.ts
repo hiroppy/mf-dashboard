@@ -199,6 +199,53 @@ describe("normalizePortfolioCategories", () => {
     },
   );
 
+  test("匿名診断で全失敗を集計し入力値を出さない", () => {
+    const data = createScrapedData();
+    const account = data.registeredAccounts.accounts[0]!;
+    const accounts = { accounts: [account, { ...account, mfId: "account-b" }] };
+    const base = { name: "Asset A", type: "預金・現金", balance: 123, institution: account.name };
+    const portfolio = {
+      totalAssets: 0,
+      items: [
+        { ...base, accountMfId: "missing-reference" },
+        { ...base, institution: "Unmatched Institution" },
+        base,
+        { ...base, accountMfId: account.mfId },
+      ],
+    };
+    let message = "";
+    try {
+      normalizePortfolioCategories(portfolio, accounts);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    const diagnostic = JSON.parse(message.split("classification_diagnostic=")[1]!);
+    expect(diagnostic).toEqual({
+      failures: {
+        explicit_reference_missing: 1,
+        name_no_match: 1,
+        name_ambiguous: 1,
+        category_missing: 1,
+      },
+      depositsWithReference: 2,
+      resolvedDeposits: 1,
+      currentAccounts: 2,
+      categoryEntries: 0,
+      currentAccountsWithCategory: 0,
+      categoryReferencesOutsideCurrentAccounts: 0,
+    });
+    for (const value of [
+      account.name,
+      account.mfId,
+      "missing-reference",
+      "Unmatched Institution",
+      "Asset A",
+      "123",
+    ]) {
+      expect(message).not.toContain(value);
+    }
+  });
+
   test("同名口座が複数ある場合は名称で推測しない", () => {
     const duplicateAccounts = {
       accounts: [
