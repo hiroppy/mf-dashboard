@@ -44,6 +44,9 @@ describe("crawler page structures", () => {
     await withNewPage(context, async (page) => {
       await gotoPage(page, mfUrls.home, "/");
 
+      // Trial checks actionability without triggering account updates.
+      await page.locator('a:has-text("一括更新")').first().click({ trial: true });
+
       const totalAssets = page.locator(".heading-radius-box, .total-assets").first();
       await totalAssets.waitFor({ state: "visible", timeout: 10000 });
       const changeRows = page.locator("table.pfm-sheet-table").first().locator("tbody tr");
